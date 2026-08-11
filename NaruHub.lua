@@ -1496,8 +1496,8 @@ local function updateMonitor()
 			card.accent.BackgroundColor3 = Color3.fromRGB(120, 220, 140)
 		else
 			card.bot.Text = ("Still growth  |  %s  |  Growing"):format(fmtTime(entry.rem))
-			card.bot.TextColor3 = Color3.fromRGB(160, 170, 185)
-			card.accent.BackgroundColor3 = Color3.fromRGB(230, 180, 90)
+			card.bot.TextColor3 = Color3.fromRGB(255, 105, 105)
+			card.accent.BackgroundColor3 = Color3.fromRGB(235, 85, 85)
 		end
 	end
 	for i = #fl + 1, #monCards do
@@ -1506,6 +1506,41 @@ local function updateMonitor()
 	monListTitle.Text = ("Buah di garden (%d)"):format(#fl)
 end
 updateMonitor()
+
+-- Tombol filter urut kg (High/Low) langsung di panel
+local sortBtn = Instance.new("TextButton")
+sortBtn.Size = UDim2.fromOffset(78, 20)
+sortBtn.Position = UDim2.new(1, -88, 0, 6)
+sortBtn.BackgroundColor3 = Color3.fromRGB(38, 38, 46)
+sortBtn.BackgroundTransparency = 0.1
+sortBtn.BorderSizePixel = 0
+sortBtn.AutoButtonColor = true
+sortBtn.Font = Enum.Font.GothamBold
+sortBtn.TextSize = 11
+sortBtn.TextColor3 = Color3.fromRGB(225, 225, 235)
+sortBtn.Text = "kg: High \226\150\188"
+sortBtn.ZIndex = 5
+sortBtn.Parent = monPanel
+Instance.new("UICorner", sortBtn).CornerRadius = UDim.new(0, 5)
+local sortStroke = Instance.new("UIStroke")
+sortStroke.Color = BRAND
+sortStroke.Thickness = 1
+sortStroke.Parent = sortBtn
+sortBtn.MouseButton1Click:Connect(function()
+	State.MonSort = (State.MonSort == "High") and "Low" or "High"
+	sortBtn.Text = State.MonSort == "High" and "kg: High \226\150\188" or "kg: Low \226\150\178"
+	table.sort(Monitor.FruitList, function(a, b)
+		if State.MonSort == "Low" then
+			return a.kg < b.kg
+		end
+		return a.kg > b.kg
+	end)
+	pcall(updateMonitor)
+	-- sinkron dropdown Fluent kalau ada
+	pcall(function()
+		Fluent.Options.NaruHub_MonSort:SetValue(State.MonSort)
+	end)
+end)
 
 do
 	local dragging, ds, sp2 = false, nil, nil
