@@ -1409,11 +1409,11 @@ monList.CanvasSize = UDim2.new()
 monList.AutomaticCanvasSize = Enum.AutomaticSize.Y
 monList.Parent = monPanel
 local monLayout = Instance.new("UIListLayout")
-monLayout.Padding = UDim.new(0, 2)
+monLayout.Padding = UDim.new(0, 4)
 monLayout.SortOrder = Enum.SortOrder.LayoutOrder
 monLayout.Parent = monList
 
-local monListLabels = {}
+local monCards = {}
 -- update 4 angka stat saja (dipanggil live tiap shovel/place)
 local function updateMonitorStats()
 	monitorGui.Enabled = State.MonitorShow
@@ -1442,36 +1442,66 @@ end
 local function updateMonitor()
 	updateMonitorStats()
 
-	-- daftar per-buah (reuse label supaya tidak churn)
+	-- daftar per-buah: kartu 2 baris (reuse supaya tidak churn)
 	local fl = Monitor.FruitList
 	for i, entry in ipairs(fl) do
-		local r = monListLabels[i]
-		if not r then
-			r = Instance.new("TextLabel")
-			r.BackgroundTransparency = 1
-			r.Size = UDim2.new(1, -6, 0, 16)
-			r.Font = Enum.Font.Gotham
-			r.TextSize = 12
-			r.TextXAlignment = Enum.TextXAlignment.Left
-			r.LayoutOrder = i
-			r.Parent = monList
-			monListLabels[i] = r
+		local card = monCards[i]
+		if not card then
+			local f = Instance.new("Frame")
+			f.Size = UDim2.new(1, -6, 0, 38)
+			f.BackgroundColor3 = Color3.fromRGB(26, 26, 32)
+			f.BackgroundTransparency = 0.35
+			f.BorderSizePixel = 0
+			f.LayoutOrder = i
+			f.Parent = monList
+			Instance.new("UICorner", f).CornerRadius = UDim.new(0, 6)
+			local accent = Instance.new("Frame")
+			accent.Name = "Accent"
+			accent.Size = UDim2.new(0, 3, 1, -10)
+			accent.Position = UDim2.new(0, 5, 0, 5)
+			accent.BorderSizePixel = 0
+			accent.Parent = f
+			Instance.new("UICorner", accent).CornerRadius = UDim.new(1, 0)
+			local top = Instance.new("TextLabel")
+			top.BackgroundTransparency = 1
+			top.Position = UDim2.new(0, 14, 0, 4)
+			top.Size = UDim2.new(1, -18, 0, 16)
+			top.Font = Enum.Font.GothamBold
+			top.TextSize = 12
+			top.TextXAlignment = Enum.TextXAlignment.Left
+			top.TextTruncate = Enum.TextTruncate.AtEnd
+			top.Parent = f
+			local bot = Instance.new("TextLabel")
+			bot.BackgroundTransparency = 1
+			bot.Position = UDim2.new(0, 14, 0, 20)
+			bot.Size = UDim2.new(1, -18, 0, 14)
+			bot.Font = Enum.Font.Gotham
+			bot.TextSize = 11
+			bot.TextXAlignment = Enum.TextXAlignment.Left
+			bot.Parent = f
+			card = { frame = f, accent = accent, top = top, bot = bot }
+			monCards[i] = card
 		end
-		r.Visible = true
-		r.TextColor3 = entry.target and Color3.fromRGB(120, 255, 140) or Color3.fromRGB(205, 205, 215)
-		local mutTxt = (entry.mut and entry.mut ~= "") and ("  [" .. entry.mut .. "]") or ""
-		local growTxt
+		card.frame.Visible = true
+		card.top.TextColor3 = entry.target and Color3.fromRGB(140, 255, 160) or Color3.fromRGB(235, 235, 240)
+		local mutTxt = (entry.mut and entry.mut ~= "") and ("  (" .. entry.mut .. ")") or ""
+		card.top.Text = ("%d.  %s  %.1fkg%s"):format(i, entry.seed, entry.kg, mutTxt)
 		if entry.rem == nil then
-			growTxt = ""
+			card.bot.Text = "Still growth  |  -  |  -"
+			card.bot.TextColor3 = Color3.fromRGB(150, 155, 165)
+			card.accent.BackgroundColor3 = Color3.fromRGB(90, 90, 100)
 		elseif entry.rem <= 0 then
-			growTxt = "  ✓ready"
+			card.bot.Text = "Still growth  |  --  |  ✓ Ready"
+			card.bot.TextColor3 = Color3.fromRGB(140, 255, 160)
+			card.accent.BackgroundColor3 = Color3.fromRGB(120, 220, 140)
 		else
-			growTxt = "  " .. fmtTime(entry.rem)
+			card.bot.Text = ("Still growth  |  %s  |  Growing"):format(fmtTime(entry.rem))
+			card.bot.TextColor3 = Color3.fromRGB(160, 170, 185)
+			card.accent.BackgroundColor3 = Color3.fromRGB(230, 180, 90)
 		end
-		r.Text = ("%s  %.1fkg%s%s"):format(entry.seed, entry.kg, mutTxt, growTxt)
 	end
-	for i = #fl + 1, #monListLabels do
-		monListLabels[i].Visible = false
+	for i = #fl + 1, #monCards do
+		monCards[i].frame.Visible = false
 	end
 	monListTitle.Text = ("Buah di garden (%d)"):format(#fl)
 end
