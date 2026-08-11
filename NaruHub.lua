@@ -80,6 +80,44 @@ do
 	end
 end
 
+-- Sisa waktu tumbuh buah (detik). 0 = ready, nil = tak diketahui.
+local fruitGrowthFn
+do
+	local ok, FVC = pcall(function()
+		return require(LocalPlayer.PlayerScripts.Controllers.FruitVisualizerController)
+	end)
+	if ok and FVC and FVC.GetFruitGrowthData then
+		fruitGrowthFn = function(fruit)
+			local o, d = pcall(function()
+				return FVC:GetFruitGrowthData(
+					tonumber(fruit:GetAttribute("UserId")),
+					fruit:GetAttribute("PlantId"),
+					fruit:GetAttribute("FruitId")
+				)
+			end)
+			if o and type(d) == "table" and type(d.MaxAge) == "number" and type(d.CurrentAge) == "number" and type(d.GrowthRate) == "number" then
+				if d.CurrentAge >= d.MaxAge then
+					return 0
+				end
+				if d.GrowthRate > 0 then
+					return (d.MaxAge - d.CurrentAge) / d.GrowthRate
+				end
+			end
+			return nil
+		end
+	end
+end
+
+local function fmtTime(sec: number): string
+	sec = math.floor(sec)
+	if sec >= 3600 then
+		return ("%dh %dm"):format(sec // 3600, (sec % 3600) // 60)
+	elseif sec >= 60 then
+		return ("%dm %ds"):format(sec // 60, sec % 60)
+	end
+	return ("%ds"):format(sec)
+end
+
 local setIdentity = setthreadidentity or set_thread_identity or setidentity or setthreadcontext
 local getIdentity = getthreadidentity or get_thread_identity or getidentity
 
@@ -434,6 +472,7 @@ local State = {
 	SprinklerNoTP = false,
 	EspEnabled = false,
 	MonitorShow = true,
+	MonSort = "High",
 
 	-- Auto Pumpkin (Misc): place sprinkler + shovel, khusus Atlantic Giant Pumpkin
 	PumpkinEnabled = false,
@@ -916,6 +955,15 @@ monSection:AddToggle("NaruHub_MonitorShow", {
 		end
 	end,
 })
+
+monSection:AddDropdown("NaruHub_MonSort", {
+	Title = "Urutkan daftar buah (kg)",
+	Values = { "High", "Low" },
+	Multi = false,
+	Default = "High",
+}):OnChanged(function(v)
+	State.MonSort = v
+end)
 
 monSection:AddToggle("NaruHub_Esp", {
 	Title = "Fruit ESP (kg di atas buah)",
@@ -1411,11 +1459,16 @@ local function updateMonitor()
 		end
 		r.Visible = true
 		r.TextColor3 = entry.target and Color3.fromRGB(120, 255, 140) or Color3.fromRGB(205, 205, 215)
-		local growTxt = ""
-		if entry.grow then
-			growTxt = entry.grow >= 1 and "  ✓siap" or ("  %d%%"):format(math.floor(entry.grow * 100))
+		local mutTxt = (entry.mut and entry.mut ~= "") and ("  [" .. entry.mut .. "]") or ""
+		local growTxt
+		if entry.rem == nil then
+			growTxt = ""
+		elseif entry.rem <= 0 then
+			growTxt = "  ✓ready"
+		else
+			growTxt = "  " .. fmtTime(entry.rem)
 		end
-		r.Text = ("%s  %.2fkg%s"):format(entry.seed, entry.kg, growTxt)
+		r.Text = ("%s  %.1fkg%s%s"):format(entry.seed, entry.kg, mutTxt, growTxt)
 	end
 	for i = #fl + 1, #monListLabels do
 		monListLabels[i].Visible = false
@@ -1773,22 +1826,18 @@ task.spawn(function()
 
 		local matchX, matchY = 0, 0
 		local lastGood = 0 -- keeper terbesar scan ini (bukan stale)
-		local readyCnt, growingCnt = 0, 0
-
+		local readyCnt = 0
 		local plantHasKeeper = {}
+		local fl = {}
+
 		for _, fr in ipairs(fruitList) do
-			if inTarget(fr.seed) then
-				local age = fr.model:GetAttribute("Age")
-				local maxAge = fr.model:GetAttribute("MaxAge")
-				if age and maxAge then
-					if age >= maxAge then
+			local w = fruitWeightFn and fruitWeightFn(fr.model)
+			if w then
+				local rem = fruitGrowthFn and fruitGrowthFn(fr.model) -- 0=ready, >0 detik, nil=?
+				if inTarget(fr.seed) then
+					if rem == 0 then
 						readyCnt += 1
-					else
-						growingCnt += 1
 					end
-				end
-				local w = fruitWeightFn and fruitWeightFn(fr.model)
-				if w then
 					local keeper = (aMode == "Below" and w >= aKg) or (aMode == "Above" and w <= aKg)
 					if keeper then
 						plantHasKeeper[fr.plantId] = true
@@ -1797,6 +1846,13 @@ task.spawn(function()
 						end
 					end
 				end
+				fl[#fl + 1] = {
+					seed = fr.seed or "?",
+					kg = w,
+					target = aSeeds[fr.seed] == true,
+					rem = rem,
+					mut = fr.model:GetAttribute("Mutation"),
+				}
 			end
 		end
 
@@ -1817,22 +1873,12 @@ task.spawn(function()
 			end
 		end
 
-		-- daftar per-buah (semua buah di garden, dengan kg)
-		local fl = {}
-		for _, fr in ipairs(fruitList) do
-			local w = fruitWeightFn and fruitWeightFn(fr.model)
-			if w then
-				local age = fr.model:GetAttribute("Age")
-				local maxAge = fr.model:GetAttribute("MaxAge")
-				local grow = (age and maxAge and maxAge > 0) and math.clamp(age / maxAge, 0, 1) or nil
-				fl[#fl + 1] = { seed = fr.seed or "?", kg = w, target = aSeeds[fr.seed] == true, grow = grow }
-			end
-		end
+		-- urut daftar by kg: High (terberat dulu) / Low (teringan dulu)
 		table.sort(fl, function(a, b)
-			if a.seed == b.seed then
-				return a.kg > b.kg
+			if State.MonSort == "Low" then
+				return a.kg < b.kg
 			end
-			return a.seed < b.seed
+			return a.kg > b.kg
 		end)
 		Monitor.FruitList = fl
 
