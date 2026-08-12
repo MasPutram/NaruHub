@@ -1663,25 +1663,21 @@ function Fluent:CreateWindow(cfg)
 				uiCorner(6, listFrame)
 				uiStroke(BRAND, 1, listFrame)
 
-				local hasSearch = (#values > 6)
-				local searchBox
-				local listTop = 0
-				if hasSearch then
-					searchBox = uiNew("TextBox", {
-						Position = UDim2.new(0, 4, 0, 4),
-						Size = UDim2.new(1, -8, 0, 24),
-						BackgroundColor3 = UI_COL_ROW,
-						Font = UI_FONT,
-						TextSize = 12,
-						TextColor3 = UI_COL_TEXT,
-						PlaceholderText = "Cari...",
-						ClearTextOnFocus = false,
-						ZIndex = 51,
-					}, listFrame)
-					uiCorner(5, searchBox)
-					uiNew("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, searchBox)
-					listTop = 30
-				end
+				-- Search selalu ada (bukan cuma kalau item banyak).
+				local searchBox = uiNew("TextBox", {
+					Position = UDim2.new(0, 4, 0, 4),
+					Size = UDim2.new(1, -8, 0, 24),
+					BackgroundColor3 = UI_COL_ROW,
+					Font = UI_FONT,
+					TextSize = 12,
+					TextColor3 = UI_COL_TEXT,
+					PlaceholderText = "Cari...",
+					ClearTextOnFocus = false,
+					ZIndex = 51,
+				}, listFrame)
+				uiCorner(5, searchBox)
+				uiNew("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, searchBox)
+				local listTop = 30
 
 				local listScroll = uiNew("ScrollingFrame", {
 					Position = UDim2.new(0, 0, 0, listTop),
@@ -1805,14 +1801,21 @@ function Fluent:CreateWindow(cfg)
 					listFrame.Visible = opening
 					backdrop.Visible = opening
 					if opening then
-						local abs, absSize = head.AbsolutePosition, head.AbsoluteSize
-						listFrame.Position = UDim2.fromOffset(abs.X, abs.Y + absSize.Y + 2)
-						listFrame.Size = UDim2.fromOffset(absSize.X, math.min(#values * 26, 160) + listTop)
-						if searchBox then
-							searchBox.Text = ""
-							for _, ob in pairs(optionBtns) do
-								ob.Visible = true
-							end
+						-- Flyout di samping window (kanan, atau kiri kalau mepet tepi
+						-- layar), bukan menggantung di bawah tombolnya sendiri.
+						local mainAbs, mainSize = main.AbsolutePosition, main.AbsoluteSize
+						local listW, listH = 240, 320
+						local screenSize = workspace.CurrentCamera.ViewportSize
+						local x = mainAbs.X + mainSize.X + 8
+						if x + listW > screenSize.X then
+							x = mainAbs.X - listW - 8
+						end
+						local y = math.clamp(head.AbsolutePosition.Y - 4, 4, math.max(4, screenSize.Y - listH - 4))
+						listFrame.Position = UDim2.fromOffset(x, y)
+						listFrame.Size = UDim2.fromOffset(listW, listH)
+						searchBox.Text = ""
+						for _, ob in pairs(optionBtns) do
+							ob.Visible = true
 						end
 					end
 				end)
