@@ -986,71 +986,783 @@ local function gearBuyLoopFor(name: string, aliveFn): number
 end
 
 --==============================================================
--- UI (Fluent)
+-- UI (NaruUI -- custom, bukan Fluent lagi)
 --==============================================================
+-- Dibangun sendiri dari Instance biasa: teks tajam (tidak ada lagi bug blur
+-- Fluent saat maximize), ukuran & warna full terkontrol. API-nya sengaja dibuat
+-- mirip Fluent (CreateWindow/AddTab/AddSection/AddToggle/dst) supaya seluruh
+-- kode fitur di bawah ini tidak perlu diubah sama sekali.
 
--- GitHub Releases kadang balikin body kosong sesaat (flaky CDN), bukan error --
--- HttpGet sukses tapi hasilnya "" sehingga loadstring gagal. Retry beberapa kali.
-local function fetchLoadstring(url: string, tries: number?)
-	local lastErr = "unknown"
-	for _ = 1, tries or 12 do
-		local ok, bodyOrErr = pcall(function()
-			return game:HttpGet(url)
-		end)
-		if ok and bodyOrErr and #bodyOrErr > 100 then
-			local fn, loadErr = loadstring(bodyOrErr)
-			if fn then
-				local runOk, result = pcall(fn)
-				if runOk then
-					return result
-				end
-				lastErr = tostring(result)
-			else
-				lastErr = tostring(loadErr)
-			end
-		else
-			lastErr = ok and "empty response" or tostring(bodyOrErr)
-		end
-		task.wait(2.5)
+local NaruTween = game:GetService("TweenService")
+
+local UI_FONT = Enum.Font.GothamMedium
+local UI_FONT_BOLD = Enum.Font.GothamBold
+local UI_COL_BG = Color3.fromRGB(16, 16, 20)
+local UI_COL_SIDEBAR = Color3.fromRGB(11, 11, 14)
+local UI_COL_ROW = Color3.fromRGB(25, 25, 31)
+local UI_COL_ROW2 = Color3.fromRGB(30, 30, 37)
+local UI_COL_TEXT = Color3.fromRGB(235, 235, 240)
+local UI_COL_DIM = Color3.fromRGB(150, 150, 160)
+local UI_COL_ACCENT = Color3.fromRGB(216, 148, 72) -- amber turunan BRAND, buat elemen interaktif
+local UI_COL_OFF = Color3.fromRGB(60, 60, 68)
+
+local function uiNew(class, props, parent)
+	local o = Instance.new(class)
+	for k, v in pairs(props) do
+		o[k] = v
 	end
-	error("fetchLoadstring gagal untuk " .. url .. ": " .. lastErr)
+	if parent then
+		o.Parent = parent
+	end
+	return o
 end
 
-local Fluent = fetchLoadstring("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua")
-local SaveManager = fetchLoadstring("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua")
-local InterfaceManager = fetchLoadstring("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua")
+local function uiCorner(radius, parent)
+	return uiNew("UICorner", { CornerRadius = UDim.new(0, radius) }, parent)
+end
+
+local function uiStroke(color, thickness, parent)
+	return uiNew("UIStroke", { Color = color, Thickness = thickness or 1 }, parent)
+end
+
+local Fluent = {}
+Fluent.Options = {}
+Fluent.Unloaded = false
+
+function Fluent:Notify(cfg)
+	if Fluent._notify then
+		Fluent._notify(cfg)
+	end
+end
+
+function Fluent:ToggleTransparency(_state) end
+
+function Fluent:Destroy()
+	if self.GUI then
+		pcall(function() self.GUI:Destroy() end)
+	end
+	self.Unloaded = true
+end
+
+function Fluent:CreateWindow(cfg)
+	local screenGui = uiNew("ScreenGui", {
+		Name = "NaruHubGUI",
+		ResetOnSpawn = false,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+		DisplayOrder = 100,
+	}, (gethui and gethui()) or game:GetService("CoreGui"))
+	self.GUI = screenGui
+
+	local size = cfg.Size or UDim2.fromOffset(720, 480)
+	local main = uiNew("Frame", {
+		Name = "Main",
+		Size = size,
+		Position = UDim2.new(0.5, 0, 0.5, 0),
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		BackgroundColor3 = UI_COL_BG,
+		BackgroundTransparency = 0.06,
+		BorderSizePixel = 0,
+		ClipsDescendants = true,
+	}, screenGui)
+	uiCorner(10, main)
+	uiStroke(Color3.fromRGB(65, 45, 21), 1.5, main)
+
+	local titleBar = uiNew("Frame", {
+		Name = "TitleBar",
+		Size = UDim2.new(1, 0, 0, 40),
+		BackgroundColor3 = UI_COL_SIDEBAR,
+		BorderSizePixel = 0,
+	}, main)
+	uiCorner(10, titleBar)
+	uiNew("Frame", {
+		Size = UDim2.new(1, 0, 0, 10),
+		Position = UDim2.new(0, 0, 1, -10),
+		BackgroundColor3 = UI_COL_SIDEBAR,
+		BorderSizePixel = 0,
+		ZIndex = 0,
+	}, titleBar)
+
+	local titleHolder = uiNew("Frame", {
+		Name = "TitleHolder",
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 14, 0, 0),
+		Size = UDim2.new(1, -140, 1, 0),
+	}, titleBar)
+	uiNew("TextLabel", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0.62, 0),
+		Font = UI_FONT_BOLD,
+		TextSize = 16,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextColor3 = UI_COL_TEXT,
+		Text = cfg.Title or "Window",
+	}, titleHolder)
+	uiNew("TextLabel", {
+		BackgroundTransparency = 1,
+		Position = UDim2.new(0, 0, 0.6, 0),
+		Size = UDim2.new(1, 0, 0.4, 0),
+		Font = UI_FONT,
+		TextSize = 12,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextColor3 = UI_COL_DIM,
+		Text = cfg.SubTitle or "",
+	}, titleHolder)
+
+	local function titleBtn(text, xOffsetFromRight)
+		local btn = uiNew("TextButton", {
+			Size = UDim2.fromOffset(28, 28),
+			Position = UDim2.new(1, xOffsetFromRight, 0.5, 0),
+			AnchorPoint = Vector2.new(0, 0.5),
+			BackgroundColor3 = UI_COL_ROW,
+			BackgroundTransparency = 0.2,
+			AutoButtonColor = true,
+			Font = UI_FONT_BOLD,
+			TextSize = 16,
+			TextColor3 = UI_COL_TEXT,
+			Text = text,
+		}, titleBar)
+		uiCorner(6, btn)
+		return btn
+	end
+
+	local closeBtn = titleBtn("\226\156\149", -36)
+	local minBtn = titleBtn("\226\128\148", -72)
+
+	local sidebar = uiNew("Frame", {
+		Name = "Sidebar",
+		Position = UDim2.new(0, 0, 0, 40),
+		Size = UDim2.new(0, cfg.TabWidth or 150, 1, -40),
+		BackgroundColor3 = UI_COL_SIDEBAR,
+		BorderSizePixel = 0,
+	}, main)
+	local sideList = uiNew("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, -12, 1, -12),
+		Position = UDim2.fromOffset(6, 6),
+	}, sidebar)
+	uiNew("UIListLayout", {
+		Padding = UDim.new(0, 4),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	}, sideList)
+
+	local content = uiNew("Frame", {
+		Name = "Content",
+		Position = UDim2.new(0, cfg.TabWidth or 150, 0, 40),
+		Size = UDim2.new(1, -(cfg.TabWidth or 150), 1, -40),
+		BackgroundTransparency = 1,
+	}, main)
+
+	do
+		local dragging, dragStart, startPos = false, nil, nil
+		titleBar.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+				dragging = true
+				dragStart = input.Position
+				startPos = main.Position
+			end
+		end)
+		UserInputService.InputChanged:Connect(function(input)
+			if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+				local delta = input.Position - dragStart
+				main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+			end
+		end)
+		UserInputService.InputEnded:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+				dragging = false
+			end
+		end)
+	end
+
+	local Window = {}
+	Window.Root = main
+	Window.ContainerHolder = content
+	Window.Minimize = function() end
+	Window.Maximize = function() end
+
+	local maxBtnFrame = uiNew("Frame", { Visible = false, Size = UDim2.fromOffset(0, 0) }, titleBar)
+	Window.TitleBar = {
+		Frame = titleBar,
+		MinButton = {
+			SetCallback = function(_self, fn)
+				minBtn.MouseButton1Click:Connect(fn)
+			end,
+		},
+		MaxButton = {
+			Frame = maxBtnFrame,
+			SetCallback = function(_self, _fn) end,
+		},
+		CloseButton = {
+			SetCallback = function(_self, fn)
+				closeBtn.MouseButton1Click:Connect(fn)
+			end,
+		},
+	}
+	closeBtn.MouseButton1Click:Connect(function()
+		Fluent:Destroy()
+	end)
+
+	local tabs = {}
+	local tabButtons = {}
+
+	function Window:AddTab(tcfg)
+		local idx = #tabs + 1
+		local btn = uiNew("TextButton", {
+			Size = UDim2.new(1, 0, 0, 32),
+			BackgroundColor3 = UI_COL_ROW,
+			BackgroundTransparency = idx == 1 and 0.3 or 1,
+			AutoButtonColor = false,
+			Font = UI_FONT,
+			TextSize = 14,
+			TextColor3 = idx == 1 and UI_COL_TEXT or UI_COL_DIM,
+			Text = "  " .. (tcfg.Title or ("Tab " .. idx)),
+			TextXAlignment = Enum.TextXAlignment.Left,
+			LayoutOrder = idx,
+		}, sideList)
+		uiCorner(6, btn)
+		tabButtons[idx] = btn
+
+		local scroll = uiNew("ScrollingFrame", {
+			Name = tcfg.Title or ("Tab" .. idx),
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			BorderSizePixel = 0,
+			ScrollBarThickness = 4,
+			ScrollBarImageColor3 = UI_COL_ACCENT,
+			CanvasSize = UDim2.new(0, 0, 0, 0),
+			AutomaticCanvasSize = Enum.AutomaticSize.Y,
+			Visible = idx == 1,
+		}, content)
+		uiNew("UIPadding", {
+			PaddingLeft = UDim.new(0, 14),
+			PaddingRight = UDim.new(0, 14),
+			PaddingTop = UDim.new(0, 10),
+			PaddingBottom = UDim.new(0, 14),
+		}, scroll)
+		uiNew("UIListLayout", {
+			Padding = UDim.new(0, 10),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}, scroll)
+
+		local Tab = { ScrollFrame = scroll, Index = idx }
+
+		btn.MouseButton1Click:Connect(function()
+			Window:SelectTab(idx)
+		end)
+
+		function Tab:AddSection(title)
+			local secFrame = uiNew("Frame", {
+				BackgroundColor3 = UI_COL_ROW,
+				BackgroundTransparency = 0.15,
+				BorderSizePixel = 0,
+				AutomaticSize = Enum.AutomaticSize.Y,
+				Size = UDim2.new(1, 0, 0, 0),
+			}, scroll)
+			uiCorner(8, secFrame)
+			uiNew("UIPadding", {
+				PaddingLeft = UDim.new(0, 12),
+				PaddingRight = UDim.new(0, 12),
+				PaddingTop = UDim.new(0, 10),
+				PaddingBottom = UDim.new(0, 10),
+			}, secFrame)
+			uiNew("UIListLayout", {
+				Padding = UDim.new(0, 6),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}, secFrame)
+
+			uiNew("TextLabel", {
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, 22),
+				Font = UI_FONT_BOLD,
+				TextSize = 15,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextColor3 = UI_COL_ACCENT,
+				Text = title,
+				LayoutOrder = 0,
+			}, secFrame)
+
+			local Section = { Frame = secFrame, _order = 1 }
+
+			local function nextOrder()
+				Section._order += 1
+				return Section._order
+			end
+
+			local function row(height)
+				return uiNew("Frame", {
+					BackgroundTransparency = 1,
+					Size = UDim2.new(1, 0, 0, height or 36),
+					LayoutOrder = nextOrder(),
+				}, secFrame)
+			end
+
+			function Section:AddParagraph(pcfg)
+				local r = row(0)
+				r.AutomaticSize = Enum.AutomaticSize.Y
+				uiNew("TextLabel", {
+					BackgroundTransparency = 1,
+					Size = UDim2.new(1, 0, 0, 18),
+					Font = UI_FONT_BOLD,
+					TextSize = 13,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					TextColor3 = UI_COL_TEXT,
+					Text = pcfg.Title or "",
+				}, r)
+				local contentLbl = uiNew("TextLabel", {
+					BackgroundTransparency = 1,
+					Position = UDim2.new(0, 0, 0, 18),
+					Size = UDim2.new(1, 0, 0, 16),
+					AutomaticSize = Enum.AutomaticSize.Y,
+					Font = UI_FONT,
+					TextSize = 13,
+					TextWrapped = true,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					TextYAlignment = Enum.TextYAlignment.Top,
+					TextColor3 = UI_COL_DIM,
+					Text = pcfg.Content or "",
+				}, r)
+				uiNew("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder }, r)
+				local obj = {}
+				function obj:SetDesc(t)
+					contentLbl.Text = t
+				end
+				function obj:SetContent(t)
+					contentLbl.Text = t
+				end
+				return obj
+			end
+
+			function Section:AddButton(bcfg)
+				local r = row(32)
+				local btn2 = uiNew("TextButton", {
+					Size = UDim2.fromScale(1, 1),
+					BackgroundColor3 = UI_COL_ROW2,
+					AutoButtonColor = true,
+					Font = UI_FONT,
+					TextSize = 13,
+					TextColor3 = UI_COL_TEXT,
+					Text = bcfg.Title or "Button",
+				}, r)
+				uiCorner(6, btn2)
+				if bcfg.Callback then
+					btn2.MouseButton1Click:Connect(bcfg.Callback)
+				end
+				return {}
+			end
+
+			function Section:AddToggle(id, tcfg2)
+				local r = row(30)
+				uiNew("TextLabel", {
+					BackgroundTransparency = 1,
+					Size = UDim2.new(1, -56, 1, 0),
+					Font = UI_FONT,
+					TextSize = 14,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					TextColor3 = UI_COL_TEXT,
+					Text = tcfg2.Title or id,
+				}, r)
+				local pill = uiNew("Frame", {
+					Size = UDim2.fromOffset(40, 22),
+					Position = UDim2.new(1, 0, 0.5, 0),
+					AnchorPoint = Vector2.new(1, 0.5),
+					BackgroundColor3 = tcfg2.Default and UI_COL_ACCENT or UI_COL_OFF,
+				}, r)
+				uiCorner(11, pill)
+				local knob = uiNew("Frame", {
+					Size = UDim2.fromOffset(18, 18),
+					Position = tcfg2.Default and UDim2.new(1, -2, 0.5, 0) or UDim2.new(0, 2, 0.5, 0),
+					AnchorPoint = tcfg2.Default and Vector2.new(1, 0.5) or Vector2.new(0, 0.5),
+					BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+				}, pill)
+				uiCorner(9, knob)
+				local click = uiNew("TextButton", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "" }, pill)
+
+				local state = tcfg2.Default or false
+				local obj = {}
+				local function apply(v, fire)
+					state = v
+					pill.BackgroundColor3 = v and UI_COL_ACCENT or UI_COL_OFF
+					NaruTween:Create(knob, TweenInfo.new(0.12), {
+						Position = v and UDim2.new(1, -2, 0.5, 0) or UDim2.new(0, 2, 0.5, 0),
+						AnchorPoint = v and Vector2.new(1, 0.5) or Vector2.new(0, 0.5),
+					}):Play()
+					if fire and tcfg2.Callback then
+						tcfg2.Callback(v)
+					end
+				end
+				click.MouseButton1Click:Connect(function()
+					apply(not state, true)
+				end)
+				function obj:SetValue(v)
+					apply(v, true)
+				end
+				obj.Value = state
+				Fluent.Options[id] = obj
+				if tcfg2.Default then
+					task.defer(function()
+						if tcfg2.Callback then
+							tcfg2.Callback(true)
+						end
+					end)
+				end
+				return obj
+			end
+
+			function Section:AddSlider(id, scfg)
+				local r = row(38)
+				uiNew("TextLabel", {
+					BackgroundTransparency = 1,
+					Size = UDim2.new(1, 0, 0, 16),
+					Font = UI_FONT,
+					TextSize = 13,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					TextColor3 = UI_COL_TEXT,
+					Text = scfg.Title or id,
+				}, r)
+				local track = uiNew("Frame", {
+					Position = UDim2.new(0, 0, 0, 22),
+					Size = UDim2.new(1, -46, 0, 6),
+					BackgroundColor3 = UI_COL_OFF,
+				}, r)
+				uiCorner(3, track)
+				local min, max = scfg.Min or 0, scfg.Max or 100
+				local rounding = scfg.Rounding or 0
+				local value = scfg.Default or min
+				local function pct(v)
+					return math.clamp((v - min) / (max - min), 0, 1)
+				end
+				local fill = uiNew("Frame", {
+					Size = UDim2.new(pct(value), 0, 1, 0),
+					BackgroundColor3 = UI_COL_ACCENT,
+				}, track)
+				uiCorner(3, fill)
+				local knob2 = uiNew("Frame", {
+					Size = UDim2.fromOffset(14, 14),
+					Position = UDim2.new(pct(value), 0, 0.5, 0),
+					AnchorPoint = Vector2.new(0.5, 0.5),
+					BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+				}, track)
+				uiCorner(7, knob2)
+				local valLbl = uiNew("TextLabel", {
+					BackgroundTransparency = 1,
+					Position = UDim2.new(1, -40, 0, 18),
+					Size = UDim2.new(0, 40, 0, 16),
+					Font = UI_FONT,
+					TextSize = 12,
+					TextXAlignment = Enum.TextXAlignment.Right,
+					TextColor3 = UI_COL_DIM,
+					Text = tostring(value),
+				}, r)
+
+				local function fmt(v)
+					if rounding <= 0 then
+						return tostring(math.floor(v + 0.5))
+					end
+					local m = 10 ^ rounding
+					return tostring(math.floor(v * m + 0.5) / m)
+				end
+
+				local function setFromAlpha(a, fire)
+					local raw = min + (max - min) * a
+					if rounding <= 0 then
+						raw = math.floor(raw + 0.5)
+					else
+						local m = 10 ^ rounding
+						raw = math.floor(raw * m + 0.5) / m
+					end
+					value = raw
+					fill.Size = UDim2.new(pct(value), 0, 1, 0)
+					knob2.Position = UDim2.new(pct(value), 0, 0.5, 0)
+					valLbl.Text = fmt(value)
+					if fire and scfg.Callback then
+						scfg.Callback(value)
+					end
+				end
+
+				local dragging = false
+				local click2 = uiNew("TextButton", { Size = UDim2.new(1, 0, 0, 20), Position = UDim2.new(0, 0, 0, 17), BackgroundTransparency = 1, Text = "" }, r)
+				click2.MouseButton1Down:Connect(function()
+					dragging = true
+				end)
+				UserInputService.InputEnded:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+						dragging = false
+					end
+				end)
+				UserInputService.InputChanged:Connect(function(input)
+					if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+						local rel = (input.Position.X - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1)
+						setFromAlpha(math.clamp(rel, 0, 1), true)
+					end
+				end)
+
+				local obj = {}
+				function obj:SetValue(v)
+					setFromAlpha(pct(v), true)
+				end
+				Fluent.Options[id] = obj
+				return obj
+			end
+
+			function Section:AddInput(id, icfg)
+				local r = row(36)
+				uiNew("TextLabel", {
+					BackgroundTransparency = 1,
+					Size = UDim2.new(0.55, 0, 1, 0),
+					Font = UI_FONT,
+					TextSize = 14,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					TextColor3 = UI_COL_TEXT,
+					Text = icfg.Title or id,
+				}, r)
+				local box = uiNew("TextBox", {
+					Size = UDim2.new(0.42, 0, 0, 26),
+					Position = UDim2.new(1, 0, 0.5, 0),
+					AnchorPoint = Vector2.new(1, 0.5),
+					BackgroundColor3 = UI_COL_ROW2,
+					Font = UI_FONT,
+					TextSize = 13,
+					TextColor3 = UI_COL_TEXT,
+					PlaceholderText = icfg.Placeholder or "",
+					Text = tostring(icfg.Default or ""),
+					ClearTextOnFocus = false,
+				}, r)
+				uiCorner(6, box)
+				uiNew("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, box)
+
+				local function commit()
+					local v = box.Text
+					if icfg.Numeric then
+						v = tostring(tonumber(v) or icfg.Default or 0)
+						box.Text = v
+					end
+					if icfg.Callback then
+						icfg.Callback(v)
+					end
+				end
+				if icfg.Finished then
+					box.FocusLost:Connect(commit)
+				else
+					box:GetPropertyChangedSignal("Text"):Connect(commit)
+				end
+
+				local obj = {}
+				function obj:SetValue(v)
+					box.Text = tostring(v)
+					commit()
+				end
+				Fluent.Options[id] = obj
+				return obj
+			end
+
+			function Section:AddDropdown(id, dcfg)
+				local r = row(36)
+				uiNew("TextLabel", {
+					BackgroundTransparency = 1,
+					Size = UDim2.new(1, 0, 0, 16),
+					Font = UI_FONT,
+					TextSize = 13,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					TextColor3 = UI_COL_TEXT,
+					Text = dcfg.Title or id,
+				}, r)
+				local head = uiNew("TextButton", {
+					Position = UDim2.new(0, 0, 0, 20),
+					Size = UDim2.new(1, 0, 0, 26),
+					BackgroundColor3 = UI_COL_ROW2,
+					AutoButtonColor = true,
+					Font = UI_FONT,
+					TextSize = 13,
+					TextColor3 = UI_COL_TEXT,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					Text = "  --",
+				}, r)
+				uiCorner(6, head)
+
+				local values = dcfg.Values or {}
+				local multi = dcfg.Multi or false
+				local selected = {}
+
+				local listGui = uiNew("ScreenGui", { ResetOnSpawn = false, DisplayOrder = 200 }, (gethui and gethui()) or game:GetService("CoreGui"))
+				local listFrame = uiNew("Frame", {
+					Visible = false,
+					BackgroundColor3 = UI_COL_ROW2,
+					BorderSizePixel = 0,
+					ZIndex = 50,
+				}, listGui)
+				uiCorner(6, listFrame)
+				uiStroke(Color3.fromRGB(65, 45, 21), 1, listFrame)
+				local listScroll = uiNew("ScrollingFrame", {
+					Size = UDim2.fromScale(1, 1),
+					BackgroundTransparency = 1,
+					BorderSizePixel = 0,
+					ScrollBarThickness = 3,
+					CanvasSize = UDim2.new(0, 0, 0, 0),
+					AutomaticCanvasSize = Enum.AutomaticSize.Y,
+					ZIndex = 50,
+				}, listFrame)
+				uiNew("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder }, listScroll)
+
+				local function headerText()
+					local names = {}
+					for name in pairs(selected) do
+						table.insert(names, name)
+					end
+					table.sort(names)
+					if #names == 0 then
+						return "  --"
+					end
+					return "  " .. table.concat(names, ", ")
+				end
+
+				local optionBtns = {}
+
+				local function fireChange()
+					if dcfg._onChanged then
+						if multi then
+							dcfg._onChanged(selected)
+						else
+							dcfg._onChanged((next(selected)))
+						end
+					end
+				end
+
+				local function setSelected(name, on)
+					if not multi then
+						selected = {}
+					end
+					selected[name] = on or nil
+					head.Text = headerText()
+					for n, b in pairs(optionBtns) do
+						b.BackgroundColor3 = selected[n] and Color3.fromRGB(45, 38, 30) or UI_COL_ROW2
+					end
+				end
+
+				local function rebuildOptions()
+					for _, c in ipairs(listScroll:GetChildren()) do
+						if c:IsA("TextButton") then
+							c:Destroy()
+						end
+					end
+					optionBtns = {}
+					for i, name in ipairs(values) do
+						local ob = uiNew("TextButton", {
+							Size = UDim2.new(1, 0, 0, 26),
+							BackgroundColor3 = selected[name] and Color3.fromRGB(45, 38, 30) or UI_COL_ROW2,
+							AutoButtonColor = true,
+							Font = UI_FONT,
+							TextSize = 12,
+							TextColor3 = UI_COL_TEXT,
+							Text = "  " .. name,
+							TextXAlignment = Enum.TextXAlignment.Left,
+							LayoutOrder = i,
+							ZIndex = 50,
+						}, listScroll)
+						optionBtns[name] = ob
+						ob.MouseButton1Click:Connect(function()
+							if multi then
+								setSelected(name, not selected[name])
+							else
+								setSelected(name, true)
+								listFrame.Visible = false
+							end
+							fireChange()
+						end)
+					end
+				end
+				rebuildOptions()
+
+				if dcfg.Default then
+					if type(dcfg.Default) == "table" then
+						for _, name in ipairs(dcfg.Default) do
+							selected[name] = true
+						end
+					elseif type(dcfg.Default) == "string" then
+						selected[dcfg.Default] = true
+					end
+					head.Text = headerText()
+					for n, b in pairs(optionBtns) do
+						b.BackgroundColor3 = selected[n] and Color3.fromRGB(45, 38, 30) or UI_COL_ROW2
+					end
+				end
+
+				head.MouseButton1Click:Connect(function()
+					listFrame.Visible = not listFrame.Visible
+					if listFrame.Visible then
+						local abs, absSize = head.AbsolutePosition, head.AbsoluteSize
+						listFrame.Position = UDim2.fromOffset(abs.X, abs.Y + absSize.Y + 2)
+						listFrame.Size = UDim2.fromOffset(absSize.X, math.min(#values * 26, 160))
+					end
+				end)
+
+				local obj = {}
+				function obj:OnChanged(fn)
+					dcfg._onChanged = fn
+				end
+				function obj:SetValue(v)
+					if type(v) == "table" then
+						selected = {}
+						for name, on in pairs(v) do
+							if on then
+								selected[name] = true
+							end
+						end
+					else
+						selected = { [v] = true }
+					end
+					head.Text = headerText()
+					for n, b in pairs(optionBtns) do
+						b.BackgroundColor3 = selected[n] and Color3.fromRGB(45, 38, 30) or UI_COL_ROW2
+					end
+					fireChange()
+				end
+				function obj:SetValues(newValues)
+					values = newValues
+					rebuildOptions()
+				end
+				Fluent.Options[id] = obj
+				if dcfg._onChanged and dcfg.Default then
+					task.defer(fireChange)
+				end
+				return obj
+			end
+
+			return Section
+		end
+
+		tabs[idx] = Tab
+		return Tab
+	end
+
+	function Window:SelectTab(idx)
+		if type(idx) == "table" then
+			idx = idx.Index
+		end
+		for i, t in ipairs(tabs) do
+			t.ScrollFrame.Visible = (i == idx)
+			tabButtons[i].BackgroundTransparency = (i == idx) and 0.3 or 1
+			tabButtons[i].TextColor3 = (i == idx) and UI_COL_TEXT or UI_COL_DIM
+		end
+	end
+
+	self.Window = Window
+	return Window
+end
 
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub",
 	SubTitle = "Grow a Garden",
 	TabWidth = 160,
 	Size = UDim2.fromOffset(720, 480),
-	Acrylic = false,
-	Theme = "Darker",
-	MinimizeKey = Enum.KeyCode.RightControl,
 })
-pcall(function() Fluent.GUI.Name = "NaruHubGUI" end)
-
--- Maximize dimatikan total: teks jadi pecah/rusak kalau di-maximize (Fluent
--- tidak scale dengan bersih di ukuran itu). Sembunyikan tombolnya + no-op-kan
--- callback-nya + timpa Window.Maximize sendiri, biar tidak ada jalan buat trigger.
-pcall(function()
-	local maxBtn = Window.TitleBar.MaxButton
-	maxBtn.Frame.Visible = false
-	maxBtn:SetCallback(function() end)
-end)
-pcall(function()
-	Window.Maximize = function() end
-end)
-
 
 local Tabs = {
-	Shop = Window:AddTab({ Title = "Seed Shop", Icon = "sprout" }),
-	Garden = Window:AddTab({ Title = "Garden", Icon = "shovel" }),
-	Automatically = Window:AddTab({ Title = "Automatically", Icon = "zap" }),
-	Misc = Window:AddTab({ Title = "Misc", Icon = "package" }),
-	Weather = Window:AddTab({ Title = "Weather", Icon = "cloud-lightning" }),
-	Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
+	Shop = Window:AddTab({ Title = "Seed Shop" }),
+	Garden = Window:AddTab({ Title = "Garden" }),
+	Automatically = Window:AddTab({ Title = "Automatically" }),
+	Misc = Window:AddTab({ Title = "Misc" }),
+	Weather = Window:AddTab({ Title = "Weather" }),
+	Settings = Window:AddTab({ Title = "Settings" }),
 }
 
 -- --- Seed Shop tab ------------------------------------------------
@@ -1848,14 +2560,11 @@ displaySection:AddToggle("NaruHub_Esp", {
 })
 
 -- --- Settings tab ------------------------------------------------
-SaveManager:SetLibrary(Fluent)
-InterfaceManager:SetLibrary(Fluent)
-SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({})
-InterfaceManager:SetFolder("NaruHub")
-SaveManager:SetFolder("NaruHub/GrowAGarden")
-InterfaceManager:BuildInterfaceSection(Tabs.Settings)
-SaveManager:BuildConfigSection(Tabs.Settings)
+local settingsInfoSection = Tabs.Settings:AddSection("Info")
+settingsInfoSection:AddParagraph({
+	Title = "NaruHub - Grow a Garden",
+	Content = "Config save/load belum ada di UI baru ini (dulu pakai SaveManager Fluent). Semua toggle balik ke default tiap execute ulang.",
+})
 
 Window:SelectTab(1)
 
@@ -1872,43 +2581,6 @@ getgenv().NaruHub = {
 
 local conns = {}
 
-local UI_FONT = Enum.Font.Oswald
-
-local function paintStroke(inst)
-	if inst:IsA("UIStroke") then
-		inst.Color = BRAND
-	elseif inst:IsA("TextLabel") or inst:IsA("TextButton") or inst:IsA("TextBox") then
-		pcall(function()
-			inst.Font = UI_FONT
-		end)
-	end
-end
-
-local function paintAll()
-	for _, d in ipairs(Fluent.GUI:GetDescendants()) do
-		paintStroke(d)
-	end
-end
-
--- Transparency dulu (memicu re-theme Fluent), BARU cat border,
--- kalau tidak border brown-nya ketimpa balik.
-pcall(function()
-	Fluent:ToggleTransparency(true)
-end)
-
-pcall(function()
-	paintAll()
-	table.insert(conns, Fluent.GUI.DescendantAdded:Connect(paintStroke))
-end)
-
--- Reapply beberapa frame untuk menangkap re-theme yang tertunda.
-task.spawn(function()
-	for _ = 1, 3 do
-		task.wait(0.2)
-		pcall(paintAll)
-	end
-end)
-
 --==============================================================
 -- Logo di title bar + logo mengambang saat minimize
 --==============================================================
@@ -1918,7 +2590,7 @@ local TILT = -10 -- kemiringan sticker (derajat)
 -- (1) Logo nempel di title bar (placeholder), miring ~10 derajat
 pcall(function()
 	local tb = Window.TitleBar.Frame
-	local titleHolder = tb:FindFirstChildWhichIsA("Frame") -- holder teks judul
+	local titleHolder = tb:FindFirstChild("TitleHolder") -- holder teks judul
 	if titleHolder then
 		local p, s = titleHolder.Position, titleHolder.Size
 		titleHolder.Position = UDim2.new(0, 46, p.Y.Scale, p.Y.Offset)
@@ -2505,37 +3177,6 @@ task.spawn(function()
 	while aliveFn() do
 		pcall(updateGardenInfo)
 		task.wait(3)
-	end
-end)
-
--- Watchdog: Fluent kadang numpuk beberapa ImageLabel background yang sama
--- (Image sama, Parent sama) tiap resize/maximize -- lama-lama numpuk bikin
--- window kelihatan gelap/blur kayak gambar rusak. Bersihkan sisa duplikatnya,
--- sisakan yang paling baru saja.
-task.spawn(function()
-	while aliveFn() do
-		task.wait(2)
-		pcall(function()
-			-- Kedalaman nesting layer duplikatnya tidak konsisten (kadang 1
-			-- level, kadang lebih), jadi dedupe langsung by Image, global dalam
-			-- Fluent.GUI -- bukan generik untuk semua gambar (bisa kena icon
-			-- yang memang sengaja dipakai berulang), tapi khusus texture
-			-- "glass paint" Fluent yang diketahui numpuk ini.
-			local KNOWN_PAINT_IMAGES = {
-				["http://www.roblox.com/asset/?id=5554236805"] = true,
-				["rbxassetid://8992230677"] = true,
-			}
-			local seenWrapper = {}
-			for _, d in ipairs(Fluent.GUI:GetDescendants()) do
-				if d:IsA("ImageLabel") and KNOWN_PAINT_IMAGES[d.Image] then
-					local prevWrapper = seenWrapper[d.Image]
-					if prevWrapper and prevWrapper.Parent then
-						prevWrapper:Destroy()
-					end
-					seenWrapper[d.Image] = d.Parent
-				end
-			end
-		end)
 	end
 end)
 
