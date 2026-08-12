@@ -19,7 +19,7 @@ local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 
-local BRAND = Color3.fromRGB(65, 45, 21) -- #412D15 border NaruHub
+local BRAND = Color3.fromRGB(255, 214, 10) -- kuning "lightning" (tema hitam-kuning)
 
 -- Generation guard: kalau script di-execute ulang (loadstring), run lama berhenti.
 local MY_GEN
@@ -997,14 +997,16 @@ local NaruTween = game:GetService("TweenService")
 
 local UI_FONT = Enum.Font.GothamMedium
 local UI_FONT_BOLD = Enum.Font.GothamBold
-local UI_COL_BG = Color3.fromRGB(16, 16, 20)
-local UI_COL_SIDEBAR = Color3.fromRGB(11, 11, 14)
-local UI_COL_ROW = Color3.fromRGB(25, 25, 31)
-local UI_COL_ROW2 = Color3.fromRGB(30, 30, 37)
-local UI_COL_TEXT = Color3.fromRGB(235, 235, 240)
-local UI_COL_DIM = Color3.fromRGB(150, 150, 160)
-local UI_COL_ACCENT = Color3.fromRGB(216, 148, 72) -- amber turunan BRAND, buat elemen interaktif
-local UI_COL_OFF = Color3.fromRGB(60, 60, 68)
+-- Tema "Lightning": hitam pekat + kuning terang, modern & kontras tinggi.
+local UI_COL_BG = Color3.fromRGB(8, 8, 9)
+local UI_COL_SIDEBAR = Color3.fromRGB(4, 4, 5)
+local UI_COL_ROW = Color3.fromRGB(17, 17, 18)
+local UI_COL_ROW2 = Color3.fromRGB(24, 24, 26)
+local UI_COL_TEXT = Color3.fromRGB(250, 250, 250)
+local UI_COL_DIM = Color3.fromRGB(145, 145, 148)
+local UI_COL_ACCENT = Color3.fromRGB(255, 214, 10) -- kuning lightning
+local UI_COL_ACCENT_DIM = Color3.fromRGB(60, 52, 10) -- kuning gelap (state terpilih, bg lembut)
+local UI_COL_OFF = Color3.fromRGB(48, 48, 50)
 
 local function uiNew(class, props, parent)
 	local o = Instance.new(class)
@@ -1065,7 +1067,7 @@ function Fluent:CreateWindow(cfg)
 		ClipsDescendants = true,
 	}, screenGui)
 	uiCorner(10, main)
-	uiStroke(Color3.fromRGB(65, 45, 21), 1.5, main)
+	uiStroke(BRAND, 1.5, main)
 
 	local titleBar = uiNew("Frame", {
 		Name = "TitleBar",
@@ -1095,7 +1097,7 @@ function Fluent:CreateWindow(cfg)
 		TextSize = 16,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextColor3 = UI_COL_TEXT,
-		Text = cfg.Title or "Window",
+		Text = "\226\154\161 " .. (cfg.Title or "Window"),
 	}, titleHolder)
 	uiNew("TextLabel", {
 		BackgroundTransparency = 1,
@@ -1209,18 +1211,27 @@ function Fluent:CreateWindow(cfg)
 		local idx = #tabs + 1
 		local btn = uiNew("TextButton", {
 			Size = UDim2.new(1, 0, 0, 32),
-			BackgroundColor3 = UI_COL_ROW,
-			BackgroundTransparency = idx == 1 and 0.3 or 1,
+			BackgroundColor3 = idx == 1 and UI_COL_ACCENT_DIM or UI_COL_ROW,
+			BackgroundTransparency = idx == 1 and 0.15 or 1,
 			AutoButtonColor = false,
 			Font = UI_FONT,
 			TextSize = 14,
-			TextColor3 = idx == 1 and UI_COL_TEXT or UI_COL_DIM,
-			Text = "  " .. (tcfg.Title or ("Tab " .. idx)),
+			TextColor3 = idx == 1 and UI_COL_ACCENT or UI_COL_DIM,
+			Text = "    " .. (tcfg.Title or ("Tab " .. idx)),
 			TextXAlignment = Enum.TextXAlignment.Left,
 			LayoutOrder = idx,
 		}, sideList)
 		uiCorner(6, btn)
-		tabButtons[idx] = btn
+		local tabAccentBar = uiNew("Frame", {
+			Size = UDim2.new(0, 3, 0.6, 0),
+			Position = UDim2.new(0, 0, 0.5, 0),
+			AnchorPoint = Vector2.new(0, 0.5),
+			BackgroundColor3 = UI_COL_ACCENT,
+			BorderSizePixel = 0,
+			Visible = idx == 1,
+		}, btn)
+		uiCorner(2, tabAccentBar)
+		tabButtons[idx] = { Btn = btn, Bar = tabAccentBar }
 
 		local scroll = uiNew("ScrollingFrame", {
 			Name = tcfg.Title or ("Tab" .. idx),
@@ -1270,16 +1281,29 @@ function Fluent:CreateWindow(cfg)
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}, secFrame)
 
-			uiNew("TextLabel", {
+			local headerRow = uiNew("Frame", {
 				BackgroundTransparency = 1,
 				Size = UDim2.new(1, 0, 0, 22),
+				LayoutOrder = 0,
+			}, secFrame)
+			uiNew("Frame", {
+				BackgroundColor3 = UI_COL_ACCENT,
+				Size = UDim2.new(0, 3, 0, 14),
+				Position = UDim2.new(0, 0, 0.5, 0),
+				AnchorPoint = Vector2.new(0, 0.5),
+				BorderSizePixel = 0,
+			}, headerRow)
+			uiNew("TextLabel", {
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 10, 0, 0),
+				Size = UDim2.new(1, -10, 1, 0),
 				Font = UI_FONT_BOLD,
 				TextSize = 15,
 				TextXAlignment = Enum.TextXAlignment.Left,
-				TextColor3 = UI_COL_ACCENT,
+				TextColor3 = UI_COL_TEXT,
 				Text = title,
 				LayoutOrder = 0,
-			}, secFrame)
+			}, headerRow)
 
 			local Section = { Frame = secFrame, _order = 1 }
 
@@ -1591,7 +1615,7 @@ function Fluent:CreateWindow(cfg)
 					ZIndex = 50,
 				}, listGui)
 				uiCorner(6, listFrame)
-				uiStroke(Color3.fromRGB(65, 45, 21), 1, listFrame)
+				uiStroke(BRAND, 1, listFrame)
 				local listScroll = uiNew("ScrollingFrame", {
 					Size = UDim2.fromScale(1, 1),
 					BackgroundTransparency = 1,
@@ -1634,7 +1658,7 @@ function Fluent:CreateWindow(cfg)
 					selected[name] = on or nil
 					head.Text = headerText()
 					for n, b in pairs(optionBtns) do
-						b.BackgroundColor3 = selected[n] and Color3.fromRGB(45, 38, 30) or UI_COL_ROW2
+						b.BackgroundColor3 = selected[n] and UI_COL_ACCENT_DIM or UI_COL_ROW2
 					end
 				end
 
@@ -1648,7 +1672,7 @@ function Fluent:CreateWindow(cfg)
 					for i, name in ipairs(values) do
 						local ob = uiNew("TextButton", {
 							Size = UDim2.new(1, 0, 0, 26),
-							BackgroundColor3 = selected[name] and Color3.fromRGB(45, 38, 30) or UI_COL_ROW2,
+							BackgroundColor3 = selected[name] and UI_COL_ACCENT_DIM or UI_COL_ROW2,
 							AutoButtonColor = true,
 							Font = UI_FONT,
 							TextSize = 12,
@@ -1682,7 +1706,7 @@ function Fluent:CreateWindow(cfg)
 					end
 					head.Text = headerText()
 					for n, b in pairs(optionBtns) do
-						b.BackgroundColor3 = selected[n] and Color3.fromRGB(45, 38, 30) or UI_COL_ROW2
+						b.BackgroundColor3 = selected[n] and UI_COL_ACCENT_DIM or UI_COL_ROW2
 					end
 				end
 
@@ -1712,7 +1736,7 @@ function Fluent:CreateWindow(cfg)
 					end
 					head.Text = headerText()
 					for n, b in pairs(optionBtns) do
-						b.BackgroundColor3 = selected[n] and Color3.fromRGB(45, 38, 30) or UI_COL_ROW2
+						b.BackgroundColor3 = selected[n] and UI_COL_ACCENT_DIM or UI_COL_ROW2
 					end
 					fireChange()
 				end
@@ -1739,9 +1763,13 @@ function Fluent:CreateWindow(cfg)
 			idx = idx.Index
 		end
 		for i, t in ipairs(tabs) do
-			t.ScrollFrame.Visible = (i == idx)
-			tabButtons[i].BackgroundTransparency = (i == idx) and 0.3 or 1
-			tabButtons[i].TextColor3 = (i == idx) and UI_COL_TEXT or UI_COL_DIM
+			local active = (i == idx)
+			t.ScrollFrame.Visible = active
+			local tb = tabButtons[i]
+			tb.Btn.BackgroundColor3 = active and UI_COL_ACCENT_DIM or UI_COL_ROW
+			tb.Btn.BackgroundTransparency = active and 0.15 or 1
+			tb.Btn.TextColor3 = active and UI_COL_ACCENT or UI_COL_DIM
+			tb.Bar.Visible = active
 		end
 	end
 
@@ -1757,7 +1785,7 @@ local Window = Fluent:CreateWindow({
 })
 
 local Tabs = {
-	Shop = Window:AddTab({ Title = "Seed Shop" }),
+	Shop = Window:AddTab({ Title = "Shop" }),
 	Garden = Window:AddTab({ Title = "Garden" }),
 	Automatically = Window:AddTab({ Title = "Automatically" }),
 	Misc = Window:AddTab({ Title = "Misc" }),
