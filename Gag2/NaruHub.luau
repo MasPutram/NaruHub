@@ -579,13 +579,27 @@ local function dropTool(tool: Instance): boolean
 	if setIdentity then
 		pcall(setIdentity, 2)
 	end
-	local ok = pcall(function()
+	local fireOk = pcall(function()
 		RequestDrop:Fire(category, id)
 	end)
 	if setIdentity then
 		pcall(setIdentity, prev)
 	end
-	return ok
+	if not fireOk then
+		return false
+	end
+
+	-- Fire itu fire-and-forget: pcall cuma nangkep error di sisi client, BUKAN
+	-- konfirmasi server benar-benar memproses drop-nya. Verifikasi tool beneran
+	-- hilang (di-destroy) sebelum dianggap sukses -- kalau tidak, jangan dihitung
+	-- (biar tidak salah lapor "sukses" padahal tool masih nyangkut di karakter).
+	for _ = 1, 30 do
+		if tool.Parent == nil then
+			return true
+		end
+		task.wait(0.05)
+	end
+	return false
 end
 
 -- Counter live untuk Monitor HUD (bukan config).
