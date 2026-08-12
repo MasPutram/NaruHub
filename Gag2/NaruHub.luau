@@ -541,7 +541,9 @@ local function getDropCategoryAndId(tool: Instance): (string?, string?)
 	return nil, nil
 end
 
--- Equip tool -> fire RequestDrop(category, id) di identity 2 -> selesai.
+-- Equip tool (tunggu betul-betul ke-equip, seperti klik pilih di inventory asli)
+-- -> baru fire RequestDrop(category, id) di identity 2 (backspace). Bukan spam
+-- fire tanpa equip -- kalau tool gagal ke-equip dalam waktu wajar, batal (return false).
 local function dropTool(tool: Instance): boolean
 	if not RequestDrop then
 		return false
@@ -552,11 +554,27 @@ local function dropTool(tool: Instance): boolean
 	end
 	local char = LocalPlayer.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
-	if hum then
+	if not char or not hum then
+		return false
+	end
+
+	if tool.Parent ~= char then
 		pcall(function()
 			hum:EquipTool(tool)
 		end)
+		local equipped = false
+		for _ = 1, 10 do
+			if tool.Parent == char then
+				equipped = true
+				break
+			end
+			task.wait(0.05)
+		end
+		if not equipped then
+			return false
+		end
 	end
+
 	local prev = (getIdentity and getIdentity()) or 8
 	if setIdentity then
 		pcall(setIdentity, 2)
