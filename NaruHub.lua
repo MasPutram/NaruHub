@@ -1067,11 +1067,11 @@ function Fluent:CreateWindow(cfg)
 		ClipsDescendants = true,
 	}, screenGui)
 	uiCorner(10, main)
-	uiStroke(BRAND, 1.5, main)
+	uiStroke(Color3.fromRGB(38, 38, 40), 1, main)
 
 	local titleBar = uiNew("Frame", {
 		Name = "TitleBar",
-		Size = UDim2.new(1, 0, 0, 40),
+		Size = UDim2.new(1, 0, 0, 46),
 		BackgroundColor3 = UI_COL_SIDEBAR,
 		BorderSizePixel = 0,
 	}, main)
@@ -1087,8 +1087,8 @@ function Fluent:CreateWindow(cfg)
 	local titleHolder = uiNew("Frame", {
 		Name = "TitleHolder",
 		BackgroundTransparency = 1,
-		Position = UDim2.new(0, 14, 0, 0),
-		Size = UDim2.new(1, -140, 1, 0),
+		Position = UDim2.new(0, 20, 0, 0),
+		Size = UDim2.new(1, -150, 1, 0),
 	}, titleBar)
 	uiNew("TextLabel", {
 		BackgroundTransparency = 1,
@@ -1132,8 +1132,8 @@ function Fluent:CreateWindow(cfg)
 
 	local sidebar = uiNew("Frame", {
 		Name = "Sidebar",
-		Position = UDim2.new(0, 0, 0, 40),
-		Size = UDim2.new(0, cfg.TabWidth or 150, 1, -40),
+		Position = UDim2.new(0, 0, 0, 46),
+		Size = UDim2.new(0, cfg.TabWidth or 150, 1, -46),
 		BackgroundColor3 = UI_COL_SIDEBAR,
 		BorderSizePixel = 0,
 	}, main)
@@ -1149,8 +1149,8 @@ function Fluent:CreateWindow(cfg)
 
 	local content = uiNew("Frame", {
 		Name = "Content",
-		Position = UDim2.new(0, cfg.TabWidth or 150, 0, 40),
-		Size = UDim2.new(1, -(cfg.TabWidth or 150), 1, -40),
+		Position = UDim2.new(0, cfg.TabWidth or 150, 0, 46),
+		Size = UDim2.new(1, -(cfg.TabWidth or 150), 1, -46),
 		BackgroundTransparency = 1,
 	}, main)
 
@@ -1251,7 +1251,7 @@ function Fluent:CreateWindow(cfg)
 			PaddingBottom = UDim.new(0, 14),
 		}, scroll)
 		uiNew("UIListLayout", {
-			Padding = UDim.new(0, 10),
+			Padding = UDim.new(0, 14),
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}, scroll)
 
@@ -1271,13 +1271,13 @@ function Fluent:CreateWindow(cfg)
 			}, scroll)
 			uiCorner(8, secFrame)
 			uiNew("UIPadding", {
-				PaddingLeft = UDim.new(0, 12),
-				PaddingRight = UDim.new(0, 12),
-				PaddingTop = UDim.new(0, 10),
-				PaddingBottom = UDim.new(0, 10),
+				PaddingLeft = UDim.new(0, 14),
+				PaddingRight = UDim.new(0, 14),
+				PaddingTop = UDim.new(0, 13),
+				PaddingBottom = UDim.new(0, 13),
 			}, secFrame)
 			uiNew("UIListLayout", {
-				Padding = UDim.new(0, 6),
+				Padding = UDim.new(0, 10),
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}, secFrame)
 
