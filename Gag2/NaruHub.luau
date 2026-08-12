@@ -50,7 +50,7 @@ end
 -- Game bindings
 --==============================================================
 
-local PurchaseSeed, CollectFruit, UseShovel, PlaceSprinkler, RequestDrop
+local PurchaseSeed, CollectFruit, UseShovel, PlaceSprinkler, RequestDrop, PurchaseGear
 do
 	local ok, net = pcall(function()
 		return require(ReplicatedStorage.SharedModules.Networking)
@@ -70,6 +70,9 @@ do
 		end
 		if net.DroppedItem then
 			RequestDrop = net.DroppedItem.RequestDrop
+		end
+		if net.GearShop then
+			PurchaseGear = net.GearShop.PurchaseGear
 		end
 	end
 end
@@ -159,6 +162,18 @@ local function getStock(name: string): number
 	return (v and v.Value) or 0
 end
 
+local gearStockItems = ReplicatedStorage:FindFirstChild("StockValues")
+gearStockItems = gearStockItems and gearStockItems:FindFirstChild("GearShop")
+gearStockItems = gearStockItems and gearStockItems:FindFirstChild("Items")
+
+local function getGearStock(name: string): number
+	if not gearStockItems then
+		return 0
+	end
+	local v = gearStockItems:FindFirstChild(name)
+	return (v and v.Value) or 0
+end
+
 local priceByName: { [string]: number } = {}
 local ALL_SEEDS: { string } = {}
 do
@@ -215,6 +230,7 @@ local DROP_CATEGORY_BY_ATTR: { [string]: string } = {
 local rarityBySeedName: { [string]: string } = {}
 local ALL_GEAR: { string } = {}
 local rarityByGearName: { [string]: string } = {}
+local gearPriceByName: { [string]: number } = {}
 local RARITY_LIST: { string } = {}
 do
 	local seen = {}
@@ -247,6 +263,9 @@ do
 						seen[entry.Rarity] = true
 						table.insert(RARITY_LIST, entry.Rarity)
 					end
+				end
+				if entry.Cost then
+					gearPriceByName[n] = entry.Cost
 				end
 				if not seenGear[n] then
 					seenGear[n] = true
@@ -319,6 +338,23 @@ local function buySeed(name: string): boolean
 	end
 	local ok = pcall(function()
 		PurchaseSeed:Fire(name)
+	end)
+	if setIdentity then
+		pcall(setIdentity, prev)
+	end
+	return ok
+end
+
+local function buyGear(name: string): boolean
+	if not PurchaseGear then
+		return false
+	end
+	local prev = (getIdentity and getIdentity()) or 8
+	if setIdentity then
+		pcall(setIdentity, 2)
+	end
+	local ok = pcall(function()
+		PurchaseGear:Fire(name)
 	end)
 	if setIdentity then
 		pcall(setIdentity, prev)
@@ -736,6 +772,12 @@ local State = {
 	BuyDelay = 0.2,
 	BoughtSession = 0,
 
+	GearEnabled = false,
+	GearBuyAll = true,
+	GearSelected = {} :: { [string]: boolean },
+	GearBuyDelay = 0.2,
+	GearBoughtSession = 0,
+
 	WeatherNotify = true,
 	WeatherNotifyEnd = false,
 	WeatherSel = {} :: { [string]: boolean },
@@ -889,13 +931,94 @@ local function buyLoopFor(name: string, aliveFn): number
 	return bought
 end
 
+local function isGearTargeted(name: string): boolean
+	if State.GearBuyAll then
+		return true
+	end
+	return State.GearSelected[name] == true
+end
+
+local function gearBuyLoopFor(name: string, aliveFn): number
+	local price = gearPriceByName[name]
+	local bought = 0
+
+	for _ = 1, 60 do
+		if not State.GearEnabled or (aliveFn and not aliveFn()) then
+			break
+		end
+		if getGearStock(name) <= 0 then
+			break
+		end
+
+		local balBefore = getSheckles()
+		if balBefore and price and balBefore < price then
+			break
+		end
+
+		if not buyGear(name) then
+			break
+		end
+
+		if balBefore then
+			local success = false
+			for _ = 1, 6 do
+				task.wait(State.GearBuyDelay)
+				local now = getSheckles()
+				if now and now < balBefore then
+					success = true
+					break
+				end
+			end
+			if success then
+				bought += 1
+				State.GearBoughtSession += 1
+			else
+				break
+			end
+		else
+			task.wait(State.GearBuyDelay)
+			bought += 1
+			State.GearBoughtSession += 1
+		end
+	end
+
+	return bought
+end
+
 --==============================================================
 -- UI (Fluent)
 --==============================================================
 
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+-- GitHub Releases kadang balikin body kosong sesaat (flaky CDN), bukan error --
+-- HttpGet sukses tapi hasilnya "" sehingga loadstring gagal. Retry beberapa kali.
+local function fetchLoadstring(url: string, tries: number?)
+	local lastErr = "unknown"
+	for _ = 1, tries or 12 do
+		local ok, bodyOrErr = pcall(function()
+			return game:HttpGet(url)
+		end)
+		if ok and bodyOrErr and #bodyOrErr > 100 then
+			local fn, loadErr = loadstring(bodyOrErr)
+			if fn then
+				local runOk, result = pcall(fn)
+				if runOk then
+					return result
+				end
+				lastErr = tostring(result)
+			else
+				lastErr = tostring(loadErr)
+			end
+		else
+			lastErr = ok and "empty response" or tostring(bodyOrErr)
+		end
+		task.wait(2.5)
+	end
+	error("fetchLoadstring gagal untuk " .. url .. ": " .. lastErr)
+end
+
+local Fluent = fetchLoadstring("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua")
+local SaveManager = fetchLoadstring("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua")
+local InterfaceManager = fetchLoadstring("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua")
 
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub",
@@ -1001,6 +1124,62 @@ seedSection:AddButton({
 			seedDropdown:SetValues(getSeedNames())
 		end)
 		Fluent:Notify({ Title = "NaruHub", Content = "Daftar seed diperbarui.", Duration = 3 })
+	end,
+})
+
+-- --- Shop tab: Auto Buy Gear (stock realtime dari StockValues.GearShop) --
+local gearBuySection = Tabs.Shop:AddSection("Auto Buy Gear")
+
+local GearStatusParagraph = gearBuySection:AddParagraph({ Title = "Status", Content = "Idle" })
+local function setGearStatus(text: string)
+	pcall(function() GearStatusParagraph:SetDesc(text) end)
+	pcall(function() GearStatusParagraph:SetContent(text) end)
+end
+
+gearBuySection:AddToggle("NaruHub_AutoBuyGear", {
+	Title = "Auto Buy Gear",
+	Default = false,
+	Callback = function(state)
+		State.GearEnabled = state
+		setGearStatus(state and "Auto buy aktif..." or "Dimatikan")
+	end,
+})
+
+gearBuySection:AddToggle("NaruHub_GearBuyAll", {
+	Title = "Beli Semua Stok",
+	Default = true,
+	Callback = function(state)
+		State.GearBuyAll = state
+	end,
+})
+
+local gearSection = Tabs.Shop:AddSection("Pilihan Gear (mode manual)")
+
+local gearDropdown = gearSection:AddDropdown("NaruHub_Gears", {
+	Title = "Target Gear",
+	Values = ALL_GEAR,
+	Multi = true,
+	Default = {},
+})
+
+gearDropdown:OnChanged(function(value)
+	local sel = {}
+	for name, on in pairs(value) do
+		if on then
+			sel[name] = true
+		end
+	end
+	State.GearSelected = sel
+end)
+
+gearSection:AddSlider("NaruHub_GearBuyDelay", {
+	Title = "Buy Delay (detik)",
+	Default = 0.2,
+	Min = 0.1,
+	Max = 1,
+	Rounding = 2,
+	Callback = function(v)
+		State.GearBuyDelay = v
 	end,
 })
 
@@ -2497,6 +2676,58 @@ task.spawn(function()
 				setStatus(("Saldo kurang (%s) - menunggu..."):format(tostring(balance)))
 			else
 				setStatus("Menunggu restock...")
+			end
+		end
+	end
+end)
+
+task.spawn(function()
+	while aliveFn() do
+		task.wait(0.4)
+		if not State.GearEnabled or not PurchaseGear then
+			continue
+		end
+
+		local balance = getSheckles()
+		local didBuy = false
+		local blockedByFunds = false
+		local anyTarget = false
+
+		for _, name in ipairs(ALL_GEAR) do
+			if not State.GearEnabled or not aliveFn() then
+				break
+			end
+			if not isGearTargeted(name) then
+				continue
+			end
+			if getGearStock(name) <= 0 then
+				continue
+			end
+			anyTarget = true
+
+			local price = gearPriceByName[name]
+			if balance and price and balance < price then
+				blockedByFunds = true
+				continue
+			end
+
+			setGearStatus(("Membeli %s..."):format(name))
+			local n = gearBuyLoopFor(name, aliveFn)
+			if n > 0 then
+				didBuy = true
+				balance = getSheckles() or balance
+			end
+		end
+
+		if State.GearEnabled then
+			if didBuy then
+				setGearStatus(("Total dibeli sesi ini: %d"):format(State.GearBoughtSession))
+			elseif blockedByFunds and not anyTarget then
+				setGearStatus(("Saldo kurang (%s)"):format(tostring(balance)))
+			elseif blockedByFunds then
+				setGearStatus(("Saldo kurang (%s) - menunggu..."):format(tostring(balance)))
+			else
+				setGearStatus("Menunggu restock...")
 			end
 		end
 	end
