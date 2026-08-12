@@ -1680,9 +1680,15 @@ getgenv().NaruHub = {
 
 local conns = {}
 
+local UI_FONT = Enum.Font.BuilderSans
+
 local function paintStroke(inst)
 	if inst:IsA("UIStroke") then
 		inst.Color = BRAND
+	elseif inst:IsA("TextLabel") or inst:IsA("TextButton") or inst:IsA("TextBox") then
+		pcall(function()
+			inst.Font = UI_FONT
+		end)
 	end
 end
 
@@ -2307,6 +2313,37 @@ task.spawn(function()
 	while aliveFn() do
 		pcall(updateGardenInfo)
 		task.wait(3)
+	end
+end)
+
+-- Watchdog: Fluent kadang numpuk beberapa ImageLabel background yang sama
+-- (Image sama, Parent sama) tiap resize/maximize -- lama-lama numpuk bikin
+-- window kelihatan gelap/blur kayak gambar rusak. Bersihkan sisa duplikatnya,
+-- sisakan yang paling baru saja.
+task.spawn(function()
+	while aliveFn() do
+		task.wait(2)
+		pcall(function()
+			-- Kedalaman nesting layer duplikatnya tidak konsisten (kadang 1
+			-- level, kadang lebih), jadi dedupe langsung by Image, global dalam
+			-- Fluent.GUI -- bukan generik untuk semua gambar (bisa kena icon
+			-- yang memang sengaja dipakai berulang), tapi khusus texture
+			-- "glass paint" Fluent yang diketahui numpuk ini.
+			local KNOWN_PAINT_IMAGES = {
+				["http://www.roblox.com/asset/?id=5554236805"] = true,
+				["rbxassetid://8992230677"] = true,
+			}
+			local seenWrapper = {}
+			for _, d in ipairs(Fluent.GUI:GetDescendants()) do
+				if d:IsA("ImageLabel") and KNOWN_PAINT_IMAGES[d.Image] then
+					local prevWrapper = seenWrapper[d.Image]
+					if prevWrapper and prevWrapper.Parent then
+						prevWrapper:Destroy()
+					end
+					seenWrapper[d.Image] = d.Parent
+				end
+			end
+		end)
 	end
 end)
 
