@@ -1363,27 +1363,51 @@ dropPetSection:AddToggle("NaruHub_DropPetEnabled", {
 	end,
 })
 
-local monSection = Tabs.Garden:AddSection("Monitor / ESP / Sprinkler")
+-- --- Garden tab: info kebun saja (read-only, tidak ada kontrol) --
+local gardenInfoSection = Tabs.Garden:AddSection("Info Kebun")
+local GardenSheckles = gardenInfoSection:AddParagraph({ Title = "Sheckles", Content = "-" })
+local GardenPlants = gardenInfoSection:AddParagraph({ Title = "Tanaman di kebun", Content = "-" })
 
-monSection:AddDropdown("NaruHub_MonSort", {
-	Title = "Urutkan daftar buah (kg)",
-	Values = { "High", "Low" },
-	Multi = false,
-	Default = "High",
-}):OnChanged(function(v)
-	State.MonSort = v
-end)
+local function updateGardenInfo()
+	local sheckles = getSheckles()
+	pcall(function()
+		GardenSheckles:SetDesc(sheckles and ("%s ¢"):format(tostring(sheckles)) or "-")
+	end)
+	pcall(function()
+		GardenSheckles:SetContent(sheckles and ("%s ¢"):format(tostring(sheckles)) or "-")
+	end)
 
-monSection:AddToggle("NaruHub_Esp", {
-	Title = "Fruit ESP (kg di atas buah)",
-	Description = "Ikut seed filter. Hijau = keeper, merah = target shovel.",
-	Default = false,
-	Callback = function(s)
-		State.EspEnabled = s
-	end,
-})
+	local counts, order = {}, {}
+	local plot = getMyPlot()
+	if plot then
+		local plants = plot:FindFirstChild("Plants")
+		if plants then
+			for _, pl in ipairs(plants:GetChildren()) do
+				local seed = pl:GetAttribute("SeedName")
+				if seed then
+					if not counts[seed] then
+						counts[seed] = 0
+						order[#order + 1] = seed
+					end
+					counts[seed] += 1
+				end
+			end
+		end
+	end
+	table.sort(order)
+	local lines = {}
+	for _, name in ipairs(order) do
+		lines[#lines + 1] = ("%s x%d"):format(name, counts[name])
+	end
+	local text = #lines > 0 and table.concat(lines, "\n") or "Tidak ada tanaman terdeteksi."
+	pcall(function() GardenPlants:SetDesc(text) end)
+	pcall(function() GardenPlants:SetContent(text) end)
+end
 
-monSection:AddToggle("NaruHub_Sprinkler", {
+-- --- Automatically tab: Auto Place Sprinkler ----------------------------
+local sprinklerSection = Tabs.Automatically:AddSection("Auto Place Sprinkler")
+
+sprinklerSection:AddToggle("NaruHub_Sprinkler", {
 	Title = "Auto Place Sprinkler (satu-satu)",
 	Description = "Taruh sprinkler dari inventory ke plot, 1 per interval.",
 	Default = false,
@@ -1392,7 +1416,7 @@ monSection:AddToggle("NaruHub_Sprinkler", {
 	end,
 })
 
-monSection:AddSlider("NaruHub_SprinklerDelay", {
+sprinklerSection:AddSlider("NaruHub_SprinklerDelay", {
 	Title = "Sprinkler Delay (detik)",
 	Default = 1.5,
 	Min = 0.3,
@@ -1403,12 +1427,33 @@ monSection:AddSlider("NaruHub_SprinklerDelay", {
 	end,
 })
 
-monSection:AddToggle("NaruHub_SprinklerNoTP", {
+sprinklerSection:AddToggle("NaruHub_SprinklerNoTP", {
 	Title = "Disable Teleport (Sprinkler)",
 	Description = "ON = taruh sprinkler tanpa memindah karakter.",
 	Default = false,
 	Callback = function(s)
 		State.SprinklerNoTP = s
+	end,
+})
+
+-- --- Misc tab: Monitor & ESP (display, bukan bagian Auto Pumpkin) -------
+local displaySection = Tabs.Misc:AddSection("Monitor & ESP")
+
+displaySection:AddDropdown("NaruHub_MonSort", {
+	Title = "Urutkan daftar buah (kg)",
+	Values = { "High", "Low" },
+	Multi = false,
+	Default = "High",
+}):OnChanged(function(v)
+	State.MonSort = v
+end)
+
+displaySection:AddToggle("NaruHub_Esp", {
+	Title = "Fruit ESP (kg di atas buah)",
+	Description = "Ikut seed filter. Hijau = keeper, merah = target shovel.",
+	Default = false,
+	Callback = function(s)
+		State.EspEnabled = s
 	end,
 })
 
@@ -2059,6 +2104,13 @@ if STATE then
 		return STATE.alive() and getgenv().__NaruHubGen == MY_GEN and not Fluent.Unloaded
 	end
 end
+
+task.spawn(function()
+	while aliveFn() do
+		pcall(updateGardenInfo)
+		task.wait(3)
+	end
+end)
 
 --==============================================================
 -- Weather Alert: deteksi via WeatherValues (terdeteksi -> berjalan) + webhook
