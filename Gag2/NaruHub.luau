@@ -639,7 +639,7 @@ local State = {
 	SprinklerDelay = 1.5,
 	SprinklerNoTP = false,
 	EspEnabled = false,
-	MonitorShow = true,
+	MonitorShow = false,
 	MonSort = "High",
 
 	-- Auto Pumpkin (Misc): place sprinkler + shovel, khusus Atlantic Giant Pumpkin
@@ -1354,7 +1354,7 @@ local monSection = Tabs.Garden:AddSection("Monitor / ESP / Sprinkler")
 
 monSection:AddToggle("NaruHub_MonitorShow", {
 	Title = "Tampilkan Monitor HUD",
-	Default = true,
+	Default = false,
 	Callback = function(s)
 		State.MonitorShow = s
 		local h = (gethui and gethui()) or game:GetService("CoreGui")
@@ -1728,6 +1728,7 @@ local monitorGui = Instance.new("ScreenGui")
 monitorGui.Name = "NaruHubMonitor"
 monitorGui.ResetOnSpawn = false
 monitorGui.DisplayOrder = 99999
+monitorGui.Enabled = State.MonitorShow
 monitorGui.Parent = hui
 
 local monPanel = Instance.new("Frame")
