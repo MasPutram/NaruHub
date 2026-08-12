@@ -675,6 +675,7 @@ local State = {
 
 	DropSeedEnabled = false,
 	DropSeedList = {} :: { [string]: boolean },
+	DropSeedCount = 0, -- 0 = tidak dibatasi
 
 	DropFruitEnabled = false,
 	DropFruitList = {} :: { [string]: boolean },
@@ -682,13 +683,16 @@ local State = {
 	DropFruitMutation = {} :: { [string]: boolean },
 	DropFruitMode = "Below",
 	DropFruitKg = 1,
+	DropFruitCount = 0,
 
 	DropGearEnabled = false,
 	DropGearList = {} :: { [string]: boolean },
 	DropGearRarity = {} :: { [string]: boolean },
+	DropGearCount = 0,
 
 	DropPetEnabled = false,
 	DropPetList = {} :: { [string]: boolean },
+	DropPetCount = 0,
 }
 
 for _, w in ipairs(WEATHERS) do
@@ -1247,6 +1251,18 @@ dropSeedSection:AddDropdown("NaruHub_DropSeedList", {
 	State.DropSeedList = sel
 end)
 
+dropSeedSection:AddInput("NaruHub_DropSeedCount", {
+	Title = "Jumlah yang mau di-drop",
+	Description = "0 = tidak dibatasi. Loop berhenti sendiri kalau sudah tercapai.",
+	Default = "0",
+	Placeholder = "mis. 10",
+	Numeric = true,
+	Finished = true,
+	Callback = function(v)
+		State.DropSeedCount = tonumber(v) or 0
+	end,
+})
+
 dropSeedSection:AddToggle("NaruHub_DropSeedEnabled", {
 	Title = "Toggle Drop Seed",
 	Description = "Drop seluruh stack seed yang dipilih di atas.",
@@ -1334,6 +1350,18 @@ dropFruitSection:AddInput("NaruHub_DropFruitKg", {
 	end,
 })
 
+dropFruitSection:AddInput("NaruHub_DropFruitCount", {
+	Title = "Jumlah yang mau di-drop",
+	Description = "0 = tidak dibatasi. Loop berhenti sendiri kalau sudah tercapai.",
+	Default = "0",
+	Placeholder = "mis. 10",
+	Numeric = true,
+	Finished = true,
+	Callback = function(v)
+		State.DropFruitCount = tonumber(v) or 0
+	end,
+})
+
 dropFruitSection:AddToggle("NaruHub_DropFruitEnabled", {
 	Title = "Toggle Auto Drop Fruit",
 	Description = "Fruit ATAU Rarity ATAU Mutation cocok (kalau dipilih) DAN lolos threshold kg -> di-drop.",
@@ -1384,6 +1412,18 @@ dropGearSection:AddDropdown("NaruHub_DropGearRarity", {
 	State.DropGearRarity = sel
 end)
 
+dropGearSection:AddInput("NaruHub_DropGearCount", {
+	Title = "Jumlah yang mau di-drop",
+	Description = "0 = tidak dibatasi. Loop berhenti sendiri kalau sudah tercapai.",
+	Default = "0",
+	Placeholder = "mis. 10",
+	Numeric = true,
+	Finished = true,
+	Callback = function(v)
+		State.DropGearCount = tonumber(v) or 0
+	end,
+})
+
 dropGearSection:AddToggle("NaruHub_DropGearEnabled", {
 	Title = "Toggle Auto Drop Gear",
 	Description = "Wajib pilih minimal Gear atau Rarity (kalau dua-duanya kosong, tidak drop apa-apa, biar aman).",
@@ -1417,6 +1457,18 @@ dropPetSection:AddDropdown("NaruHub_DropPetList", {
 	end
 	State.DropPetList = sel
 end)
+
+dropPetSection:AddInput("NaruHub_DropPetCount", {
+	Title = "Jumlah yang mau di-drop",
+	Description = "0 = tidak dibatasi. Loop berhenti sendiri kalau sudah tercapai.",
+	Default = "0",
+	Placeholder = "mis. 10",
+	Numeric = true,
+	Finished = true,
+	Callback = function(v)
+		State.DropPetCount = tonumber(v) or 0
+	end,
+})
 
 dropPetSection:AddToggle("NaruHub_DropPetEnabled", {
 	Title = "Toggle Auto Drop Pets",
@@ -2761,47 +2813,81 @@ local function gearMatchesFilter(gearName: string): boolean
 	return nameOk or rarityOk
 end
 
--- Auto Drop Seed
+-- Auto Drop Seed -- pick (equip) -> backspace (drop) -> pick lagi -> ulang,
+-- terlacak (X/Y) sampai target tercapai (0 = tidak dibatasi), lalu berhenti sendiri.
+local dropSeedTotal, dropSeedWasOn = 0, false
 task.spawn(function()
 	while aliveFn() do
 		task.wait(1)
 		if not State.DropSeedEnabled then
+			dropSeedWasOn = false
 			continue
+		end
+		if not dropSeedWasOn then
+			dropSeedTotal = 0
+			dropSeedWasOn = true
 		end
 		if not next(State.DropSeedList) then
 			setDropSeedStatus("Pilih seed dulu (kosong = tidak drop apa-apa).")
 			continue
 		end
-		local done = 0
+		local target = State.DropSeedCount
+		if target and target > 0 and dropSeedTotal >= target then
+			State.DropSeedEnabled = false
+			pcall(function() Fluent.Options.NaruHub_DropSeedEnabled:SetValue(false) end)
+			setDropSeedStatus(("Selesai: %d/%d seed di-drop."):format(dropSeedTotal, target))
+			continue
+		end
 		for _, t in ipairs(collectDropCandidates()) do
 			if not State.DropSeedEnabled or not aliveFn() then
+				break
+			end
+			if target and target > 0 and dropSeedTotal >= target then
 				break
 			end
 			local seedName = t:GetAttribute("SeedTool")
 			if seedName and State.DropSeedList[seedName] then
 				if dropTool(t) then
-					done += 1
-					setDropSeedStatus(("Drop %d seed..."):format(done))
+					dropSeedTotal += 1
+					local suffix = (target and target > 0) and ("/" .. target) or ""
+					setDropSeedStatus(("Drop %d%s seed..."):format(dropSeedTotal, suffix))
 					task.wait(State.DropDelay)
 				end
 			end
 		end
 		if State.DropSeedEnabled then
-			setDropSeedStatus(done > 0 and ("Selesai: %d seed di-drop."):format(done) or "Aktif - tidak ada yang cocok.")
+			local target2 = State.DropSeedCount
+			local suffix = (target2 and target2 > 0) and ("/" .. target2) or ""
+			setDropSeedStatus(dropSeedTotal > 0 and ("Progress: %d%s seed di-drop."):format(dropSeedTotal, suffix) or "Aktif - tidak ada yang cocok.")
 		end
 	end
 end)
 
 -- Auto Drop Fruit
+local dropFruitTotal, dropFruitWasOn = 0, false
 task.spawn(function()
 	while aliveFn() do
 		task.wait(1)
 		if not State.DropFruitEnabled then
+			dropFruitWasOn = false
 			continue
 		end
-		local done = 0
+		if not dropFruitWasOn then
+			dropFruitTotal = 0
+			dropFruitWasOn = true
+		end
+		local target = State.DropFruitCount
+		if target and target > 0 and dropFruitTotal >= target then
+			State.DropFruitEnabled = false
+			pcall(function() Fluent.Options.NaruHub_DropFruitEnabled:SetValue(false) end)
+			setDropFruitStatus(("Selesai: %d/%d fruit di-drop."):format(dropFruitTotal, target))
+			continue
+		end
 		for _, t in ipairs(collectDropCandidates()) do
 			if not State.DropFruitEnabled or not aliveFn() then
+				break
+			end
+			if target and target > 0 and dropFruitTotal >= target then
 				break
 			end
 			if t:GetAttribute("HarvestedFruit") == true then
@@ -2810,80 +2896,119 @@ task.spawn(function()
 				local weight = t:GetAttribute("Weight")
 				if fruitName and fruitMatchesFilter(fruitName, mutation, weight) then
 					if dropTool(t) then
-						done += 1
-						setDropFruitStatus(("Drop %d fruit..."):format(done))
+						dropFruitTotal += 1
+						local suffix = (target and target > 0) and ("/" .. target) or ""
+						setDropFruitStatus(("Drop %d%s fruit..."):format(dropFruitTotal, suffix))
 						task.wait(State.DropDelay)
 					end
 				end
 			end
 		end
 		if State.DropFruitEnabled then
-			setDropFruitStatus(done > 0 and ("Selesai: %d fruit di-drop."):format(done) or "Aktif - tidak ada yang cocok.")
+			local target2 = State.DropFruitCount
+			local suffix = (target2 and target2 > 0) and ("/" .. target2) or ""
+			setDropFruitStatus(dropFruitTotal > 0 and ("Progress: %d%s fruit di-drop."):format(dropFruitTotal, suffix) or "Aktif - tidak ada yang cocok.")
 		end
 	end
 end)
 
 -- Auto Drop Gear
+local dropGearTotal, dropGearWasOn = 0, false
 task.spawn(function()
 	while aliveFn() do
 		task.wait(1)
 		if not State.DropGearEnabled then
+			dropGearWasOn = false
 			continue
+		end
+		if not dropGearWasOn then
+			dropGearTotal = 0
+			dropGearWasOn = true
 		end
 		if not next(State.DropGearList) and not next(State.DropGearRarity) then
 			setDropGearStatus("Pilih gear atau rarity dulu (kosong = tidak drop apa-apa).")
 			continue
 		end
-		local done = 0
+		local target = State.DropGearCount
+		if target and target > 0 and dropGearTotal >= target then
+			State.DropGearEnabled = false
+			pcall(function() Fluent.Options.NaruHub_DropGearEnabled:SetValue(false) end)
+			setDropGearStatus(("Selesai: %d/%d gear di-drop."):format(dropGearTotal, target))
+			continue
+		end
 		for _, t in ipairs(collectDropCandidates()) do
 			if not State.DropGearEnabled or not aliveFn() then
+				break
+			end
+			if target and target > 0 and dropGearTotal >= target then
 				break
 			end
 			local category, gearName = getDropCategoryAndId(t)
 			if category and category ~= "Seeds" and category ~= "HarvestedFruits" and category ~= "Pets" then
 				if gearName and gearMatchesFilter(gearName) then
 					if dropTool(t) then
-						done += 1
-						setDropGearStatus(("Drop %d gear..."):format(done))
+						dropGearTotal += 1
+						local suffix = (target and target > 0) and ("/" .. target) or ""
+						setDropGearStatus(("Drop %d%s gear..."):format(dropGearTotal, suffix))
 						task.wait(State.DropDelay)
 					end
 				end
 			end
 		end
 		if State.DropGearEnabled then
-			setDropGearStatus(done > 0 and ("Selesai: %d gear di-drop."):format(done) or "Aktif - tidak ada yang cocok.")
+			local target2 = State.DropGearCount
+			local suffix = (target2 and target2 > 0) and ("/" .. target2) or ""
+			setDropGearStatus(dropGearTotal > 0 and ("Progress: %d%s gear di-drop."):format(dropGearTotal, suffix) or "Aktif - tidak ada yang cocok.")
 		end
 	end
 end)
 
 -- Auto Drop Pets
+local dropPetTotal, dropPetWasOn = 0, false
 task.spawn(function()
 	while aliveFn() do
 		task.wait(1)
 		if not State.DropPetEnabled then
+			dropPetWasOn = false
 			continue
+		end
+		if not dropPetWasOn then
+			dropPetTotal = 0
+			dropPetWasOn = true
 		end
 		if not next(State.DropPetList) then
 			setDropPetStatus("Pilih pet dulu (kosong = tidak drop apa-apa).")
 			continue
 		end
-		local done = 0
+		local target = State.DropPetCount
+		if target and target > 0 and dropPetTotal >= target then
+			State.DropPetEnabled = false
+			pcall(function() Fluent.Options.NaruHub_DropPetEnabled:SetValue(false) end)
+			setDropPetStatus(("Selesai: %d/%d pet di-drop."):format(dropPetTotal, target))
+			continue
+		end
 		for _, t in ipairs(collectDropCandidates()) do
 			if not State.DropPetEnabled or not aliveFn() then
+				break
+			end
+			if target and target > 0 and dropPetTotal >= target then
 				break
 			end
 			local petId = t:GetAttribute("PetId")
 			local petName = t:GetAttribute("Pet")
 			if type(petId) == "string" and petId ~= "" and petName and State.DropPetList[petName] then
 				if dropTool(t) then
-					done += 1
-					setDropPetStatus(("Drop %d pet..."):format(done))
+					dropPetTotal += 1
+					local suffix = (target and target > 0) and ("/" .. target) or ""
+					setDropPetStatus(("Drop %d%s pet..."):format(dropPetTotal, suffix))
 					task.wait(State.DropDelay)
 				end
 			end
 		end
 		if State.DropPetEnabled then
-			setDropPetStatus(done > 0 and ("Selesai: %d pet di-drop."):format(done) or "Aktif - tidak ada yang cocok.")
+			local target2 = State.DropPetCount
+			local suffix = (target2 and target2 > 0) and ("/" .. target2) or ""
+			setDropPetStatus(dropPetTotal > 0 and ("Progress: %d%s pet di-drop."):format(dropPetTotal, suffix) or "Aktif - tidak ada yang cocok.")
 		end
 	end
 end)
