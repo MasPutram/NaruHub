@@ -1801,18 +1801,19 @@ function Fluent:CreateWindow(cfg)
 					listFrame.Visible = opening
 					backdrop.Visible = opening
 					if opening then
-						-- Flyout di samping window (kanan, atau kiri kalau mepet tepi
-						-- layar), bukan menggantung di bawah tombolnya sendiri.
+						-- Nempel jadi perpanjangan window (bukan ngambang sejajar tombol,
+						-- bukan juga di luar area window) -- tinggi & posisi Y ikut
+						-- persis window, cuma nempel di tepi kanan (atau kiri kalau
+						-- mepet tepi layar).
 						local mainAbs, mainSize = main.AbsolutePosition, main.AbsoluteSize
-						local listW, listH = 240, 320
+						local listW = 240
 						local screenSize = workspace.CurrentCamera.ViewportSize
-						local x = mainAbs.X + mainSize.X + 8
+						local x = mainAbs.X + mainSize.X
 						if x + listW > screenSize.X then
-							x = mainAbs.X - listW - 8
+							x = mainAbs.X - listW
 						end
-						local y = math.clamp(head.AbsolutePosition.Y - 4, 4, math.max(4, screenSize.Y - listH - 4))
-						listFrame.Position = UDim2.fromOffset(x, y)
-						listFrame.Size = UDim2.fromOffset(listW, listH)
+						listFrame.Position = UDim2.fromOffset(x, mainAbs.Y)
+						listFrame.Size = UDim2.fromOffset(listW, mainSize.Y)
 						searchBox.Text = ""
 						for _, ob in pairs(optionBtns) do
 							ob.Visible = true
