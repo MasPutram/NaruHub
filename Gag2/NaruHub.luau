@@ -35,12 +35,18 @@ end
 do
 	local hui = (gethui and gethui()) or game:GetService("CoreGui")
 	local roots = { game:GetService("CoreGui"), hui }
-	local staleNames = { "NaruHubGUI", "NaruHubMonitor", "NaruHubEsp", "NaruHubToast", "NaruHubLauncher" }
+	local staleNames = {
+		NaruHubGUI = true,
+		NaruHubMonitor = true,
+		NaruHubEsp = true,
+		NaruHubToast = true,
+		NaruHubLauncher = true,
+		NaruHubDropdown = true, -- 1 ScreenGui per dropdown, bisa banyak sekaligus
+	}
 	for _, root in ipairs(roots) do
-		for _, name in ipairs(staleNames) do
-			local existing = root:FindFirstChild(name)
-			if existing then
-				pcall(function() existing:Destroy() end)
+		for _, child in ipairs(root:GetChildren()) do
+			if staleNames[child.Name] then
+				pcall(function() child:Destroy() end)
 			end
 		end
 	end
@@ -1166,6 +1172,24 @@ function Fluent:CreateWindow(cfg)
 		BackgroundTransparency = 1,
 	}, main)
 
+	-- Garis horizontal: pemisah title bar dari body (sidebar + content)
+	uiNew("Frame", {
+		Size = UDim2.new(1, 0, 0, 1),
+		Position = UDim2.new(0, 0, 0, 46),
+		BackgroundColor3 = Color3.fromRGB(34, 34, 36),
+		BorderSizePixel = 0,
+		ZIndex = 5,
+	}, main)
+
+	-- Garis vertikal: pemisah sidebar dari content
+	uiNew("Frame", {
+		Size = UDim2.new(0, 1, 1, -46),
+		Position = UDim2.new(0, cfg.TabWidth or 150, 0, 46),
+		BackgroundColor3 = Color3.fromRGB(34, 34, 36),
+		BorderSizePixel = 0,
+		ZIndex = 5,
+	}, main)
+
 	do
 		local dragging, dragStart, startPos = false, nil, nil
 		titleBar.InputBegan:Connect(function(input)
@@ -1243,13 +1267,6 @@ function Fluent:CreateWindow(cfg)
 			Visible = idx == 1,
 		}, btn)
 		uiCorner(2, tabAccentBar)
-		-- Garis pemisah tipis di bawah tiap tab (bukan tab terakhir)
-		uiNew("Frame", {
-			Size = UDim2.new(1, -8, 0, 1),
-			Position = UDim2.new(0, 4, 1, 3),
-			BackgroundColor3 = Color3.fromRGB(32, 32, 34),
-			BorderSizePixel = 0,
-		}, btn)
 		tabButtons[idx] = { Btn = btn, Bar = tabAccentBar }
 
 		local scroll = uiNew("ScrollingFrame", {
@@ -1626,7 +1643,7 @@ function Fluent:CreateWindow(cfg)
 				local multi = dcfg.Multi or false
 				local selected = {}
 
-				local listGui = uiNew("ScreenGui", { ResetOnSpawn = false, DisplayOrder = 200 }, (gethui and gethui()) or game:GetService("CoreGui"))
+				local listGui = uiNew("ScreenGui", { Name = "NaruHubDropdown", ResetOnSpawn = false, DisplayOrder = 200 }, (gethui and gethui()) or game:GetService("CoreGui"))
 				local listFrame = uiNew("Frame", {
 					Visible = false,
 					BackgroundColor3 = UI_COL_ROW2,
