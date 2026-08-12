@@ -1872,7 +1872,7 @@ getgenv().NaruHub = {
 
 local conns = {}
 
-local UI_FONT = Enum.Font.Gotham
+local UI_FONT = Enum.Font.Oswald
 
 local function paintStroke(inst)
 	if inst:IsA("UIStroke") then
