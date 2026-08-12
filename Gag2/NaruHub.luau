@@ -29,6 +29,23 @@ do
 	MY_GEN = g.__NaruHubGen
 end
 
+-- Safety net: STATE.onCleanup (kalau ada) yang biasa nge-destroy UI lama, tapi
+-- itu tidak selalu tersedia dari harness live-reload. Paksa hapus sisa UI generasi
+-- sebelumnya di sini juga, independen dari mekanisme cleanup manapun.
+do
+	local hui = (gethui and gethui()) or game:GetService("CoreGui")
+	local roots = { game:GetService("CoreGui"), hui }
+	local staleNames = { "NaruHubGUI", "NaruHubMonitor", "NaruHubEsp", "NaruHubToast", "NaruHubLauncher" }
+	for _, root in ipairs(roots) do
+		for _, name in ipairs(staleNames) do
+			local existing = root:FindFirstChild(name)
+			if existing then
+				pcall(function() existing:Destroy() end)
+			end
+		end
+	end
+end
+
 --==============================================================
 -- Game bindings
 --==============================================================
@@ -883,12 +900,13 @@ local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub",
 	SubTitle = "Grow a Garden",
-	TabWidth = 150,
-	Size = UDim2.fromOffset(560, 430),
+	TabWidth = 160,
+	Size = UDim2.fromOffset(720, 480),
 	Acrylic = false,
 	Theme = "Darker",
 	MinimizeKey = Enum.KeyCode.RightControl,
 })
+pcall(function() Fluent.GUI.Name = "NaruHubGUI" end)
 
 local Tabs = {
 	Shop = Window:AddTab({ Title = "Seed Shop", Icon = "sprout" }),
@@ -918,7 +936,6 @@ end
 
 buySection:AddToggle("NaruHub_AutoBuy", {
 	Title = "Auto Buy",
-	Description = "Beli otomatis seed yang ada stok & terjangkau.",
 	Default = false,
 	Callback = function(state)
 		State.Enabled = state
@@ -928,7 +945,6 @@ buySection:AddToggle("NaruHub_AutoBuy", {
 
 buySection:AddToggle("NaruHub_BuyAll", {
 	Title = "Beli Semua Stok",
-	Description = "ON = semua seed. OFF = hanya pilihan di dropdown.",
 	Default = true,
 	Callback = function(state)
 		State.BuyAll = state
@@ -939,7 +955,6 @@ local seedSection = Tabs.Shop:AddSection("Pilihan Seed (mode manual)")
 
 local seedDropdown = seedSection:AddDropdown("NaruHub_Seeds", {
 	Title = "Target Seeds",
-	Description = "Dipakai saat 'Beli Semua Stok' OFF.",
 	Values = getSeedNames(),
 	Multi = true,
 	Default = {},
@@ -957,7 +972,6 @@ end)
 
 seedSection:AddSlider("NaruHub_BuyDelay", {
 	Title = "Buy Delay (detik)",
-	Description = "Jeda antar pembelian.",
 	Default = 0.2,
 	Min = 0.1,
 	Max = 1,
@@ -969,7 +983,6 @@ seedSection:AddSlider("NaruHub_BuyDelay", {
 
 seedSection:AddButton({
 	Title = "Refresh Daftar Seed",
-	Description = "Muat ulang daftar seed dari game.",
 	Callback = function()
 		pcall(function()
 			seedDropdown:SetValues(getSeedNames())
@@ -996,7 +1009,6 @@ do
 	State.PumpkinSprinkler = types[1] or "Syrup Sprinkler"
 	pumpkinSection:AddDropdown("NaruHub_PumpkinSprinkler", {
 		Title = "Sprinkler yang dipakai",
-		Description = "Pilih sprinkler yang ditaruh sebelum shovel.",
 		Values = types,
 		Multi = false,
 		Default = types[1],
@@ -1017,7 +1029,6 @@ pumpkinSection:AddInput("NaruHub_PumpkinKg", {
 
 pumpkinSection:AddSlider("NaruHub_PumpkinDelay", {
 	Title = "Kecepatan / delay (detik)",
-	Description = "Makin kecil makin cepat (place & shovel). Tetap satu per satu.",
 	Default = 0.15,
 	Min = 0.05,
 	Max = 1,
@@ -1029,7 +1040,6 @@ pumpkinSection:AddSlider("NaruHub_PumpkinDelay", {
 
 pumpkinSection:AddToggle("NaruHub_Pumpkin", {
 	Title = "Auto Pumpkin",
-	Description = "Place sprinkler di pumpkin -> shovel buah < kg -> ulang. Sprinkler habis = stop.",
 	Default = false,
 	Callback = function(s)
 		State.PumpkinEnabled = s
@@ -1039,7 +1049,6 @@ pumpkinSection:AddToggle("NaruHub_Pumpkin", {
 
 pumpkinSection:AddToggle("NaruHub_PumpkinNoTP", {
 	Title = "Disable Teleport",
-	Description = "ON = tanpa teleport (shovel hanya buah dekat karakter).",
 	Default = false,
 	Callback = function(s)
 		State.PumpkinNoTP = s
@@ -1073,7 +1082,6 @@ end
 
 weatherSection:AddToggle("NaruHub_WeatherNotify", {
 	Title = "Weather Notify",
-	Description = "Munculkan notif saat cuaca muncul.",
 	Default = true,
 	Callback = function(s)
 		State.WeatherNotify = s
@@ -1082,7 +1090,6 @@ weatherSection:AddToggle("NaruHub_WeatherNotify", {
 
 weatherSection:AddToggle("NaruHub_WeatherNotifyEnd", {
 	Title = "Notif saat cuaca selesai",
-	Description = "Juga notif ketika cuaca berakhir.",
 	Default = false,
 	Callback = function(s)
 		State.WeatherNotifyEnd = s
@@ -1096,7 +1103,6 @@ do
 	end
 	local drop = weatherSection:AddDropdown("NaruHub_WeatherSel", {
 		Title = "Cuaca yang dinotif",
-		Description = "Pilih cuaca mana yang memicu notif.",
 		Values = values,
 		Multi = true,
 		Default = {},
@@ -1124,7 +1130,6 @@ local webhookSection = Tabs.Weather:AddSection("Discord Webhook (notif ke HP)")
 
 webhookSection:AddInput("NaruHub_Webhook", {
 	Title = "Webhook URL",
-	Description = "Tempel Discord webhook URL. Rahasia, jangan dibagikan.",
 	Default = "",
 	Placeholder = "https://discord.com/api/webhooks/...",
 	Finished = true,
@@ -1135,7 +1140,6 @@ webhookSection:AddInput("NaruHub_Webhook", {
 
 webhookSection:AddButton({
 	Title = "Test Webhook",
-	Description = "Kirim pesan uji ke webhook.",
 	Callback = function()
 		if State.WebhookUrl == "" then
 			Fluent:Notify({ Title = "NaruHub", Content = "Isi Webhook URL dulu.", Duration = 5 })
@@ -1156,7 +1160,6 @@ webhookSection:AddButton({
 local featurePickerSection = Tabs.Automatically:AddSection("Pilih Fitur")
 local featurePicker = featurePickerSection:AddDropdown("NaruHub_AutoFeaturePick", {
 	Title = "Fitur",
-	Description = "Pilih salah satu (Shovel / Sprinkler / Drop Items).",
 	Values = { "Auto Shovel Fruit", "Auto Place Sprinkler", "Automatically Drop Item" },
 	Multi = false,
 	Default = "Auto Shovel Fruit",
@@ -1172,7 +1175,6 @@ end
 
 shovelSection:AddToggle("NaruHub_ShovelDryRun", {
 	Title = "Dry Run (aman: hitung saja, tidak menghapus)",
-	Description = "Matikan kalau sudah yakin mau benar-benar shovel.",
 	Default = true,
 	Callback = function(s)
 		State.ShovelDryRun = s
@@ -1181,7 +1183,6 @@ shovelSection:AddToggle("NaruHub_ShovelDryRun", {
 
 shovelSection:AddToggle("NaruHub_ShovelEnabled", {
 	Title = "Auto Shovel Fruit",
-	Description = "Shovel buah yang kg-nya di luar target.",
 	Default = false,
 	Callback = function(s)
 		State.ShovelEnabled = s
@@ -1191,7 +1192,6 @@ shovelSection:AddToggle("NaruHub_ShovelEnabled", {
 
 shovelSection:AddDropdown("NaruHub_ShovelMode", {
 	Title = "Mode",
-	Description = "Below = shovel yang < kg. Above = shovel yang > kg.",
 	Values = { "Below", "Above" },
 	Multi = false,
 	Default = "Below",
@@ -1214,7 +1214,6 @@ local shovelFilterSection = Tabs.Automatically:AddSection("Filter & Batas")
 
 shovelFilterSection:AddDropdown("NaruHub_ShovelSeeds", {
 	Title = "Seed filter (kosong = semua)",
-	Description = "Pilih seed, mis. Atlantic Giant Pumpkin.",
 	Values = ALL_SEEDS,
 	Multi = true,
 	Default = {},
@@ -1252,7 +1251,6 @@ shovelFilterSection:AddSlider("NaruHub_ShovelDelay", {
 
 shovelFilterSection:AddToggle("NaruHub_ShovelNoTP", {
 	Title = "Disable Teleport (Shovel)",
-	Description = "ON = shovel tanpa teleport (hanya buah dekat karakter yang kena).",
 	Default = false,
 	Callback = function(s)
 		State.ShovelNoTP = s
@@ -1264,7 +1262,6 @@ local sprinklerSection = Tabs.Automatically:AddSection("Pengaturan Sprinkler")
 
 sprinklerSection:AddToggle("NaruHub_Sprinkler", {
 	Title = "Auto Place Sprinkler (satu-satu)",
-	Description = "Taruh sprinkler dari inventory ke plot, 1 per interval.",
 	Default = false,
 	Callback = function(s)
 		State.SprinklerEnabled = s
@@ -1284,7 +1281,6 @@ sprinklerSection:AddSlider("NaruHub_SprinklerDelay", {
 
 sprinklerSection:AddToggle("NaruHub_SprinklerNoTP", {
 	Title = "Disable Teleport (Sprinkler)",
-	Description = "ON = taruh sprinkler tanpa memindah karakter.",
 	Default = false,
 	Callback = function(s)
 		State.SprinklerNoTP = s
@@ -1317,7 +1313,6 @@ end
 
 dropSeedSection:AddDropdown("NaruHub_DropSeedList", {
 	Title = "Select seed",
-	Description = "Wajib pilih minimal satu (kosong = tidak drop apa-apa, biar aman).",
 	Values = ALL_SEEDS,
 	Multi = true,
 	Default = {},
@@ -1333,7 +1328,6 @@ end)
 
 dropSeedSection:AddInput("NaruHub_DropSeedCount", {
 	Title = "Jumlah yang mau di-drop",
-	Description = "0 = tidak dibatasi. Loop berhenti sendiri kalau sudah tercapai.",
 	Default = "0",
 	Placeholder = "mis. 10",
 	Numeric = true,
@@ -1345,7 +1339,6 @@ dropSeedSection:AddInput("NaruHub_DropSeedCount", {
 
 dropSeedSection:AddToggle("NaruHub_DropSeedEnabled", {
 	Title = "Toggle Drop Seed",
-	Description = "Drop seluruh stack seed yang dipilih di atas.",
 	Default = false,
 	Callback = function(s)
 		State.DropSeedEnabled = s
@@ -1363,7 +1356,6 @@ end
 
 dropFruitSection:AddDropdown("NaruHub_DropFruitList", {
 	Title = "Select drop fruit",
-	Description = "Kosong = semua jenis fruit (asal cocok filter lain di bawah).",
 	Values = ALL_SEEDS, -- SeedName == FruitName di game ini
 	Multi = true,
 	Default = {},
@@ -1379,7 +1371,6 @@ end)
 
 dropFruitSection:AddDropdown("NaruHub_DropFruitRarity", {
 	Title = "Select rarity (OR)",
-	Description = "Kosong = semua rarity. Buah lolos kalau cocok Fruit ATAU Rarity ATAU Mutation yang dipilih.",
 	Values = RARITY_LIST,
 	Multi = true,
 	Default = {},
@@ -1395,7 +1386,6 @@ end)
 
 dropFruitSection:AddDropdown("NaruHub_DropFruitMutation", {
 	Title = "Drop mutation",
-	Description = "Kosong = abaikan filter mutasi. Daftar diambil dari buah yang ada di backpack saat script dimuat.",
 	Values = ALL_MUTATIONS,
 	Multi = true,
 	Default = {},
@@ -1411,7 +1401,6 @@ end)
 
 dropFruitSection:AddDropdown("NaruHub_DropFruitMode", {
 	Title = "Threshold mode",
-	Description = "Below = drop yang beratnya < kg. Above = drop yang beratnya > kg.",
 	Values = { "Below", "Above" },
 	Multi = false,
 	Default = "Below",
@@ -1432,7 +1421,6 @@ dropFruitSection:AddInput("NaruHub_DropFruitKg", {
 
 dropFruitSection:AddInput("NaruHub_DropFruitCount", {
 	Title = "Jumlah yang mau di-drop",
-	Description = "0 = tidak dibatasi. Loop berhenti sendiri kalau sudah tercapai.",
 	Default = "0",
 	Placeholder = "mis. 10",
 	Numeric = true,
@@ -1444,7 +1432,6 @@ dropFruitSection:AddInput("NaruHub_DropFruitCount", {
 
 dropFruitSection:AddToggle("NaruHub_DropFruitEnabled", {
 	Title = "Toggle Auto Drop Fruit",
-	Description = "Fruit ATAU Rarity ATAU Mutation cocok (kalau dipilih) DAN lolos threshold kg -> di-drop.",
 	Default = false,
 	Callback = function(s)
 		State.DropFruitEnabled = s
@@ -1462,7 +1449,6 @@ end
 
 dropGearSection:AddDropdown("NaruHub_DropGearList", {
 	Title = "Select gear",
-	Description = "Kosong = semua gear (asal cocok rarity kalau dipilih).",
 	Values = ALL_GEAR,
 	Multi = true,
 	Default = {},
@@ -1478,7 +1464,6 @@ end)
 
 dropGearSection:AddDropdown("NaruHub_DropGearRarity", {
 	Title = "Rarity",
-	Description = "Kosong = semua rarity.",
 	Values = RARITY_LIST,
 	Multi = true,
 	Default = {},
@@ -1494,7 +1479,6 @@ end)
 
 dropGearSection:AddInput("NaruHub_DropGearCount", {
 	Title = "Jumlah yang mau di-drop",
-	Description = "0 = tidak dibatasi. Loop berhenti sendiri kalau sudah tercapai.",
 	Default = "0",
 	Placeholder = "mis. 10",
 	Numeric = true,
@@ -1506,7 +1490,6 @@ dropGearSection:AddInput("NaruHub_DropGearCount", {
 
 dropGearSection:AddToggle("NaruHub_DropGearEnabled", {
 	Title = "Toggle Auto Drop Gear",
-	Description = "Wajib pilih minimal Gear atau Rarity (kalau dua-duanya kosong, tidak drop apa-apa, biar aman).",
 	Default = false,
 	Callback = function(s)
 		State.DropGearEnabled = s
@@ -1524,7 +1507,6 @@ end
 
 dropPetSection:AddDropdown("NaruHub_DropPetList", {
 	Title = "Select pets",
-	Description = "Wajib pilih minimal satu spesies (kosong = tidak drop apa-apa, biar aman).",
 	Values = ALL_PETS,
 	Multi = true,
 	Default = {},
@@ -1540,7 +1522,6 @@ end)
 
 dropPetSection:AddInput("NaruHub_DropPetCount", {
 	Title = "Jumlah yang mau di-drop",
-	Description = "0 = tidak dibatasi. Loop berhenti sendiri kalau sudah tercapai.",
 	Default = "0",
 	Placeholder = "mis. 10",
 	Numeric = true,
@@ -1668,7 +1649,6 @@ end)
 
 displaySection:AddToggle("NaruHub_Esp", {
 	Title = "Fruit ESP (kg di atas buah)",
-	Description = "Ikut seed filter. Hijau = keeper, merah = target shovel.",
 	Default = false,
 	Callback = function(s)
 		State.EspEnabled = s
