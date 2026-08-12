@@ -941,6 +941,19 @@ pumpkinSection:AddToggle("NaruHub_PumpkinNoTP", {
 	end,
 })
 
+pumpkinSection:AddToggle("NaruHub_MonitorShow", {
+	Title = "Tampilkan Monitor HUD",
+	Default = false,
+	Callback = function(s)
+		State.MonitorShow = s
+		local h = (gethui and gethui()) or game:GetService("CoreGui")
+		local m = h:FindFirstChild("NaruHubMonitor")
+		if m then
+			m.Enabled = s
+		end
+	end,
+})
+
 -- --- Weather tab -------------------------------------------------
 local weatherSection = Tabs.Weather:AddSection("Weather Alert")
 
@@ -1351,19 +1364,6 @@ dropPetSection:AddToggle("NaruHub_DropPetEnabled", {
 })
 
 local monSection = Tabs.Garden:AddSection("Monitor / ESP / Sprinkler")
-
-monSection:AddToggle("NaruHub_MonitorShow", {
-	Title = "Tampilkan Monitor HUD",
-	Default = false,
-	Callback = function(s)
-		State.MonitorShow = s
-		local h = (gethui and gethui()) or game:GetService("CoreGui")
-		local m = h:FindFirstChild("NaruHubMonitor")
-		if m then
-			m.Enabled = s
-		end
-	end,
-})
 
 monSection:AddDropdown("NaruHub_MonSort", {
 	Title = "Urutkan daftar buah (kg)",
