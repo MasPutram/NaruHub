@@ -541,12 +541,78 @@ local function getDropCategoryAndId(tool: Instance): (string?, string?)
 	return nil, nil
 end
 
+-- Fruit yang stack-nya banyak (mis. puluhan Cactus) disimpan game sebagai
+-- Configuration "proxy" ringan (attribute FruitProxy=true), BUKAN Tool -- cuma
+-- 1 Tool nyata yang aktif setiap saat. Untuk drop, proxy harus di-"promote" dulu
+-- jadi Tool asli lewat Networking.Backpack.PromoteFruit, baru bisa di-equip.
+-- Id proxy tidak selalu sama dengan Id Tool hasil promote, jadi dideteksi lewat
+-- "Tool baru yang sebelumnya belum ada" (snapshot before/after), bukan match Id.
+local function promoteFruitProxy(proxy: Instance): Instance?
+	local id = proxy:GetAttribute("Id")
+	local fruitName = proxy:GetAttribute("FruitName")
+	if not id or not fruitName then
+		return nil
+	end
+	local ok, net = pcall(function()
+		return require(ReplicatedStorage.SharedModules.Networking)
+	end)
+	if not ok or not net or not net.Backpack or not net.Backpack.PromoteFruit then
+		return nil
+	end
+
+	local before = {}
+	local function snap(c)
+		if not c then
+			return
+		end
+		for _, t in ipairs(c:GetChildren()) do
+			if t:IsA("Tool") and t:GetAttribute("HarvestedFruit") == true and t:GetAttribute("FruitName") == fruitName then
+				before[t] = true
+			end
+		end
+	end
+	snap(LocalPlayer:FindFirstChild("Backpack"))
+	snap(LocalPlayer.Character)
+
+	pcall(function()
+		net.Backpack.PromoteFruit:Fire(id)
+	end)
+
+	for _ = 1, 30 do
+		task.wait(0.05)
+		local function check(c)
+			if not c then
+				return nil
+			end
+			for _, t in ipairs(c:GetChildren()) do
+				if t:IsA("Tool") and t:GetAttribute("HarvestedFruit") == true and t:GetAttribute("FruitName") == fruitName and not before[t] then
+					return t
+				end
+			end
+			return nil
+		end
+		local found = check(LocalPlayer:FindFirstChild("Backpack")) or check(LocalPlayer.Character)
+		if found then
+			return found
+		end
+	end
+	return nil
+end
+
 -- Equip tool (tunggu betul-betul ke-equip, seperti klik pilih di inventory asli)
 -- -> baru fire RequestDrop(category, id) di identity 2 (backspace). Bukan spam
 -- fire tanpa equip -- kalau tool gagal ke-equip dalam waktu wajar, batal (return false).
 local function dropTool(tool: Instance): boolean
 	if not RequestDrop then
 		return false
+	end
+
+	if tool.ClassName == "Configuration" and tool:GetAttribute("FruitProxy") == true then
+		local promoted = promoteFruitProxy(tool)
+		if not promoted then
+			return false
+		end
+		tool = promoted
 	end
 	local category, id = getDropCategoryAndId(tool)
 	if not category or not id then
@@ -2771,22 +2837,18 @@ end)
 
 local function collectDropCandidates(): { Instance }
 	local list = {}
-	local bp = LocalPlayer:FindFirstChild("Backpack")
-	if bp then
-		for _, t in ipairs(bp:GetChildren()) do
-			if t:IsA("Tool") then
+	local function scan(c)
+		if not c then
+			return
+		end
+		for _, t in ipairs(c:GetChildren()) do
+			if t:IsA("Tool") or (t.ClassName == "Configuration" and t:GetAttribute("FruitProxy") == true) then
 				list[#list + 1] = t
 			end
 		end
 	end
-	local char = LocalPlayer.Character
-	if char then
-		for _, t in ipairs(char:GetChildren()) do
-			if t:IsA("Tool") then
-				list[#list + 1] = t
-			end
-		end
-	end
+	scan(LocalPlayer:FindFirstChild("Backpack"))
+	scan(LocalPlayer.Character)
 	return list
 end
 
