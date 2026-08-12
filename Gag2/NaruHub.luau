@@ -1229,7 +1229,7 @@ function Fluent:CreateWindow(cfg)
 			Font = UI_FONT,
 			TextSize = 14,
 			TextColor3 = idx == 1 and UI_COL_ACCENT or UI_COL_DIM,
-			Text = "   " .. (tcfg.Icon and (tcfg.Icon .. "  ") or "") .. (tcfg.Title or ("Tab " .. idx)),
+			Text = "   " .. (tcfg.Title or ("Tab " .. idx)),
 			TextXAlignment = Enum.TextXAlignment.Left,
 			LayoutOrder = idx,
 		}, sideList)
@@ -1243,6 +1243,13 @@ function Fluent:CreateWindow(cfg)
 			Visible = idx == 1,
 		}, btn)
 		uiCorner(2, tabAccentBar)
+		-- Garis pemisah tipis di bawah tiap tab (bukan tab terakhir)
+		uiNew("Frame", {
+			Size = UDim2.new(1, -8, 0, 1),
+			Position = UDim2.new(0, 4, 1, 3),
+			BackgroundColor3 = Color3.fromRGB(32, 32, 34),
+			BorderSizePixel = 0,
+		}, btn)
 		tabButtons[idx] = { Btn = btn, Bar = tabAccentBar }
 
 		local scroll = uiNew("ScrollingFrame", {
@@ -1801,12 +1808,12 @@ local Window = Fluent:CreateWindow({
 -- dropdown "Pilih Fitur" di bawah -- kalau urutan ini diubah lagi, index-nya
 -- ikut diupdate.)
 local Tabs = {
-	Garden = Window:AddTab({ Title = "Garden", Icon = "\240\159\140\177" }),
-	Automatically = Window:AddTab({ Title = "Automatically", Icon = "\226\154\161" }),
-	Shop = Window:AddTab({ Title = "Shop", Icon = "\240\159\155\146" }),
-	Misc = Window:AddTab({ Title = "Misc", Icon = "\240\159\147\166" }),
-	Weather = Window:AddTab({ Title = "Weather", Icon = "\226\155\133" }),
-	Settings = Window:AddTab({ Title = "Settings", Icon = "\226\154\153\239\184\143" }),
+	Garden = Window:AddTab({ Title = "Garden" }),
+	Automatically = Window:AddTab({ Title = "Automatically" }),
+	Shop = Window:AddTab({ Title = "Shop" }),
+	Misc = Window:AddTab({ Title = "Misc" }),
+	Weather = Window:AddTab({ Title = "Weather" }),
+	Settings = Window:AddTab({ Title = "Settings" }),
 }
 
 -- --- Seed Shop tab ------------------------------------------------
