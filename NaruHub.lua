@@ -1090,25 +1090,37 @@ function Fluent:CreateWindow(cfg)
 		Position = UDim2.new(0, 20, 0, 0),
 		Size = UDim2.new(1, -150, 1, 0),
 	}, titleBar)
-	uiNew("TextLabel", {
+	uiNew("UIListLayout", {
+		FillDirection = Enum.FillDirection.Horizontal,
+		VerticalAlignment = Enum.VerticalAlignment.Center,
+		Padding = UDim.new(0, 8),
+		SortOrder = Enum.SortOrder.LayoutOrder,
+	}, titleHolder)
+	local titleLbl = uiNew("TextLabel", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0.62, 0),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.new(0, 0, 0, 20),
 		Font = UI_FONT_BOLD,
-		TextSize = 16,
+		TextSize = 17,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextColor3 = UI_COL_TEXT,
-		Text = "\226\154\161 " .. (cfg.Title or "Window"),
+		Text = cfg.Title or "Window",
+		LayoutOrder = 1,
 	}, titleHolder)
+	local premiumBadge = uiNew("Frame", {
+		BackgroundColor3 = UI_COL_ACCENT_DIM,
+		Size = UDim2.fromOffset(66, 18),
+		LayoutOrder = 2,
+	}, titleHolder)
+	uiCorner(4, premiumBadge)
 	uiNew("TextLabel", {
 		BackgroundTransparency = 1,
-		Position = UDim2.new(0, 0, 0.6, 0),
-		Size = UDim2.new(1, 0, 0.4, 0),
-		Font = UI_FONT,
-		TextSize = 12,
-		TextXAlignment = Enum.TextXAlignment.Left,
-		TextColor3 = UI_COL_DIM,
-		Text = cfg.SubTitle or "",
-	}, titleHolder)
+		Size = UDim2.fromScale(1, 1),
+		Font = UI_FONT_BOLD,
+		TextSize = 11,
+		TextColor3 = UI_COL_ACCENT,
+		Text = "PREMIUM",
+	}, premiumBadge)
 
 	local function titleBtn(text, xOffsetFromRight)
 		local btn = uiNew("TextButton", {
@@ -1217,7 +1229,7 @@ function Fluent:CreateWindow(cfg)
 			Font = UI_FONT,
 			TextSize = 14,
 			TextColor3 = idx == 1 and UI_COL_ACCENT or UI_COL_DIM,
-			Text = "    " .. (tcfg.Title or ("Tab " .. idx)),
+			Text = "   " .. (tcfg.Icon and (tcfg.Icon .. "  ") or "") .. (tcfg.Title or ("Tab " .. idx)),
 			TextXAlignment = Enum.TextXAlignment.Left,
 			LayoutOrder = idx,
 		}, sideList)
@@ -1784,13 +1796,17 @@ local Window = Fluent:CreateWindow({
 	Size = UDim2.fromOffset(720, 480),
 })
 
+-- Urutan sesuai roadmap: Garden dulu (info kebun), baru fitur automasi,
+-- lalu belanja, lalu sisanya. (Automatically = tab ke-2, dipakai di wiring
+-- dropdown "Pilih Fitur" di bawah -- kalau urutan ini diubah lagi, index-nya
+-- ikut diupdate.)
 local Tabs = {
-	Shop = Window:AddTab({ Title = "Shop" }),
-	Garden = Window:AddTab({ Title = "Garden" }),
-	Automatically = Window:AddTab({ Title = "Automatically" }),
-	Misc = Window:AddTab({ Title = "Misc" }),
-	Weather = Window:AddTab({ Title = "Weather" }),
-	Settings = Window:AddTab({ Title = "Settings" }),
+	Garden = Window:AddTab({ Title = "Garden", Icon = "\240\159\140\177" }),
+	Automatically = Window:AddTab({ Title = "Automatically", Icon = "\226\154\161" }),
+	Shop = Window:AddTab({ Title = "Shop", Icon = "\240\159\155\146" }),
+	Misc = Window:AddTab({ Title = "Misc", Icon = "\240\159\147\166" }),
+	Weather = Window:AddTab({ Title = "Weather", Icon = "\226\155\133" }),
+	Settings = Window:AddTab({ Title = "Settings", Icon = "\226\154\153\239\184\143" }),
 }
 
 -- --- Seed Shop tab ------------------------------------------------
@@ -2514,11 +2530,11 @@ local function updateGardenInfo()
 end
 
 -- --- Wiring dropdown "Pilih Fitur": section lain disembunyikan otomatis.
--- Fluent tidak punya API collapse resmi; tiap AddSection tetap menghasilkan
--- 1 Frame di ScrollingFrame tab ini (Window.ContainerHolder, index 3 = Automatically).
+-- Tiap AddSection menghasilkan 1 Frame di ScrollingFrame tab ini
+-- (Window.ContainerHolder, index 2 = Automatically, lihat urutan Tabs di atas).
 do
 	local ok, err = pcall(function()
-		local scrollFrame = Window.ContainerHolder:GetChildren()[3]
+		local scrollFrame = Window.ContainerHolder:GetChildren()[2]
 		local byTitle = {}
 		for _, c in ipairs(scrollFrame:GetChildren()) do
 			if c:IsA("Frame") then
@@ -2621,13 +2637,13 @@ pcall(function()
 	local titleHolder = tb:FindFirstChild("TitleHolder") -- holder teks judul
 	if titleHolder then
 		local p, s = titleHolder.Position, titleHolder.Size
-		titleHolder.Position = UDim2.new(0, 62, p.Y.Scale, p.Y.Offset)
-		titleHolder.Size = UDim2.new(1, -62, s.Y.Scale, s.Y.Offset)
+		titleHolder.Position = UDim2.new(0, 66, p.Y.Scale, p.Y.Offset)
+		titleHolder.Size = UDim2.new(1, -66, s.Y.Scale, s.Y.Offset)
 	end
 	local titleLogo = Instance.new("ImageLabel")
 	titleLogo.Name = "NaruHubTitleLogo"
 	titleLogo.BackgroundTransparency = 1
-	titleLogo.Size = UDim2.fromOffset(36, 36)
+	titleLogo.Size = UDim2.fromOffset(42, 42)
 	titleLogo.Position = UDim2.new(0, 14, 0.5, 0)
 	titleLogo.AnchorPoint = Vector2.new(0, 0.5)
 	titleLogo.Rotation = TILT
