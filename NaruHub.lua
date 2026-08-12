@@ -1644,6 +1644,16 @@ function Fluent:CreateWindow(cfg)
 				local selected = {}
 
 				local listGui = uiNew("ScreenGui", { Name = "NaruHubDropdown", ResetOnSpawn = false, DisplayOrder = 200 }, (gethui and gethui()) or game:GetService("CoreGui"))
+				-- Backdrop full-layar, transparan, di belakang list -- klik di mana
+				-- saja di luar list akan menutup dropdown (bukan cuma klik opsi).
+				local backdrop = uiNew("TextButton", {
+					Visible = false,
+					Size = UDim2.fromScale(1, 1),
+					BackgroundTransparency = 1,
+					AutoButtonColor = false,
+					Text = "",
+					ZIndex = 49,
+				}, listGui)
 				local listFrame = uiNew("Frame", {
 					Visible = false,
 					BackgroundColor3 = UI_COL_ROW2,
@@ -1652,8 +1662,30 @@ function Fluent:CreateWindow(cfg)
 				}, listGui)
 				uiCorner(6, listFrame)
 				uiStroke(BRAND, 1, listFrame)
+
+				local hasSearch = (#values > 6)
+				local searchBox
+				local listTop = 0
+				if hasSearch then
+					searchBox = uiNew("TextBox", {
+						Position = UDim2.new(0, 4, 0, 4),
+						Size = UDim2.new(1, -8, 0, 24),
+						BackgroundColor3 = UI_COL_ROW,
+						Font = UI_FONT,
+						TextSize = 12,
+						TextColor3 = UI_COL_TEXT,
+						PlaceholderText = "Cari...",
+						ClearTextOnFocus = false,
+						ZIndex = 51,
+					}, listFrame)
+					uiCorner(5, searchBox)
+					uiNew("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, searchBox)
+					listTop = 30
+				end
+
 				local listScroll = uiNew("ScrollingFrame", {
-					Size = UDim2.fromScale(1, 1),
+					Position = UDim2.new(0, 0, 0, listTop),
+					Size = UDim2.new(1, 0, 1, -listTop),
 					BackgroundTransparency = 1,
 					BorderSizePixel = 0,
 					ScrollBarThickness = 3,
@@ -1698,6 +1730,11 @@ function Fluent:CreateWindow(cfg)
 					end
 				end
 
+				local function closeDropdown()
+					listFrame.Visible = false
+					backdrop.Visible = false
+				end
+
 				local function rebuildOptions()
 					for _, c in ipairs(listScroll:GetChildren()) do
 						if c:IsA("TextButton") then
@@ -1724,13 +1761,30 @@ function Fluent:CreateWindow(cfg)
 								setSelected(name, not selected[name])
 							else
 								setSelected(name, true)
-								listFrame.Visible = false
+								closeDropdown()
 							end
 							fireChange()
 						end)
 					end
+					if searchBox and searchBox.Text ~= "" then
+						local q = searchBox.Text:lower()
+						for name, ob in pairs(optionBtns) do
+							ob.Visible = name:lower():find(q, 1, true) ~= nil
+						end
+					end
 				end
 				rebuildOptions()
+
+				if searchBox then
+					searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+						local q = searchBox.Text:lower()
+						for name, ob in pairs(optionBtns) do
+							ob.Visible = (q == "") or (name:lower():find(q, 1, true) ~= nil)
+						end
+					end)
+				end
+
+				backdrop.MouseButton1Click:Connect(closeDropdown)
 
 				if dcfg.Default then
 					if type(dcfg.Default) == "table" then
@@ -1747,11 +1801,19 @@ function Fluent:CreateWindow(cfg)
 				end
 
 				head.MouseButton1Click:Connect(function()
-					listFrame.Visible = not listFrame.Visible
-					if listFrame.Visible then
+					local opening = not listFrame.Visible
+					listFrame.Visible = opening
+					backdrop.Visible = opening
+					if opening then
 						local abs, absSize = head.AbsolutePosition, head.AbsoluteSize
 						listFrame.Position = UDim2.fromOffset(abs.X, abs.Y + absSize.Y + 2)
-						listFrame.Size = UDim2.fromOffset(absSize.X, math.min(#values * 26, 160))
+						listFrame.Size = UDim2.fromOffset(absSize.X, math.min(#values * 26, 160) + listTop)
+						if searchBox then
+							searchBox.Text = ""
+							for _, ob in pairs(optionBtns) do
+								ob.Visible = true
+							end
+						end
 					end
 				end)
 
