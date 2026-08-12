@@ -649,6 +649,9 @@ local State = {
 	PumpkinDelay = 0.15,
 	PumpkinNoTP = false,
 
+	-- Automatically tab: dropdown pemilih fitur (biar tidak scroll panjang)
+	AutoFeaturePick = "Auto Shovel Fruit",
+
 	-- Automatically Drop Item (Automatically tab)
 	DropDelay = 0.25,
 
@@ -1045,6 +1048,16 @@ webhookSection:AddButton({
 	end,
 })
 
+-- --- Automatically tab: dropdown pemilih fitur (biar tidak scroll panjang) --
+local featurePickerSection = Tabs.Automatically:AddSection("Pilih Fitur")
+local featurePicker = featurePickerSection:AddDropdown("NaruHub_AutoFeaturePick", {
+	Title = "Fitur",
+	Description = "Pilih satu fitur -- section lain otomatis disembunyikan.",
+	Values = { "Auto Shovel Fruit", "Auto Place Sprinkler", "Drop Seed", "Drop Fruit", "Drop Gear", "Drop Pets" },
+	Multi = false,
+	Default = "Auto Shovel Fruit",
+})
+
 -- --- Automatically tab (Auto Shovel Fruit by kg) -----------------------
 local shovelSection = Tabs.Automatically:AddSection("Auto Shovel Fruit (by kg)")
 
@@ -1435,6 +1448,53 @@ sprinklerSection:AddToggle("NaruHub_SprinklerNoTP", {
 		State.SprinklerNoTP = s
 	end,
 })
+
+-- --- Wiring dropdown "Pilih Fitur": sembunyikan section yang tidak dipilih.
+-- Section Fluent = 1 Frame per AddSection, urut sesuai urutan dibuat, jadi diambil
+-- posisional dari ScrollingFrame tab ini (Window.ContainerHolder, index 3 = Automatically).
+do
+	local ok, err = pcall(function()
+		local scrollFrame = Window.ContainerHolder:GetChildren()[3]
+		local frames = {}
+		for _, c in ipairs(scrollFrame:GetChildren()) do
+			if c:IsA("Frame") then
+				frames[#frames + 1] = c
+			end
+		end
+		-- Urutan dibuat: [1]Pilih Fitur [2]Shovel [3]Filter&Batas [4]DropDelay
+		-- [5]DropSeed [6]DropFruit [7]DropGear [8]DropPets [9]Sprinkler
+		local groups = {
+			["Auto Shovel Fruit"] = { frames[2], frames[3] },
+			["Auto Place Sprinkler"] = { frames[9] },
+			["Drop Seed"] = { frames[5] },
+			["Drop Fruit"] = { frames[6] },
+			["Drop Gear"] = { frames[7] },
+			["Drop Pets"] = { frames[8] },
+		}
+		local alwaysVisible = { frames[1], frames[4] } -- Pilih Fitur + Drop Delay (shared)
+
+		local function applyFeaturePick(selected: string)
+			for _, f in ipairs(alwaysVisible) do
+				f.Visible = true
+			end
+			for name, group in pairs(groups) do
+				local show = name == selected
+				for _, f in ipairs(group) do
+					f.Visible = show
+				end
+			end
+		end
+
+		applyFeaturePick(State.AutoFeaturePick or "Auto Shovel Fruit")
+		featurePicker:OnChanged(function(v)
+			State.AutoFeaturePick = v
+			applyFeaturePick(v)
+		end)
+	end)
+	if not ok then
+		warn("[NaruHub] Gagal wiring dropdown Pilih Fitur: " .. tostring(err))
+	end
+end
 
 -- --- Misc tab: Monitor & ESP (display, bukan bagian Auto Pumpkin) -------
 local displaySection = Tabs.Misc:AddSection("Monitor & ESP")
