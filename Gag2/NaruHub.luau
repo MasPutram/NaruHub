@@ -33,7 +33,7 @@ end
 -- Game bindings
 --==============================================================
 
-local PurchaseSeed, CollectFruit, UseShovel, PlaceSprinkler
+local PurchaseSeed, CollectFruit, UseShovel, PlaceSprinkler, RequestDrop
 do
 	local ok, net = pcall(function()
 		return require(ReplicatedStorage.SharedModules.Networking)
@@ -50,6 +50,9 @@ do
 		end
 		if net.Place then
 			PlaceSprinkler = net.Place.PlaceSprinkler
+		end
+		if net.DroppedItem then
+			RequestDrop = net.DroppedItem.RequestDrop
 		end
 	end
 end
@@ -161,6 +164,120 @@ do
 		end
 		table.sort(ALL_SEEDS)
 	end
+end
+
+-- Kategori attribute Tool -> nama kategori Networking.DroppedItem.RequestDrop.
+-- Sama seperti tabel lookup asli game (DroppedItemController).
+local DROP_CATEGORY_BY_ATTR: { [string]: string } = {
+	SeedTool = "Seeds",
+	Sprinkler = "Sprinklers",
+	WateringCan = "WateringCans",
+	Mushroom = "Mushrooms",
+	Gnome = "Gnomes",
+	Raccoon = "Raccoons",
+	Crate = "Crates",
+	Teleporter = "Teleporters",
+	PlayerMagnet = "Magnets",
+	FruitMagnet = "FruitMagnets",
+	PetTeleporter = "PetTeleporters",
+	SeedPack = "SeedPacks",
+	Wheelbarrow = "Wheelbarrows",
+	Trowel = "Trowels",
+	Crowbar = "Crowbars",
+	Ladder = "Ladders",
+	FreezeRay = "FreezeRays",
+	PowerHose = "PowerHoses",
+	Rake = "Rakes",
+	Sign = "Signs",
+	EmptyPot = "EmptyPots",
+	Flashbang = "Flashbangs",
+	Bird = "Birds",
+}
+
+-- Rarity per nama seed/fruit (SeedName == FruitName di game ini).
+local rarityBySeedName: { [string]: string } = {}
+local ALL_GEAR: { string } = {}
+local rarityByGearName: { [string]: string } = {}
+local RARITY_LIST: { string } = {}
+do
+	local seen = {}
+	local ok, SeedData = pcall(function()
+		return require(ReplicatedStorage.SharedModules.SeedData)
+	end)
+	if ok and type(SeedData) == "table" then
+		for _, entry in ipairs(SeedData) do
+			local n = entry.SeedName or entry.Name
+			if n and entry.Rarity then
+				rarityBySeedName[n] = entry.Rarity
+				if not seen[entry.Rarity] then
+					seen[entry.Rarity] = true
+					table.insert(RARITY_LIST, entry.Rarity)
+				end
+			end
+		end
+	end
+	local ok2, GearShopData = pcall(function()
+		return require(ReplicatedStorage.SharedModules.GearShopData)
+	end)
+	if ok2 and type(GearShopData) == "table" and type(GearShopData.Data) == "table" then
+		local seenGear = {}
+		for _, entry in ipairs(GearShopData.Data) do
+			local n = entry.ItemName
+			if n then
+				if entry.Rarity then
+					rarityByGearName[n] = entry.Rarity
+					if not seen[entry.Rarity] then
+						seen[entry.Rarity] = true
+						table.insert(RARITY_LIST, entry.Rarity)
+					end
+				end
+				if not seenGear[n] then
+					seenGear[n] = true
+					table.insert(ALL_GEAR, n)
+				end
+			end
+		end
+	end
+	table.sort(RARITY_LIST)
+	table.sort(ALL_GEAR)
+end
+
+-- Spesies pet (dari PetModules -- data animasi/wander, key = nama spesies).
+local ALL_PETS: { string } = {}
+do
+	local ok, PetModules = pcall(function()
+		return require(ReplicatedStorage.SharedModules.PetModules)
+	end)
+	if ok and type(PetModules) == "table" then
+		for name in pairs(PetModules) do
+			table.insert(ALL_PETS, name)
+		end
+		table.sort(ALL_PETS)
+	end
+end
+
+-- Mutasi buah: dikumpulkan dari backpack saat load (tidak ada daftar statis resmi).
+-- Kosong = filter mutasi diabaikan. Update: buka ulang script kalau ada mutasi baru.
+local ALL_MUTATIONS: { string } = {}
+do
+	local seen = {}
+	local function scan(container)
+		if not container then
+			return
+		end
+		for _, t in ipairs(container:GetChildren()) do
+			if t:IsA("Tool") and t:GetAttribute("HarvestedFruit") == true then
+				local m = t:GetAttribute("Mutation")
+				if m and m ~= "" and not seen[m] then
+					seen[m] = true
+					table.insert(ALL_MUTATIONS, m)
+				end
+			end
+		end
+	end
+	scan(LocalPlayer:FindFirstChild("Backpack"))
+	scan(LocalPlayer.Character)
+	table.sort(ALL_MUTATIONS)
 end
 
 local function getSeedNames(): { string }
@@ -402,6 +519,57 @@ local function placeSprinkler(pos: Vector3, attr: string, tool: Instance, plotId
 	return ok
 end
 
+-- Tentukan (kategori, id) drop dari sebuah Tool, sama seperti logika asli game
+-- (DroppedItemController): fruit & pet pakai Id unik, sisanya pakai nama attribute-nya.
+local function getDropCategoryAndId(tool: Instance): (string?, string?)
+	if tool:GetAttribute("HarvestedFruit") == true then
+		local id = tool:GetAttribute("Id")
+		if id then
+			return "HarvestedFruits", id
+		end
+	end
+	local petId = tool:GetAttribute("PetId")
+	if type(petId) == "string" and petId ~= "" then
+		return "Pets", petId
+	end
+	for attrName, category in pairs(DROP_CATEGORY_BY_ATTR) do
+		local v = tool:GetAttribute(attrName)
+		if v then
+			return category, v
+		end
+	end
+	return nil, nil
+end
+
+-- Equip tool -> fire RequestDrop(category, id) di identity 2 -> selesai.
+local function dropTool(tool: Instance): boolean
+	if not RequestDrop then
+		return false
+	end
+	local category, id = getDropCategoryAndId(tool)
+	if not category or not id then
+		return false
+	end
+	local char = LocalPlayer.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		pcall(function()
+			hum:EquipTool(tool)
+		end)
+	end
+	local prev = (getIdentity and getIdentity()) or 8
+	if setIdentity then
+		pcall(setIdentity, 2)
+	end
+	local ok = pcall(function()
+		RequestDrop:Fire(category, id)
+	end)
+	if setIdentity then
+		pcall(setIdentity, prev)
+	end
+	return ok
+end
+
 -- Counter live untuk Monitor HUD (bukan config).
 local Monitor = { Shovel = 0, Sprinkler = 0, MatchX = 0, MatchY = 0, LastGoodKg = 0, Ready = 0, FruitList = {} }
 local SPRINKLER_LIFETIME = 120
@@ -480,6 +648,26 @@ local State = {
 	PumpkinKg = 50,
 	PumpkinDelay = 0.15,
 	PumpkinNoTP = false,
+
+	-- Automatically Drop Item (Automatically tab)
+	DropDelay = 0.25,
+
+	DropSeedEnabled = false,
+	DropSeedList = {} :: { [string]: boolean },
+
+	DropFruitEnabled = false,
+	DropFruitList = {} :: { [string]: boolean },
+	DropFruitRarity = {} :: { [string]: boolean },
+	DropFruitMutation = {} :: { [string]: boolean },
+	DropFruitMode = "Below",
+	DropFruitKg = 1,
+
+	DropGearEnabled = false,
+	DropGearList = {} :: { [string]: boolean },
+	DropGearRarity = {} :: { [string]: boolean },
+
+	DropPetEnabled = false,
+	DropPetList = {} :: { [string]: boolean },
 }
 
 for _, w in ipairs(WEATHERS) do
@@ -600,6 +788,7 @@ local Window = Fluent:CreateWindow({
 local Tabs = {
 	Shop = Window:AddTab({ Title = "Seed Shop", Icon = "sprout" }),
 	Garden = Window:AddTab({ Title = "Garden", Icon = "shovel" }),
+	Automatically = Window:AddTab({ Title = "Automatically", Icon = "zap" }),
 	Misc = Window:AddTab({ Title = "Misc", Icon = "package" }),
 	Weather = Window:AddTab({ Title = "Weather", Icon = "cloud-lightning" }),
 	Settings = Window:AddTab({ Title = "Settings", Icon = "settings" }),
@@ -843,8 +1032,8 @@ webhookSection:AddButton({
 	end,
 })
 
--- --- Garden tab (Auto Shovel Fruit by kg) -----------------------
-local shovelSection = Tabs.Garden:AddSection("Auto Shovel Fruit (by kg)")
+-- --- Automatically tab (Auto Shovel Fruit by kg) -----------------------
+local shovelSection = Tabs.Automatically:AddSection("Auto Shovel Fruit (by kg)")
 
 local ShovelStatus = shovelSection:AddParagraph({ Title = "Status", Content = "Idle" })
 local function setShovelStatus(text: string)
@@ -892,7 +1081,7 @@ shovelSection:AddInput("NaruHub_ShovelKg", {
 	end,
 })
 
-local shovelFilterSection = Tabs.Garden:AddSection("Filter & Batas")
+local shovelFilterSection = Tabs.Automatically:AddSection("Filter & Batas")
 
 shovelFilterSection:AddDropdown("NaruHub_ShovelSeeds", {
 	Title = "Seed filter (kosong = semua)",
@@ -938,6 +1127,226 @@ shovelFilterSection:AddToggle("NaruHub_ShovelNoTP", {
 	Default = false,
 	Callback = function(s)
 		State.ShovelNoTP = s
+	end,
+})
+
+-- --- Automatically tab: Automatically Drop Item -------------------------
+-- Catatan: drop = equip item lalu Networking.DroppedItem.RequestDrop:Fire(category, id),
+-- sama seperti tombol drop asli game. Tidak perlu teleport (item dari inventory).
+
+local dropDelaySection = Tabs.Automatically:AddSection("Automatically Drop Item")
+dropDelaySection:AddSlider("NaruHub_DropDelay", {
+	Title = "Drop Delay (detik, semua kategori)",
+	Default = 0.25,
+	Min = 0.1,
+	Max = 2,
+	Rounding = 2,
+	Callback = function(v)
+		State.DropDelay = v
+	end,
+})
+
+-- Drop Seed ---------------------------------------------------------------
+local dropSeedSection = Tabs.Automatically:AddSection("Drop Seed")
+local DropSeedStatus = dropSeedSection:AddParagraph({ Title = "Status", Content = "Idle" })
+local function setDropSeedStatus(text: string)
+	pcall(function() DropSeedStatus:SetDesc(text) end)
+	pcall(function() DropSeedStatus:SetContent(text) end)
+end
+
+dropSeedSection:AddDropdown("NaruHub_DropSeedList", {
+	Title = "Select seed",
+	Description = "Wajib pilih minimal satu (kosong = tidak drop apa-apa, biar aman).",
+	Values = ALL_SEEDS,
+	Multi = true,
+	Default = {},
+}):OnChanged(function(value)
+	local sel = {}
+	for name, on in pairs(value) do
+		if on then
+			sel[name] = true
+		end
+	end
+	State.DropSeedList = sel
+end)
+
+dropSeedSection:AddToggle("NaruHub_DropSeedEnabled", {
+	Title = "Toggle Drop Seed",
+	Description = "Drop seluruh stack seed yang dipilih di atas.",
+	Default = false,
+	Callback = function(s)
+		State.DropSeedEnabled = s
+		setDropSeedStatus(s and "Aktif..." or "Dimatikan")
+	end,
+})
+
+-- Drop Fruits ---------------------------------------------------------------
+local dropFruitSection = Tabs.Automatically:AddSection("Drop Fruits")
+local DropFruitStatus = dropFruitSection:AddParagraph({ Title = "Status", Content = "Idle" })
+local function setDropFruitStatus(text: string)
+	pcall(function() DropFruitStatus:SetDesc(text) end)
+	pcall(function() DropFruitStatus:SetContent(text) end)
+end
+
+dropFruitSection:AddDropdown("NaruHub_DropFruitList", {
+	Title = "Select drop fruit",
+	Description = "Kosong = semua jenis fruit (asal cocok filter lain di bawah).",
+	Values = ALL_SEEDS, -- SeedName == FruitName di game ini
+	Multi = true,
+	Default = {},
+}):OnChanged(function(value)
+	local sel = {}
+	for name, on in pairs(value) do
+		if on then
+			sel[name] = true
+		end
+	end
+	State.DropFruitList = sel
+end)
+
+dropFruitSection:AddDropdown("NaruHub_DropFruitRarity", {
+	Title = "Select rarity (OR)",
+	Description = "Kosong = semua rarity. Buah lolos kalau cocok Fruit ATAU Rarity ATAU Mutation yang dipilih.",
+	Values = RARITY_LIST,
+	Multi = true,
+	Default = {},
+}):OnChanged(function(value)
+	local sel = {}
+	for name, on in pairs(value) do
+		if on then
+			sel[name] = true
+		end
+	end
+	State.DropFruitRarity = sel
+end)
+
+dropFruitSection:AddDropdown("NaruHub_DropFruitMutation", {
+	Title = "Drop mutation",
+	Description = "Kosong = abaikan filter mutasi. Daftar diambil dari buah yang ada di backpack saat script dimuat.",
+	Values = ALL_MUTATIONS,
+	Multi = true,
+	Default = {},
+}):OnChanged(function(value)
+	local sel = {}
+	for name, on in pairs(value) do
+		if on then
+			sel[name] = true
+		end
+	end
+	State.DropFruitMutation = sel
+end)
+
+dropFruitSection:AddDropdown("NaruHub_DropFruitMode", {
+	Title = "Threshold mode",
+	Description = "Below = drop yang beratnya < kg. Above = drop yang beratnya > kg.",
+	Values = { "Below", "Above" },
+	Multi = false,
+	Default = "Below",
+}):OnChanged(function(v)
+	State.DropFruitMode = v
+end)
+
+dropFruitSection:AddInput("NaruHub_DropFruitKg", {
+	Title = "Threshold (kg)",
+	Default = "1",
+	Placeholder = "mis. 5",
+	Numeric = true,
+	Finished = true,
+	Callback = function(v)
+		State.DropFruitKg = tonumber(v) or State.DropFruitKg
+	end,
+})
+
+dropFruitSection:AddToggle("NaruHub_DropFruitEnabled", {
+	Title = "Toggle Auto Drop Fruit",
+	Description = "Fruit ATAU Rarity ATAU Mutation cocok (kalau dipilih) DAN lolos threshold kg -> di-drop.",
+	Default = false,
+	Callback = function(s)
+		State.DropFruitEnabled = s
+		setDropFruitStatus(s and "Aktif..." or "Dimatikan")
+	end,
+})
+
+-- Drop Gear ---------------------------------------------------------------
+local dropGearSection = Tabs.Automatically:AddSection("Drop Gear")
+local DropGearStatus = dropGearSection:AddParagraph({ Title = "Status", Content = "Idle" })
+local function setDropGearStatus(text: string)
+	pcall(function() DropGearStatus:SetDesc(text) end)
+	pcall(function() DropGearStatus:SetContent(text) end)
+end
+
+dropGearSection:AddDropdown("NaruHub_DropGearList", {
+	Title = "Select gear",
+	Description = "Kosong = semua gear (asal cocok rarity kalau dipilih).",
+	Values = ALL_GEAR,
+	Multi = true,
+	Default = {},
+}):OnChanged(function(value)
+	local sel = {}
+	for name, on in pairs(value) do
+		if on then
+			sel[name] = true
+		end
+	end
+	State.DropGearList = sel
+end)
+
+dropGearSection:AddDropdown("NaruHub_DropGearRarity", {
+	Title = "Rarity",
+	Description = "Kosong = semua rarity.",
+	Values = RARITY_LIST,
+	Multi = true,
+	Default = {},
+}):OnChanged(function(value)
+	local sel = {}
+	for name, on in pairs(value) do
+		if on then
+			sel[name] = true
+		end
+	end
+	State.DropGearRarity = sel
+end)
+
+dropGearSection:AddToggle("NaruHub_DropGearEnabled", {
+	Title = "Toggle Auto Drop Gear",
+	Description = "Wajib pilih minimal Gear atau Rarity (kalau dua-duanya kosong, tidak drop apa-apa, biar aman).",
+	Default = false,
+	Callback = function(s)
+		State.DropGearEnabled = s
+		setDropGearStatus(s and "Aktif..." or "Dimatikan")
+	end,
+})
+
+-- Drop Pets ---------------------------------------------------------------
+local dropPetSection = Tabs.Automatically:AddSection("Drop Pets")
+local DropPetStatus = dropPetSection:AddParagraph({ Title = "Status", Content = "Idle" })
+local function setDropPetStatus(text: string)
+	pcall(function() DropPetStatus:SetDesc(text) end)
+	pcall(function() DropPetStatus:SetContent(text) end)
+end
+
+dropPetSection:AddDropdown("NaruHub_DropPetList", {
+	Title = "Select pets",
+	Description = "Wajib pilih minimal satu spesies (kosong = tidak drop apa-apa, biar aman).",
+	Values = ALL_PETS,
+	Multi = true,
+	Default = {},
+}):OnChanged(function(value)
+	local sel = {}
+	for name, on in pairs(value) do
+		if on then
+			sel[name] = true
+		end
+	end
+	State.DropPetList = sel
+end)
+
+dropPetSection:AddToggle("NaruHub_DropPetEnabled", {
+	Title = "Toggle Auto Drop Pets",
+	Default = false,
+	Callback = function(s)
+		State.DropPetEnabled = s
+		setDropPetStatus(s and "Aktif..." or "Dimatikan")
 	end,
 })
 
@@ -2149,6 +2558,193 @@ task.spawn(function()
 
 		if State.PumpkinEnabled then
 			setPumpkinStatus(("Place %d | Shovel %d (<%gkg)"):format(placedThis, doneShovel, State.PumpkinKg))
+		end
+	end
+end)
+
+-- Automatically Drop Item: helper filter + loop per kategori --------------
+
+local function collectDropCandidates(): { Instance }
+	local list = {}
+	local bp = LocalPlayer:FindFirstChild("Backpack")
+	if bp then
+		for _, t in ipairs(bp:GetChildren()) do
+			if t:IsA("Tool") then
+				list[#list + 1] = t
+			end
+		end
+	end
+	local char = LocalPlayer.Character
+	if char then
+		for _, t in ipairs(char:GetChildren()) do
+			if t:IsA("Tool") then
+				list[#list + 1] = t
+			end
+		end
+	end
+	return list
+end
+
+-- Fruit lolos kalau (Fruit ATAU Rarity ATAU Mutation cocok, kalau ada yang dipilih)
+-- DAN lolos threshold berat (selalu dicek, wajib).
+local function fruitMatchesFilter(fruitName: string, mutation: string?, weight: number?): boolean
+	local hasType = next(State.DropFruitList) ~= nil
+	local hasRarity = next(State.DropFruitRarity) ~= nil
+	local hasMut = next(State.DropFruitMutation) ~= nil
+	local passSelector
+	if not hasType and not hasRarity and not hasMut then
+		passSelector = true
+	else
+		local typeOk = hasType and State.DropFruitList[fruitName] == true
+		local rarityOk = hasRarity and rarityBySeedName[fruitName] and State.DropFruitRarity[rarityBySeedName[fruitName]] == true
+		local mutOk = hasMut and mutation and mutation ~= "" and State.DropFruitMutation[mutation] == true
+		passSelector = typeOk or rarityOk or mutOk
+	end
+	if not passSelector or not weight then
+		return false
+	end
+	if State.DropFruitMode == "Below" then
+		return weight < State.DropFruitKg
+	else
+		return weight > State.DropFruitKg
+	end
+end
+
+-- Gear lolos kalau nama ATAU rarity cocok (wajib pilih minimal satu, biar aman).
+local function gearMatchesFilter(gearName: string): boolean
+	local hasName = next(State.DropGearList) ~= nil
+	local hasRarity = next(State.DropGearRarity) ~= nil
+	if not hasName and not hasRarity then
+		return false
+	end
+	local nameOk = hasName and State.DropGearList[gearName] == true
+	local rarityOk = hasRarity and rarityByGearName[gearName] and State.DropGearRarity[rarityByGearName[gearName]] == true
+	return nameOk or rarityOk
+end
+
+-- Auto Drop Seed
+task.spawn(function()
+	while aliveFn() do
+		task.wait(1)
+		if not State.DropSeedEnabled then
+			continue
+		end
+		if not next(State.DropSeedList) then
+			setDropSeedStatus("Pilih seed dulu (kosong = tidak drop apa-apa).")
+			continue
+		end
+		local done = 0
+		for _, t in ipairs(collectDropCandidates()) do
+			if not State.DropSeedEnabled or not aliveFn() then
+				break
+			end
+			local seedName = t:GetAttribute("SeedTool")
+			if seedName and State.DropSeedList[seedName] then
+				if dropTool(t) then
+					done += 1
+					setDropSeedStatus(("Drop %d seed..."):format(done))
+					task.wait(State.DropDelay)
+				end
+			end
+		end
+		if State.DropSeedEnabled then
+			setDropSeedStatus(done > 0 and ("Selesai: %d seed di-drop."):format(done) or "Aktif - tidak ada yang cocok.")
+		end
+	end
+end)
+
+-- Auto Drop Fruit
+task.spawn(function()
+	while aliveFn() do
+		task.wait(1)
+		if not State.DropFruitEnabled then
+			continue
+		end
+		local done = 0
+		for _, t in ipairs(collectDropCandidates()) do
+			if not State.DropFruitEnabled or not aliveFn() then
+				break
+			end
+			if t:GetAttribute("HarvestedFruit") == true then
+				local fruitName = t:GetAttribute("FruitName")
+				local mutation = t:GetAttribute("Mutation")
+				local weight = t:GetAttribute("Weight")
+				if fruitName and fruitMatchesFilter(fruitName, mutation, weight) then
+					if dropTool(t) then
+						done += 1
+						setDropFruitStatus(("Drop %d fruit..."):format(done))
+						task.wait(State.DropDelay)
+					end
+				end
+			end
+		end
+		if State.DropFruitEnabled then
+			setDropFruitStatus(done > 0 and ("Selesai: %d fruit di-drop."):format(done) or "Aktif - tidak ada yang cocok.")
+		end
+	end
+end)
+
+-- Auto Drop Gear
+task.spawn(function()
+	while aliveFn() do
+		task.wait(1)
+		if not State.DropGearEnabled then
+			continue
+		end
+		if not next(State.DropGearList) and not next(State.DropGearRarity) then
+			setDropGearStatus("Pilih gear atau rarity dulu (kosong = tidak drop apa-apa).")
+			continue
+		end
+		local done = 0
+		for _, t in ipairs(collectDropCandidates()) do
+			if not State.DropGearEnabled or not aliveFn() then
+				break
+			end
+			local category, gearName = getDropCategoryAndId(t)
+			if category and category ~= "Seeds" and category ~= "HarvestedFruits" and category ~= "Pets" then
+				if gearName and gearMatchesFilter(gearName) then
+					if dropTool(t) then
+						done += 1
+						setDropGearStatus(("Drop %d gear..."):format(done))
+						task.wait(State.DropDelay)
+					end
+				end
+			end
+		end
+		if State.DropGearEnabled then
+			setDropGearStatus(done > 0 and ("Selesai: %d gear di-drop."):format(done) or "Aktif - tidak ada yang cocok.")
+		end
+	end
+end)
+
+-- Auto Drop Pets
+task.spawn(function()
+	while aliveFn() do
+		task.wait(1)
+		if not State.DropPetEnabled then
+			continue
+		end
+		if not next(State.DropPetList) then
+			setDropPetStatus("Pilih pet dulu (kosong = tidak drop apa-apa).")
+			continue
+		end
+		local done = 0
+		for _, t in ipairs(collectDropCandidates()) do
+			if not State.DropPetEnabled or not aliveFn() then
+				break
+			end
+			local petId = t:GetAttribute("PetId")
+			local petName = t:GetAttribute("Pet")
+			if type(petId) == "string" and petId ~= "" and petName and State.DropPetList[petName] then
+				if dropTool(t) then
+					done += 1
+					setDropPetStatus(("Drop %d pet..."):format(done))
+					task.wait(State.DropDelay)
+				end
+			end
+		end
+		if State.DropPetEnabled then
+			setDropPetStatus(done > 0 and ("Selesai: %d pet di-drop."):format(done) or "Aktif - tidak ada yang cocok.")
 		end
 	end
 end)
