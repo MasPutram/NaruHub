@@ -649,8 +649,8 @@ local State = {
 	PumpkinDelay = 0.15,
 	PumpkinNoTP = false,
 
-	-- Automatically tab: dropdown pemilih fitur (biar tidak scroll panjang)
-	AutoFeaturePick = "Auto Shovel Fruit",
+	-- Automatically tab: akordeon (group mana yang sedang terbuka)
+	AutoOpenGroup = "Auto Shovel Fruit",
 
 	-- Automatically Drop Item (Automatically tab)
 	DropDelay = 0.25,
@@ -1048,17 +1048,20 @@ webhookSection:AddButton({
 	end,
 })
 
--- --- Automatically tab: dropdown pemilih fitur (biar tidak scroll panjang) --
-local featurePickerSection = Tabs.Automatically:AddSection("Pilih Fitur")
-local featurePicker = featurePickerSection:AddDropdown("NaruHub_AutoFeaturePick", {
-	Title = "Fitur",
-	Description = "Pilih satu fitur -- section lain otomatis disembunyikan.",
-	Values = { "Auto Shovel Fruit", "Auto Place Sprinkler", "Drop Seed", "Drop Fruit", "Drop Gear", "Drop Pets" },
-	Multi = false,
-	Default = "Auto Shovel Fruit",
+-- --- Automatically tab: akordeon (klik induk -> buka, yang lain tutup) --
+-- Diisi setelah semua section Automatically dibuat (wiring di bagian bawah).
+local accordionToggle: ((string) -> ())?
+
+local shovelHeader = Tabs.Automatically:AddButton({
+	Title = "\226\150\190 Auto Shovel Fruit",
+	Description = "Klik untuk buka/tutup",
+	Callback = function()
+		if accordionToggle then
+			accordionToggle("Auto Shovel Fruit")
+		end
+	end,
 })
 
--- --- Automatically tab (Auto Shovel Fruit by kg) -----------------------
 local shovelSection = Tabs.Automatically:AddSection("Auto Shovel Fruit (by kg)")
 
 local ShovelStatus = shovelSection:AddParagraph({ Title = "Status", Content = "Idle" })
@@ -1156,11 +1159,63 @@ shovelFilterSection:AddToggle("NaruHub_ShovelNoTP", {
 	end,
 })
 
--- --- Automatically tab: Automatically Drop Item -------------------------
+-- --- Automatically tab: Auto Place Sprinkler (akordeon) -----------------
+local sprinklerHeader = Tabs.Automatically:AddButton({
+	Title = "\226\150\184 Auto Place Sprinkler",
+	Description = "Klik untuk buka/tutup",
+	Callback = function()
+		if accordionToggle then
+			accordionToggle("Auto Place Sprinkler")
+		end
+	end,
+})
+
+local sprinklerSection = Tabs.Automatically:AddSection("Pengaturan Sprinkler")
+
+sprinklerSection:AddToggle("NaruHub_Sprinkler", {
+	Title = "Auto Place Sprinkler (satu-satu)",
+	Description = "Taruh sprinkler dari inventory ke plot, 1 per interval.",
+	Default = false,
+	Callback = function(s)
+		State.SprinklerEnabled = s
+	end,
+})
+
+sprinklerSection:AddSlider("NaruHub_SprinklerDelay", {
+	Title = "Sprinkler Delay (detik)",
+	Default = 1.5,
+	Min = 0.3,
+	Max = 5,
+	Rounding = 1,
+	Callback = function(v)
+		State.SprinklerDelay = v
+	end,
+})
+
+sprinklerSection:AddToggle("NaruHub_SprinklerNoTP", {
+	Title = "Disable Teleport (Sprinkler)",
+	Description = "ON = taruh sprinkler tanpa memindah karakter.",
+	Default = false,
+	Callback = function(s)
+		State.SprinklerNoTP = s
+	end,
+})
+
+-- --- Automatically tab: Automatically Drop Item (akordeon) --------------
 -- Catatan: drop = equip item lalu Networking.DroppedItem.RequestDrop:Fire(category, id),
 -- sama seperti tombol drop asli game. Tidak perlu teleport (item dari inventory).
 
-local dropDelaySection = Tabs.Automatically:AddSection("Automatically Drop Item")
+local dropHeader = Tabs.Automatically:AddButton({
+	Title = "\226\150\184 Automatically Drop Item",
+	Description = "Klik untuk buka/tutup",
+	Callback = function()
+		if accordionToggle then
+			accordionToggle("Automatically Drop Item")
+		end
+	end,
+})
+
+local dropDelaySection = Tabs.Automatically:AddSection("Drop Settings (semua kategori)")
 dropDelaySection:AddSlider("NaruHub_DropDelay", {
 	Title = "Drop Delay (detik, semua kategori)",
 	Default = 0.25,
@@ -1417,82 +1472,70 @@ local function updateGardenInfo()
 	pcall(function() GardenPlants:SetContent(text) end)
 end
 
--- --- Automatically tab: Auto Place Sprinkler ----------------------------
-local sprinklerSection = Tabs.Automatically:AddSection("Auto Place Sprinkler")
-
-sprinklerSection:AddToggle("NaruHub_Sprinkler", {
-	Title = "Auto Place Sprinkler (satu-satu)",
-	Description = "Taruh sprinkler dari inventory ke plot, 1 per interval.",
-	Default = false,
-	Callback = function(s)
-		State.SprinklerEnabled = s
-	end,
-})
-
-sprinklerSection:AddSlider("NaruHub_SprinklerDelay", {
-	Title = "Sprinkler Delay (detik)",
-	Default = 1.5,
-	Min = 0.3,
-	Max = 5,
-	Rounding = 1,
-	Callback = function(v)
-		State.SprinklerDelay = v
-	end,
-})
-
-sprinklerSection:AddToggle("NaruHub_SprinklerNoTP", {
-	Title = "Disable Teleport (Sprinkler)",
-	Description = "ON = taruh sprinkler tanpa memindah karakter.",
-	Default = false,
-	Callback = function(s)
-		State.SprinklerNoTP = s
-	end,
-})
-
--- --- Wiring dropdown "Pilih Fitur": sembunyikan section yang tidak dipilih.
--- Section Fluent = 1 Frame per AddSection, urut sesuai urutan dibuat, jadi diambil
--- posisional dari ScrollingFrame tab ini (Window.ContainerHolder, index 3 = Automatically).
+-- --- Wiring akordeon: cari tiap frame lewat judulnya (satu kali, di awal),
+-- lalu klik tombol induk -> buka groupnya, tutup semua group lain.
+-- Fluent tidak punya API collapse resmi; AddSection/AddButton tetap menghasilkan
+-- 1 Frame per elemen di ScrollingFrame tab (Window.ContainerHolder, index 3 = Automatically).
 do
 	local ok, err = pcall(function()
 		local scrollFrame = Window.ContainerHolder:GetChildren()[3]
-		local frames = {}
+		local byTitle = {}
 		for _, c in ipairs(scrollFrame:GetChildren()) do
-			if c:IsA("Frame") then
-				frames[#frames + 1] = c
-			end
-		end
-		-- Urutan dibuat: [1]Pilih Fitur [2]Shovel [3]Filter&Batas [4]DropDelay
-		-- [5]DropSeed [6]DropFruit [7]DropGear [8]DropPets [9]Sprinkler
-		local groups = {
-			["Auto Shovel Fruit"] = { frames[2], frames[3] },
-			["Auto Place Sprinkler"] = { frames[9] },
-			["Drop Seed"] = { frames[5] },
-			["Drop Fruit"] = { frames[6] },
-			["Drop Gear"] = { frames[7] },
-			["Drop Pets"] = { frames[8] },
-		}
-		local alwaysVisible = { frames[1], frames[4] } -- Pilih Fitur + Drop Delay (shared)
-
-		local function applyFeaturePick(selected: string)
-			for _, f in ipairs(alwaysVisible) do
-				f.Visible = true
-			end
-			for name, group in pairs(groups) do
-				local show = name == selected
-				for _, f in ipairs(group) do
-					f.Visible = show
+			if c:IsA("Frame") or c:IsA("TextButton") then
+				for _, dd in ipairs(c:GetDescendants()) do
+					if dd:IsA("TextLabel") then
+						if not byTitle[dd.Text] then
+							byTitle[dd.Text] = { frame = c, label = dd }
+						end
+						break
+					end
 				end
 			end
 		end
 
-		applyFeaturePick(State.AutoFeaturePick or "Auto Shovel Fruit")
-		featurePicker:OnChanged(function(v)
-			State.AutoFeaturePick = v
-			applyFeaturePick(v)
-		end)
+		local headers = {
+			["Auto Shovel Fruit"] = byTitle["\226\150\190 Auto Shovel Fruit"] or byTitle["\226\150\184 Auto Shovel Fruit"],
+			["Auto Place Sprinkler"] = byTitle["\226\150\190 Auto Place Sprinkler"] or byTitle["\226\150\184 Auto Place Sprinkler"],
+			["Automatically Drop Item"] = byTitle["\226\150\190 Automatically Drop Item"] or byTitle["\226\150\184 Automatically Drop Item"],
+		}
+		local function frameOf(title)
+			local e = byTitle[title]
+			return e and e.frame
+		end
+		local contentGroups = {
+			["Auto Shovel Fruit"] = { frameOf("Auto Shovel Fruit (by kg)"), frameOf("Filter & Batas") },
+			["Auto Place Sprinkler"] = { frameOf("Pengaturan Sprinkler") },
+			["Automatically Drop Item"] = {
+				frameOf("Drop Settings (semua kategori)"),
+				frameOf("Drop Seed"),
+				frameOf("Drop Fruits"),
+				frameOf("Drop Gear"),
+				frameOf("Drop Pets"),
+			},
+		}
+		local order = { "Auto Shovel Fruit", "Auto Place Sprinkler", "Automatically Drop Item" }
+
+		local function applyAccordion(openName: string)
+			for _, name in ipairs(order) do
+				local open = name == openName
+				local hdr = headers[name]
+				if hdr and hdr.label then
+					hdr.label.Text = (open and "\226\150\190 " or "\226\150\184 ") .. name
+				end
+				for _, f in ipairs(contentGroups[name]) do
+					if f then
+						f.Visible = open
+					end
+				end
+			end
+			State.AutoOpenGroup = openName
+		end
+
+		accordionToggle = applyAccordion
+		applyAccordion(State.AutoOpenGroup or "Auto Shovel Fruit")
 	end)
 	if not ok then
-		warn("[NaruHub] Gagal wiring dropdown Pilih Fitur: " .. tostring(err))
+		warn("[NaruHub] Gagal wiring akordeon Automatically: " .. tostring(err))
 	end
 end
 
