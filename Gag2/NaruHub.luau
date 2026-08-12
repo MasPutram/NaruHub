@@ -920,16 +920,6 @@ pcall(function()
 	Window.Maximize = function() end
 end)
 
--- Window.Root di-hardcode Fluent pakai ukuran pixel absolut dari resolusi saat
--- window dibuat (mis. 1920x1009), bukan relatif -- kalau window Roblox di-resize
--- atau di-minimize lalu balik lagi, panel jadi salah ukuran/posisi (tidak ikut
--- viewport). Paksa jadi Scale 1,1 supaya selalu ikut ukuran layar terkini.
-pcall(function()
-	local root = Window.Root
-	root.Size = UDim2.fromScale(1, 1)
-	root.Position = UDim2.fromScale(0, 0)
-	root.AnchorPoint = Vector2.new(0, 0)
-end)
 
 local Tabs = {
 	Shop = Window:AddTab({ Title = "Seed Shop", Icon = "sprout" }),
