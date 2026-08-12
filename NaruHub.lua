@@ -2613,22 +2613,22 @@ local conns = {}
 -- Logo di title bar + logo mengambang saat minimize
 --==============================================================
 
-local TILT = -10 -- kemiringan sticker (derajat)
+local TILT = 0 -- tidak miring (normal)
 
--- (1) Logo nempel di title bar (placeholder), miring ~10 derajat
+-- (1) Logo nempel di title bar, ukuran lebih besar + ada jarak ke teks judul
 pcall(function()
 	local tb = Window.TitleBar.Frame
 	local titleHolder = tb:FindFirstChild("TitleHolder") -- holder teks judul
 	if titleHolder then
 		local p, s = titleHolder.Position, titleHolder.Size
-		titleHolder.Position = UDim2.new(0, 46, p.Y.Scale, p.Y.Offset)
-		titleHolder.Size = UDim2.new(1, -46, s.Y.Scale, s.Y.Offset)
+		titleHolder.Position = UDim2.new(0, 62, p.Y.Scale, p.Y.Offset)
+		titleHolder.Size = UDim2.new(1, -62, s.Y.Scale, s.Y.Offset)
 	end
 	local titleLogo = Instance.new("ImageLabel")
 	titleLogo.Name = "NaruHubTitleLogo"
 	titleLogo.BackgroundTransparency = 1
-	titleLogo.Size = UDim2.fromOffset(28, 28)
-	titleLogo.Position = UDim2.new(0, 12, 0.5, 0)
+	titleLogo.Size = UDim2.fromOffset(36, 36)
+	titleLogo.Position = UDim2.new(0, 14, 0.5, 0)
 	titleLogo.AnchorPoint = Vector2.new(0, 0.5)
 	titleLogo.Rotation = TILT
 	titleLogo.Image = LOGO_ASSET or ""
@@ -2657,10 +2657,10 @@ launcher.Parent = hui
 
 local logoBtn = Instance.new("ImageButton")
 logoBtn.Name = "Logo"
-logoBtn.Size = UDim2.fromOffset(60, 60)
+logoBtn.Size = UDim2.fromOffset(76, 76)
 logoBtn.Position = UDim2.new(0, 28, 0, 28) -- pojok kiri atas
-logoBtn.BackgroundColor3 = Color3.fromRGB(18, 18, 20)
-logoBtn.BackgroundTransparency = 0.12
+logoBtn.BackgroundColor3 = Color3.fromRGB(6, 6, 7)
+logoBtn.BackgroundTransparency = 0.02
 logoBtn.AutoButtonColor = false
 logoBtn.Rotation = TILT
 logoBtn.Image = ""
@@ -2672,13 +2672,13 @@ logoCorner.Parent = logoBtn
 
 local logoStroke = Instance.new("UIStroke")
 logoStroke.Color = BRAND
-logoStroke.Thickness = 2
+logoStroke.Thickness = 1.5
 logoStroke.Parent = logoBtn
 
 local logoImg = Instance.new("ImageLabel")
 logoImg.Name = "Img"
 logoImg.BackgroundTransparency = 1
-logoImg.Size = UDim2.fromScale(0.72, 0.72)
+logoImg.Size = UDim2.fromScale(0.78, 0.78)
 logoImg.Position = UDim2.fromScale(0.5, 0.5)
 logoImg.AnchorPoint = Vector2.new(0.5, 0.5)
 logoImg.Image = LOGO_ASSET or ""
@@ -2691,7 +2691,7 @@ if not LOGO_ASSET then
 	lbl.BackgroundTransparency = 1
 	lbl.Size = UDim2.fromScale(1, 1)
 	lbl.Font = Enum.Font.GothamBold
-	lbl.TextSize = 24
+	lbl.TextSize = 30
 	lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
 	lbl.Text = "N"
 	lbl.Parent = logoBtn
