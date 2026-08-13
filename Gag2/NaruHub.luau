@@ -1801,17 +1801,11 @@ function Fluent:CreateWindow(cfg)
 					listFrame.Visible = opening
 					backdrop.Visible = opening
 					if opening then
-						-- Nempel jadi perpanjangan window (bukan ngambang sejajar tombol,
-						-- bukan juga di luar area window) -- tinggi & posisi Y ikut
-						-- persis window, cuma nempel di tepi kanan (atau kiri kalau
-						-- mepet tepi layar).
+						-- Nimpa DI DALAM window (overlay konten, flush ke tepi kanan
+						-- window), bukan nambah panel baru di luar window.
 						local mainAbs, mainSize = main.AbsolutePosition, main.AbsoluteSize
-						local listW = 240
-						local screenSize = workspace.CurrentCamera.ViewportSize
-						local x = mainAbs.X + mainSize.X
-						if x + listW > screenSize.X then
-							x = mainAbs.X - listW
-						end
+						local listW = math.min(240, mainSize.X - 20)
+						local x = mainAbs.X + mainSize.X - listW
 						listFrame.Position = UDim2.fromOffset(x, mainAbs.Y)
 						listFrame.Size = UDim2.fromOffset(listW, mainSize.Y)
 						searchBox.Text = ""
