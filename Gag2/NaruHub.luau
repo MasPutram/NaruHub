@@ -1298,50 +1298,85 @@ function Fluent:CreateWindow(cfg)
 		end)
 
 		function Tab:AddSection(title)
+			-- Gaya list collapsible (kayak HipHub): baris judul + panah, klik buat
+			-- buka/tutup isinya. Default tertutup, cuma nunjukin judulnya saja.
 			local secFrame = uiNew("Frame", {
-				BackgroundColor3 = UI_COL_ROW,
-				BackgroundTransparency = 0.15,
-				BorderSizePixel = 0,
+				BackgroundTransparency = 1,
 				AutomaticSize = Enum.AutomaticSize.Y,
 				Size = UDim2.new(1, 0, 0, 0),
 			}, scroll)
-			uiCorner(8, secFrame)
-			uiNew("UIPadding", {
-				PaddingLeft = UDim.new(0, 14),
-				PaddingRight = UDim.new(0, 14),
-				PaddingTop = UDim.new(0, 13),
-				PaddingBottom = UDim.new(0, 13),
-			}, secFrame)
 			uiNew("UIListLayout", {
-				Padding = UDim.new(0, 10),
+				Padding = UDim.new(0, 8),
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}, secFrame)
 
-			local headerRow = uiNew("Frame", {
-				BackgroundTransparency = 1,
-				Size = UDim2.new(1, 0, 0, 22),
+			local expanded = false
+
+			local headerBtn = uiNew("TextButton", {
+				BackgroundColor3 = UI_COL_ROW,
+				BackgroundTransparency = 0.1,
+				AutoButtonColor = false,
+				BorderSizePixel = 0,
+				Size = UDim2.new(1, 0, 0, 38),
+				Text = "",
 				LayoutOrder = 0,
 			}, secFrame)
+			uiCorner(8, headerBtn)
 			uiNew("Frame", {
 				BackgroundColor3 = UI_COL_ACCENT,
-				Size = UDim2.new(0, 3, 0, 14),
-				Position = UDim2.new(0, 0, 0.5, 0),
+				Size = UDim2.new(0, 3, 0, 16),
+				Position = UDim2.new(0, 12, 0.5, 0),
 				AnchorPoint = Vector2.new(0, 0.5),
 				BorderSizePixel = 0,
-			}, headerRow)
+			}, headerBtn)
 			uiNew("TextLabel", {
 				BackgroundTransparency = 1,
-				Position = UDim2.new(0, 10, 0, 0),
-				Size = UDim2.new(1, -10, 1, 0),
+				Position = UDim2.new(0, 24, 0, 0),
+				Size = UDim2.new(1, -50, 1, 0),
 				Font = UI_FONT_BOLD,
 				TextSize = 15,
 				TextXAlignment = Enum.TextXAlignment.Left,
 				TextColor3 = UI_COL_TEXT,
 				Text = title,
-				LayoutOrder = 0,
-			}, headerRow)
+			}, headerBtn)
+			local chevron = uiNew("TextLabel", {
+				BackgroundTransparency = 1,
+				Position = UDim2.new(1, -30, 0, 0),
+				Size = UDim2.new(0, 20, 1, 0),
+				Font = UI_FONT_BOLD,
+				TextSize = 14,
+				TextColor3 = UI_COL_ACCENT,
+				Text = "\226\128\186", -- ">"
+			}, headerBtn)
 
-			local Section = { Frame = secFrame, _order = 1 }
+			local contentHolder = uiNew("Frame", {
+				BackgroundColor3 = UI_COL_ROW,
+				BackgroundTransparency = 0.15,
+				BorderSizePixel = 0,
+				AutomaticSize = Enum.AutomaticSize.Y,
+				Size = UDim2.new(1, 0, 0, 0),
+				Visible = false,
+				LayoutOrder = 1,
+			}, secFrame)
+			uiCorner(8, contentHolder)
+			uiNew("UIPadding", {
+				PaddingLeft = UDim.new(0, 14),
+				PaddingRight = UDim.new(0, 14),
+				PaddingTop = UDim.new(0, 13),
+				PaddingBottom = UDim.new(0, 13),
+			}, contentHolder)
+			uiNew("UIListLayout", {
+				Padding = UDim.new(0, 10),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}, contentHolder)
+
+			headerBtn.MouseButton1Click:Connect(function()
+				expanded = not expanded
+				contentHolder.Visible = expanded
+				chevron.Text = expanded and "\226\136\168" or "\226\128\186" -- "v" : ">"
+			end)
+
+			local Section = { Frame = contentHolder, _order = 0 }
 
 			local function nextOrder()
 				Section._order += 1
@@ -1353,7 +1388,7 @@ function Fluent:CreateWindow(cfg)
 					BackgroundTransparency = 1,
 					Size = UDim2.new(1, 0, 0, height or 36),
 					LayoutOrder = nextOrder(),
-				}, secFrame)
+				}, contentHolder)
 			end
 
 			function Section:AddParagraph(pcfg)
