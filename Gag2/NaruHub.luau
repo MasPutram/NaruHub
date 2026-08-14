@@ -34,6 +34,44 @@ do
 	MY_GEN = g.__NaruHubGen
 end
 
+--==============================================================
+-- Auto Save/Load Config per-HWID: semua Toggle/Slider/Input/Dropdown yang
+-- dibuat lewat Section:Add* otomatis ke-load dari file lama & auto-save tiap
+-- diubah, jadi tidak perlu setting ulang dari awal kalau device (HWID) sama.
+--==============================================================
+local ConfigData: { [string]: any } = {}
+local CONFIG_PATH
+do
+	local ok, hwid = pcall(function()
+		return gethwid and gethwid() or "default"
+	end)
+	local safeId = (ok and hwid and tostring(hwid):gsub("[^%w]", "")) or "default"
+	CONFIG_PATH = "NaruHub_Config_" .. safeId .. ".json"
+end
+
+local function saveConfig()
+	if not writefile then
+		return
+	end
+	pcall(function()
+		writefile(CONFIG_PATH, HttpService:JSONEncode(ConfigData))
+	end)
+end
+
+do
+	local ok = pcall(function()
+		if isfile and isfile(CONFIG_PATH) then
+			local decoded = HttpService:JSONDecode(readfile(CONFIG_PATH))
+			if type(decoded) == "table" then
+				ConfigData = decoded
+			end
+		end
+	end)
+	if not ok then
+		ConfigData = {}
+	end
+end
+
 -- Safety net: STATE.onCleanup (kalau ada) yang biasa nge-destroy UI lama, tapi
 -- itu tidak selalu tersedia dari harness live-reload. Paksa hapus sisa UI generasi
 -- sebelumnya di sini juga, independen dari mekanisme cleanup manapun.
@@ -1504,13 +1542,18 @@ function Fluent:CreateWindow(cfg)
 				local obj = {}
 				local function apply(v, fire)
 					state = v
+					obj.Value = v
 					pill.BackgroundColor3 = v and UI_COL_ACCENT or UI_COL_OFF
 					NaruTween:Create(knob, TweenInfo.new(0.12), {
 						Position = v and UDim2.new(1, -2, 0.5, 0) or UDim2.new(0, 2, 0.5, 0),
 						AnchorPoint = v and Vector2.new(1, 0.5) or Vector2.new(0, 0.5),
 					}):Play()
-					if fire and tcfg2.Callback then
-						tcfg2.Callback(v)
+					if fire then
+						ConfigData[id] = v
+						saveConfig()
+						if tcfg2.Callback then
+							tcfg2.Callback(v)
+						end
 					end
 				end
 				click.MouseButton1Click:Connect(function()
@@ -1521,7 +1564,11 @@ function Fluent:CreateWindow(cfg)
 				end
 				obj.Value = state
 				Fluent.Options[id] = obj
-				if tcfg2.Default then
+				if ConfigData[id] ~= nil then
+					task.defer(function()
+						apply(ConfigData[id] and true or false, true)
+					end)
+				elseif tcfg2.Default then
 					task.defer(function()
 						if tcfg2.Callback then
 							tcfg2.Callback(true)
@@ -1551,6 +1598,7 @@ function Fluent:CreateWindow(cfg)
 				local min, max = scfg.Min or 0, scfg.Max or 100
 				local rounding = scfg.Rounding or 0
 				local value = scfg.Default or min
+				local obj = { Value = value }
 				local function pct(v)
 					return math.clamp((v - min) / (max - min), 0, 1)
 				end
@@ -1597,8 +1645,13 @@ function Fluent:CreateWindow(cfg)
 					fill.Size = UDim2.new(pct(value), 0, 1, 0)
 					knob2.Position = UDim2.new(pct(value), 0, 0.5, 0)
 					valLbl.Text = fmt(value)
-					if fire and scfg.Callback then
-						scfg.Callback(value)
+					obj.Value = value
+					if fire then
+						ConfigData[id] = value
+						saveConfig()
+						if scfg.Callback then
+							scfg.Callback(value)
+						end
 					end
 				end
 
@@ -1619,11 +1672,15 @@ function Fluent:CreateWindow(cfg)
 					end
 				end)
 
-				local obj = {}
 				function obj:SetValue(v)
 					setFromAlpha(pct(v), true)
 				end
 				Fluent.Options[id] = obj
+				if ConfigData[id] ~= nil then
+					task.defer(function()
+						obj:SetValue(ConfigData[id])
+					end)
+				end
 				return obj
 			end
 
@@ -1659,6 +1716,8 @@ function Fluent:CreateWindow(cfg)
 						v = tostring(tonumber(v) or icfg.Default or 0)
 						box.Text = v
 					end
+					ConfigData[id] = v
+					saveConfig()
 					if icfg.Callback then
 						icfg.Callback(v)
 					end
@@ -1675,6 +1734,11 @@ function Fluent:CreateWindow(cfg)
 					commit()
 				end
 				Fluent.Options[id] = obj
+				if ConfigData[id] ~= nil then
+					task.defer(function()
+						obj:SetValue(ConfigData[id])
+					end)
+				end
 				return obj
 			end
 
@@ -1769,6 +1833,8 @@ function Fluent:CreateWindow(cfg)
 				local optionBtns = {}
 
 				local function fireChange()
+					ConfigData[id] = multi and selected or (next(selected))
+					saveConfig()
 					if dcfg._onChanged then
 						if multi then
 							dcfg._onChanged(selected)
@@ -1904,7 +1970,11 @@ function Fluent:CreateWindow(cfg)
 					rebuildOptions()
 				end
 				Fluent.Options[id] = obj
-				if dcfg._onChanged and dcfg.Default then
+				if ConfigData[id] ~= nil then
+					task.defer(function()
+						obj:SetValue(ConfigData[id])
+					end)
+				elseif dcfg._onChanged and dcfg.Default then
 					task.defer(fireChange)
 				end
 				return obj
@@ -2830,7 +2900,16 @@ perfSection:AddToggle("NaruHub_BoostFps", {
 local settingsInfoSection = Tabs.Settings:AddSection("Info")
 settingsInfoSection:AddParagraph({
 	Title = "NaruHub - Grow a Garden",
-	Content = "Config save/load belum ada di UI baru ini (dulu pakai SaveManager Fluent). Semua toggle balik ke default tiap execute ulang.",
+	Content = "Semua toggle/slider/dropdown otomatis tersimpan per-HWID dan ke-load lagi tiap execute ulang di device yang sama.",
+})
+
+local startupSection = Tabs.Settings:AddSection("Auto Start")
+startupSection:AddToggle("NaruHub_AutoMinimize", {
+	Title = "Auto Start Minimized",
+	Default = false,
+	Callback = function(s)
+		State.AutoStartMinimized = s
+	end,
 })
 
 Window:SelectTab(1)
@@ -2954,6 +3033,14 @@ pcall(function()
 		setMinimized(true)
 	end
 end)
+
+if ConfigData.NaruHub_AutoMinimize then
+	task.defer(function()
+		pcall(function()
+			setMinimized(true)
+		end)
+	end)
+end
 
 -- drag + click (klik logo = restore)
 local dragging, dragStart, startPos, movedFar = false, nil, nil, false
