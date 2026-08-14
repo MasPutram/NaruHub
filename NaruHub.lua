@@ -21,6 +21,11 @@ local LocalPlayer = Players.LocalPlayer
 
 local BRAND = Color3.fromRGB(255, 214, 10) -- kuning "lightning" (tema hitam-kuning)
 
+-- Dipanggil dari tombol Close title bar SEBELUM Fluent:Destroy(), supaya state
+-- yang butuh restore (AFK Mode, Boost FPS, dll) tidak nyangkut kalau window
+-- ditutup lewat X, bukan cuma lewat reload script.
+local onWindowClose: () -> ()? = nil
+
 -- Generation guard: kalau script di-execute ulang (loadstring), run lama berhenti.
 local MY_GEN
 do
@@ -42,6 +47,7 @@ do
 		NaruHubToast = true,
 		NaruHubLauncher = true,
 		NaruHubDropdown = true, -- 1 ScreenGui per dropdown, bisa banyak sekaligus
+		NaruHubAfkScreen = true,
 	}
 	for _, root in ipairs(roots) do
 		for _, child in ipairs(root:GetChildren()) do
@@ -1256,6 +1262,9 @@ function Fluent:CreateWindow(cfg)
 		},
 	}
 	closeBtn.MouseButton1Click:Connect(function()
+		if onWindowClose then
+			pcall(onWindowClose)
+		end
 		Fluent:Destroy()
 	end)
 
@@ -2705,7 +2714,7 @@ local function setAfkMode(on: boolean)
 			afkScreenGui.Name = "NaruHubAfkScreen"
 			afkScreenGui.ResetOnSpawn = false
 			afkScreenGui.IgnoreGuiInset = true
-			afkScreenGui.DisplayOrder = 999999
+			afkScreenGui.DisplayOrder = 50 -- di bawah window utama (DisplayOrder 100) biar GUI tetap bisa diklik buat matiin AFK Mode
 			afkScreenGui.Parent = (gethui and gethui()) or game:GetService("CoreGui")
 			local blackFrame = Instance.new("Frame")
 			blackFrame.Size = UDim2.fromScale(1, 1)
@@ -2728,7 +2737,7 @@ local function setAfkMode(on: boolean)
 			local logo = Instance.new("ImageLabel")
 			logo.Name = "Logo"
 			logo.BackgroundTransparency = 1
-			logo.Size = UDim2.fromOffset(72, 72)
+			logo.Size = UDim2.fromOffset(160, 160)
 			logo.Image = LOGO_ASSET or ""
 			logo.ScaleType = Enum.ScaleType.Fit
 			logo.LayoutOrder = 1
@@ -3416,6 +3425,7 @@ local function cleanup()
 	pcall(function() setAfkMode(false) end)
 	pcall(function() setBoostFps(false) end)
 	pcall(function() Fluent:Destroy() end)
+	onWindowClose = nil
 	pcall(function() launcher:Destroy() end)
 	pcall(function() toastGui:Destroy() end)
 	pcall(function() monitorGui:Destroy() end)
@@ -3425,6 +3435,8 @@ local function cleanup()
 		pcall(function() c:disconnect() end)
 	end
 end
+
+onWindowClose = cleanup
 
 if STATE then
 	STATE.onCleanup(cleanup)
