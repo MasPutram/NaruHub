@@ -150,9 +150,24 @@ end
 local setIdentity = setthreadidentity or set_thread_identity or setidentity or setthreadcontext
 local getIdentity = getthreadidentity or get_thread_identity or getidentity
 
+-- Nama leaderstat currency beda per place (Sheckles di World 1, Leaves di
+-- Fall Harvest/World 2) walau simbol tampilannya sama-sama "¢". Dicoba nama
+-- yang diketahui dulu, baru fallback ke Int/NumberValue pertama yang ketemu
+-- biar tetap jalan kalau ada place baru lagi nanti dengan nama lain.
 local function getSheckles(): number?
 	local ls = LocalPlayer:FindFirstChild("leaderstats")
-	local s = ls and ls:FindFirstChild("Sheckles")
+	if not ls then
+		return nil
+	end
+	local s = ls:FindFirstChild("Sheckles") or ls:FindFirstChild("Leaves")
+	if not s then
+		for _, c in ipairs(ls:GetChildren()) do
+			if c:IsA("IntValue") or c:IsA("NumberValue") then
+				s = c
+				break
+			end
+		end
+	end
 	return s and s.Value or nil
 end
 
@@ -804,6 +819,10 @@ local State = {
 	EspEnabled = false,
 	MonitorShow = false,
 	MonSort = "High",
+
+	-- Performance Booster (Misc)
+	PerfAfkMode = false,
+	PerfBoostFps = false,
 
 	-- Auto Pumpkin (Misc): place sprinkler + shovel, khusus Atlantic Giant Pumpkin
 	PumpkinEnabled = false,
@@ -1928,44 +1947,11 @@ local Tabs = {
 	Settings = Window:AddTab({ Title = "Settings" }),
 }
 
--- --- Seed Shop tab ------------------------------------------------
-local buySection = Tabs.Shop:AddSection("Auto Buy")
+-- --- Shop tab: Shop Seed (1 fitur = 1 section, bukan dipecah-pecah) ------
+local shopSeedSection = Tabs.Shop:AddSection("Shop Seed")
 
-local StatusParagraph = buySection:AddParagraph({
-	Title = "Status",
-	Content = "Idle",
-})
-
-local function setStatus(text: string)
-	pcall(function()
-		StatusParagraph:SetDesc(text)
-	end)
-	pcall(function()
-		StatusParagraph:SetContent(text)
-	end)
-end
-
-buySection:AddToggle("NaruHub_AutoBuy", {
-	Title = "Auto Buy",
-	Default = false,
-	Callback = function(state)
-		State.Enabled = state
-		setStatus(state and "Auto buy aktif..." or "Dimatikan")
-	end,
-})
-
-buySection:AddToggle("NaruHub_BuyAll", {
-	Title = "Beli Semua Stok",
-	Default = true,
-	Callback = function(state)
-		State.BuyAll = state
-	end,
-})
-
-local seedSection = Tabs.Shop:AddSection("Pilihan Seed (mode manual)")
-
-local seedDropdown = seedSection:AddDropdown("NaruHub_Seeds", {
-	Title = "Target Seeds",
+local seedDropdown = shopSeedSection:AddDropdown("NaruHub_Seeds", {
+	Title = "Select Seed",
 	Values = getSeedNames(),
 	Multi = true,
 	Default = {},
@@ -1981,7 +1967,7 @@ seedDropdown:OnChanged(function(value)
 	State.Selected = sel
 end)
 
-seedSection:AddSlider("NaruHub_BuyDelay", {
+shopSeedSection:AddSlider("NaruHub_BuyDelay", {
 	Title = "Buy Delay (detik)",
 	Default = 0.2,
 	Min = 0.1,
@@ -1992,7 +1978,7 @@ seedSection:AddSlider("NaruHub_BuyDelay", {
 	end,
 })
 
-seedSection:AddButton({
+shopSeedSection:AddButton({
 	Title = "Refresh Daftar Seed",
 	Callback = function()
 		pcall(function()
@@ -2002,36 +1988,42 @@ seedSection:AddButton({
 	end,
 })
 
--- --- Shop tab: Auto Buy Gear (stock realtime dari StockValues.GearShop) --
-local gearBuySection = Tabs.Shop:AddSection("Auto Buy Gear")
+local StatusParagraph = shopSeedSection:AddParagraph({
+	Title = "Status",
+	Content = "Idle",
+})
 
-local GearStatusParagraph = gearBuySection:AddParagraph({ Title = "Status", Content = "Idle" })
-local function setGearStatus(text: string)
-	pcall(function() GearStatusParagraph:SetDesc(text) end)
-	pcall(function() GearStatusParagraph:SetContent(text) end)
+local function setStatus(text: string)
+	pcall(function()
+		StatusParagraph:SetDesc(text)
+	end)
+	pcall(function()
+		StatusParagraph:SetContent(text)
+	end)
 end
 
-gearBuySection:AddToggle("NaruHub_AutoBuyGear", {
-	Title = "Auto Buy Gear",
+shopSeedSection:AddToggle("NaruHub_AutoBuy", {
+	Title = "Auto Buy Seed",
 	Default = false,
 	Callback = function(state)
-		State.GearEnabled = state
-		setGearStatus(state and "Auto buy aktif..." or "Dimatikan")
+		State.Enabled = state
+		setStatus(state and "Auto buy aktif..." or "Dimatikan")
 	end,
 })
 
-gearBuySection:AddToggle("NaruHub_GearBuyAll", {
-	Title = "Beli Semua Stok",
+shopSeedSection:AddToggle("NaruHub_BuyAll", {
+	Title = "Auto Buy All Seeds (beli semua stok)",
 	Default = true,
 	Callback = function(state)
-		State.GearBuyAll = state
+		State.BuyAll = state
 	end,
 })
 
-local gearSection = Tabs.Shop:AddSection("Pilihan Gear (mode manual)")
+-- --- Shop tab: Shop Gear (stock realtime dari StockValues.GearShop) ------
+local shopGearSection = Tabs.Shop:AddSection("Shop Gear")
 
-local gearDropdown = gearSection:AddDropdown("NaruHub_Gears", {
-	Title = "Target Gear",
+local gearDropdown = shopGearSection:AddDropdown("NaruHub_Gears", {
+	Title = "Select Gear",
 	Values = ALL_GEAR,
 	Multi = true,
 	Default = {},
@@ -2047,7 +2039,7 @@ gearDropdown:OnChanged(function(value)
 	State.GearSelected = sel
 end)
 
-gearSection:AddSlider("NaruHub_GearBuyDelay", {
+shopGearSection:AddSlider("NaruHub_GearBuyDelay", {
 	Title = "Buy Delay (detik)",
 	Default = 0.2,
 	Min = 0.1,
@@ -2055,6 +2047,29 @@ gearSection:AddSlider("NaruHub_GearBuyDelay", {
 	Rounding = 2,
 	Callback = function(v)
 		State.GearBuyDelay = v
+	end,
+})
+
+local GearStatusParagraph = shopGearSection:AddParagraph({ Title = "Status", Content = "Idle" })
+local function setGearStatus(text: string)
+	pcall(function() GearStatusParagraph:SetDesc(text) end)
+	pcall(function() GearStatusParagraph:SetContent(text) end)
+end
+
+shopGearSection:AddToggle("NaruHub_AutoBuyGear", {
+	Title = "Auto Buy Gear",
+	Default = false,
+	Callback = function(state)
+		State.GearEnabled = state
+		setGearStatus(state and "Auto buy aktif..." or "Dimatikan")
+	end,
+})
+
+shopGearSection:AddToggle("NaruHub_GearBuyAll", {
+	Title = "Auto Buy All Gear (beli semua stok)",
+	Default = true,
+	Callback = function(state)
+		State.GearBuyAll = state
 	end,
 })
 
@@ -2221,41 +2236,26 @@ webhookSection:AddButton({
 	end,
 })
 
--- --- Automatically tab: pilih fitur dulu (baru 3: Shovel, Sprinkler, Drop Items) --
--- Wajib pilih fitur -> section lain otomatis disembunyikan, tidak perlu scroll panjang.
--- Wiring lengkap ada di bagian bawah, setelah semua section Automatically dibuat.
-local featurePickerSection = Tabs.Automatically:AddSection("Pilih Fitur")
-local featurePicker = featurePickerSection:AddDropdown("NaruHub_AutoFeaturePick", {
-	Title = "Fitur",
-	Values = { "Auto Shovel Fruit", "Auto Place Sprinkler", "Automatically Drop Item" },
-	Multi = false,
-	Default = "Auto Shovel Fruit",
-})
+-- Catatan: dulu ada dropdown "Pilih Fitur" terpisah buat sembunyi/tampil
+-- section, sekarang sudah tidak perlu -- tiap section di Automatically ini
+-- sendiri sudah collapsible (klik judulnya buat expand/collapse).
 
-local shovelSection = Tabs.Automatically:AddSection("Auto Shovel Fruit (by kg)")
+local shovelSection = Tabs.Automatically:AddSection("Auto Shovel Fruit")
 
-local ShovelStatus = shovelSection:AddParagraph({ Title = "Status", Content = "Idle" })
-local function setShovelStatus(text: string)
-	pcall(function() ShovelStatus:SetDesc(text) end)
-	pcall(function() ShovelStatus:SetContent(text) end)
-end
-
-shovelSection:AddToggle("NaruHub_ShovelDryRun", {
-	Title = "Dry Run (aman: hitung saja, tidak menghapus)",
-	Default = true,
-	Callback = function(s)
-		State.ShovelDryRun = s
-	end,
-})
-
-shovelSection:AddToggle("NaruHub_ShovelEnabled", {
-	Title = "Auto Shovel Fruit",
-	Default = false,
-	Callback = function(s)
-		State.ShovelEnabled = s
-		setShovelStatus(s and (State.ShovelDryRun and "DRY RUN aktif..." or "AKTIF - menghapus buah!") or "Dimatikan")
-	end,
-})
+shovelSection:AddDropdown("NaruHub_ShovelSeeds", {
+	Title = "Seed filter (kosong = semua)",
+	Values = ALL_SEEDS,
+	Multi = true,
+	Default = {},
+}):OnChanged(function(value)
+	local sel = {}
+	for name, on in pairs(value) do
+		if on then
+			sel[name] = true
+		end
+	end
+	State.ShovelSeeds = sel
+end)
 
 shovelSection:AddDropdown("NaruHub_ShovelMode", {
 	Title = "Mode",
@@ -2277,24 +2277,7 @@ shovelSection:AddInput("NaruHub_ShovelKg", {
 	end,
 })
 
-local shovelFilterSection = Tabs.Automatically:AddSection("Filter & Batas")
-
-shovelFilterSection:AddDropdown("NaruHub_ShovelSeeds", {
-	Title = "Seed filter (kosong = semua)",
-	Values = ALL_SEEDS,
-	Multi = true,
-	Default = {},
-}):OnChanged(function(value)
-	local sel = {}
-	for name, on in pairs(value) do
-		if on then
-			sel[name] = true
-		end
-	end
-	State.ShovelSeeds = sel
-end)
-
-shovelFilterSection:AddSlider("NaruHub_ShovelLimit", {
+shovelSection:AddSlider("NaruHub_ShovelLimit", {
 	Title = "Limit per pass",
 	Default = 30,
 	Min = 1,
@@ -2305,7 +2288,7 @@ shovelFilterSection:AddSlider("NaruHub_ShovelLimit", {
 	end,
 })
 
-shovelFilterSection:AddSlider("NaruHub_ShovelDelay", {
+shovelSection:AddSlider("NaruHub_ShovelDelay", {
 	Title = "Shovel Delay (detik)",
 	Default = 0.2,
 	Min = 0.05,
@@ -2316,11 +2299,34 @@ shovelFilterSection:AddSlider("NaruHub_ShovelDelay", {
 	end,
 })
 
-shovelFilterSection:AddToggle("NaruHub_ShovelNoTP", {
+local ShovelStatus = shovelSection:AddParagraph({ Title = "Status", Content = "Idle" })
+local function setShovelStatus(text: string)
+	pcall(function() ShovelStatus:SetDesc(text) end)
+	pcall(function() ShovelStatus:SetContent(text) end)
+end
+
+shovelSection:AddToggle("NaruHub_ShovelDryRun", {
+	Title = "Dry Run (aman: hitung saja, tidak menghapus)",
+	Default = true,
+	Callback = function(s)
+		State.ShovelDryRun = s
+	end,
+})
+
+shovelSection:AddToggle("NaruHub_ShovelNoTP", {
 	Title = "Disable Teleport (Shovel)",
 	Default = false,
 	Callback = function(s)
 		State.ShovelNoTP = s
+	end,
+})
+
+shovelSection:AddToggle("NaruHub_ShovelEnabled", {
+	Title = "Auto Shovel Fruit",
+	Default = false,
+	Callback = function(s)
+		State.ShovelEnabled = s
+		setShovelStatus(s and (State.ShovelDryRun and "DRY RUN aktif..." or "AKTIF - menghapus buah!") or "Dimatikan")
 	end,
 })
 
@@ -2609,7 +2615,15 @@ dropPetSection:AddToggle("NaruHub_DropPetEnabled", {
 
 -- --- Garden tab: info kebun saja (read-only, tidak ada kontrol) --
 local gardenInfoSection = Tabs.Garden:AddSection("Info Kebun")
-local GardenSheckles = gardenInfoSection:AddParagraph({ Title = "Sheckles", Content = "-" })
+local currencyLabel = "Sheckles"
+do
+	local ls = LocalPlayer:FindFirstChild("leaderstats")
+	local stat = ls and (ls:FindFirstChild("Sheckles") or ls:FindFirstChild("Leaves"))
+	if stat then
+		currencyLabel = stat.Name
+	end
+end
+local GardenSheckles = gardenInfoSection:AddParagraph({ Title = currencyLabel, Content = "-" })
 local GardenPlants = gardenInfoSection:AddParagraph({ Title = "Tanaman di kebun", Content = "-" })
 
 local function updateGardenInfo()
@@ -2648,60 +2662,6 @@ local function updateGardenInfo()
 	pcall(function() GardenPlants:SetContent(text) end)
 end
 
--- --- Wiring dropdown "Pilih Fitur": section lain disembunyikan otomatis.
--- Tiap AddSection menghasilkan 1 Frame di ScrollingFrame tab ini
--- (Window.ContainerHolder, index 2 = Automatically, lihat urutan Tabs di atas).
-do
-	local ok, err = pcall(function()
-		local scrollFrame = Window.ContainerHolder:GetChildren()[2]
-		local byTitle = {}
-		for _, c in ipairs(scrollFrame:GetChildren()) do
-			if c:IsA("Frame") then
-				for _, dd in ipairs(c:GetDescendants()) do
-					if dd:IsA("TextLabel") then
-						if not byTitle[dd.Text] then
-							byTitle[dd.Text] = c
-						end
-						break
-					end
-				end
-			end
-		end
-
-		local contentGroups = {
-			["Auto Shovel Fruit"] = { byTitle["Auto Shovel Fruit (by kg)"], byTitle["Filter & Batas"] },
-			["Auto Place Sprinkler"] = { byTitle["Pengaturan Sprinkler"] },
-			["Automatically Drop Item"] = {
-				byTitle["Drop Settings (semua kategori)"],
-				byTitle["Drop Seed"],
-				byTitle["Drop Fruits"],
-				byTitle["Drop Gear"],
-				byTitle["Drop Pets"],
-			},
-		}
-
-		local function applyFeaturePick(selected: string)
-			for name, group in pairs(contentGroups) do
-				local show = name == selected
-				for _, f in ipairs(group) do
-					if f then
-						f.Visible = show
-					end
-				end
-			end
-			State.AutoOpenGroup = selected
-		end
-
-		applyFeaturePick(State.AutoOpenGroup or "Auto Shovel Fruit")
-		featurePicker:OnChanged(function(v)
-			applyFeaturePick(v)
-		end)
-	end)
-	if not ok then
-		warn("[NaruHub] Gagal wiring dropdown Pilih Fitur: " .. tostring(err))
-	end
-end
-
 -- --- Misc tab: Monitor & ESP (display, bukan bagian Auto Pumpkin) -------
 local displaySection = Tabs.Misc:AddSection("Monitor & ESP")
 
@@ -2719,6 +2679,106 @@ displaySection:AddToggle("NaruHub_Esp", {
 	Default = false,
 	Callback = function(s)
 		State.EspEnabled = s
+	end,
+})
+
+-- --- Misc tab: Performance Booster ---------------------------------------
+-- AFK Mode: lepas workspace.Gardens dari tree (tetap dipegang variabel Lua,
+-- jadi bisa dipasang balik) + layar hitam penuh. Boost FPS: cuma sembunyikan
+-- Decal/Texture (Transparency=1), tidak menyentuh Material/warna part.
+local perfSection = Tabs.Misc:AddSection("Performance Booster")
+
+local savedGardens: Instance?
+local savedGardensParent: Instance?
+local afkScreenGui: ScreenGui?
+
+local function setAfkMode(on: boolean)
+	if on then
+		local gardens = workspace:FindFirstChild("Gardens")
+		if gardens and gardens.Parent then
+			savedGardens = gardens
+			savedGardensParent = gardens.Parent
+			gardens.Parent = nil
+		end
+		if not afkScreenGui then
+			afkScreenGui = Instance.new("ScreenGui")
+			afkScreenGui.Name = "NaruHubAfkScreen"
+			afkScreenGui.ResetOnSpawn = false
+			afkScreenGui.IgnoreGuiInset = true
+			afkScreenGui.DisplayOrder = 999999
+			afkScreenGui.Parent = (gethui and gethui()) or game:GetService("CoreGui")
+			local blackFrame = Instance.new("Frame")
+			blackFrame.Size = UDim2.fromScale(1, 1)
+			blackFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+			blackFrame.BorderSizePixel = 0
+			blackFrame.Parent = afkScreenGui
+			local lbl = Instance.new("TextLabel")
+			lbl.BackgroundTransparency = 1
+			lbl.Size = UDim2.fromScale(1, 1)
+			lbl.Font = Enum.Font.GothamBold
+			lbl.TextSize = 20
+			lbl.TextColor3 = Color3.fromRGB(110, 110, 115)
+			lbl.Text = "AFK Mode -- NaruHub"
+			lbl.Parent = blackFrame
+		end
+		afkScreenGui.Enabled = true
+	else
+		if savedGardens and savedGardensParent then
+			savedGardens.Parent = savedGardensParent
+		end
+		savedGardens = nil
+		savedGardensParent = nil
+		if afkScreenGui then
+			afkScreenGui.Enabled = false
+		end
+	end
+end
+
+perfSection:AddToggle("NaruHub_AfkMode", {
+	Title = "AFK Mode (destroy garden + black screen)",
+	Default = false,
+	Callback = function(s)
+		State.PerfAfkMode = s
+		pcall(setAfkMode, s)
+	end,
+})
+
+local hiddenTextures: { [Instance]: number } = {}
+local textureWatchConn: RBXScriptConnection?
+
+local function hideOneTexture(d: Instance)
+	if (d:IsA("Decal") or d:IsA("Texture")) and hiddenTextures[d] == nil and d.Transparency < 1 then
+		hiddenTextures[d] = d.Transparency
+		d.Transparency = 1
+	end
+end
+
+local function setBoostFps(on: boolean)
+	if on then
+		for _, d in ipairs(workspace:GetDescendants()) do
+			hideOneTexture(d)
+		end
+		textureWatchConn = workspace.DescendantAdded:Connect(hideOneTexture)
+	else
+		if textureWatchConn then
+			textureWatchConn:Disconnect()
+			textureWatchConn = nil
+		end
+		for d, origT in pairs(hiddenTextures) do
+			if d and d.Parent then
+				pcall(function() d.Transparency = origT end)
+			end
+		end
+		hiddenTextures = {}
+	end
+end
+
+perfSection:AddToggle("NaruHub_BoostFps", {
+	Title = "Boost FPS (hilangkan texture)",
+	Default = false,
+	Callback = function(s)
+		State.PerfBoostFps = s
+		task.spawn(setBoostFps, s)
 	end,
 })
 
@@ -3318,6 +3378,8 @@ local aliveFn = function()
 end
 
 local function cleanup()
+	pcall(function() setAfkMode(false) end)
+	pcall(function() setBoostFps(false) end)
 	pcall(function() Fluent:Destroy() end)
 	pcall(function() launcher:Destroy() end)
 	pcall(function() toastGui:Destroy() end)
