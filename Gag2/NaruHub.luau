@@ -2712,14 +2712,49 @@ local function setAfkMode(on: boolean)
 			blackFrame.BackgroundColor3 = Color3.new(0, 0, 0)
 			blackFrame.BorderSizePixel = 0
 			blackFrame.Parent = afkScreenGui
-			local lbl = Instance.new("TextLabel")
-			lbl.BackgroundTransparency = 1
-			lbl.Size = UDim2.fromScale(1, 1)
-			lbl.Font = Enum.Font.GothamBold
-			lbl.TextSize = 20
-			lbl.TextColor3 = Color3.fromRGB(110, 110, 115)
-			lbl.Text = "AFK Mode -- NaruHub"
-			lbl.Parent = blackFrame
+
+			local holder = Instance.new("Frame")
+			holder.BackgroundTransparency = 1
+			holder.AutomaticSize = Enum.AutomaticSize.XY
+			holder.Position = UDim2.fromScale(0.5, 0.5)
+			holder.AnchorPoint = Vector2.new(0.5, 0.5)
+			holder.Parent = blackFrame
+			local layout = Instance.new("UIListLayout")
+			layout.FillDirection = Enum.FillDirection.Vertical
+			layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+			layout.Padding = UDim.new(0, 10)
+			layout.Parent = holder
+
+			local logo = Instance.new("ImageLabel")
+			logo.Name = "Logo"
+			logo.BackgroundTransparency = 1
+			logo.Size = UDim2.fromOffset(72, 72)
+			logo.Image = LOGO_ASSET or ""
+			logo.ScaleType = Enum.ScaleType.Fit
+			logo.LayoutOrder = 1
+			logo.Parent = holder
+
+			local titleLbl = Instance.new("TextLabel")
+			titleLbl.BackgroundTransparency = 1
+			titleLbl.Size = UDim2.fromOffset(0, 28)
+			titleLbl.AutomaticSize = Enum.AutomaticSize.X
+			titleLbl.Font = Enum.Font.GothamBold
+			titleLbl.TextSize = 24
+			titleLbl.TextColor3 = Color3.fromRGB(230, 230, 232)
+			titleLbl.Text = "AFK MODE BY NARU"
+			titleLbl.LayoutOrder = 2
+			titleLbl.Parent = holder
+
+			local subLbl = Instance.new("TextLabel")
+			subLbl.BackgroundTransparency = 1
+			subLbl.Size = UDim2.fromOffset(0, 18)
+			subLbl.AutomaticSize = Enum.AutomaticSize.X
+			subLbl.Font = Enum.Font.GothamMedium
+			subLbl.TextSize = 14
+			subLbl.TextColor3 = Color3.fromRGB(110, 110, 115)
+			subLbl.Text = "AFK Mode -- NaruHub"
+			subLbl.LayoutOrder = 3
+			subLbl.Parent = holder
 		end
 		afkScreenGui.Enabled = true
 	else
