@@ -206,8 +206,11 @@ local function mailFruitValue(itemKey: string, entry: any): number
 	if not MailboxItemCatalog then
 		return 0
 	end
+	-- p4 (arg ke-4) HARUS Instance ber-attribute "Friends" (dipakai buat
+	-- friend-boost) -- FruitValueCalc GetAttribute langsung tanpa nil-check,
+	-- jadi nil bikin GetValue silently return 0 (dibungkus pcall internal).
 	local ok, v = pcall(function()
-		return MailboxItemCatalog.GetValue("HarvestedFruits", itemKey, entry, nil)
+		return MailboxItemCatalog.GetValue("HarvestedFruits", itemKey, entry, LocalPlayer)
 	end)
 	if ok and typeof(v) == "number" then
 		return v
@@ -2484,37 +2487,56 @@ buildMailCategorySection("Mail Pets", MAIL_CATEGORIES_PET, "NaruHub_MailPet", fa
 local fruitPool = {}
 local fruitLabelMap = {}
 
+-- PENTING: fruit yang bisa di-mail TIDAK muncul di PlayerStateClient replica
+-- (Data.Inventory.HarvestedFruits kosong walau tas penuh) -- itu cuma dipakai
+-- buat mail seed/gear/pets. Sumber yang bener buat fruit adalah instance
+-- Tool/Configuration di Backpack (dan Character kalau lagi dipegang):
+--  * Tool asli: attribute HarvestedFruit=true (fruit yang cuma 1 di tas).
+--  * Configuration "proxy": attribute FruitProxy=true (stack banyak fruit
+--    sama, misal 20x Maple Cactus) -- TIDAK perlu di-promote dulu, Id proxy
+--    bisa langsung dipakai di Mailbox.SendBatch (sudah dicoba & berhasil).
 local function rebuildFruitPool()
 	fruitPool = {}
 	fruitLabelMap = {}
-	local inv = getInventoryData()
-	local bucket = inv and inv[MAIL_CATEGORY_FRUIT]
-	if type(bucket) ~= "table" then
-		return {}
-	end
 	local labels = {}
-	for id, entry in pairs(bucket) do
-		if type(entry) == "table" and entry.Id then
-			local value = mailFruitValue(id, entry)
-			local fruitName = entry.FruitName or entry.Name or "Fruit"
-			local mutation = entry.Mutation
-			local isFav = entry.IsFavorite == true
-			local label
-			if mutation and mutation ~= "" then
-				label = ("%s [%s] - %d\xC2\xA2%s"):format(fruitName, mutation, value, isFav and " *" or "")
-			else
-				label = ("%s - %d\xC2\xA2%s"):format(fruitName, value, isFav and " *" or "")
+	local function scan(container: Instance?)
+		if not container then
+			return
+		end
+		for _, c in ipairs(container:GetChildren()) do
+			local isFruit = c:GetAttribute("HarvestedFruit") == true or c:GetAttribute("FruitProxy") == true
+			if isFruit and c:GetAttribute("PottedPlant") ~= true then
+				local id = c:GetAttribute("Id")
+				local fruitName = c:GetAttribute("FruitName") or c:GetAttribute("Fruit")
+				if id and fruitName then
+					local entry = {
+						FruitName = fruitName,
+						Mutation = c:GetAttribute("Mutation"),
+						SizeMultiplier = c:GetAttribute("SizeMultiplier"),
+					}
+					local isFav = c:GetAttribute("IsFavorite") == true
+					local value = mailFruitValue(id, entry)
+					local mutation = entry.Mutation
+					local label
+					if mutation and mutation ~= "" then
+						label = ("%s [%s] - %d\xC2\xA2%s"):format(fruitName, mutation, value, isFav and " *" or "")
+					else
+						label = ("%s - %d\xC2\xA2%s"):format(fruitName, value, isFav and " *" or "")
+					end
+					-- Label bisa dobel kalau ada 2 fruit identik persis; disambiguasi pake id.
+					if fruitLabelMap[label] then
+						label = label .. " #" .. id:sub(1, 4)
+					end
+					local rec = { Category = MAIL_CATEGORY_FRUIT, ItemKey = id, Value = value, Label = label, IsFavorite = isFav }
+					fruitLabelMap[label] = rec
+					table.insert(fruitPool, rec)
+					table.insert(labels, label)
+				end
 			end
-			-- Label bisa dobel kalau ada 2 fruit identik persis; disambiguasi pake id.
-			if fruitLabelMap[label] then
-				label = label .. " #" .. id:sub(1, 4)
-			end
-			local rec = { Category = MAIL_CATEGORY_FRUIT, ItemKey = id, Value = value, Label = label, IsFavorite = isFav }
-			fruitLabelMap[label] = rec
-			table.insert(fruitPool, rec)
-			table.insert(labels, label)
 		end
 	end
+	scan(LocalPlayer:FindFirstChild("Backpack"))
+	scan(LocalPlayer.Character)
 	table.sort(labels)
 	return labels
 end
@@ -2529,7 +2551,17 @@ local fruitDropdown = fruitInvSection:AddDropdown("NaruHub_MailFruitItems", {
 fruitInvSection:AddButton({
 	Title = "Refresh Inventory",
 	Callback = function()
-		fruitDropdown:SetValues(rebuildFruitPool())
+		local labels = rebuildFruitPool()
+		local ok = pcall(function()
+			fruitDropdown:SetValues(labels)
+		end)
+		if not ok then
+			Fluent:Notify({
+				Title = "NaruHub",
+				Content = "Gagal refresh tampilan dropdown, coba klik sekali lagi.",
+				Duration = 5,
+			})
+		end
 	end,
 })
 fruitInvSection:AddButton({
@@ -2790,7 +2822,10 @@ bulkMailSection:AddButton({
 })
 
 task.defer(function()
-	fruitDropdown:SetValues(rebuildFruitPool())
+	local labels = rebuildFruitPool()
+	pcall(function()
+		fruitDropdown:SetValues(labels)
+	end)
 end)
 end -- do (Mail tab scope)
 
