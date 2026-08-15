@@ -989,6 +989,12 @@ local State = {
 	MailAutoClaimEnabled = false,
 	MailAutoClaimInterval = 35,
 
+	-- Auto Sell Fruit (Misc): Daily Deal (bonus 2.2x, reset ~12 jam) diprioritaskan
+	-- dulu tiap cycle, baru fallback ke Sell All normal kalau deal lagi kosong.
+	SellDailyDealEnabled = false,
+	SellAllEnabled = false,
+	SellCheckInterval = 30,
+
 	-- Auto Pumpkin (Misc): place sprinkler + shovel, khusus Atlantic Giant Pumpkin
 	PumpkinEnabled = false,
 	PumpkinSprinkler = "Syrup Sprinkler",
@@ -3658,6 +3664,115 @@ do
 			if State.MailAutoClaimEnabled then
 				setClaimStatus("Claiming... (" .. os.date("%H:%M:%S") .. ")")
 				mailClaimAll()
+			end
+		end
+	end)
+end
+
+-- --- Misc tab: Auto Sell Fruit (Daily Deal + Normal) ------------------------
+-- Daily Deal (Networking.NPCS.UseDailyDealAll) ngasih bonus ~2.2x harga
+-- normal tapi reset tiap ~12 jam & cuma bisa dipake sekali per reset -- jadi
+-- tiap cycle SELALU dicek dulu, baru fallback ke Sell All normal kalau lagi
+-- kosong. Ini biar Auto Sell All ngga "buang" bonus daily deal yang lagi
+-- ready dengan jual di harga normal duluan.
+do
+	local NPCS_CheckDailyDeal, NPCS_PreviewSellAll, NPCS_UseDailyDealAll, NPCS_SellAll
+	do
+		local ok, net = pcall(function()
+			return require(ReplicatedStorage.SharedModules.Networking)
+		end)
+		if ok and net and net.NPCS then
+			NPCS_CheckDailyDeal = net.NPCS.CheckDailyDeal
+			NPCS_PreviewSellAll = net.NPCS.PreviewSellAll
+			NPCS_UseDailyDealAll = net.NPCS.UseDailyDealAll
+			NPCS_SellAll = net.NPCS.SellAll
+		end
+	end
+
+	local function fireNPC(remote)
+		if not remote then
+			return nil
+		end
+		local prev = (getIdentity and getIdentity()) or 8
+		if setIdentity then
+			pcall(setIdentity, 2)
+		end
+		local ok, result = pcall(function()
+			return remote:Fire()
+		end)
+		if setIdentity then
+			pcall(setIdentity, prev)
+		end
+		if ok then
+			return result
+		end
+		return nil
+	end
+
+	local sellSection = Tabs.Misc:AddSection("Auto Sell Fruit")
+	local sellStatusPara = sellSection:AddParagraph({ Title = "Status", Content = "Idle" })
+	local function setSellStatus(text: string)
+		pcall(function()
+			sellStatusPara:SetDesc(text)
+		end)
+	end
+
+	sellSection:AddSlider("NaruHub_SellCheckInterval", {
+		Title = "Interval Cek (detik)",
+		Min = 15,
+		Max = 120,
+		Default = 30,
+		Callback = function(v)
+			State.SellCheckInterval = v
+		end,
+	})
+	sellSection:AddToggle("NaruHub_SellDailyDeal", {
+		Title = "Auto Sell Daily Deal (bonus ~2.2x, prioritas)",
+		Default = false,
+		Callback = function(s)
+			State.SellDailyDealEnabled = s
+		end,
+	})
+	sellSection:AddToggle("NaruHub_SellAll", {
+		Title = "Auto Sell All (harga normal, fallback)",
+		Default = false,
+		Callback = function(s)
+			State.SellAllEnabled = s
+		end,
+	})
+
+	task.spawn(function()
+		while getgenv().__NaruHubGen == MY_GEN do
+			task.wait(math.max(15, State.SellCheckInterval or 30))
+			if State.SellDailyDealEnabled or State.SellAllEnabled then
+				local preview = fireNPC(NPCS_PreviewSellAll)
+				local fruitCount = (preview and preview.FruitCount) or 0
+				if fruitCount <= 0 then
+					setSellStatus("Tidak ada fruit buat dijual (" .. os.date("%H:%M:%S") .. ")")
+				else
+					local deal = State.SellDailyDealEnabled and fireNPC(NPCS_CheckDailyDeal)
+					if deal and deal.Available then
+						setSellStatus(("Daily Deal aktif, menjual %d fruit..."):format(fruitCount))
+						local result = fireNPC(NPCS_UseDailyDealAll)
+						if result and result.Success then
+							setSellStatus(("Daily Deal! Terjual %d fruit seharga %s (%s)"):format(
+								result.SoldCount or fruitCount, tostring(result.SellPrice), os.date("%H:%M:%S")))
+						else
+							setSellStatus("Daily Deal gagal, coba lagi nanti (" .. os.date("%H:%M:%S") .. ")")
+						end
+					elseif State.SellAllEnabled then
+						setSellStatus(("Sell All normal, menjual %d fruit..."):format(fruitCount))
+						local result = fireNPC(NPCS_SellAll)
+						if result and result.Success then
+							setSellStatus(("Terjual %d fruit (harga normal, %s)"):format(fruitCount, os.date("%H:%M:%S")))
+						else
+							setSellStatus("Sell All gagal, coba lagi nanti (" .. os.date("%H:%M:%S") .. ")")
+						end
+					elseif deal then
+						local mins = math.floor((deal.TimeRemaining or 0) / 60)
+						setSellStatus(("Nunggu Daily Deal (~%d menit lagi), Auto Sell All mati"):format(mins))
+					end
+				end
 			end
 		end
 	end)
