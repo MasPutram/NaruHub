@@ -127,6 +127,120 @@ do
 	end
 end
 
+-- Mailbox: kirim item ke pemain lain. Format ketahuan dari MailboxController
+-- asli game -- SendBatch:Fire(userId, {{Category=, ItemKey=, Count=}, ...}, note).
+local MailboxSendBatch, MailboxLookupPlayer
+do
+	local ok, net = pcall(function()
+		return require(ReplicatedStorage.SharedModules.Networking)
+	end)
+	if ok and net and net.Mailbox then
+		MailboxSendBatch = net.Mailbox.SendBatch
+		MailboxLookupPlayer = net.Mailbox.LookupPlayer
+	end
+end
+
+-- Kategori Mailbox asli (dari MailboxItemCatalog.Categories):
+--  Pets, Sprinklers, WateringCans, Mushrooms, Gnomes, Raccoons, Crates,
+--  SeedPacks, Trowels, Props, Seeds, HarvestedFruits, EmptyPots
+local MAIL_CATEGORIES_SEED = { "Seeds", "SeedPacks" }
+local MAIL_CATEGORIES_GEAR = {
+	"Sprinklers", "WateringCans", "Mushrooms", "Gnomes", "Raccoons",
+	"Trowels", "Props", "Crates", "EmptyPots",
+}
+local MAIL_CATEGORIES_PET = { "Pets" }
+local MAIL_CATEGORY_FRUIT = "HarvestedFruits"
+
+-- Data inventaris asli (PlayerStateClient replica) -- sama persis yang dibaca
+-- MailboxController game buat nampilin apa aja yang bisa di-gift.
+local function getInventoryData()
+	local ok, PSC = pcall(function()
+		return require(ReplicatedStorage.ClientModules.PlayerStateClient)
+	end)
+	if not ok or not PSC then
+		return nil
+	end
+	local ok2, replica = pcall(function()
+		return PSC:GetLocalReplica()
+	end)
+	if not ok2 or not replica or type(replica.Data) ~= "table" then
+		return nil
+	end
+	return replica.Data.Inventory
+end
+
+local function mailLookupUser(username: string): (number?, string?)
+	if not MailboxLookupPlayer or not username or username == "" then
+		return nil
+	end
+	local prev = (getIdentity and getIdentity()) or 8
+	if setIdentity then
+		pcall(setIdentity, 2)
+	end
+	local ok, userId, displayName = pcall(function()
+		return MailboxLookupPlayer:Fire(username)
+	end)
+	if setIdentity then
+		pcall(setIdentity, prev)
+	end
+	if ok and typeof(userId) == "number" and userId > 0 then
+		return userId, displayName
+	end
+	return nil
+end
+
+-- Katalog asli game (dipakai UI Mailbox bawaan) -- dipakai buat GetValue
+-- (harga fruit) & Resolve (nama tampilan). Reuse langsung, nggak perlu
+-- reimplementasi rumus harga fruit sendiri.
+local MailboxItemCatalog
+do
+	local ok, mod = pcall(function()
+		return require(LocalPlayer.PlayerScripts.Controllers.MailboxController.MailboxItemCatalog)
+	end)
+	if ok then
+		MailboxItemCatalog = mod
+	end
+end
+
+local function mailFruitValue(itemKey: string, entry: any): number
+	if not MailboxItemCatalog then
+		return 0
+	end
+	local ok, v = pcall(function()
+		return MailboxItemCatalog.GetValue("HarvestedFruits", itemKey, entry, nil)
+	end)
+	if ok and typeof(v) == "number" then
+		return v
+	end
+	return 0
+end
+
+local function mailSendBatch(userId: number, items: { any }, note: string?): (boolean, string?)
+	if not MailboxSendBatch then
+		return false, "Mailbox remote tidak ditemukan"
+	end
+	if not items or #items == 0 then
+		return false, "Tidak ada item dipilih"
+	end
+	local prev = (getIdentity and getIdentity()) or 8
+	if setIdentity then
+		pcall(setIdentity, 2)
+	end
+	local ok, success, msg = pcall(function()
+		return MailboxSendBatch:Fire(userId, items, note or "")
+	end)
+	if setIdentity then
+		pcall(setIdentity, prev)
+	end
+	if not ok then
+		return false, "Gagal fire remote"
+	end
+	if not success then
+		return false, (msg and msg ~= "" and msg) or "Gagal mengirim mail"
+	end
+	return true, (msg and msg ~= "" and msg) or "Mail terkirim!"
+end
+
 local CollectionService = game:GetService("CollectionService")
 
 -- Berat buah (kg) pakai kalkulator asli game.
@@ -2021,6 +2135,8 @@ local Tabs = {
 	Garden = Window:AddTab({ Title = "Garden" }),
 	Automatically = Window:AddTab({ Title = "Automatically" }),
 	Shop = Window:AddTab({ Title = "Shop" }),
+	Mail = Window:AddTab({ Title = "Mail" }),
+	MailFruit = Window:AddTab({ Title = "Mail Fruit" }),
 	Misc = Window:AddTab({ Title = "Misc" }),
 	Weather = Window:AddTab({ Title = "Weather" }),
 	Settings = Window:AddTab({ Title = "Settings" }),
@@ -2152,7 +2268,473 @@ shopGearSection:AddToggle("NaruHub_GearBuyAll", {
 	end,
 })
 
--- --- Settings tab -------------------------------------------------
+-- --- Mail tab: MailBox (kirim seed/pack, gear, pets) ----------------------
+-- Recipient dishare 1 composer buat 3 kategori, sesuai gimana Mailbox asli
+-- game kerja (Networking.Mailbox.SendBatch:Fire(userId, items, note)).
+-- Dibungkus do..end supaya semua local sekali-pakai di sini dilepas lagi
+-- setelah selesai (chunk utama kena limit 200 local Luau kalau enggak).
+do
+local mailRecipientSection = Tabs.Mail:AddSection("Kirim ke")
+mailRecipientSection:AddInput("NaruHub_MailUsername", {
+	Title = "Username Tujuan",
+	Default = "",
+	Placeholder = "Username Roblox",
+	Finished = true,
+	Callback = function(v)
+		State.MailUsername = v
+	end,
+})
+local mailRecipientStatus = mailRecipientSection:AddParagraph({ Title = "Status Tujuan", Content = "Belum dicek." })
+local function setMailRecipientStatus(text: string)
+	pcall(function()
+		mailRecipientStatus:SetDesc(text)
+	end)
+end
+mailRecipientSection:AddButton({
+	Title = "Cek Username",
+	Callback = function()
+		local uname = State.MailUsername or ""
+		if uname == "" then
+			setMailRecipientStatus("Isi username dulu.")
+			return
+		end
+		setMailRecipientStatus("Mencari...")
+		task.spawn(function()
+			local userId, displayName = mailLookupUser(uname)
+			if not userId then
+				State.MailRecipientId = nil
+				setMailRecipientStatus("Username tidak ditemukan.")
+				return
+			end
+			State.MailRecipientId = userId
+			State.MailRecipientName = displayName or uname
+			setMailRecipientStatus(("Ketemu: %s (id %d)"):format(displayName or uname, userId))
+		end)
+	end,
+})
+
+-- Ambil daftar item mail-able dari inventory asli + map label->{Category,ItemKey,Available}.
+-- p3IsFruit dipakai kalau nanti butuh dibedain (tab Fruit pakai fungsi sendiri).
+local function buildMailItemList(categories: { string })
+	local labels = {}
+	local map = {}
+	local inv = getInventoryData()
+	if not inv then
+		return labels, map
+	end
+	for _, cat in ipairs(categories) do
+		local bucket = inv[cat]
+		if type(bucket) == "table" then
+			if cat == "Pets" then
+				for petId, entry in pairs(bucket) do
+					if type(entry) == "table" and entry.Id and entry.Equipped ~= true then
+						local label = ("%s #%s"):format(tostring(entry.Name or "Pet"), tostring(petId):sub(1, 6))
+						labels[#labels + 1] = label
+						map[label] = { Category = cat, ItemKey = petId, Available = 1 }
+					end
+				end
+			else
+				for name, count in pairs(bucket) do
+					if type(count) == "number" and count > 0 then
+						local label = ("%s (x%d)"):format(tostring(name), count)
+						labels[#labels + 1] = label
+						map[label] = { Category = cat, ItemKey = name, Available = count }
+					end
+				end
+			end
+		end
+	end
+	table.sort(labels)
+	return labels, map
+end
+
+-- Bikin 1 section "Mail <kategori>" lengkap (dropdown multi + refresh + kirim).
+-- withQty = true buat kategori yang stackable (seed/gear), false buat pets (Count selalu 1).
+local function buildMailCategorySection(title: string, categories: { string }, idPrefix: string, withQty: boolean)
+	local section = Tabs.Mail:AddSection(title)
+	local labels, map = buildMailItemList(categories)
+	local dropdown = section:AddDropdown(idPrefix .. "Items", {
+		Title = "Pilih item",
+		Values = labels,
+		Multi = true,
+		Default = {},
+	})
+	section:AddButton({
+		Title = "Refresh Daftar",
+		Callback = function()
+			local newLabels, newMap = buildMailItemList(categories)
+			map = newMap
+			dropdown:SetValues(newLabels)
+		end,
+	})
+	local currentQty = 1
+	if withQty then
+		section:AddInput(idPrefix .. "Qty", {
+			Title = "Jumlah per item",
+			Default = "1",
+			Numeric = true,
+			Finished = true,
+			Callback = function(v)
+				currentQty = math.max(1, tonumber(v) or 1)
+			end,
+		})
+	end
+	local statusPara = section:AddParagraph({ Title = "Status", Content = "Idle" })
+	local function setStatus(text: string)
+		pcall(function()
+			statusPara:SetDesc(text)
+		end)
+	end
+	local selected = {}
+	dropdown:OnChanged(function(value)
+		selected = {}
+		for name, on in pairs(value) do
+			if on then
+				selected[name] = true
+			end
+		end
+	end)
+	section:AddButton({
+		Title = "Kirim " .. title,
+		Callback = function()
+			if not State.MailRecipientId then
+				setStatus("Cek username tujuan dulu (section Kirim ke).")
+				return
+			end
+			local items = {}
+			for label in pairs(selected) do
+				local info = map[label]
+				if info then
+					local count = withQty and math.min(currentQty, info.Available) or 1
+					table.insert(items, { Category = info.Category, ItemKey = info.ItemKey, Count = count })
+				end
+			end
+			if #items == 0 then
+				setStatus("Pilih item dulu.")
+				return
+			end
+			setStatus(("Mengirim %d jenis item..."):format(#items))
+			task.spawn(function()
+				local ok, msg = mailSendBatch(State.MailRecipientId, items, "")
+				setStatus((ok and "Terkirim: " or "Gagal: ") .. (msg or ""))
+				if ok then
+					local newLabels, newMap = buildMailItemList(categories)
+					map = newMap
+					dropdown:SetValues(newLabels)
+					selected = {}
+				end
+			end)
+		end,
+	})
+	return section
+end
+
+buildMailCategorySection("Mail Seed & Packs", MAIL_CATEGORIES_SEED, "NaruHub_MailSeed", true)
+buildMailCategorySection("Mail Gear", MAIL_CATEGORIES_GEAR, "NaruHub_MailGear", true)
+buildMailCategorySection("Mail Pets", MAIL_CATEGORIES_PET, "NaruHub_MailPet", false)
+
+-- --- Mail Fruit tab (tab terpisah dari MailBox) ---------------------------
+-- fruitPool: cache {label=..., Category="HarvestedFruits", ItemKey=id, Value=..}
+-- dipakai bareng sama Fruit Inventory list, Cart, dan Bulk Mail biar kalau
+-- satu fruit udah kepake di satu pengiriman, ga kepilih lagi di pengiriman lain.
+local fruitPool = {}
+local fruitLabelMap = {}
+
+local function rebuildFruitPool()
+	fruitPool = {}
+	fruitLabelMap = {}
+	local inv = getInventoryData()
+	local bucket = inv and inv[MAIL_CATEGORY_FRUIT]
+	if type(bucket) ~= "table" then
+		return {}
+	end
+	local labels = {}
+	for id, entry in pairs(bucket) do
+		if type(entry) == "table" and entry.Id then
+			local value = mailFruitValue(id, entry)
+			local fruitName = entry.FruitName or entry.Name or "Fruit"
+			local mutation = entry.Mutation
+			local label
+			if mutation and mutation ~= "" then
+				label = ("%s [%s] - %d\xC2\xA2"):format(fruitName, mutation, value)
+			else
+				label = ("%s - %d\xC2\xA2"):format(fruitName, value)
+			end
+			-- Label bisa dobel kalau ada 2 fruit identik persis; disambiguasi pake id.
+			if fruitLabelMap[label] then
+				label = label .. " #" .. id:sub(1, 4)
+			end
+			local rec = { Category = MAIL_CATEGORY_FRUIT, ItemKey = id, Value = value, Label = label }
+			fruitLabelMap[label] = rec
+			table.insert(fruitPool, rec)
+			table.insert(labels, label)
+		end
+	end
+	table.sort(labels)
+	return labels
+end
+
+local fruitInvSection = Tabs.MailFruit:AddSection("Fruit Inventory")
+local fruitDropdown = fruitInvSection:AddDropdown("NaruHub_MailFruitItems", {
+	Title = "Pilih fruit",
+	Values = {},
+	Multi = true,
+	Default = {},
+})
+fruitInvSection:AddButton({
+	Title = "Refresh Inventory",
+	Callback = function()
+		fruitDropdown:SetValues(rebuildFruitPool())
+	end,
+})
+fruitInvSection:AddButton({
+	Title = "Add All Visible",
+	Callback = function()
+		local all = {}
+		for _, rec in ipairs(fruitPool) do
+			all[rec.Label] = true
+		end
+		fruitDropdown:SetValue(all)
+	end,
+})
+local fruitTargetValue = 0
+fruitInvSection:AddInput("NaruHub_MailFruitTarget", {
+	Title = "Target Value (Sheckles)",
+	Default = "0",
+	Numeric = true,
+	Finished = true,
+	Callback = function(v)
+		fruitTargetValue = tonumber(v) or 0
+	end,
+})
+fruitInvSection:AddButton({
+	Title = "Auto Fill to Target",
+	Callback = function()
+		if fruitTargetValue <= 0 then
+			return
+		end
+		local sorted = {}
+		for _, rec in ipairs(fruitPool) do
+			table.insert(sorted, rec)
+		end
+		table.sort(sorted, function(a, b)
+			return a.Value > b.Value
+		end)
+		local total = 0
+		local picked = {}
+		for _, rec in ipairs(sorted) do
+			if total >= fruitTargetValue then
+				break
+			end
+			picked[rec.Label] = true
+			total = total + rec.Value
+		end
+		fruitDropdown:SetValue(picked)
+	end,
+})
+
+local fruitSelected = {}
+local refreshCartLabel: () -> () -- didefinisikan di bawah (section Mail Cart), dipanggil di sini
+fruitDropdown:OnChanged(function(value)
+	fruitSelected = {}
+	for label, on in pairs(value) do
+		if on then
+			fruitSelected[label] = true
+		end
+	end
+	if refreshCartLabel then
+		refreshCartLabel()
+	end
+end)
+
+-- --- Mail Fruit tab: Mail Cart --------------------------------------------
+local mailCartSection = Tabs.MailFruit:AddSection("Mail Cart")
+mailCartSection:AddInput("NaruHub_MailFruitUsername", {
+	Title = "Recipient Username",
+	Default = "",
+	Placeholder = "Username Roblox",
+	Finished = true,
+	Callback = function(v)
+		State.MailUsername = v
+	end,
+})
+local cartStatus = mailCartSection:AddParagraph({ Title = "Cart", Content = "0 fruit - 0\xC2\xA2" })
+function refreshCartLabel()
+	local n, total = 0, 0
+	for label in pairs(fruitSelected) do
+		local rec = fruitLabelMap[label]
+		if rec then
+			n = n + 1
+			total = total + rec.Value
+		end
+	end
+	pcall(function()
+		cartStatus:SetDesc(("%d fruit - %d\xC2\xA2"):format(n, total))
+	end)
+end
+mailCartSection:AddInput("NaruHub_MailFruitNote", {
+	Title = "Note (optional)",
+	Default = "",
+	Placeholder = "message",
+	Finished = true,
+	Callback = function(v)
+		State.MailFruitNote = v
+	end,
+})
+local cartSendStatus = mailCartSection:AddParagraph({ Title = "Status", Content = "Idle" })
+local function setCartStatus(text: string)
+	pcall(function()
+		cartSendStatus:SetDesc(text)
+	end)
+end
+mailCartSection:AddButton({
+	Title = "Send Fruit Mail",
+	Callback = function()
+		refreshCartLabel()
+		local uname = State.MailUsername or ""
+		if uname == "" then
+			setCartStatus("Isi Recipient Username dulu.")
+			return
+		end
+		local items = {}
+		for label in pairs(fruitSelected) do
+			local rec = fruitLabelMap[label]
+			if rec then
+				table.insert(items, { Category = rec.Category, ItemKey = rec.ItemKey, Count = 1 })
+			end
+		end
+		if #items == 0 then
+			setCartStatus("Cart kosong, pilih fruit dulu.")
+			return
+		end
+		setCartStatus("Mencari user...")
+		task.spawn(function()
+			local userId = mailLookupUser(uname)
+			if not userId then
+				setCartStatus("Username tidak ditemukan.")
+				return
+			end
+			setCartStatus(("Mengirim %d fruit..."):format(#items))
+			local ok, msg = mailSendBatch(userId, items, State.MailFruitNote or "")
+			setCartStatus((ok and "Terkirim: " or "Gagal: ") .. (msg or ""))
+			if ok then
+				fruitDropdown:SetValues(rebuildFruitPool())
+				fruitSelected = {}
+				refreshCartLabel()
+			end
+		end)
+	end,
+})
+refreshCartLabel()
+
+-- --- Mail Fruit tab: Bulk Mail (banyak akun sekaligus) --------------------
+local bulkMailSection = Tabs.MailFruit:AddSection("Bulk Mail")
+local bulkTargetValue = 0
+bulkMailSection:AddInput("NaruHub_BulkMailTarget", {
+	Title = "Target Value per Akun (Sheckles)",
+	Default = "0",
+	Numeric = true,
+	Finished = true,
+	Callback = function(v)
+		bulkTargetValue = tonumber(v) or 0
+	end,
+})
+local bulkUsernamesRaw = ""
+bulkMailSection:AddInput("NaruHub_BulkMailUsernames", {
+	Title = "Usernames (pisah koma/baris baru)",
+	Default = "",
+	Placeholder = "user1, user2, user3",
+	Finished = true,
+	Callback = function(v)
+		bulkUsernamesRaw = v
+	end,
+})
+local bulkStatus = bulkMailSection:AddParagraph({ Title = "Status", Content = "Idle" })
+local function setBulkStatus(text: string)
+	pcall(function()
+		bulkStatus:SetDesc(text)
+	end)
+end
+local bulkRunning = false
+bulkMailSection:AddButton({
+	Title = "Kirim Bulk Mail",
+	Callback = function()
+		if bulkRunning then
+			return
+		end
+		local usernames = {}
+		for part in (bulkUsernamesRaw or ""):gmatch("[^,\n]+") do
+			local trimmed = part:match("^%s*(.-)%s*$")
+			if trimmed ~= "" then
+				table.insert(usernames, trimmed)
+			end
+		end
+		if #usernames == 0 then
+			setBulkStatus("Isi daftar username dulu.")
+			return
+		end
+		if bulkTargetValue <= 0 then
+			setBulkStatus("Isi Target Value per Akun dulu.")
+			return
+		end
+		bulkRunning = true
+		task.spawn(function()
+			-- Pool lokal (urut value desc) yang dikonsumsi tiap akun, biar fruit
+			-- yang udah kepake ga kekirim dobel ke akun lain.
+			local pool = {}
+			for _, rec in ipairs(fruitPool) do
+				table.insert(pool, rec)
+			end
+			table.sort(pool, function(a, b)
+				return a.Value > b.Value
+			end)
+			local poolIdx = 1
+			local doneCount, failCount = 0, 0
+			for i, uname in ipairs(usernames) do
+				setBulkStatus(("[%d/%d] Cari %s..."):format(i, #usernames, uname))
+				local userId = mailLookupUser(uname)
+				if not userId then
+					failCount = failCount + 1
+					setBulkStatus(("[%d/%d] %s tidak ditemukan, skip."):format(i, #usernames, uname))
+				else
+					local items, total = {}, 0
+					while poolIdx <= #pool and total < bulkTargetValue do
+						local rec = pool[poolIdx]
+						poolIdx = poolIdx + 1
+						table.insert(items, { Category = rec.Category, ItemKey = rec.ItemKey, Count = 1 })
+						total = total + rec.Value
+						if #items >= 20 then
+							break
+						end
+					end
+					if #items == 0 then
+						setBulkStatus(("[%d/%d] Fruit habis, stop di %s."):format(i, #usernames, uname))
+						break
+					end
+					setBulkStatus(("[%d/%d] Kirim %d fruit ke %s..."):format(i, #usernames, #items, uname))
+					local ok = mailSendBatch(userId, items, State.MailFruitNote or "")
+					if ok then
+						doneCount = doneCount + 1
+					else
+						failCount = failCount + 1
+					end
+				end
+				task.wait(1.5)
+			end
+			bulkRunning = false
+			setBulkStatus(("Selesai. Berhasil %d, gagal %d."):format(doneCount, failCount))
+			fruitDropdown:SetValues(rebuildFruitPool())
+			fruitSelected = {}
+			refreshCartLabel()
+		end)
+	end,
+})
+
+task.defer(function()
+	fruitDropdown:SetValues(rebuildFruitPool())
+end)
+end -- do (Mail tab scope)
+
 -- --- Misc tab: Auto Pumpkin -------------------------------------
 local pumpkinSection = Tabs.Misc:AddSection("Auto Pumpkin (Atlantic Giant Pumpkin)")
 
