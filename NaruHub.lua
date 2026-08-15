@@ -2278,6 +2278,37 @@ shopGearSection:AddToggle("NaruHub_GearBuyAll", {
 -- Dibungkus do..end supaya semua local sekali-pakai di sini dilepas lagi
 -- setelah selesai (chunk utama kena limit 200 local Luau kalau enggak).
 do
+local BackpackSetFruitFavorite, BackpackSetPetFavorite
+do
+	local ok, net = pcall(function()
+		return require(ReplicatedStorage.SharedModules.Networking)
+	end)
+	if ok and net and net.Backpack then
+		BackpackSetFruitFavorite = net.Backpack.SetFruitFavorite
+		BackpackSetPetFavorite = net.Backpack.SetPetFavorite
+	end
+end
+
+-- Item favorit ditolak server kalau langsung di-mail -- unfavorite dulu,
+-- kasih jeda dikit biar replika kesinkron, baru lanjut kirim.
+local function mailClearFavorite(kind: "Fruit" | "Pet", itemKey: string)
+	local remote = kind == "Fruit" and BackpackSetFruitFavorite or BackpackSetPetFavorite
+	if not remote then
+		return
+	end
+	local prev = (getIdentity and getIdentity()) or 8
+	if setIdentity then
+		pcall(setIdentity, 2)
+	end
+	pcall(function()
+		remote:Fire(itemKey, false)
+	end)
+	if setIdentity then
+		pcall(setIdentity, prev)
+	end
+	task.wait(0.3)
+end
+
 local mailRecipientSection = Tabs.Mail:AddSection("Kirim ke")
 mailRecipientSection:AddInput("NaruHub_MailUsername", {
 	Title = "Username Tujuan",
@@ -2332,9 +2363,10 @@ local function buildMailItemList(categories: { string })
 			if cat == "Pets" then
 				for petId, entry in pairs(bucket) do
 					if type(entry) == "table" and entry.Id and entry.Equipped ~= true then
-						local label = ("%s #%s"):format(tostring(entry.Name or "Pet"), tostring(petId):sub(1, 6))
+						local isFav = entry.IsFavorite == true
+						local label = ("%s #%s%s"):format(tostring(entry.Name or "Pet"), tostring(petId):sub(1, 6), isFav and " *" or "")
 						labels[#labels + 1] = label
-						map[label] = { Category = cat, ItemKey = petId, Available = 1 }
+						map[label] = { Category = cat, ItemKey = petId, Available = 1, IsFavorite = isFav }
 					end
 				end
 			else
@@ -2419,6 +2451,14 @@ local function buildMailCategorySection(title: string, categories: { string }, i
 			end
 			setStatus(("Mengirim %d jenis item..."):format(#items))
 			task.spawn(function()
+				-- Pet favorit ditolak server kalau langsung di-mail -- unfavorite dulu.
+				for label in pairs(selected) do
+					local info = map[label]
+					if info and info.IsFavorite then
+						setStatus("Unfavorite dulu...")
+						mailClearFavorite("Pet", info.ItemKey)
+					end
+				end
 				local ok, msg = mailSendBatch(State.MailRecipientId, items, "")
 				setStatus((ok and "Terkirim: " or "Gagal: ") .. (msg or ""))
 				if ok then
@@ -2458,17 +2498,18 @@ local function rebuildFruitPool()
 			local value = mailFruitValue(id, entry)
 			local fruitName = entry.FruitName or entry.Name or "Fruit"
 			local mutation = entry.Mutation
+			local isFav = entry.IsFavorite == true
 			local label
 			if mutation and mutation ~= "" then
-				label = ("%s [%s] - %d\xC2\xA2"):format(fruitName, mutation, value)
+				label = ("%s [%s] - %d\xC2\xA2%s"):format(fruitName, mutation, value, isFav and " *" or "")
 			else
-				label = ("%s - %d\xC2\xA2"):format(fruitName, value)
+				label = ("%s - %d\xC2\xA2%s"):format(fruitName, value, isFav and " *" or "")
 			end
 			-- Label bisa dobel kalau ada 2 fruit identik persis; disambiguasi pake id.
 			if fruitLabelMap[label] then
 				label = label .. " #" .. id:sub(1, 4)
 			end
-			local rec = { Category = MAIL_CATEGORY_FRUIT, ItemKey = id, Value = value, Label = label }
+			local rec = { Category = MAIL_CATEGORY_FRUIT, ItemKey = id, Value = value, Label = label, IsFavorite = isFav }
 			fruitLabelMap[label] = rec
 			table.insert(fruitPool, rec)
 			table.insert(labels, label)
@@ -2618,6 +2659,13 @@ mailCartSection:AddButton({
 				setCartStatus("Username tidak ditemukan.")
 				return
 			end
+			for label in pairs(fruitSelected) do
+				local rec = fruitLabelMap[label]
+				if rec and rec.IsFavorite then
+					setCartStatus("Unfavorite dulu...")
+					mailClearFavorite("Fruit", rec.ItemKey)
+				end
+			end
 			setCartStatus(("Mengirim %d fruit..."):format(#items))
 			local ok, msg = mailSendBatch(userId, items, State.MailFruitNote or "")
 			setCartStatus((ok and "Terkirim: " or "Gagal: ") .. (msg or ""))
@@ -2701,11 +2749,12 @@ bulkMailSection:AddButton({
 					failCount = failCount + 1
 					setBulkStatus(("[%d/%d] %s tidak ditemukan, skip."):format(i, #usernames, uname))
 				else
-					local items, total = {}, 0
+					local items, picked, total = {}, {}, 0
 					while poolIdx <= #pool and total < bulkTargetValue do
 						local rec = pool[poolIdx]
 						poolIdx = poolIdx + 1
 						table.insert(items, { Category = rec.Category, ItemKey = rec.ItemKey, Count = 1 })
+						table.insert(picked, rec)
 						total = total + rec.Value
 						if #items >= 20 then
 							break
@@ -2714,6 +2763,12 @@ bulkMailSection:AddButton({
 					if #items == 0 then
 						setBulkStatus(("[%d/%d] Fruit habis, stop di %s."):format(i, #usernames, uname))
 						break
+					end
+					for _, rec in ipairs(picked) do
+						if rec.IsFavorite then
+							setBulkStatus(("[%d/%d] Unfavorite dulu..."):format(i, #usernames))
+							mailClearFavorite("Fruit", rec.ItemKey)
+						end
 					end
 					setBulkStatus(("[%d/%d] Kirim %d fruit ke %s..."):format(i, #usernames, #items, uname))
 					local ok = mailSendBatch(userId, items, State.MailFruitNote or "")
