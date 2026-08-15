@@ -982,6 +982,10 @@ local State = {
 	PerfAfkMode = false,
 	PerfBoostFps = false,
 
+	-- Auto Claim Mailbox (Misc)
+	MailAutoClaimEnabled = false,
+	MailAutoClaimInterval = 35,
+
 	-- Auto Pumpkin (Misc): place sprinkler + shovel, khusus Atlantic Giant Pumpkin
 	PumpkinEnabled = false,
 	PumpkinSprinkler = "Syrup Sprinkler",
@@ -3477,6 +3481,97 @@ perfSection:AddToggle("NaruHub_BoostFps", {
 		task.spawn(setBoostFps, s)
 	end,
 })
+
+-- --- Misc tab: Auto Claim Mailbox ------------------------------------------
+-- ClaimAll:Fire() kena cooldown 30 detik di game sendiri (dicek client-side
+-- di MailboxController asli) -- interval slider dikunci minimal 30 biar ga
+-- nembak sia-sia pas masih cooldown.
+do
+	local MailboxClaimAll, MailboxClaimAllFinished
+	do
+		local ok, net = pcall(function()
+			return require(ReplicatedStorage.SharedModules.Networking)
+		end)
+		if ok and net and net.Mailbox then
+			MailboxClaimAll = net.Mailbox.ClaimAll
+			MailboxClaimAllFinished = net.Mailbox.ClaimAllFinished
+		end
+	end
+
+	-- ClaimAll:Fire() kena cooldown 30 detik oleh game sendiri (dicek
+	-- client-side di MailboxController asli). Hasil beneran nyampe async
+	-- lewat event ClaimAllFinished, di-listen di bawah.
+	local function mailClaimAll()
+		if not MailboxClaimAll then
+			return false
+		end
+		local prev = (getIdentity and getIdentity()) or 8
+		if setIdentity then
+			pcall(setIdentity, 2)
+		end
+		local ok = pcall(function()
+			MailboxClaimAll:Fire()
+		end)
+		if setIdentity then
+			pcall(setIdentity, prev)
+		end
+		return ok
+	end
+
+	local mailClaimSection = Tabs.Misc:AddSection("Auto Claim Mailbox")
+	local claimStatusPara = mailClaimSection:AddParagraph({ Title = "Status", Content = "Idle" })
+	local function setClaimStatus(text: string)
+		pcall(function()
+			claimStatusPara:SetDesc(text)
+		end)
+	end
+
+	pcall(function()
+		MailboxClaimAllFinished.OnClientEvent:Connect(function(result)
+			local claimed = 0
+			if type(result) == "table" and type(result.Claimed) == "table" then
+				for _ in pairs(result.Claimed) do
+					claimed = claimed + 1
+				end
+			end
+			if claimed > 0 then
+				setClaimStatus(("Claimed %d gift%s (%s)"):format(claimed, claimed ~= 1 and "s" or "", os.date("%H:%M:%S")))
+			elseif type(result) == "table" and type(result.Reason) == "string" and result.Reason ~= "" then
+				setClaimStatus(result.Reason)
+			else
+				setClaimStatus("Tidak ada mail baru (" .. os.date("%H:%M:%S") .. ")")
+			end
+		end)
+	end)
+
+	mailClaimSection:AddSlider("NaruHub_MailAutoClaimInterval", {
+		Title = "Interval Claim (detik)",
+		Min = 30,
+		Max = 180,
+		Default = 35,
+		Callback = function(v)
+			State.MailAutoClaimInterval = v
+		end,
+	})
+	mailClaimSection:AddToggle("NaruHub_MailAutoClaim", {
+		Title = "Auto Claim Mailbox",
+		Default = false,
+		Callback = function(s)
+			State.MailAutoClaimEnabled = s
+			setClaimStatus(s and "Aktif, nunggu interval..." or "Dimatikan")
+		end,
+	})
+
+	task.spawn(function()
+		while getgenv().__NaruHubGen == MY_GEN do
+			task.wait(math.max(30, State.MailAutoClaimInterval or 35))
+			if State.MailAutoClaimEnabled then
+				setClaimStatus("Claiming... (" .. os.date("%H:%M:%S") .. ")")
+				mailClaimAll()
+			end
+		end
+	end)
+end
 
 -- --- Settings tab ------------------------------------------------
 local settingsInfoSection = Tabs.Settings:AddSection("Info")
