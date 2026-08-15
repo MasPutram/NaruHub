@@ -3709,7 +3709,20 @@ do
 		return nil
 	end
 
+	local function fmtHM(seconds: number): string
+		seconds = math.max(0, math.floor(seconds))
+		local h = math.floor(seconds / 3600)
+		local m = math.floor((seconds % 3600) / 60)
+		return ("%dj %dm"):format(h, m)
+	end
+
 	local sellSection = Tabs.Misc:AddSection("Auto Sell Fruit")
+	local dealStatusPara = sellSection:AddParagraph({ Title = "Daily Deal", Content = "Mengecek..." })
+	local function setDealStatus(text: string)
+		pcall(function()
+			dealStatusPara:SetDesc(text)
+		end)
+	end
 	local sellStatusPara = sellSection:AddParagraph({ Title = "Status", Content = "Idle" })
 	local function setSellStatus(text: string)
 		pcall(function()
@@ -3741,6 +3754,22 @@ do
 		end,
 	})
 
+	-- Status "Daily Deal" ini nyala terus (independen dari toggle) biar user
+	-- selalu bisa lihat sisa waktu reset-nya tanpa harus nyalain auto sell dulu.
+	task.spawn(function()
+		while getgenv().__NaruHubGen == MY_GEN do
+			local deal = fireNPC(NPCS_CheckDailyDeal)
+			if not deal then
+				setDealStatus("Gagal cek (coba lagi nanti)")
+			elseif deal.Available then
+				setDealStatus("AKTIF sekarang! (bonus ~2.2x)")
+			else
+				setDealStatus(("Reset dalam %s"):format(fmtHM(deal.TimeRemaining or 0)))
+			end
+			task.wait(20)
+		end
+	end)
+
 	task.spawn(function()
 		while getgenv().__NaruHubGen == MY_GEN do
 			task.wait(math.max(15, State.SellCheckInterval or 30))
@@ -3769,8 +3798,7 @@ do
 							setSellStatus("Sell All gagal, coba lagi nanti (" .. os.date("%H:%M:%S") .. ")")
 						end
 					elseif deal then
-						local mins = math.floor((deal.TimeRemaining or 0) / 60)
-						setSellStatus(("Nunggu Daily Deal (~%d menit lagi), Auto Sell All mati"):format(mins))
+						setSellStatus(("Nunggu Daily Deal (~%s lagi), Auto Sell All mati"):format(fmtHM(deal.TimeRemaining or 0)))
 					end
 				end
 			end
