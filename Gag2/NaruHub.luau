@@ -2035,7 +2035,7 @@ function Fluent:CreateWindow(cfg)
 					end)
 				end
 
-				local function rebuildOptions()
+				local function rebuildOptionsOnce()
 					optionBtns = {}
 					local n = math.min(#values, poolSize)
 					for i = 1, n do
@@ -2058,6 +2058,21 @@ function Fluent:CreateWindow(cfg)
 							ob.Visible = name:lower():find(q, 1, true) ~= nil
 						end
 					end
+				end
+				-- Beberapa executor kadang nolak property-assignment sesaat
+				-- ("lacking capability Plugin") dari thread callback tombol --
+				-- keliatannya transient/flaky, bukan konsisten. Retry beberapa
+				-- kali dengan jeda singkat; rebuildOptionsOnce idempotent jadi
+				-- aman diulang dari awal.
+				local function rebuildOptions()
+					for attempt = 1, 5 do
+						local ok = pcall(rebuildOptionsOnce)
+						if ok then
+							return true
+						end
+						task.wait(0.1)
+					end
+					return false
 				end
 				rebuildOptions()
 
@@ -2594,16 +2609,7 @@ fruitInvSection:AddButton({
 	Title = "Refresh Inventory",
 	Callback = function()
 		local labels = rebuildFruitPool()
-		local ok = pcall(function()
-			fruitDropdown:SetValues(labels)
-		end)
-		if not ok then
-			Fluent:Notify({
-				Title = "NaruHub",
-				Content = "Gagal refresh tampilan dropdown, coba klik sekali lagi.",
-				Duration = 5,
-			})
-		end
+		fruitDropdown:SetValues(labels)
 	end,
 })
 fruitInvSection:AddButton({
