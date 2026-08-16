@@ -1901,6 +1901,13 @@ function Fluent:CreateWindow(cfg)
 				local values = dcfg.Values or {}
 				local multi = dcfg.Multi or false
 				local selected = {}
+				-- Pool ukuran tetap dibuat sekali di sini (thread utama, full
+				-- capability). rebuildOptions() nanti CUMA ubah properti (Text/
+				-- Visible/warna) instance yang udah ada, ga pernah Instance.new
+				-- lagi -- soalnya beberapa executor nolak Instance.new dari
+				-- thread callback tombol ("lacking capability Plugin"), yang
+				-- bikin Refresh Inventory/Refresh Daftar keliatan diem aja.
+				local poolSize = dcfg.PoolSize or 100
 
 				local listGui = uiNew("ScreenGui", { Name = "NaruHubDropdown", ResetOnSpawn = false, DisplayOrder = 200 }, (gethui and gethui()) or game:GetService("CoreGui"))
 				-- Backdrop full-layar, transparan, di belakang list -- klik di mana
@@ -1992,36 +1999,58 @@ function Fluent:CreateWindow(cfg)
 					backdrop.Visible = false
 				end
 
-				local function rebuildOptions()
-					for _, c in ipairs(listScroll:GetChildren()) do
-						if c:IsA("TextButton") then
-							c:Destroy()
+				-- Pool dibuat sekali di sini (masih di thread utama waktu UI
+				-- pertama kali dibangun). slotName[ob] nyimpen nama yang lagi
+				-- ditempel ke tombol itu, dibaca pas diklik -- karena satu
+				-- tombol dipakai ulang buat nama yang beda-beda tiap refresh.
+				local optionPool = {}
+				local slotName = {}
+				for i = 1, poolSize do
+					local ob = uiNew("TextButton", {
+						Size = UDim2.new(1, 0, 0, 26),
+						BackgroundColor3 = UI_COL_ROW2,
+						AutoButtonColor = true,
+						Font = UI_FONT,
+						TextSize = 12,
+						TextColor3 = UI_COL_TEXT,
+						Text = "",
+						TextXAlignment = Enum.TextXAlignment.Left,
+						LayoutOrder = i,
+						ZIndex = 50,
+						Visible = false,
+					}, listScroll)
+					optionPool[i] = ob
+					ob.MouseButton1Click:Connect(function()
+						local name = slotName[ob]
+						if not name then
+							return
 						end
-					end
+						if multi then
+							setSelected(name, not selected[name])
+						else
+							setSelected(name, true)
+							closeDropdown()
+						end
+						fireChange()
+					end)
+				end
+
+				local function rebuildOptions()
 					optionBtns = {}
-					for i, name in ipairs(values) do
-						local ob = uiNew("TextButton", {
-							Size = UDim2.new(1, 0, 0, 26),
-							BackgroundColor3 = selected[name] and UI_COL_ACCENT_DIM or UI_COL_ROW2,
-							AutoButtonColor = true,
-							Font = UI_FONT,
-							TextSize = 12,
-							TextColor3 = UI_COL_TEXT,
-							Text = "  " .. name,
-							TextXAlignment = Enum.TextXAlignment.Left,
-							LayoutOrder = i,
-							ZIndex = 50,
-						}, listScroll)
+					local n = math.min(#values, poolSize)
+					for i = 1, n do
+						local name = values[i]
+						local ob = optionPool[i]
+						slotName[ob] = name
+						ob.Text = "  " .. name
+						ob.BackgroundColor3 = selected[name] and UI_COL_ACCENT_DIM or UI_COL_ROW2
+						ob.Visible = true
 						optionBtns[name] = ob
-						ob.MouseButton1Click:Connect(function()
-							if multi then
-								setSelected(name, not selected[name])
-							else
-								setSelected(name, true)
-								closeDropdown()
-							end
-							fireChange()
-						end)
+					end
+					for i = n + 1, poolSize do
+						local ob = optionPool[i]
+						slotName[ob] = nil
+						ob.Visible = false
 					end
 					if searchBox and searchBox.Text ~= "" then
 						local q = searchBox.Text:lower()
@@ -2400,7 +2429,7 @@ end
 
 -- Bikin 1 section "Mail <kategori>" lengkap (dropdown multi + refresh + kirim).
 -- withQty = true buat kategori yang stackable (seed/gear), false buat pets (Count selalu 1).
-local function buildMailCategorySection(title: string, categories: { string }, idPrefix: string, withQty: boolean)
+local function buildMailCategorySection(title: string, categories: { string }, idPrefix: string, withQty: boolean, poolSize: number?)
 	local section = Tabs.Mail:AddSection(title)
 	local labels, map = buildMailItemList(categories)
 	local dropdown = section:AddDropdown(idPrefix .. "Items", {
@@ -2408,6 +2437,7 @@ local function buildMailCategorySection(title: string, categories: { string }, i
 		Values = labels,
 		Multi = true,
 		Default = {},
+		PoolSize = poolSize,
 	})
 	section:AddButton({
 		Title = "Refresh Daftar",
@@ -2489,7 +2519,7 @@ end
 
 buildMailCategorySection("Mail Seed & Packs", MAIL_CATEGORIES_SEED, "NaruHub_MailSeed", true)
 buildMailCategorySection("Mail Gear", MAIL_CATEGORIES_GEAR, "NaruHub_MailGear", true)
-buildMailCategorySection("Mail Pets", MAIL_CATEGORIES_PET, "NaruHub_MailPet", false)
+buildMailCategorySection("Mail Pets", MAIL_CATEGORIES_PET, "NaruHub_MailPet", false, 350)
 
 -- --- Mail Fruit tab (tab terpisah dari MailBox) ---------------------------
 -- fruitPool: cache {label=..., Category="HarvestedFruits", ItemKey=id, Value=..}
@@ -2558,6 +2588,7 @@ local fruitDropdown = fruitInvSection:AddDropdown("NaruHub_MailFruitItems", {
 	Values = {},
 	Multi = true,
 	Default = {},
+	PoolSize = 150, -- tas fruit dibatasi game sendiri di 100
 })
 fruitInvSection:AddButton({
 	Title = "Refresh Inventory",
