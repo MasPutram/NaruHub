@@ -995,6 +995,11 @@ local State = {
 	SellAllEnabled = false,
 	SellCheckInterval = 30,
 
+	-- Anti AFK (Misc): klik asli (mousemoveabs+mouse1click, bukan cuma jiggle
+	-- kursor) tiap interval biar Roblox ngga nganggap idle.
+	AntiAfkEnabled = false,
+	AntiAfkInterval = 45,
+
 	-- Auto Pumpkin (Misc): place sprinkler + shovel, khusus Atlantic Giant Pumpkin
 	PumpkinEnabled = false,
 	PumpkinSprinkler = "Syrup Sprinkler",
@@ -3801,6 +3806,65 @@ do
 						setSellStatus(("Nunggu Daily Deal (~%s lagi), Auto Sell All mati"):format(fmtHM(deal.TimeRemaining or 0)))
 					end
 				end
+			end
+		end
+	end)
+end
+
+-- --- Misc tab: Anti AFK ------------------------------------------------
+-- Klik asli (mousemoveabs + mouse1click, input OS-level lewat executor) ke
+-- titik netral layar (bukan tombol apapun) tiap interval. Ini beneran nge-
+-- klik, bukan cuma jiggle kursor -- makanya kalau pas ada menu/GUI Roblox
+-- lain yang lagi kebuka pas titik itu, bisa ke-close karena kena klik asli.
+do
+	local antiAfkSection = Tabs.Misc:AddSection("Anti AFK")
+	local antiAfkStatusPara = antiAfkSection:AddParagraph({ Title = "Status", Content = "Idle" })
+	local function setAntiAfkStatus(text: string)
+		pcall(function()
+			antiAfkStatusPara:SetDesc(text)
+		end)
+	end
+
+	antiAfkSection:AddSlider("NaruHub_AntiAfkInterval", {
+		Title = "Interval Klik (detik)",
+		Min = 15,
+		Max = 180,
+		Default = 45,
+		Callback = function(v)
+			State.AntiAfkInterval = v
+		end,
+	})
+	antiAfkSection:AddToggle("NaruHub_AntiAfk", {
+		Title = "Anti AFK (Auto Clicker)",
+		Default = false,
+		Callback = function(s)
+			State.AntiAfkEnabled = s
+			setAntiAfkStatus(s and "Aktif, nunggu interval..." or "Dimatikan")
+		end,
+	})
+
+	task.spawn(function()
+		while getgenv().__NaruHubGen == MY_GEN do
+			task.wait(math.max(15, State.AntiAfkInterval or 45))
+			if State.AntiAfkEnabled then
+				local ok = pcall(function()
+					if isrbxactive and not isrbxactive() then
+						setAntiAfkStatus("Window Roblox ga fokus, klik dilewati.")
+						return
+					end
+					local cam = workspace.CurrentCamera
+					local vp = (cam and cam.ViewportSize) or Vector2.new(800, 600)
+					-- titik netral: tengah layar, agak ke atas dikit biar ga kena
+					-- hotbar/inventory yang biasanya nempel di bawah.
+					local x, y = vp.X * 0.5, vp.Y * 0.4
+					if mousemoveabs then
+						mousemoveabs(x, y)
+					end
+					if mouse1click then
+						mouse1click()
+					end
+				end)
+				setAntiAfkStatus((ok and "Klik... " or "Gagal klik ") .. os.date("%H:%M:%S"))
 			end
 		end
 	end)
