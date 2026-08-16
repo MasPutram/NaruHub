@@ -1012,6 +1012,7 @@ local State = {
 	PumpkinEnabled = false,
 	PumpkinSprinkler = "Syrup Sprinkler",
 	PumpkinKg = 50,
+	PumpkinMode = "Below", -- "Below" = shovel yang DI BAWAH kg (buang yang kecil), "Above" = shovel yang DI ATAS kg (ambil yang udah besar/bagus)
 	PumpkinDelay = 0.15,
 	PumpkinNoTP = false,
 	-- Berat asli (float, ga dibulatin) dari fruit terakhir yang beneran
@@ -2961,8 +2962,16 @@ do
 	end)
 end
 
+pumpkinSection:AddDropdown("NaruHub_PumpkinMode", {
+	Title = "Mode",
+	Values = { "Below", "Above" },
+	Default = "Below",
+}):OnChanged(function(v)
+	State.PumpkinMode = v
+end)
+
 pumpkinSection:AddInput("NaruHub_PumpkinKg", {
-	Title = "Shovel buah di atas (kg)",
+	Title = "Shovel buah di bawah/atas (kg) -- lihat Mode",
 	Default = "50",
 	Numeric = true,
 	Finished = true,
@@ -4892,7 +4901,7 @@ task.spawn(function()
 		-- Target aktif: kalau Auto Pumpkin nyala pakai config pumpkin, selain itu config Garden.
 		local aMode, aKg, aSeeds
 		if State.PumpkinEnabled then
-			aMode, aKg, aSeeds = "Below", State.PumpkinKg, { ["Atlantic Giant Pumpkin"] = true }
+			aMode, aKg, aSeeds = State.PumpkinMode, State.PumpkinKg, { ["Atlantic Giant Pumpkin"] = true }
 		else
 			aMode, aKg, aSeeds = State.ShovelMode, State.ShovelKg, State.ShovelSeeds
 		end
@@ -5119,7 +5128,8 @@ task.spawn(function()
 			continue
 		end
 
-		-- FASE 2: shovel pumpkin fruit >= kg (yang udah bagus/besar, teleport tiap buah)
+		-- FASE 2: shovel pumpkin fruit sesuai Mode (Below = buang yang kecil,
+		-- Above = ambil yang udah besar/bagus), teleport tiap buah.
 		local shovel = getEquippedShovel()
 		local doneShovel = 0
 		if shovel then
@@ -5136,9 +5146,17 @@ task.spawn(function()
 					continue
 				end
 				local w = fruitWeightFn and fruitWeightFn(fr.model)
-				if not w or w < State.PumpkinKg then
+				if not w then
 					continue
 				end
+				local matches = (State.PumpkinMode == "Above" and w >= State.PumpkinKg)
+					or (State.PumpkinMode ~= "Above" and w < State.PumpkinKg)
+				if not matches then
+					continue
+				end
+				-- Shovel jalan berdasarkan kg Below/Above aja -- ready panen
+				-- atau belum, tetap di-shovel kalau beratnya cocok (sesuai
+				-- instruksi user, jangan digate status kematangan).
 				-- Paksa shovel tetap ke-equip tiap fruit -- kalau user manual
 				-- pegang tool lain di tengah jalan (shovel ke-lepas dari
 				-- Character), balikin lagi ke shovel sebelum lanjut.
@@ -5161,7 +5179,8 @@ task.spawn(function()
 					Monitor.Shovel += 1
 					State.PumpkinLastGoodKg = w
 					pcall(updateMonitorStats)
-					setPumpkinStatus(("Shovel %d (>=%gkg) -- terakhir %s kg"):format(doneShovel, State.PumpkinKg, formatKg(w)))
+					setPumpkinStatus(("Shovel %d (%s %gkg) -- terakhir %s kg"):format(
+						doneShovel, State.PumpkinMode == "Above" and ">=" or "<", State.PumpkinKg, formatKg(w)))
 					task.wait(State.PumpkinDelay)
 				end
 			end
@@ -5172,7 +5191,8 @@ task.spawn(function()
 
 		if State.PumpkinEnabled then
 			local lastStr = State.PumpkinLastGoodKg > 0 and formatKg(State.PumpkinLastGoodKg) or "-"
-			setPumpkinStatus(("Place %d | Shovel %d (>=%gkg) | Last: %s kg"):format(placedThis, doneShovel, State.PumpkinKg, lastStr))
+			setPumpkinStatus(("Place %d | Shovel %d (%s %gkg) | Last: %s kg"):format(
+				placedThis, doneShovel, State.PumpkinMode == "Above" and ">=" or "<", State.PumpkinKg, lastStr))
 		end
 	end
 end)
