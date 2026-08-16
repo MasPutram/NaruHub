@@ -246,6 +246,14 @@ end
 
 local CollectionService = game:GetService("CollectionService")
 
+-- Format kg apa adanya (2 desimal max, tanpa nol nempel di belakang) --
+-- 50 -> "50", 63.2 -> "63.2", bukan dibulatin ke bilangan bulat.
+local function formatKg(w: number): string
+	local s = string.format("%.2f", w)
+	s = s:gsub("0+$", ""):gsub("%.$", "")
+	return s
+end
+
 -- Berat buah (kg) pakai kalkulator asli game.
 local fruitWeightFn
 do
@@ -1006,6 +1014,10 @@ local State = {
 	PumpkinKg = 50,
 	PumpkinDelay = 0.15,
 	PumpkinNoTP = false,
+	-- Berat asli (float, ga dibulatin) dari fruit terakhir yang beneran
+	-- ke-shovel -- persist sampai ada shovel berikutnya, BUKAN di-reset
+	-- tiap scan monitor kayak Monitor.LastGoodKg.
+	PumpkinLastGoodKg = 0,
 
 	-- Automatically tab: akordeon (group mana yang sedang terbuka)
 	AutoOpenGroup = "Auto Shovel Fruit",
@@ -2950,7 +2962,7 @@ do
 end
 
 pumpkinSection:AddInput("NaruHub_PumpkinKg", {
-	Title = "Shovel buah di bawah (kg)",
+	Title = "Shovel buah di atas (kg)",
 	Default = "50",
 	Numeric = true,
 	Finished = true,
@@ -4370,7 +4382,7 @@ local function updateMonitorStats()
 	rowSpr.Text = ("Sprinkler: %d (aktif %d%s)"):format(
 		Monitor.Sprinkler, active, soonest and (", %ds"):format(math.floor(soonest)) or "")
 	rowMatch.Text = ("Match: %d/%d"):format(Monitor.MatchX, Monitor.MatchY)
-	rowLast.Text = ("Last good: %s kg"):format(Monitor.LastGoodKg > 0 and string.format("%.2f", Monitor.LastGoodKg) or "-")
+	rowLast.Text = ("Last good: %s kg"):format(State.PumpkinLastGoodKg > 0 and formatKg(State.PumpkinLastGoodKg) or "-")
 	rowReady.Text = ("Siap panen: %d"):format(Monitor.Ready)
 end
 
@@ -5107,7 +5119,7 @@ task.spawn(function()
 			continue
 		end
 
-		-- FASE 2: shovel pumpkin fruit < kg (teleport tiap buah)
+		-- FASE 2: shovel pumpkin fruit >= kg (yang udah bagus/besar, teleport tiap buah)
 		local shovel = getEquippedShovel()
 		local doneShovel = 0
 		if shovel then
@@ -5124,8 +5136,19 @@ task.spawn(function()
 					continue
 				end
 				local w = fruitWeightFn and fruitWeightFn(fr.model)
-				if not w or w >= State.PumpkinKg then
+				if not w or w < State.PumpkinKg then
 					continue
+				end
+				-- Paksa shovel tetap ke-equip tiap fruit -- kalau user manual
+				-- pegang tool lain di tengah jalan (shovel ke-lepas dari
+				-- Character), balikin lagi ke shovel sebelum lanjut.
+				if shovel.Parent ~= LocalPlayer.Character then
+					shovel = getEquippedShovel()
+					if not shovel then
+						break
+					end
+					shovelAttr = shovel:GetAttribute("Shovel")
+					task.wait(0.1)
 				end
 				local part = fr.model.PrimaryPart or fr.model:FindFirstChildWhichIsA("BasePart")
 				if not State.PumpkinNoTP and hrp and part then
@@ -5136,8 +5159,9 @@ task.spawn(function()
 				if shovelFruit(fr.plantId, fr.fruitId, shovelAttr, shovel) then
 					doneShovel += 1
 					Monitor.Shovel += 1
+					State.PumpkinLastGoodKg = w
 					pcall(updateMonitorStats)
-					setPumpkinStatus(("Shovel %d (<%gkg)..."):format(doneShovel, State.PumpkinKg))
+					setPumpkinStatus(("Shovel %d (>=%gkg) -- terakhir %s kg"):format(doneShovel, State.PumpkinKg, formatKg(w)))
 					task.wait(State.PumpkinDelay)
 				end
 			end
@@ -5147,7 +5171,8 @@ task.spawn(function()
 		end
 
 		if State.PumpkinEnabled then
-			setPumpkinStatus(("Place %d | Shovel %d (<%gkg)"):format(placedThis, doneShovel, State.PumpkinKg))
+			local lastStr = State.PumpkinLastGoodKg > 0 and formatKg(State.PumpkinLastGoodKg) or "-"
+			setPumpkinStatus(("Place %d | Shovel %d (>=%gkg) | Last: %s kg"):format(placedThis, doneShovel, State.PumpkinKg, lastStr))
 		end
 	end
 end)
