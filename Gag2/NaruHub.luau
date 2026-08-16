@@ -2709,14 +2709,51 @@ mailCartSection:AddButton({
 					mailClearFavorite("Fruit", rec.ItemKey)
 				end
 			end
-			setCartStatus(("Mengirim %d fruit..."):format(#items))
-			local ok, msg = mailSendBatch(userId, items, State.MailFruitNote or "")
-			setCartStatus((ok and "Terkirim: " or "Gagal: ") .. (msg or ""))
-			if ok then
-				fruitDropdown:SetValues(rebuildFruitPool())
-				fruitSelected = {}
-				refreshCartLabel()
+			-- Server nolak batch lebih dari 20 item ("Invalid items") -- pecah
+			-- jadi beberapa kali SendBatch kalau yang dipilih lebih dari itu.
+			local chunks = {}
+			for i = 1, #items, 20 do
+				local chunk = {}
+				for j = i, math.min(i + 19, #items) do
+					table.insert(chunk, items[j])
+				end
+				table.insert(chunks, chunk)
 			end
+			local sentOk, sentFail = 0, 0
+			local lastMsg = ""
+			for i, chunk in ipairs(chunks) do
+				setCartStatus(("Mengirim batch %d/%d (%d fruit)..."):format(i, #chunks, #chunk))
+				local ok, msg = mailSendBatch(userId, chunk, State.MailFruitNote or "")
+				-- Server ada cooldown antar-gift ("Wait Xs before sending another
+				-- gift") -- kalau kena, tunggu sesuai pesan lalu retry sekali.
+				if not ok and msg then
+					local waitSecs = tonumber(msg:match("Wait (%d+)s"))
+					if waitSecs then
+						setCartStatus(("Cooldown, nunggu %ds..."):format(waitSecs))
+						task.wait(waitSecs + 1)
+						ok, msg = mailSendBatch(userId, chunk, State.MailFruitNote or "")
+					end
+				end
+				lastMsg = msg or ""
+				if ok then
+					sentOk = sentOk + #chunk
+				else
+					sentFail = sentFail + #chunk
+				end
+				if i < #chunks then
+					task.wait(9)
+				end
+			end
+			if sentFail == 0 then
+				setCartStatus(("Terkirim: %d fruit terkirim (%s)"):format(sentOk, lastMsg))
+			elseif sentOk == 0 then
+				setCartStatus("Gagal: " .. lastMsg)
+			else
+				setCartStatus(("Sebagian: %d terkirim, %d gagal (%s)"):format(sentOk, sentFail, lastMsg))
+			end
+			fruitDropdown:SetValues(rebuildFruitPool())
+			fruitSelected = {}
+			refreshCartLabel()
 		end)
 	end,
 })
@@ -2814,14 +2851,24 @@ bulkMailSection:AddButton({
 						end
 					end
 					setBulkStatus(("[%d/%d] Kirim %d fruit ke %s..."):format(i, #usernames, #items, uname))
-					local ok = mailSendBatch(userId, items, State.MailFruitNote or "")
+					local ok, msg = mailSendBatch(userId, items, State.MailFruitNote or "")
+					-- Cooldown antar-gift server ("Wait Xs before sending another
+					-- gift") -- kalau kena, tunggu sesuai pesan lalu retry sekali.
+					if not ok and msg then
+						local waitSecs = tonumber(msg:match("Wait (%d+)s"))
+						if waitSecs then
+							setBulkStatus(("[%d/%d] Cooldown, nunggu %ds..."):format(i, #usernames, waitSecs))
+							task.wait(waitSecs + 1)
+							ok = mailSendBatch(userId, items, State.MailFruitNote or "")
+						end
+					end
 					if ok then
 						doneCount = doneCount + 1
 					else
 						failCount = failCount + 1
 					end
 				end
-				task.wait(1.5)
+				task.wait(9)
 			end
 			bulkRunning = false
 			setBulkStatus(("Selesai. Berhasil %d, gagal %d."):format(doneCount, failCount))
