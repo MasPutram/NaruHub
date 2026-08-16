@@ -4970,6 +4970,13 @@ task.spawn(function()
 		Monitor.MatchX, Monitor.MatchY = matchX, matchY
 		Monitor.LastGoodKg = lastGood
 		Monitor.Ready = readyCnt
+		-- "Last good" buat Auto Pumpkin: fruit yang beratnya nyampe target
+		-- (keeper terberat scan ini). Cuma di-update kalau ADA keeper -- kalau
+		-- kosong (lagi ga ada yang capai target), biarin nilai lama tetap
+		-- tampil, jangan direset ke 0/"-".
+		if State.PumpkinEnabled and lastGood > 0 then
+			State.PumpkinLastGoodKg = lastGood
+		end
 		pcall(updateMonitor)
 		pcall(function()
 			updateEsp(fruitList)
@@ -5177,10 +5184,9 @@ task.spawn(function()
 				if shovelFruit(fr.plantId, fr.fruitId, shovelAttr, shovel) then
 					doneShovel += 1
 					Monitor.Shovel += 1
-					State.PumpkinLastGoodKg = w
 					pcall(updateMonitorStats)
-					setPumpkinStatus(("Shovel %d (%s %gkg) -- terakhir %s kg"):format(
-						doneShovel, State.PumpkinMode == "Above" and ">=" or "<", State.PumpkinKg, formatKg(w)))
+					setPumpkinStatus(("Shovel %d (%s %gkg)"):format(
+						doneShovel, State.PumpkinMode == "Above" and ">=" or "<", State.PumpkinKg))
 					task.wait(State.PumpkinDelay)
 				end
 			end
