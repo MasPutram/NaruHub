@@ -912,7 +912,18 @@ local function dropTool(tool: Instance): boolean
 end
 
 -- Counter live untuk Monitor HUD (bukan config).
-local Monitor = { Shovel = 0, Sprinkler = 0, MatchX = 0, MatchY = 0, LastGoodKg = 0, Ready = 0, FruitList = {} }
+-- PumpkinSeenKeepers/PumpkinBaselineDone numpang di table Monitor (bukan
+-- local terpisah) biar ga nambah local baru ke chunk utama (udah mepet limit
+-- 200 Luau). FruitId keeper (Auto Pumpkin) yang udah pernah "diumumkan" ke
+-- Last Good -- biar last good nunjukin fruit BARU yang baru capai target,
+-- bukan selalu yang paling gede se-kebun (bisa nge-stuck kalau ada 1 fruit
+-- raksasa). Scan pertama abis reload/enable cuma catat baseline TANPA
+-- nge-trigger Last Good -- kita ga tau kapan fruit lama itu sebenernya
+-- nyampe target duluan.
+local Monitor = {
+	Shovel = 0, Sprinkler = 0, MatchX = 0, MatchY = 0, LastGoodKg = 0, Ready = 0, FruitList = {},
+	PumpkinSeenKeepers = {}, PumpkinBaselineDone = false,
+}
 local SPRINKLER_LIFETIME = 120
 local sprinklerTimes = {} -- os.clock() tiap placement (untuk countdown)
 
@@ -4910,10 +4921,12 @@ task.spawn(function()
 		end
 
 		local matchX, matchY = 0, 0
-		local lastGood = 0 -- keeper terbesar scan ini (bukan stale)
+		local lastGood = 0 -- keeper terbesar scan ini (dipakai buat Match X/Y, bukan Last Good)
 		local readyCnt = 0
 		local plantHasKeeper = {}
 		local fl = {}
+		local currentKeeperIds = {}
+		local newlyGood -- fruit keeper BARU (belum pernah keliatan) yang ketemu scan ini
 
 		for _, fr in ipairs(fruitList) do
 			local w = fruitWeightFn and fruitWeightFn(fr.model)
@@ -4928,6 +4941,15 @@ task.spawn(function()
 						plantHasKeeper[fr.plantId] = true
 						if w > lastGood then
 							lastGood = w
+						end
+						if State.PumpkinEnabled and fr.fruitId then
+							currentKeeperIds[fr.fruitId] = true
+							if not Monitor.PumpkinSeenKeepers[fr.fruitId] then
+								Monitor.PumpkinSeenKeepers[fr.fruitId] = true
+								if Monitor.PumpkinBaselineDone then
+									newlyGood = w
+								end
+							end
 						end
 					end
 				end
@@ -4970,12 +4992,23 @@ task.spawn(function()
 		Monitor.MatchX, Monitor.MatchY = matchX, matchY
 		Monitor.LastGoodKg = lastGood
 		Monitor.Ready = readyCnt
-		-- "Last good" buat Auto Pumpkin: fruit yang beratnya nyampe target
-		-- (keeper terberat scan ini). Cuma di-update kalau ADA keeper -- kalau
-		-- kosong (lagi ga ada yang capai target), biarin nilai lama tetap
-		-- tampil, jangan direset ke 0/"-".
-		if State.PumpkinEnabled and lastGood > 0 then
-			State.PumpkinLastGoodKg = lastGood
+		-- "Last good" buat Auto Pumpkin: fruit BARU yang baru capai target
+		-- (bukan selalu yang paling gede se-kebun -- itu bisa nge-stuck kalau
+		-- ada 1 fruit raksasa yang keukeuh paling besar terus). Cuma update
+		-- kalau ketemu fruit keeper yang belum pernah ke-lihat sebelumnya;
+		-- fruit yang udah di-shovel/panen dilupain lagi (id-nya ilang dari
+		-- kebun) biar kalau nanti nongol fruit baru dengan id sama tetap
+		-- ke-anggep baru.
+		if State.PumpkinEnabled then
+			if newlyGood then
+				State.PumpkinLastGoodKg = newlyGood
+			end
+			Monitor.PumpkinBaselineDone = true
+			for fid in pairs(Monitor.PumpkinSeenKeepers) do
+				if not currentKeeperIds[fid] then
+					Monitor.PumpkinSeenKeepers[fid] = nil
+				end
+			end
 		end
 		pcall(updateMonitor)
 		pcall(function()
