@@ -4926,7 +4926,12 @@ task.spawn(function()
 		local plantHasKeeper = {}
 		local fl = {}
 		local currentKeeperIds = {}
-		local newlyGood -- fruit keeper BARU (belum pernah keliatan) yang ketemu scan ini
+		-- Fruit keeper BARU (belum pernah keliatan) yang ketemu scan ini. Kalau
+		-- lebih dari satu fruit baru ketemu di scan yang sama (wajar kalau
+		-- kebunnya rame), pilih yang paling DEKAT ke angka target -- itu yang
+		-- paling baru "pas lewat" threshold, bukan sekadar yang terakhir
+		-- ke-iterasi (yang bisa ke-bias ke fruit paling gede).
+		local newlyGood, newlyGoodDist
 
 		for _, fr in ipairs(fruitList) do
 			local w = fruitWeightFn and fruitWeightFn(fr.model)
@@ -4947,7 +4952,11 @@ task.spawn(function()
 							if not Monitor.PumpkinSeenKeepers[fr.fruitId] then
 								Monitor.PumpkinSeenKeepers[fr.fruitId] = true
 								if Monitor.PumpkinBaselineDone then
-									newlyGood = w
+									local dist = math.abs(w - aKg)
+									if not newlyGoodDist or dist < newlyGoodDist then
+										newlyGood = w
+										newlyGoodDist = dist
+									end
 								end
 							end
 						end
