@@ -11,6 +11,7 @@ Run: python poster_server.py
 
 import io
 import json
+import os
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -18,15 +19,23 @@ from pathlib import Path
 import requests
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
-PORT = 8765
+PORT = int(os.environ.get("PORT", 8765))
 ASSETS_DIR = Path(__file__).parent / "assets"
 NORMAL_DIR = ASSETS_DIR / "Normal"
 MUTATION_DIR = ASSETS_DIR / "Mutation"
 COMBO_DIR = ASSETS_DIR / "MutationCombo"
 
-FONT_DIR = Path("C:/Windows/Fonts")
-FONT_BOLD = FONT_DIR / "arialbd.ttf"
-FONT_REGULAR = FONT_DIR / "arial.ttf"
+# Font dibundling di repo (fonts/) biar jalan di Linux (Render dst) yang ga
+# punya C:\Windows\Fonts. Kalau ternyata jalan lokal di Windows dan folder
+# bundled-nya hilang, jatuh balik ke Arial bawaan OS.
+_BUNDLED_FONT_DIR = Path(__file__).parent / "fonts"
+_WINDOWS_FONT_DIR = Path("C:/Windows/Fonts")
+if (_BUNDLED_FONT_DIR / "DejaVuSans-Bold.ttf").exists():
+    FONT_BOLD = _BUNDLED_FONT_DIR / "DejaVuSans-Bold.ttf"
+    FONT_REGULAR = _BUNDLED_FONT_DIR / "DejaVuSans.ttf"
+else:
+    FONT_BOLD = _WINDOWS_FONT_DIR / "arialbd.ttf"
+    FONT_REGULAR = _WINDOWS_FONT_DIR / "arial.ttf"
 
 # ---- palette (light card look, matching the reference) ----
 BG = (223, 231, 240)
@@ -459,11 +468,23 @@ class Handler(BaseHTTPRequestHandler):
                     self._send_json(502, {"ok": False, "error": f"discord {resp.status_code}: {resp.text[:300]}"})
                     return
 
-            out_path = Path(__file__).parent / "last_poster.png"
-            out_path.write_bytes(buf.getvalue())
-            self._send_json(200, {"ok": True, "saved": str(out_path)})
+            # Simpan salinan lokal buat debugging -- opsional, jangan sampai
+            # gagal-total kalau disk-nya read-only/ephemeral (misal di Render).
+            saved_to = None
+            try:
+                out_path = Path(__file__).parent / "last_poster.png"
+                out_path.write_bytes(buf.getvalue())
+                saved_to = str(out_path)
+            except OSError:
+                pass
+            self._send_json(200, {"ok": True, "saved": saved_to})
         except Exception as e:  # noqa: BLE001
             self._send_json(500, {"ok": False, "error": str(e)})
+
+    def do_GET(self):
+        # Health check buat platform hosting (Render dst) + biar buka URL-nya
+        # di browser ga cuma dapet 501.
+        self._send_json(200, {"ok": True, "service": "poster_server", "hint": "POST JSON to /generate"})
 
     def log_message(self, fmt, *args):
         print("[poster_server]", fmt % args)
@@ -485,11 +506,16 @@ def main():
     # 0.0.0.0 biar bisa diakses dari device lain (HP dll) di WiFi yang sama,
     # ga cuma dari PC ini sendiri (127.0.0.1).
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    lan_ip = get_lan_ip()
     print(f"poster_server listening on http://0.0.0.0:{PORT}")
-    print(f"  -> from this PC:        http://127.0.0.1:{PORT}/generate")
-    print(f"  -> from other devices:  http://{lan_ip}:{PORT}/generate")
-    print("     (pastikan device itu di WiFi yang sama, dan Windows Firewall ngizinin port ini)")
+    if os.environ.get("PORT"):
+        # PORT di-set dari luar -> lagi jalan di hosting (Render dst), bukan
+        # PC lokal. LAN IP ga relevan di sini.
+        print("  -> hosted; pakai URL publik dari platform hosting kamu + /generate")
+    else:
+        lan_ip = get_lan_ip()
+        print(f"  -> from this PC:        http://127.0.0.1:{PORT}/generate")
+        print(f"  -> from other devices:  http://{lan_ip}:{PORT}/generate")
+        print("     (pastikan device itu di WiFi yang sama, dan Windows Firewall ngizinin port ini)")
     server.serve_forever()
 
 
