@@ -73,16 +73,22 @@ local Window = Fluent:CreateWindow({
 
 - Auto save/load config per-HWID (pakai `gethwid`/`writefile`/`readfile`/`isfile` — otomatis
   nonaktif kalau executor-nya ga support, ga bakal error).
-- Section collapsible (accordion), dropdown search + overlay-in-window, drag title bar,
-  Close/Minimize button bawaan.
+- Section collapsible (accordion), dropdown search + overlay-in-window, drag title bar.
+- **Logo NaruHub udah ke-embed langsung (base64) di dalam `NaruUI.luau`** — otomatis kepakai
+  di title bar dan di badge minimize kalau `LogoImage` ga diisi. Executor yang ga support
+  base64-decode/writefile/getcustomasset bakal fallback ke tanpa logo (huruf pertama judul
+  window aja di badge minimize), ga error.
+- **Minimize bawaan lengkap**: klik "-" → window sembunyi, muncul badge logo bulat ngambang
+  di pojok kiri atas (bisa di-drag, klik = restore). `Window:Minimize()` / `Window:Restore()`
+  bisa dipanggil manual, dan `CreateWindow({ AutoStartMinimized = true })` buat langsung
+  minimize pas pertama kali dibuka.
 - Fix "lacking capability Plugin" pada dropdown refresh (pool tombol + retry) — ini bug
   executor yang ditemukan pas develop NaruHub, tapi generic, bisa kejadian di game manapun.
 
 ## Yang TIDAK ikut ke-bawa (spesifik NaruHub, harus dibangun ulang per-game)
 
-- Logo custom di title bar, badge "PREMIUM" spesifik, minimize-jadi-logo-ngambang.
-  (Lihat `NaruHub.luau` bagian "Logo di title bar" kalau mau nyontek polanya — itu generic
-  juga sebenarnya, cuma belum diekstrak ke sini biar template ini tetap ringkas.)
+- Badge "PREMIUM" spesifik itu cuma teks (`Badge = "PREMIUM"` di `CreateWindow`), tinggal
+  ganti teksnya atau kosongin field-nya.
 - Semua logic game-specific (Networking remote bindings, identity-switch pattern buat fire
   remote, dll) — itu HARUS diriset ulang tiap game beda (lihat cara riset di NaruHub: pakai
   MCP `real` buat script-grep/dump remote, jangan nebak-nebak nama remote).

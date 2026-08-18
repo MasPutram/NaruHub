@@ -14,7 +14,8 @@ local Fluent = NaruUI.New({
 local Window = Fluent:CreateWindow({
 	Title = "MyScript",
 	Badge = "BETA", -- opsional, kosongin field ini kalau ga mau ada badge
-	LogoImage = "rbxassetid://0", -- opsional, ganti asset id logo kamu (atau lihat README buat logo custom embed)
+	-- LogoImage = "rbxassetid://123...", -- opsional, kosongin biar pakai logo NaruHub bawaan (auto-embed)
+	-- AutoStartMinimized = true, -- opsional, window langsung minimize pas pertama dibuka
 	TabWidth = 150,
 	Size = UDim2.fromOffset(650, 420),
 })
