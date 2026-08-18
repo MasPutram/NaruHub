@@ -754,12 +754,15 @@ function NaruUI.New(cfg)
 					uiCorner(6, box)
 					uiNew("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, box)
 
+					local obj = { Value = tostring(icfg.Default or "") }
+
 					local function commit()
 						local v = box.Text
 						if icfg.Numeric then
 							v = tostring(tonumber(v) or icfg.Default or 0)
 							box.Text = v
 						end
+						obj.Value = v
 						ConfigData[id] = v
 						saveConfig()
 						if icfg.Callback then
@@ -772,7 +775,6 @@ function NaruUI.New(cfg)
 						box:GetPropertyChangedSignal("Text"):Connect(commit)
 					end
 
-					local obj = {}
 					function obj:SetValue(v)
 						box.Text = tostring(v)
 						commit()
