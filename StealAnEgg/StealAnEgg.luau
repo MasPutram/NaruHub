@@ -1583,6 +1583,12 @@ do
 		local serverUrl = posterServerInput.Value ~= "" and posterServerInput.Value or POSTER_SERVER_URL
 
 		statusPara:SetContent("Render poster + kirim ke Discord...")
+
+		-- request() ga punya opsi timeout sendiri, jadi kalau koneksi HP<->PC
+		-- ke-drop diam-diam (client isolation WiFi, firewall, dst) tombol ini
+		-- bisa "ngestuck" tanpa pesan apa-apa. Race manual pakai task.delay
+		-- biar user tetap dapet status jelas walau request aslinya belum balik.
+		local settled = false
 		task.spawn(function()
 			local ok, res = pcall(function()
 				return request({
@@ -1592,8 +1598,12 @@ do
 					Body = body,
 				})
 			end)
+			if settled then
+				return
+			end
+			settled = true
 			if not ok then
-				statusPara:SetContent("Gagal konek ke poster_server.py: " .. tostring(res))
+				statusPara:SetContent("Gagal konek ke poster server: " .. tostring(res))
 				return
 			end
 			if res.StatusCode == 200 then
@@ -1601,6 +1611,13 @@ do
 			else
 				statusPara:SetContent(("Gagal (HTTP %*): %*"):format(res.StatusCode, res.Body or ""))
 			end
+		end)
+		task.delay(10, function()
+			if settled then
+				return
+			end
+			settled = true
+			statusPara:SetContent("Timeout 10 detik, ga ada respon dari '" .. serverUrl .. "'. Cek: poster_server.py masih nyala? HP & PC di WiFi yang sama? Ada router/firewall yang blokir koneksi antar-device (client isolation)?")
 		end)
 	end
 
