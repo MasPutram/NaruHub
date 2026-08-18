@@ -1498,6 +1498,12 @@ do
 		end,
 	})
 
+	local posterServerInput = section:AddInput("StealAnEgg_PosterServerUrl", {
+		Title = "Poster Server URL",
+		Placeholder = "http://127.0.0.1:8765/generate",
+		Default = POSTER_SERVER_URL,
+		Finished = true,
+	})
 	local webhookInput = section:AddInput("StealAnEgg_Webhook", {
 		Title = "Discord Webhook URL",
 		Placeholder = "https://discord.com/api/webhooks/...",
@@ -1574,12 +1580,13 @@ do
 		}
 
 		local body = HttpService:JSONEncode(payload)
+		local serverUrl = posterServerInput.Value ~= "" and posterServerInput.Value or POSTER_SERVER_URL
 
 		statusPara:SetContent("Render poster + kirim ke Discord...")
 		task.spawn(function()
 			local ok, res = pcall(function()
 				return request({
-					Url = POSTER_SERVER_URL,
+					Url = serverUrl,
 					Method = "POST",
 					Headers = { ["Content-Type"] = "application/json" },
 					Body = body,

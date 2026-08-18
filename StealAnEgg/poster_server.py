@@ -469,9 +469,27 @@ class Handler(BaseHTTPRequestHandler):
         print("[poster_server]", fmt % args)
 
 
+def get_lan_ip() -> str:
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except Exception:
+        return "127.0.0.1"
+    finally:
+        s.close()
+
+
 def main():
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"poster_server listening on http://127.0.0.1:{PORT}")
+    # 0.0.0.0 biar bisa diakses dari device lain (HP dll) di WiFi yang sama,
+    # ga cuma dari PC ini sendiri (127.0.0.1).
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    lan_ip = get_lan_ip()
+    print(f"poster_server listening on http://0.0.0.0:{PORT}")
+    print(f"  -> from this PC:        http://127.0.0.1:{PORT}/generate")
+    print(f"  -> from other devices:  http://{lan_ip}:{PORT}/generate")
+    print("     (pastikan device itu di WiFi yang sama, dan Windows Firewall ngizinin port ini)")
     server.serve_forever()
 
 
