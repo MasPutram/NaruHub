@@ -1612,12 +1612,15 @@ do
 				statusPara:SetContent(("Gagal (HTTP %*): %*"):format(res.StatusCode, res.Body or ""))
 			end
 		end)
-		task.delay(10, function()
+		-- 60 detik, bukan 10 -- hosting gratis (Render dst) suka "tidur" kalau
+		-- lama ga dipakai, request pertama abis idle bisa 30-60 detik buat
+		-- bangun lagi. 10 detik ketat banget, bikin false-positive "timeout".
+		task.delay(60, function()
 			if settled then
 				return
 			end
 			settled = true
-			statusPara:SetContent("Timeout 10 detik, ga ada respon dari '" .. serverUrl .. "'. Cek: poster_server.py masih nyala? HP & PC di WiFi yang sama? Ada router/firewall yang blokir koneksi antar-device (client isolation)?")
+			statusPara:SetContent("Timeout 60 detik, ga ada respon dari '" .. serverUrl .. "'. Cek: server masih nyala? Kalau pakai hosting gratis, coba generate ulang (bisa jadi baru \"bangun\" dari sleep). Kalau local: HP & PC di WiFi yang sama? Ada firewall yang blokir?")
 		end)
 	end
 
