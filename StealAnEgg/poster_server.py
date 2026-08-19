@@ -349,13 +349,29 @@ def render_poster(data: dict) -> Image.Image:
                 draw.text((tx, gy0 + 53), fmt_weight(pet["weight"]), font=font(11), fill=DIM)
         y += rows_needed * (gcard_h + 8) + 16
 
-    # ---- Detail checklist ----
-    if checklist:
-        chk_h = 34 + len(checklist) * 26
+    # ---- Detail checklist -- item dari user + stat auto-detect (Speed,
+    # Income Aktif, Level Kandang, Level Treadmill), tetep juga dipajang di
+    # atas sebagai pill, ini cuma duplikat biar kebaca sebagai "detail acc". ----
+    auto_detail_lines = []
+    if run_speed is not None:
+        auto_detail_lines.append(
+            f"Speed: {run_speed:,.0f}" if isinstance(run_speed, (int, float)) else f"Speed: {run_speed}"
+        )
+    active_total_rate = sum(p.get("rate", 0) for p in active_pets)
+    if active_total_rate:
+        auto_detail_lines.append(f"Income Aktif: {fmt_money(active_total_rate)}")
+    if kandang_level is not None:
+        auto_detail_lines.append(f"Level Kandang: {kandang_level}")
+    if treadmill_level is not None:
+        auto_detail_lines.append(f"Level Treadmill: {treadmill_level}")
+
+    full_checklist = list(checklist) + auto_detail_lines
+    if full_checklist:
+        chk_h = 34 + len(full_checklist) * 26
         rounded_card(draw, (left_x0, y, left_x1, y + chk_h))
         draw.text((left_x0 + 16, y + 12), "DETAIL ACC", font=font(16, bold=True), fill=NAVY)
         cy = y + 40
-        for item in checklist:
+        for item in full_checklist:
             draw.ellipse([left_x0 + 18, cy + 3, left_x0 + 32, cy + 17], outline=GREEN, width=2)
             draw.line([left_x0 + 21, cy + 10, left_x0 + 24, cy + 14], fill=GREEN, width=2)
             draw.line([left_x0 + 24, cy + 14, left_x0 + 30, cy + 6], fill=GREEN, width=2)
