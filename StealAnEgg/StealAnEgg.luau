@@ -1617,7 +1617,7 @@ do
 	local EggItemUtil = require(ReplicatedStorage.Library.Util.EggItemUtil)
 	local HttpService = game:GetService("HttpService")
 
-	local POSTER_SERVER_URL = "http://127.0.0.1:8765/generate"
+	local POSTER_SERVER_URL = "https://lecture-ownership-out-clinics.trycloudflare.com/generate"
 
 	local function mutationNamesFromString(str)
 		if not str or str == "" then
