@@ -413,16 +413,20 @@ def render_poster(data: dict) -> Image.Image:
 
     full_checklist = list(checklist) + auto_detail_lines
     if full_checklist:
-        chk_h = 34 + len(full_checklist) * 26
+        detail_cols = 2
+        col_w = (left_x1 - left_x0) / detail_cols
+        rows_needed = -(-len(full_checklist) // detail_cols)
+        chk_h = 34 + rows_needed * 26
         rounded_card(draw, (left_x0, y, left_x1, y + chk_h))
         draw.text((left_x0 + 16, y + 12), "DETAIL ACC", font=font(16, bold=True), fill=NAVY)
-        cy = y + 40
-        for item in full_checklist:
-            draw.ellipse([left_x0 + 18, cy + 3, left_x0 + 32, cy + 17], outline=GREEN, width=2)
-            draw.line([left_x0 + 21, cy + 10, left_x0 + 24, cy + 14], fill=GREEN, width=2)
-            draw.line([left_x0 + 24, cy + 14, left_x0 + 30, cy + 6], fill=GREEN, width=2)
-            draw.text((left_x0 + 40, cy), item, font=font(15), fill=NAVY)
-            cy += 26
+        for idx, item in enumerate(full_checklist):
+            r, c = divmod(idx, detail_cols)
+            cx = left_x0 + c * col_w
+            cy = y + 40 + r * 26
+            draw.ellipse([cx + 18, cy + 3, cx + 32, cy + 17], outline=GREEN, width=2)
+            draw.line([cx + 21, cy + 10, cx + 24, cy + 14], fill=GREEN, width=2)
+            draw.line([cx + 24, cy + 14, cx + 30, cy + 6], fill=GREEN, width=2)
+            draw.text((cx + 40, cy), item, font=font(15), fill=NAVY)
         y += chk_h + 18
 
     # ================= RIGHT COLUMN =================
