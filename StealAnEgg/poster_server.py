@@ -101,6 +101,17 @@ def fmt_weight(kg: float) -> str:
     return f"{kg:,.0f} Kg" if kg >= 1 else f"{kg:.2f} Kg"
 
 
+def fmt_duration(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}h {m}m"
+    if m:
+        return f"{m}m {s}s"
+    return f"{s}s"
+
+
 def rounded_card(draw: ImageDraw.ImageDraw, box, radius=18, fill=CARD_BG, outline=BORDER, width=1):
     draw.rounded_rectangle(box, radius=radius, fill=fill, outline=outline, width=width)
 
@@ -164,6 +175,7 @@ def render_poster(data: dict) -> Image.Image:
     all_pets = data.get("allPets") or []
     active_pets = data.get("activePets") or []
     active_limit = data.get("activeLimit", len(active_pets))
+    growing_eggs = data.get("growingEggs") or []
     run_speed = data.get("runSpeed")
     total_money_per_second = data.get("totalMoneyPerSecond")
     kandang_level = data.get("kandangLevel")
@@ -348,6 +360,40 @@ def render_poster(data: dict) -> Image.Image:
             if pet.get("weight"):
                 draw.text((tx, gy0 + 53), fmt_weight(pet["weight"]), font=font(11), fill=DIM)
         y += rows_needed * (gcard_h + 8) + 16
+
+    # ---- Telur yang sedang tumbuh di kandang -- spesies/mutasi udah
+    # ke-deteksi meski belum netas (sama kayak fitur "Prediksi Hatch"). ----
+    if growing_eggs:
+        rounded_card(draw, (left_x0, y, left_x1, y + 40), radius=20, fill=(226, 232, 240))
+        draw_text_centered(draw, ((left_x0 + left_x1) / 2, y + 20), "TELUR YANG SEDANG TUMBUH", font(18, bold=True), NAVY)
+        y += 52
+
+        egg_cols = 3
+        egg_card_w = (left_x1 - left_x0 - (egg_cols - 1) * 10) / egg_cols
+        egg_card_h = 86
+        eggs_shown = growing_eggs[:9]
+        rows_needed = -(-len(eggs_shown) // egg_cols)
+        for idx, egg in enumerate(eggs_shown):
+            r, c = divmod(idx, egg_cols)
+            gx0 = left_x0 + c * (egg_card_w + 10)
+            gy0 = y + r * (egg_card_h + 8)
+            muts = egg.get("mutations") or []
+            icon = find_icon(egg.get("category", ""), muts)
+            paste_icon(canvas, icon, (int(gx0), int(gy0), int(gx0 + egg_card_h), int(gy0 + egg_card_h)))
+            tx = gx0 + egg_card_h + 8
+            name = egg.get("category", "?")
+            if muts:
+                name = f"{' + '.join(m.upper() for m in muts)} {name}"
+            if len(name) > 22:
+                name = name[:21] + "…"
+            draw.text((tx, gy0 + 6), name, font=font(12, bold=True), fill=NAVY)
+            if egg.get("ready"):
+                draw.text((tx, gy0 + 26), "SIAP MENETAS!", font=font(13, bold=True), fill=GREEN)
+            else:
+                draw.text((tx, gy0 + 26), fmt_duration(egg.get("remainingSeconds", 0)), font=font(15, bold=True), fill=BLUE)
+            if egg.get("weight"):
+                draw.text((tx, gy0 + 50), fmt_weight(egg["weight"]), font=font(11), fill=DIM)
+        y += rows_needed * (egg_card_h + 8) + 16
 
     # ---- Detail checklist -- item dari user + stat auto-detect (Speed,
     # Income Aktif, Level Kandang, Level Treadmill), tetep juga dipajang di

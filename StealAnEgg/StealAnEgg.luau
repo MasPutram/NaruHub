@@ -1421,8 +1421,18 @@ do
 
 	local function autoUnequipAll()
 		local activeRecords = AssetCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+		local uids = {}
 		for uid in pairs(activeRecords) do
+			table.insert(uids, uid)
+		end
+		-- Firing semua RequestUnequipAsset dalam 1 frame bikin karakter
+		-- gonta-ganti pegang pet/tongkat (tabrakan animasi equip). Kasih
+		-- jeda kecil antar unequip biar rapi.
+		for i, uid in ipairs(uids) do
 			AssetCmds.RequestUnequipAsset(uid)
+			if i < #uids then
+				task.wait(0.2)
+			end
 		end
 	end
 
@@ -1434,7 +1444,7 @@ do
 			autoEquipRunning = enabled
 			if enabled then
 				task.spawn(function()
-					while autoEquipRunning and not Fluent.Unloaded do
+					while autoEquipRunning and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 						pcall(autoEquipEmptySlots)
 						task.wait(5)
 					end
@@ -1451,7 +1461,7 @@ do
 			autoUnequipRunning = enabled
 			if enabled then
 				task.spawn(function()
-					while autoUnequipRunning and not Fluent.Unloaded do
+					while autoUnequipRunning and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 						pcall(autoUnequipAll)
 						task.wait(2)
 					end
@@ -1574,7 +1584,7 @@ do
 			autoRunning = enabled
 			if enabled then
 				task.spawn(function()
-					while autoRunning and not Fluent.Unloaded do
+					while autoRunning and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 						pcall(refreshEggs)
 						task.wait(3)
 					end
@@ -1603,6 +1613,8 @@ do
 	local AssetItemUtil = require(ReplicatedStorage.Library.Util.AssetItemUtil)
 	local AssetCmds = require(ReplicatedStorage.Library.Client.AssetCmds)
 	local MutationsModule = require(ReplicatedStorage.Library.Modules.Mutations)
+	local EggCmds = require(ReplicatedStorage.Library.Client.EggCmds)
+	local EggItemUtil = require(ReplicatedStorage.Library.Util.EggItemUtil)
 	local HttpService = game:GetService("HttpService")
 
 	local POSTER_SERVER_URL = "http://127.0.0.1:8765/generate"
@@ -1697,6 +1709,54 @@ do
 		return pets
 	end
 
+	-- Telur yang lagi tumbuh di kandang -- spesies & mutasi udah di-roll
+	-- server sejak ditaruh (EggItemUtil sama persis kayak yang dipakai di
+	-- "Monitor Telur & Kandang"), cuma disembunyikan visualnya sampai hatch.
+	local function collectGrowingEggs()
+		pcall(function()
+			EggCmds.RequestRuntimeSnapshot()
+		end)
+		local records = EggCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+		local now = Workspace:GetServerTimeNow()
+		local eggs = {}
+		for uid, rec in pairs(records) do
+			if rec.Placement ~= nil then
+				local speed = rec.GrowthSpeedMultiplier or 1
+				local nightCredit = 0
+				pcall(function()
+					nightCredit = EggItemUtil.GetCurrentNightGrowthCreditSeconds(rec, now, speed)
+				end)
+				local remaining, ready = 0, false
+				pcall(function()
+					remaining = EggItemUtil.GetRemainingGrowthSeconds(rec, now, speed, nightCredit, LocalPlayer)
+				end)
+				pcall(function()
+					ready = EggItemUtil.IsGrowthReady(rec, now, speed, nightCredit, LocalPlayer)
+				end)
+				local weight = 0
+				pcall(function()
+					weight = AssetItemUtil.GetVisualWeightKg({
+						Category = rec.AssetCategory,
+						Scale = rec.AssetScale or 1,
+						Mutations = rec.Mutations or {},
+					})
+				end)
+				table.insert(eggs, {
+					uid = uid,
+					category = rec.AssetCategory,
+					mutations = rec.Mutations or {},
+					remainingSeconds = math.max(0, math.floor(remaining)),
+					ready = ready,
+					weight = weight,
+				})
+			end
+		end
+		table.sort(eggs, function(a, b)
+			return a.remainingSeconds < b.remainingSeconds
+		end)
+		return eggs
+	end
+
 	local SaveModule = require(ReplicatedStorage.Library.Client.Save)
 
 	local function collectAccountStats()
@@ -1787,6 +1847,7 @@ do
 
 		local allPets = collectBackpackPets()
 		local activePets = collectActivePets()
+		local growingEggs = collectGrowingEggs()
 		local activeLimit = 0
 		pcall(function()
 			activeLimit = AssetCmds.RequestEquipLimit()
@@ -1802,6 +1863,7 @@ do
 			allPets = allPets,
 			activePets = activePets,
 			activeLimit = activeLimit,
+			growingEggs = growingEggs,
 			runSpeed = runSpeed,
 			totalMoneyPerSecond = moneyPerSecond,
 			kandangLevel = kandangLevel,
