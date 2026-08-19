@@ -166,6 +166,12 @@ def render_poster(data: dict) -> Image.Image:
     active_limit = data.get("activeLimit", len(active_pets))
     run_speed = data.get("runSpeed")
     total_money_per_second = data.get("totalMoneyPerSecond")
+    # Total $/s murni dari pet aktif -- pakai nilai eksplisit dari Lua kalau
+    # ada (udah dihitung otomatis dari sum tiap pet aktif), fallback ke
+    # ngejumlahin activePets sendiri kalau field-nya ngga dikirim.
+    active_total_rate = data.get("activeTotalRate")
+    if active_total_rate is None:
+        active_total_rate = sum(p.get("rate", 0) for p in active_pets)
 
     all_pets_sorted = sorted(all_pets, key=lambda p: p.get("rate", 0), reverse=True)
     active_pets_sorted = sorted(active_pets, key=lambda p: p.get("rate", 0), reverse=True)
@@ -223,21 +229,25 @@ def render_poster(data: dict) -> Image.Image:
         rounded_card(draw, (left_x0, by, left_x0 + bw, by + bh), radius=20, fill=(226, 232, 240), outline=BLUE, width=2)
         draw_text_centered(draw, (left_x0 + bw / 2, by + bh / 2), badge, font(18, bold=True), BLUE)
 
-    # ---- Auto-detected stats: run speed + account income/s ----
-    if run_speed is not None or total_money_per_second is not None:
+    # ---- Auto-detected stats: run speed + account income/s + total pet aktif ----
+    if run_speed is not None or total_money_per_second is not None or active_total_rate:
         stat_y = 108
-        stat_x = left_x0 + 210
+        stat_x0 = left_x0 + 210
         stats = []
         if run_speed is not None:
             stats.append(("SPEED", f"{run_speed:,.0f}" if isinstance(run_speed, (int, float)) else str(run_speed)))
         if total_money_per_second is not None:
             stats.append(("INCOME", fmt_money(total_money_per_second)))
+        if active_total_rate:
+            stats.append(("TOTAL AKTIF", fmt_money(active_total_rate)))
+        gap = 10
+        sw = min(190, (left_x1 - stat_x0 - gap * (len(stats) - 1)) / max(len(stats), 1))
+        stat_x = stat_x0
         for label, val in stats:
-            sw = 190
             rounded_card(draw, (stat_x, stat_y, stat_x + sw, stat_y + 44), radius=20, fill=(236, 253, 245), outline=GREEN, width=2)
-            draw.text((stat_x + 16, stat_y + 8), label, font=font(10, bold=True), fill=DIM)
-            draw.text((stat_x + 16, stat_y + 20), val, font=font(16, bold=True), fill=GREEN)
-            stat_x += sw + 10
+            draw.text((stat_x + 14, stat_y + 8), label, font=font(10, bold=True), fill=DIM)
+            draw.text((stat_x + 14, stat_y + 20), val, font=font(15, bold=True), fill=GREEN)
+            stat_x += sw + gap
 
     y = 178
 

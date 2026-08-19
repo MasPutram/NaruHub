@@ -1334,6 +1334,139 @@ do
 	end
 
 	section:AddButton({ Title = "Scan Tas Sekarang", Callback = scanBag })
+
+	-- Auto Equip & Auto Un-equip -- 2 toggle independen (bukan 1 "equip
+	-- terbaik" yang otomatis nge-swap). Equip cuma ngisi slot aktif yang
+	-- masih kosong; Un-equip cuma ngelepas pet aktif yang $/s-nya paling
+	-- kecil. Nyalain keduanya bareng efeknya jadi "upgrade otomatis": Un-equip
+	-- ngosongin slot punya pet lemah, Equip langsung isi lagi pakai yang lebih
+	-- bagus dari tas di tick berikutnya.
+	local AssetGenerationUtil = require(ReplicatedStorage.Library.Util.AssetGenerationUtil)
+	local AssetCmds = require(ReplicatedStorage.Library.Client.AssetCmds)
+	local MutationsModule = require(ReplicatedStorage.Library.Modules.Mutations)
+
+	local function mutationNamesFromString(str)
+		if not str or str == "" then
+			return {}
+		end
+		local ok, arr = pcall(function()
+			return MutationsModule.ExtractMutationsFromString(str)
+		end)
+		if not ok or type(arr) ~= "table" then
+			return {}
+		end
+		local names = {}
+		for _, m in ipairs(arr) do
+			if type(m) == "table" and m.Name then
+				table.insert(names, m.Name)
+			end
+		end
+		return names
+	end
+
+	local function autoEquipEmptySlots()
+		local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+		if not backpack then
+			return
+		end
+		local limit = 0
+		pcall(function()
+			limit = AssetCmds.RequestEquipLimit()
+		end)
+		if limit <= 0 then
+			return
+		end
+
+		local activeRecords = AssetCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+		local activeCount = 0
+		for _ in pairs(activeRecords) do
+			activeCount += 1
+		end
+		if activeCount >= limit then
+			return
+		end
+
+		local candidates = {}
+		for _, tool in ipairs(backpack:GetChildren()) do
+			if tool:GetAttribute("ItemType") == "Asset" then
+				local uid = tool:GetAttribute("UID")
+				if uid and not activeRecords[uid] then
+					local category = tool:GetAttribute("Category")
+					local scale = tool:GetAttribute("Scale") or 1
+					local mutations = mutationNamesFromString(tool:GetAttribute("Mutations"))
+					local rate = 0
+					pcall(function()
+						rate = AssetGenerationUtil.GetBaseRateMutationOnly({
+							Category = category,
+							Scale = scale,
+							Mutations = mutations,
+						})
+					end)
+					table.insert(candidates, { uid = uid, rate = rate })
+				end
+			end
+		end
+		table.sort(candidates, function(a, b)
+			return a.rate > b.rate
+		end)
+
+		local ci = 1
+		while activeCount < limit and ci <= #candidates do
+			if AssetCmds.RequestEquipAsset(candidates[ci].uid) then
+				activeCount += 1
+			end
+			ci += 1
+		end
+	end
+
+	local function autoUnequipWeakest()
+		local activeRecords = AssetCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+		local weakestUid, weakestRate = nil, math.huge
+		for uid, rec in pairs(activeRecords) do
+			local rate = rec.MoneyPerSecond or 0
+			if rate < weakestRate then
+				weakestRate = rate
+				weakestUid = uid
+			end
+		end
+		if weakestUid then
+			AssetCmds.RequestUnequipAsset(weakestUid)
+		end
+	end
+
+	local autoEquipRunning = false
+	section:AddToggle("StealAnEgg_AutoEquip", {
+		Title = "Auto Equip (isi slot kosong, tiap 15 detik)",
+		Default = false,
+		Callback = function(enabled)
+			autoEquipRunning = enabled
+			if enabled then
+				task.spawn(function()
+					while autoEquipRunning and not Fluent.Unloaded do
+						pcall(autoEquipEmptySlots)
+						task.wait(15)
+					end
+				end)
+			end
+		end,
+	})
+
+	local autoUnequipRunning = false
+	section:AddToggle("StealAnEgg_AutoUnequip", {
+		Title = "Auto Un-equip (lepas pet aktif paling lemah, tiap 15 detik)",
+		Default = false,
+		Callback = function(enabled)
+			autoUnequipRunning = enabled
+			if enabled then
+				task.spawn(function()
+					while autoUnequipRunning and not Fluent.Unloaded do
+						pcall(autoUnequipWeakest)
+						task.wait(15)
+					end
+				end)
+			end
+		end,
+	})
 end
 
 ------------------------------------------------------------
@@ -1547,97 +1680,7 @@ do
 		return runSpeed, moneyPerSecond
 	end
 
-	-- Equip pet ber-$/s tertinggi dari tas ke slot aktif yang masih kosong, dan
-	-- tukar pet aktif paling lemah kalau ada kandidat di tas yang lebih bagus.
-	local function autoEquipBestPets()
-		local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-		if not backpack then
-			return
-		end
-		local limit = 0
-		pcall(function()
-			limit = AssetCmds.RequestEquipLimit()
-		end)
-		if limit <= 0 then
-			return
-		end
-
-		local activeRecords = AssetCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
-		local activeList = {}
-		for uid, rec in pairs(activeRecords) do
-			table.insert(activeList, { uid = uid, rate = rec.MoneyPerSecond or 0 })
-		end
-		table.sort(activeList, function(a, b)
-			return a.rate < b.rate
-		end)
-
-		local candidates = {}
-		for _, tool in ipairs(backpack:GetChildren()) do
-			if tool:GetAttribute("ItemType") == "Asset" then
-				local uid = tool:GetAttribute("UID")
-				if uid and not activeRecords[uid] then
-					local category = tool:GetAttribute("Category")
-					local scale = tool:GetAttribute("Scale") or 1
-					local mutations = mutationNamesFromString(tool:GetAttribute("Mutations"))
-					local rate = 0
-					pcall(function()
-						rate = AssetGenerationUtil.GetBaseRateMutationOnly({
-							Category = category,
-							Scale = scale,
-							Mutations = mutations,
-						})
-					end)
-					table.insert(candidates, { uid = uid, rate = rate })
-				end
-			end
-		end
-		table.sort(candidates, function(a, b)
-			return a.rate > b.rate
-		end)
-
-		local activeCount = #activeList
-		local ci = 1
-		while activeCount < limit and ci <= #candidates do
-			local ok = AssetCmds.RequestEquipAsset(candidates[ci].uid)
-			if ok then
-				activeCount += 1
-			end
-			ci += 1
-		end
-
-		local ai = 1
-		while ci <= #candidates and ai <= #activeList do
-			local weakest = activeList[ai]
-			local candidate = candidates[ci]
-			if candidate.rate > weakest.rate then
-				AssetCmds.RequestUnequipAsset(weakest.uid)
-				AssetCmds.RequestEquipAsset(candidate.uid)
-				ai += 1
-				ci += 1
-			else
-				break
-			end
-		end
-	end
-
 	local section = Tab:AddSection("Jual Akun (Auto Poster)")
-
-	local autoEquipRunning = false
-	section:AddToggle("StealAnEgg_AutoEquipBest", {
-		Title = "Auto Equip Best Pet (tiap 15 detik)",
-		Default = false,
-		Callback = function(enabled)
-			autoEquipRunning = enabled
-			if enabled then
-				task.spawn(function()
-					while autoEquipRunning and not Fluent.Unloaded do
-						pcall(autoEquipBestPets)
-						task.wait(15)
-					end
-				end)
-			end
-		end,
-	})
 
 	local posterServerInput = section:AddInput("StealAnEgg_PosterServerUrl", {
 		Title = "Poster Server URL",
@@ -1705,6 +1748,14 @@ do
 		end)
 		local runSpeed, moneyPerSecond = collectAccountStats()
 
+		-- Total $/s murni dari pet yang lagi aktif (bukan income akun secara
+		-- keseluruhan kayak totalMoneyPerSecond) -- dihitung otomatis dari
+		-- jumlahin rate tiap pet aktif, bukan diketik manual.
+		local activeTotalRate = 0
+		for _, pet in ipairs(activePets) do
+			activeTotalRate += pet.rate or 0
+		end
+
 		local payload = {
 			title = titleInput.Value ~= "" and titleInput.Value or "Jual Akun GACOR",
 			badge = badgeInput.Value,
@@ -1714,6 +1765,7 @@ do
 			allPets = allPets,
 			activePets = activePets,
 			activeLimit = activeLimit,
+			activeTotalRate = activeTotalRate,
 			runSpeed = runSpeed,
 			totalMoneyPerSecond = moneyPerSecond,
 			ownerFacebook = ownerInput.Value,
