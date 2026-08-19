@@ -1741,6 +1741,14 @@ do
 						Mutations = rec.Mutations or {},
 					})
 				end)
+				local rate = 0
+				pcall(function()
+					rate = AssetGenerationUtil.GetBaseRateMutationOnly({
+						Category = rec.AssetCategory,
+						Scale = rec.AssetScale or 1,
+						Mutations = rec.Mutations or {},
+					})
+				end)
 				table.insert(eggs, {
 					uid = uid,
 					category = rec.AssetCategory,
@@ -1748,6 +1756,7 @@ do
 					remainingSeconds = math.max(0, math.floor(remaining)),
 					ready = ready,
 					weight = weight,
+					rate = rate,
 				})
 			end
 		end

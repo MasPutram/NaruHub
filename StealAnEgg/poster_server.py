@@ -386,13 +386,15 @@ def render_poster(data: dict) -> Image.Image:
                 name = f"{' + '.join(m.upper() for m in muts)} {name}"
             if len(name) > 22:
                 name = name[:21] + "…"
-            draw.text((tx, gy0 + 6), name, font=font(12, bold=True), fill=NAVY)
+            draw.text((tx, gy0 + 4), name, font=font(12, bold=True), fill=NAVY)
             if egg.get("ready"):
-                draw.text((tx, gy0 + 26), "SIAP MENETAS!", font=font(13, bold=True), fill=GREEN)
+                draw.text((tx, gy0 + 22), "SIAP MENETAS!", font=font(13, bold=True), fill=GREEN)
             else:
-                draw.text((tx, gy0 + 26), fmt_duration(egg.get("remainingSeconds", 0)), font=font(15, bold=True), fill=BLUE)
+                draw.text((tx, gy0 + 22), fmt_duration(egg.get("remainingSeconds", 0)), font=font(14, bold=True), fill=BLUE)
+            if egg.get("rate"):
+                draw.text((tx, gy0 + 42), fmt_money(egg["rate"]), font=font(13, bold=True), fill=GREEN)
             if egg.get("weight"):
-                draw.text((tx, gy0 + 50), fmt_weight(egg["weight"]), font=font(11), fill=DIM)
+                draw.text((tx, gy0 + 62), fmt_weight(egg["weight"]), font=font(11), fill=DIM)
         y += rows_needed * (egg_card_h + 8) + 16
 
     # ---- Detail checklist -- item dari user + stat auto-detect (Speed,
