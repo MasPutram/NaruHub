@@ -1445,7 +1445,7 @@ do
 
 	local autoUnequipRunning = false
 	section:AddToggle("StealAnEgg_AutoUnequip", {
-		Title = "Auto Un-equip All (lepas semua pet aktif, tiap 5 detik)",
+		Title = "Auto Un-equip All (lepas semua pet aktif, tiap 2 detik)",
 		Default = false,
 		Callback = function(enabled)
 			autoUnequipRunning = enabled
@@ -1453,7 +1453,7 @@ do
 				task.spawn(function()
 					while autoUnequipRunning and not Fluent.Unloaded do
 						pcall(autoUnequipAll)
-						task.wait(5)
+						task.wait(2)
 					end
 				end)
 			end
