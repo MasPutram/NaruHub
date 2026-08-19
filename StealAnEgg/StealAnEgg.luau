@@ -1428,7 +1428,7 @@ do
 
 	local autoEquipRunning = false
 	section:AddToggle("StealAnEgg_AutoEquip", {
-		Title = "Auto Equip (isi slot kosong, tiap 15 detik)",
+		Title = "Auto Equip (isi slot kosong, tiap 5 detik)",
 		Default = false,
 		Callback = function(enabled)
 			autoEquipRunning = enabled
@@ -1436,7 +1436,7 @@ do
 				task.spawn(function()
 					while autoEquipRunning and not Fluent.Unloaded do
 						pcall(autoEquipEmptySlots)
-						task.wait(15)
+						task.wait(5)
 					end
 				end)
 			end
@@ -1445,7 +1445,7 @@ do
 
 	local autoUnequipRunning = false
 	section:AddToggle("StealAnEgg_AutoUnequip", {
-		Title = "Auto Un-equip All (lepas semua pet aktif, tiap 15 detik)",
+		Title = "Auto Un-equip All (lepas semua pet aktif, tiap 5 detik)",
 		Default = false,
 		Callback = function(enabled)
 			autoUnequipRunning = enabled
@@ -1453,7 +1453,7 @@ do
 				task.spawn(function()
 					while autoUnequipRunning and not Fluent.Unloaded do
 						pcall(autoUnequipAll)
-						task.wait(15)
+						task.wait(5)
 					end
 				end)
 			end
