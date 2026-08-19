@@ -166,12 +166,8 @@ def render_poster(data: dict) -> Image.Image:
     active_limit = data.get("activeLimit", len(active_pets))
     run_speed = data.get("runSpeed")
     total_money_per_second = data.get("totalMoneyPerSecond")
-    # Total $/s murni dari pet aktif -- pakai nilai eksplisit dari Lua kalau
-    # ada (udah dihitung otomatis dari sum tiap pet aktif), fallback ke
-    # ngejumlahin activePets sendiri kalau field-nya ngga dikirim.
-    active_total_rate = data.get("activeTotalRate")
-    if active_total_rate is None:
-        active_total_rate = sum(p.get("rate", 0) for p in active_pets)
+    kandang_level = data.get("kandangLevel")
+    treadmill_level = data.get("treadmillLevel")
 
     all_pets_sorted = sorted(all_pets, key=lambda p: p.get("rate", 0), reverse=True)
     active_pets_sorted = sorted(active_pets, key=lambda p: p.get("rate", 0), reverse=True)
@@ -229,8 +225,9 @@ def render_poster(data: dict) -> Image.Image:
         rounded_card(draw, (left_x0, by, left_x0 + bw, by + bh), radius=20, fill=(226, 232, 240), outline=BLUE, width=2)
         draw_text_centered(draw, (left_x0 + bw / 2, by + bh / 2), badge, font(18, bold=True), BLUE)
 
-    # ---- Auto-detected stats: run speed + account income/s + total pet aktif ----
-    if run_speed is not None or total_money_per_second is not None or active_total_rate:
+    # ---- Auto-detected stats: run speed + account income/s (row 1) ----
+    y = 178
+    if run_speed is not None or total_money_per_second is not None:
         stat_y = 108
         stat_x0 = left_x0 + 210
         stats = []
@@ -238,8 +235,6 @@ def render_poster(data: dict) -> Image.Image:
             stats.append(("SPEED", f"{run_speed:,.0f}" if isinstance(run_speed, (int, float)) else str(run_speed)))
         if total_money_per_second is not None:
             stats.append(("INCOME", fmt_money(total_money_per_second)))
-        if active_total_rate:
-            stats.append(("TOTAL AKTIF", fmt_money(active_total_rate)))
         gap = 10
         sw = min(190, (left_x1 - stat_x0 - gap * (len(stats) - 1)) / max(len(stats), 1))
         stat_x = stat_x0
@@ -249,7 +244,21 @@ def render_poster(data: dict) -> Image.Image:
             draw.text((stat_x + 14, stat_y + 20), val, font=font(15, bold=True), fill=GREEN)
             stat_x += sw + gap
 
-    y = 178
+    # ---- Level Kandang / Level Treadmill (row 2, compact) ----
+    if kandang_level is not None or treadmill_level is not None:
+        lvl_y = 156
+        lvl_x = left_x0 + 210
+        lvl_stats = []
+        if kandang_level is not None:
+            lvl_stats.append(("KANDANG", f"Lv. {kandang_level}"))
+        if treadmill_level is not None:
+            lvl_stats.append(("TREADMILL", f"Lv. {treadmill_level}"))
+        for label, val in lvl_stats:
+            lw = 118
+            rounded_card(draw, (lvl_x, lvl_y, lvl_x + lw, lvl_y + 32), radius=16, fill=(238, 242, 255), outline=BLUE, width=2)
+            draw_text_centered(draw, (lvl_x + lw / 2, lvl_y + 16), f"{label} {val}", font(11, bold=True), BLUE)
+            lvl_x += lw + 8
+        y = 214
 
     # ---- Top 3 pick cards ----
     card_w = (left_x1 - left_x0 - 2 * 14) / 3
@@ -356,17 +365,15 @@ def render_poster(data: dict) -> Image.Image:
 
     # ================= RIGHT COLUMN =================
     ry = 40
-    header_h = 76
+    header_h = 48
     rounded_card(draw, (right_x0, ry, right_x1, ry + header_h), radius=16, fill=CARD_BG)
     draw.ellipse([right_x0 + 16, ry + 15, right_x0 + 34, ry + 33], fill=NAVY)
     draw.text((right_x0 + 46, ry + 14), f"{len(active_pets_sorted)}/{active_limit} ACTIVE", font=font(17, bold=True), fill=NAVY)
     equip_best_w, equip_best_h = 140, 32
     ebx0 = right_x1 - equip_best_w - 16
-    eby0 = ry + 12
+    eby0 = ry + 8
     rounded_card(draw, (ebx0, eby0, ebx0 + equip_best_w, eby0 + equip_best_h), radius=8, fill=GREEN, outline=None)
     draw_text_centered(draw, (ebx0 + equip_best_w / 2, eby0 + equip_best_h / 2), "EQUIP BEST", font(13, bold=True), (255, 255, 255))
-    total_active_rate = sum(p.get("rate", 0) for p in active_pets_sorted)
-    draw.text((right_x0 + 16, ry + 46), f"Total Aktif: {fmt_money(total_active_rate)}", font=font(14, bold=True), fill=GREEN)
     ry += header_h + 12
 
     list_h = min(len(right_panel_pets), 8) * 84 + 20

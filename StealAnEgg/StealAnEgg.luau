@@ -1419,18 +1419,10 @@ do
 		end
 	end
 
-	local function autoUnequipWeakest()
+	local function autoUnequipAll()
 		local activeRecords = AssetCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
-		local weakestUid, weakestRate = nil, math.huge
-		for uid, rec in pairs(activeRecords) do
-			local rate = rec.MoneyPerSecond or 0
-			if rate < weakestRate then
-				weakestRate = rate
-				weakestUid = uid
-			end
-		end
-		if weakestUid then
-			AssetCmds.RequestUnequipAsset(weakestUid)
+		for uid in pairs(activeRecords) do
+			AssetCmds.RequestUnequipAsset(uid)
 		end
 	end
 
@@ -1453,20 +1445,61 @@ do
 
 	local autoUnequipRunning = false
 	section:AddToggle("StealAnEgg_AutoUnequip", {
-		Title = "Auto Un-equip (lepas pet aktif paling lemah, tiap 15 detik)",
+		Title = "Auto Un-equip All (lepas semua pet aktif, tiap 15 detik)",
 		Default = false,
 		Callback = function(enabled)
 			autoUnequipRunning = enabled
 			if enabled then
 				task.spawn(function()
 					while autoUnequipRunning and not Fluent.Unloaded do
-						pcall(autoUnequipWeakest)
+						pcall(autoUnequipAll)
 						task.wait(15)
 					end
 				end)
 			end
 		end,
 	})
+
+	-- Total $/s dari pet aktif -- ditampilin langsung di GUI (bukan cuma di
+	-- poster), biar kelihatan realtime abis di-equip.
+	local function formatMoney(v)
+		v = v or 0
+		local abs = math.abs(v)
+		if abs >= 1e12 then
+			return string.format("$%.1fT/s", v / 1e12)
+		elseif abs >= 1e9 then
+			return string.format("$%.1fB/s", v / 1e9)
+		elseif abs >= 1e6 then
+			return string.format("$%.1fM/s", v / 1e6)
+		elseif abs >= 1e3 then
+			return string.format("$%.1fK/s", v / 1e3)
+		end
+		return string.format("$%d/s", v)
+	end
+
+	local incomePara = section:AddParagraph({
+		Title = "Total Income Pet Aktif",
+		Content = "Klik \"Cek Income Aktif\" atau nyalain Auto Equip/Un-equip buat mulai.",
+	})
+
+	local function refreshActiveIncome()
+		local activeRecords = AssetCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+		local total, count = 0, 0
+		for _, rec in pairs(activeRecords) do
+			total += rec.MoneyPerSecond or 0
+			count += 1
+		end
+		local limit = 0
+		pcall(function()
+			limit = AssetCmds.RequestEquipLimit()
+		end)
+		incomePara:SetContent(string.format(
+			"%d/%d Active -- Total: %s",
+			count, limit, formatMoney(total)
+		))
+	end
+
+	section:AddButton({ Title = "Cek Income Pet Aktif Sekarang", Callback = refreshActiveIncome })
 end
 
 ------------------------------------------------------------
@@ -1664,6 +1697,8 @@ do
 		return pets
 	end
 
+	local SaveModule = require(ReplicatedStorage.Library.Client.Save)
+
 	local function collectAccountStats()
 		local runSpeed, moneyPerSecond
 		local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
@@ -1677,7 +1712,17 @@ do
 				moneyPerSecond = moneyValue.Value
 			end
 		end
-		return runSpeed, moneyPerSecond
+
+		local kandangLevel, treadmillLevel
+		pcall(function()
+			local stats = SaveModule.Get(LocalPlayer)
+			if stats then
+				kandangLevel = stats.BaseUpgradeLevel
+				treadmillLevel = stats.TreadmillUpgradeLevel
+			end
+		end)
+
+		return runSpeed, moneyPerSecond, kandangLevel, treadmillLevel
 	end
 
 	local section = Tab:AddSection("Jual Akun (Auto Poster)")
@@ -1746,15 +1791,7 @@ do
 		pcall(function()
 			activeLimit = AssetCmds.RequestEquipLimit()
 		end)
-		local runSpeed, moneyPerSecond = collectAccountStats()
-
-		-- Total $/s murni dari pet yang lagi aktif (bukan income akun secara
-		-- keseluruhan kayak totalMoneyPerSecond) -- dihitung otomatis dari
-		-- jumlahin rate tiap pet aktif, bukan diketik manual.
-		local activeTotalRate = 0
-		for _, pet in ipairs(activePets) do
-			activeTotalRate += pet.rate or 0
-		end
+		local runSpeed, moneyPerSecond, kandangLevel, treadmillLevel = collectAccountStats()
 
 		local payload = {
 			title = titleInput.Value ~= "" and titleInput.Value or "Jual Akun GACOR",
@@ -1765,9 +1802,10 @@ do
 			allPets = allPets,
 			activePets = activePets,
 			activeLimit = activeLimit,
-			activeTotalRate = activeTotalRate,
 			runSpeed = runSpeed,
 			totalMoneyPerSecond = moneyPerSecond,
+			kandangLevel = kandangLevel,
+			treadmillLevel = treadmillLevel,
 			ownerFacebook = ownerInput.Value,
 			sourceAccount = LocalPlayer.Name,
 		}
