@@ -34,7 +34,7 @@ MARGIN = 72
 # + ReadPixelsBuffer -- metode sama kayak yang dipakai buat 84 icon pet di
 # StealAnEgg/assets/Normal). Dipakai buat header cluster + icon per baris paket. ----
 EGG_DIR = HERE / "assets" / "Eggs"
-EGG_NAMES = ["Mosasaurus", "Bronto", "Dragon", "Cerberus", "Kraken", "Tralaledon"]
+EGG_NAMES = sorted(p.stem[len("Egg_"):] for p in EGG_DIR.glob("Egg_*.png"))
 _egg_cache = {}
 
 
@@ -138,10 +138,11 @@ def render_poster(cfg: dict) -> Image.Image:
 
     # ---- Header egg cluster (kanan atas) -- 3 telur asli, ditumpuk & diputar
     # dikit biar kerasa "ditaruh" bukan di-generate. ----
+    header_eggs = [n for n in ["Kraken", "Eternal Lunar Dragon", "Cerberus"] if n in EGG_NAMES] or EGG_NAMES[:3]
     cluster_specs = [
-        (EGG_NAMES[0], 118, -14, x1 - 250, 30),
-        (EGG_NAMES[1], 96, 10, x1 - 150, 8),
-        (EGG_NAMES[2], 104, -6, x1 - 110, 90),
+        (header_eggs[0], 118, -14, x1 - 250, 30),
+        (header_eggs[1], 96, 10, x1 - 150, 8),
+        (header_eggs[2], 104, -6, x1 - 110, 90),
     ]
     for name, size, angle, cx, cy in cluster_specs:
         egg = load_egg(name, size)
