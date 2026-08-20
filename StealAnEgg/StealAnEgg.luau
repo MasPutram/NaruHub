@@ -1977,9 +1977,15 @@ do
 		Finished = true,
 	})
 	local priceInput = section:AddInput("StealAnEgg_PosterPrice", {
-		Title = "Harga (opsional)",
+		Title = "Harga (opsional, kosongin buat auto-hitung dari income)",
 		Placeholder = "Rp 150.000",
 		Default = "",
+		Finished = true,
+	})
+	local hargaPerBInput = section:AddInput("StealAnEgg_HargaPerB", {
+		Title = "Harga per 1B/s Income Aktif (Rp, buat auto-hitung Price Acc)",
+		Placeholder = "cth: 5000",
+		Default = "5000",
 		Finished = true,
 	})
 	local ownerInput = section:AddInput("StealAnEgg_PosterOwner", {
@@ -2004,6 +2010,31 @@ do
 		return out
 	end
 
+	-- "Rp 1.234.567" -- titik tiap 3 digit, gaya Rupiah.
+	local function formatRupiah(n)
+		n = math.floor(n + 0.5)
+		local s = tostring(math.abs(n))
+		local reversed = s:reverse():gsub("(%d%d%d)", "%1."):reverse()
+		reversed = reversed:gsub("^%.", "")
+		return "Rp " .. (n < 0 and "-" or "") .. reversed
+	end
+
+	-- Price Acc auto-hitung dari total income pet aktif: tiap 1B/s income
+	-- dihargai sebesar StealAnEgg_HargaPerB (default Rp 5.000). Field harga
+	-- manual (priceInput) tetap menang kalau diisi -- ini cuma fallback.
+	local function computeAutoPrice(activePets)
+		local totalRate = 0
+		for _, p in ipairs(activePets) do
+			totalRate += (p.rate or 0)
+		end
+		if totalRate <= 0 then
+			return ""
+		end
+		local ratePerB = tonumber(hargaPerBInput.Value) or 5000
+		local incomeB = totalRate / 1e9
+		return formatRupiah(incomeB * ratePerB)
+	end
+
 	local function generateAndSend()
 		statusPara:SetContent("Mengumpulkan data akun...")
 
@@ -2016,12 +2047,13 @@ do
 			activeLimit = AssetCmds.RequestEquipLimit()
 		end)
 		local runSpeed, moneyPerSecond, kandangLevel, treadmillLevel = collectAccountStats()
+		local autoPrice = computeAutoPrice(activePets)
 
 		local payload = {
 			title = titleInput.Value ~= "" and titleInput.Value or "Jual Akun GACOR",
 			badge = badgeInput.Value,
 			checklist = splitComma(checklistInput.Value or ""),
-			price = priceInput.Value,
+			price = priceInput.Value ~= "" and priceInput.Value or autoPrice,
 			webhookUrl = webhookInput.Value,
 			allPets = allPets,
 			activePets = activePets,
