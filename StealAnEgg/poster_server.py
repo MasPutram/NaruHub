@@ -544,9 +544,13 @@ def render_poster(data: dict) -> Image.Image:
 
     if inactive_unlisted:
         inv_h = 80
+        inactive_total_rate = sum(p.get("rate", 0) for p in inactive_unlisted)
         rounded_card(draw, (right_x0, ry, right_x1, ry + inv_h), fill=CARD_BG)
         draw.text((right_x0 + 20, ry + 14), "PET INVENTORY (TIDAK AKTIF)", font=font(14, bold=True), fill=DIM)
         draw.text((right_x0 + 20, ry + 34), f"+{len(inactive_unlisted)}", font=font(30, bold=True), fill=NAVY)
+        if inactive_total_rate:
+            count_w = draw.textlength(f"+{len(inactive_unlisted)}", font=font(30, bold=True))
+            draw.text((right_x0 + 30 + count_w, ry + 46), f"total {fmt_money(inactive_total_rate)}", font=font(13, bold=True), fill=GREEN)
         ry += inv_h + 24
 
     tv_h = 220
