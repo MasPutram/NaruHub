@@ -1911,7 +1911,7 @@ do
 			if res.StatusCode == 200 then
 				statusPara:SetContent("Berhasil! Poster sudah dikirim ke Discord (kalau webhook diisi) dan disimpan di StealAnEgg/last_poster.png.")
 			else
-				statusPara:SetContent(("Gagal (HTTP %*): %*"):format(res.StatusCode, res.Body or ""))
+				statusPara:SetContent(("Gagal (HTTP %s): %s"):format(tostring(res.StatusCode), tostring(res.Body or "")))
 			end
 		end)
 		-- 60 detik, bukan 10 -- hosting gratis (Render dst) suka "tidur" kalau
