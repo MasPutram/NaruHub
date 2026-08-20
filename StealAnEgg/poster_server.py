@@ -184,11 +184,16 @@ def render_poster(data: dict) -> Image.Image:
 
     all_pets_sorted = sorted(all_pets, key=lambda p: p.get("rate", 0), reverse=True)
     active_pets_sorted = sorted(active_pets, key=lambda p: p.get("rate", 0), reverse=True)
+    growing_eggs_sorted = sorted(growing_eggs, key=lambda p: p.get("rate", 0), reverse=True)
+    backpack_eggs_sorted = sorted(backpack_eggs, key=lambda p: p.get("rate", 0), reverse=True)
+    egg_keys = {pet_key(e) for e in growing_eggs_sorted + backpack_eggs_sorted}
 
-    # Kandidat 3 Card Utama + Paling Gacor: pet yang lagi AKTIF diutamakan,
-    # baru jatuh balik ke isi tas kalau aktifnya kurang dari 3.
+    # Kandidat 3 Card Utama + Paling Gacor: pet AKTIF + isi tas + telur (baik
+    # yang lagi tumbuh maupun yang masih di tas) semua ikut bersaing -- kalau
+    # ada telur yang $/s prediksinya lebih gacor dari pet manapun, dia yang
+    # nongol di atas, bukan pet apa adanya.
     pool, seen = [], set()
-    for p in active_pets_sorted + all_pets_sorted:
+    for p in active_pets_sorted + all_pets_sorted + growing_eggs_sorted + backpack_eggs_sorted:
         k = pet_key(p)
         if k not in seen:
             seen.add(k)
@@ -225,6 +230,11 @@ def render_poster(data: dict) -> Image.Image:
             right_seen.add(k)
             right_panel_pets.append(p)
     right_panel_pets.sort(key=lambda p: p.get("rate", 0), reverse=True)
+
+    # Telur yang udah kepromosi ke 3 card utama / Paling Gacor ga usah
+    # dobel muncul lagi di section "sedang tumbuh" / "di tas" di bawah.
+    growing_eggs_remaining = [e for e in growing_eggs_sorted if pet_key(e) not in featured_keys]
+    backpack_eggs_remaining = [e for e in backpack_eggs_sorted if pet_key(e) not in featured_keys]
 
     left_x0, left_x1 = 32, 640
     right_x0, right_x1 = 656, W - 32
@@ -280,9 +290,13 @@ def render_poster(data: dict) -> Image.Image:
         cx0 = left_x0 + i * (card_w + 14)
         cx1 = cx0 + card_w
         rounded_card(draw, (cx0, y, cx1, y + card_h))
+        is_egg_pick = pet_key(pet) in egg_keys
+        if is_egg_pick:
+            rounded_card(draw, (cx0 + 10, y + 10, cx0 + 84, y + 32), radius=10, fill=(255, 244, 214), outline=GOLD, width=1)
+            draw_text_centered(draw, (cx0 + 47, y + 21), "TELUR", font(11, bold=True), GOLD)
         if pet.get("weight"):
-            draw_text_centered(draw, (cx0 + card_w / 2, y + 22), fmt_weight(pet["weight"]),
-                                font(15), DIM)
+            weight_x = cx0 + 94 + (card_w - 94) / 2 if is_egg_pick else cx0 + card_w / 2
+            draw_text_centered(draw, (weight_x, y + 22), fmt_weight(pet["weight"]), font(15), DIM)
         icon = find_icon(pet.get("category", ""), pet.get("mutations", []))
         paste_icon(canvas, icon, (int(cx0 + 14), int(y + 42), int(cx1 - 14), int(y + 42 + 130)))
         name = pet.get("name", pet.get("category", "?"))
@@ -322,6 +336,10 @@ def render_poster(data: dict) -> Image.Image:
         mut_label = " + ".join(m.upper() for m in muts) if muts else ""
         if mut_label:
             draw.text((left_x0 + 20, y + 30), mut_label, font=font(16, bold=True), fill=mutation_tag_color(muts[0] if muts else ""))
+        if pet_key(best) in egg_keys:
+            egg_badge_w = 78
+            rounded_card(draw, (left_x0 + ribbon_w + 16, y - 14, left_x0 + ribbon_w + 16 + egg_badge_w, y - 14 + ribbon_h), radius=10, fill=(255, 244, 214), outline=GOLD, width=1)
+            draw_text_centered(draw, (left_x0 + ribbon_w + 16 + egg_badge_w / 2, y - 14 + ribbon_h / 2), "TELUR", font(12, bold=True), GOLD)
         name_upper = best.get("name", best.get("category", "?")).upper()
         draw.text((left_x0 + 20, y + 56), name_upper, font=font(24, bold=True), fill=NAVY)
         draw.text((left_x0 + 20, y + feat_h - 60), fmt_money(best.get("rate", 0)), font=font(32, bold=True), fill=GREEN)
@@ -364,7 +382,7 @@ def render_poster(data: dict) -> Image.Image:
 
     # ---- Telur yang sedang tumbuh di kandang -- spesies/mutasi udah
     # ke-deteksi meski belum netas (sama kayak fitur "Prediksi Hatch"). ----
-    if growing_eggs:
+    if growing_eggs_remaining:
         rounded_card(draw, (left_x0, y, left_x1, y + 40), radius=20, fill=(226, 232, 240))
         draw_text_centered(draw, ((left_x0 + left_x1) / 2, y + 20), "TELUR YANG SEDANG TUMBUH", font(18, bold=True), NAVY)
         y += 52
@@ -372,7 +390,7 @@ def render_poster(data: dict) -> Image.Image:
         egg_cols = 3
         egg_card_w = (left_x1 - left_x0 - (egg_cols - 1) * 10) / egg_cols
         egg_card_h = 86
-        eggs_shown = growing_eggs[:9]
+        eggs_shown = growing_eggs_remaining[:9]
         rows_needed = -(-len(eggs_shown) // egg_cols)
         for idx, egg in enumerate(eggs_shown):
             r, c = divmod(idx, egg_cols)
@@ -401,7 +419,7 @@ def render_poster(data: dict) -> Image.Image:
     # ---- Telur yang masih di tas, belum ditaruh (v2: metode curi-tanpa-place
     # biar auto script ga tabrakan) -- spesies/mutasi tetap kebaca dari record
     # yang sama, cuma ga ada countdown karena belum jalan pertumbuhannya. ----
-    if backpack_eggs:
+    if backpack_eggs_remaining:
         rounded_card(draw, (left_x0, y, left_x1, y + 40), radius=20, fill=(226, 232, 240))
         draw_text_centered(draw, ((left_x0 + left_x1) / 2, y + 20), "TELUR DI TAS (BELUM DITARUH)", font(18, bold=True), NAVY)
         y += 52
@@ -409,7 +427,7 @@ def render_poster(data: dict) -> Image.Image:
         bp_cols = 3
         bp_card_w = (left_x1 - left_x0 - (bp_cols - 1) * 10) / bp_cols
         bp_card_h = 86
-        bp_shown = backpack_eggs[:9]
+        bp_shown = backpack_eggs_remaining[:9]
         bp_rows_needed = -(-len(bp_shown) // bp_cols)
         for idx, egg in enumerate(bp_shown):
             r, c = divmod(idx, bp_cols)
@@ -442,6 +460,9 @@ def render_poster(data: dict) -> Image.Image:
     active_total_rate = sum(p.get("rate", 0) for p in active_pets)
     if active_total_rate:
         auto_detail_lines.append(f"Income Aktif: {fmt_money(active_total_rate)}")
+    egg_potential_rate = sum(e.get("rate", 0) for e in growing_eggs) + sum(e.get("rate", 0) for e in backpack_eggs)
+    if egg_potential_rate:
+        auto_detail_lines.append(f"Potensi + Telur Netas: {fmt_money(active_total_rate + egg_potential_rate)}")
     if kandang_level is not None:
         auto_detail_lines.append(f"Level Kandang: {kandang_level}")
     if treadmill_level is not None:
