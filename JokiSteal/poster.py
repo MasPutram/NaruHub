@@ -597,6 +597,221 @@ def render_portrait(cfg: dict, w: int, h: int, s: float) -> Image.Image:
     return canvas.convert("RGB")
 
 
+def dashed_box(draw, box, color, dash=10, gap=6, width=2):
+    """Border putus-putus -- dipakai buat nandain slot yang masih dummy
+    (Nama Store/Logo/Kontak) belum diisi bahan asli dari customer."""
+    x0, y0, x1, y1 = box
+    x = x0
+    while x < x1:
+        draw.line([(x, y0), (min(x + dash, x1), y0)], fill=color, width=width)
+        draw.line([(x, y1), (min(x + dash, x1), y1)], fill=color, width=width)
+        x += dash + gap
+    yv = y0
+    while yv < y1:
+        draw.line([(x0, yv), (x0, min(yv + dash, y1))], fill=color, width=width)
+        draw.line([(x1, yv), (x1, min(yv + dash, y1))], fill=color, width=width)
+        yv += dash + gap
+
+
+def dummy_label(draw, box, label, color=(255, 224, 190)):
+    dashed_box(draw, box, color)
+    text_centered(draw, ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2), label, font("bold", 16), color)
+    small = font("reg", 12)
+    text_centered(draw, ((box[0] + box[2]) / 2, box[3] - 16), "(dummy -- ganti pas bahan sudah ada)", small, color)
+
+
+def render_wireframe_layout(cfg: dict, w: int = 1920, h: int = 1080) -> Image.Image:
+    """Landscape sesuai wireframe request customer:
+    [Nama Store][Judul]
+    [Logo][Price Layanan (+ 2 konten gambar)][Price Paket]
+    [Kontak][Support Pay][Operasional]
+    [        Payment (lebar)         ]
+    Nama Store/Logo/Kontak sengaja dummy -- customer belum kirim bahannya."""
+    canvas = radial_gradient(w, h, BG_INNER, BG_OUTER, center=(0.5, 0.3)).convert("RGBA")
+    draw = ImageDraw.Draw(canvas)
+
+    margin = 50
+    col1_x0, col1_x1 = margin, 330
+    mid_x0, mid_x1 = 350, 1430
+    right_x0, right_x1 = 1450, w - margin
+
+    # ---- Row 1: Nama Store + Judul ----
+    row1_y0, row1_y1 = 40, 150
+    dummy_label(draw, (col1_x0, row1_y0, col1_x1, row1_y1), cfg.get("store_name", "NAMA STORE"))
+
+    title_box = (mid_x0, row1_y0, right_x1, row1_y1)
+    rglow = rounded_glow_rect(w, h, title_box, RED, radius=22, blur=22, alpha=160)
+    canvas = Image.alpha_composite(canvas, rglow)
+    draw = ImageDraw.Draw(canvas)
+    draw.rounded_rectangle(title_box, radius=18, fill=DARK_RED, outline=GOLD, width=4)
+    title = cfg.get("title", "JASA JOKI STEAL AN EGG")
+    title_f = font("bold", 46)
+    while draw.textlength(title, font=title_f) > (title_box[2] - title_box[0]) - 40 and title_f.size > 22:
+        title_f = font("bold", title_f.size - 2)
+    text_centered(draw, ((title_box[0] + title_box[2]) / 2, (title_box[1] + title_box[3]) / 2),
+                  title, title_f, WHITE, stroke_width=5, stroke_fill=(70, 6, 6))
+
+    # ---- Row 2: Logo / Price Layanan (+2 konten gambar) / Price Paket ----
+    row2_y0, row2_y1 = 170, 725
+    logo_h = (row2_y1 - row2_y0 - 15) * 0.5
+    logo_box = (col1_x0, row2_y0, col1_x1, row2_y0 + logo_h)
+    dashed_box(draw, logo_box, (255, 224, 190))
+    logo_badge_r = min(logo_box[2] - logo_box[0], logo_box[3] - logo_box[1]) / 2 - 20
+    lcx, lcy = (logo_box[0] + logo_box[2]) / 2, (logo_box[1] + logo_box[3]) / 2 - 8
+    draw.ellipse((lcx - logo_badge_r, lcy - logo_badge_r, lcx + logo_badge_r, lcy + logo_badge_r),
+                 fill=(20, 10, 8), outline=GOLD, width=4)
+    logo_egg = load_egg(HEADER_EGGS[0] if HEADER_EGGS else EGG_NAMES[0], int(logo_badge_r * 1.4))
+    paste_rgba(canvas, logo_egg, lcx - logo_egg.width / 2, lcy - logo_egg.height / 2)
+    draw.text(((logo_box[0] + logo_box[2]) / 2, logo_box[3] - 14), "LOGO (dummy)", font=font("reg", 12),
+               fill=(255, 224, 190), anchor="mm")
+
+    kontak_box = (col1_x0, row2_y0 + logo_h + 15, col1_x1, row2_y1)
+    dashed_box(draw, kontak_box, (255, 224, 190))
+    contact = cfg.get("contact", "Order: -")
+    bub_cx, bub_cy = kontak_box[0] + 40, (kontak_box[1] + kontak_box[3]) / 2 - 10
+    draw.rounded_rectangle((bub_cx - 18, bub_cy - 14, bub_cx + 18, bub_cy + 12), radius=9, fill=GOLD)
+    draw.polygon([(bub_cx - 7, bub_cy + 12), (bub_cx + 2, bub_cy + 12), (bub_cx - 9, bub_cy + 22)], fill=GOLD)
+    for dx in (-8, 0, 8):
+        draw.ellipse((bub_cx + dx - 3, bub_cy - 7, bub_cx + dx + 3, bub_cy - 1), fill=(20, 10, 8))
+    draw.text((bub_cx + 32, bub_cy - 10), contact, font=font("bold", 18), fill=CREAM)
+    text_centered(draw, ((kontak_box[0] + kontak_box[2]) / 2, kontak_box[3] - 16), "(dummy)",
+                  font("reg", 12), (255, 224, 190))
+
+    # -- Price Layanan (tengah) --
+    pl_box = (mid_x0, row2_y0, mid_x1, row2_y1)
+    draw.rounded_rectangle(pl_box, radius=20, fill=(15, 8, 6, 170), outline=GOLD, width=2)
+    text_centered(draw, ((pl_box[0] + pl_box[2]) / 2, pl_box[1] + 30), "PRICE LAYANAN",
+                  font("bold", 24), GOLD, stroke_width=2, stroke_fill=(40, 10, 4))
+
+    # -- 2 slot "konten gambar" (showcase telur/pet), ngapit judul panel di
+    # atas -- ditaruh duluan & list harga mulai DI BAWAH keduanya biar ga
+    # numpuk nutupin teks harga. --
+    gimg_size = 128
+    gimg_y = pl_box[1] + 46
+    gimg1_x = pl_box[0] + 20
+    g = glow_layer(w, h, (gimg1_x - 16, gimg_y - 16, gimg1_x + gimg_size + 16, gimg_y + gimg_size + 16),
+                   GOLD, blur=20, alpha=130)
+    canvas = Image.alpha_composite(canvas, g)
+    draw = ImageDraw.Draw(canvas)
+    draw.rounded_rectangle((gimg1_x, gimg_y, gimg1_x + gimg_size, gimg_y + gimg_size),
+                            radius=14, fill=(18, 10, 8, 240), outline=GOLD, width=3)
+    egg1 = load_egg(HEADER_EGGS[1] if len(HEADER_EGGS) > 1 else EGG_NAMES[1], int(gimg_size * 0.72))
+    paste_rgba(canvas, egg1, gimg1_x + (gimg_size - egg1.width) / 2, gimg_y + (gimg_size - egg1.height) / 2 - 6)
+    text_centered(draw, (gimg1_x + gimg_size / 2, gimg_y + gimg_size - 14), "KONTEN GAMBAR",
+                  font("bold", 9), DIM)
+
+    gimg2_x = pl_box[2] - gimg_size - 20
+    g2 = glow_layer(w, h, (gimg2_x - 16, gimg_y - 16, gimg2_x + gimg_size + 16, gimg_y + gimg_size + 16),
+                     GOLD, blur=20, alpha=130)
+    canvas = Image.alpha_composite(canvas, g2)
+    draw = ImageDraw.Draw(canvas)
+    draw.rounded_rectangle((gimg2_x, gimg_y, gimg2_x + gimg_size, gimg_y + gimg_size),
+                            radius=14, fill=(18, 10, 8, 240), outline=GOLD, width=3)
+    pet2_name = TOP_PETS[0] if TOP_PETS[0] in PET_FILES else None
+    if pet2_name:
+        pet2 = load_pet(pet2_name, int(gimg_size * 0.8))
+        paste_rgba(canvas, pet2, gimg2_x + (gimg_size - pet2.width) / 2, gimg_y + (gimg_size - pet2.height) / 2 - 6)
+    text_centered(draw, (gimg2_x + gimg_size / 2, gimg_y + gimg_size - 14), "KONTEN GAMBAR",
+                  font("bold", 9), DIM)
+    draw = ImageDraw.Draw(canvas)
+
+    packages = cfg.get("packages", [])
+    pill_colors = [GREEN, GOLD, BLUE, (150, 60, 220), RED]
+    py = gimg_y + gimg_size + 18
+    pill_h = 64
+    pill_gap = 9
+    list_x0, list_x1 = pl_box[0] + 24, pl_box[2] - 24
+    for i, pkg in enumerate(packages):
+        color = pill_colors[i % len(pill_colors)]
+        box = (list_x0, py, list_x1, py + pill_h)
+        draw.rounded_rectangle(box, radius=14, fill=color, outline=WHITE, width=2)
+        checklist_icon(draw, list_x0 + 26, py + pill_h / 2, size=24)
+        name = pkg.get("name", "")
+        price = pkg.get("price", "")
+        name_f = font("bold", 16)
+        text_x = list_x0 + 48
+        max_name_w = (list_x1 - text_x) - 100
+        while draw.textlength(name.upper(), font=name_f) > max_name_w and len(name) > 4:
+            name = name[:-2] + "…"
+        draw.text((text_x, py + pill_h / 2 - 10), name.upper(), font=name_f, fill=(20, 16, 10))
+        text_centered(draw, (list_x1 - 22, py + pill_h / 2 + 1), price, font("bold", 24), (20, 16, 10), anchor="rm")
+        py += pill_h + pill_gap
+
+    # -- Price Paket (kanan): satu paket unggulan ditonjolin --
+    pp_box = (right_x0, row2_y0, right_x1, row2_y1)
+    draw.rounded_rectangle(pp_box, radius=20, fill=(15, 8, 6, 170), outline=GOLD, width=2)
+    text_centered(draw, ((pp_box[0] + pp_box[2]) / 2, pp_box[1] + 30), "PRICE PAKET",
+                  font("bold", 22), GOLD, stroke_width=2, stroke_fill=(40, 10, 4))
+    featured_pkg = packages[-1] if packages else {"name": "Paket Lengkap", "price": "-"}
+    fp_cx = (pp_box[0] + pp_box[2]) / 2
+    fp_cy = pp_box[1] + 230
+    pet_show = TOP_PETS[1] if len(TOP_PETS) > 1 and TOP_PETS[1] in PET_FILES else None
+    if pet_show:
+        gpp = glow_layer(w, h, (fp_cx - 140, fp_cy - 120, fp_cx + 140, fp_cy + 140), GOLD, blur=40, alpha=120)
+        canvas = Image.alpha_composite(canvas, gpp)
+        pet_img = load_pet(pet_show, 220)
+        paste_rgba(canvas, pet_img, fp_cx - pet_img.width / 2, fp_cy - pet_img.height / 2)
+        draw = ImageDraw.Draw(canvas)
+    text_centered(draw, (fp_cx, pp_box[3] - 170), featured_pkg.get("name", "").upper(),
+                  font("bold", 20), WHITE)
+    text_centered(draw, (fp_cx, pp_box[3] - 120), featured_pkg.get("price", "-"),
+                  font("bold", 48), GOLD, stroke_width=2, stroke_fill=(60, 30, 4))
+    badge_w = 190
+    badge_box = (fp_cx - badge_w / 2, pp_box[3] - 60, fp_cx + badge_w / 2, pp_box[3] - 24)
+    draw.rounded_rectangle(badge_box, radius=16, fill=GREEN, outline=WHITE, width=2)
+    text_centered(draw, ((badge_box[0] + badge_box[2]) / 2, (badge_box[1] + badge_box[3]) / 2),
+                  "PALING LARIS", font("bold", 14), (10, 24, 14))
+
+    # ---- Row 3: Support Pay / Operasional (Kontak sudah di kolom kiri) ----
+    row3_y0, row3_y1 = 745, 855
+    sp_box = (mid_x0, row3_y0, 700, row3_y1)
+    draw.rounded_rectangle(sp_box, radius=18, fill=(15, 8, 6, 170), outline=GOLD, width=2)
+    draw.text((sp_box[0] + 18, sp_box[1] + 12), "SUPPORT PAY", font=font("bold", 13), fill=DIM)
+    methods = cfg.get("payment_methods", [])
+    mx = sp_box[0] + 18
+    my = sp_box[1] + 38
+    mf = font("bold", 15)
+    mh = 32
+    for m in methods:
+        mw = draw.textlength(m, font=mf) + 26
+        if mx + mw > sp_box[2] - 12:
+            mx = sp_box[0] + 18
+            my += mh + 8
+        draw.rounded_rectangle((mx, my, mx + mw, my + mh), radius=8, fill=WHITE)
+        text_centered(draw, (mx + mw / 2, my + mh / 2), m, mf, (20, 16, 10))
+        mx += mw + 10
+
+    op_box = (720, row3_y0 + 10, right_x1, row3_y1 + 20)
+    draw.rounded_rectangle(op_box, radius=18, fill=BLUE, outline=WHITE, width=3)
+    draw.text((op_box[0] + 20, op_box[1] + 12), "OPERASIONAL", font=font("bold", 13), fill=(230, 240, 255))
+    jam = cfg.get("jam_operasional", "-")
+    check_badge(draw, op_box[0] + 26, op_box[1] + 58, r=14, color=GREEN)
+    draw.text((op_box[0] + 50, op_box[1] + 42), f"Jam Operasional: {jam}", font=font("bold", 18), fill=WHITE)
+    est = cfg.get("estimasi", "")
+    if est:
+        draw.text((op_box[0] + 50, op_box[1] + 68), est.upper(), font=font("bold", 15), fill=(220, 235, 255))
+
+    # ---- Row 4: Payment (lebar, di bawah Price Layanan + Price Paket) ----
+    row4_y0, row4_y1 = 875, 985
+    pay_box = (mid_x0, row4_y0, right_x1, row4_y1)
+    pglow = rounded_glow_rect(w, h, pay_box, GREEN, radius=20, blur=20, alpha=140)
+    canvas = Image.alpha_composite(canvas, pglow)
+    draw = ImageDraw.Draw(canvas)
+    draw.rounded_rectangle(pay_box, radius=18, fill=(16, 60, 34), outline=GREEN, width=3)
+    check_badge(draw, pay_box[0] + 46, (pay_box[1] + pay_box[3]) / 2, r=22, color=GREEN)
+    draw.text((pay_box[0] + 86, (pay_box[1] + pay_box[3]) / 2 - 30), "SIAP ORDER?",
+               font=font("bold", 24), fill=WHITE)
+    draw.text((pay_box[0] + 86, (pay_box[1] + pay_box[3]) / 2 - 2),
+               f"Hubungi {contact} -- bayar setelah pesanan kelar (aman & transparan)",
+               font=font("reg", 16), fill=(220, 245, 230))
+
+    note = cfg.get("note", "")
+    if note:
+        draw.text((col1_x0, h - 40), note, font=font("reg", 13), fill=(255, 224, 190))
+
+    return canvas.convert("RGB")
+
+
 def main():
     cfg_path = HERE / "config.json"
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
@@ -606,6 +821,9 @@ def main():
 
     render_poster(cfg, 1440, 1080).save(HERE / "joki_poster_4x3.png")
     print(f"Saved: {HERE / 'joki_poster_4x3.png'}")
+
+    render_wireframe_layout(cfg, 1920, 1080).save(HERE / "joki_poster_landscape.png")
+    print(f"Saved: {HERE / 'joki_poster_landscape.png'}")
 
 
 if __name__ == "__main__":

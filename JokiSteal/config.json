@@ -1,5 +1,7 @@
 {
   "title": "JOKI STEAL AN EGG",
+  "store_name": "NAMA STORE ANDA",
+  "jam_operasional": "09.00 - 22.00 WIB",
   "tagline": "Membantu mencuri telur dengan rarity:",
   "rarities": ["COSMIC", "SECRET", "ETERNAL", "DIVINE"],
   "perks": ["Tidak Terkena Stun", "Speed: -"],
