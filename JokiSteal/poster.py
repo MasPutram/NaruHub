@@ -30,6 +30,28 @@ ACCENT_SOFT = (223, 231, 219)
 
 MARGIN = 72
 
+# ---- Icon telur asli dari game (di-extract via AssetService:CreateEditableImageAsync
+# + ReadPixelsBuffer -- metode sama kayak yang dipakai buat 84 icon pet di
+# StealAnEgg/assets/Normal). Dipakai buat header cluster + icon per baris paket. ----
+EGG_DIR = HERE / "assets" / "Eggs"
+EGG_NAMES = ["Mosasaurus", "Bronto", "Dragon", "Cerberus", "Kraken", "Tralaledon"]
+_egg_cache = {}
+
+
+def load_egg(name, size):
+    key = (name, size)
+    if key in _egg_cache:
+        return _egg_cache[key]
+    path = EGG_DIR / f"Egg_{name}.png"
+    img = Image.open(path).convert("RGBA")
+    img = img.resize((size, size), Image.LANCZOS)
+    _egg_cache[key] = img
+    return img
+
+
+def paste_rgba(canvas, img, x, y):
+    canvas.paste(img, (int(x), int(y)), img)
+
 
 def load_fonts():
     """Georgia (serif, buat judul) kalau ada -- fallback DejaVu Sans di
@@ -114,6 +136,18 @@ def render_poster(cfg: dict) -> Image.Image:
     x0, x1 = MARGIN, W - MARGIN
     y = 64
 
+    # ---- Header egg cluster (kanan atas) -- 3 telur asli, ditumpuk & diputar
+    # dikit biar kerasa "ditaruh" bukan di-generate. ----
+    cluster_specs = [
+        (EGG_NAMES[0], 118, -14, x1 - 250, 30),
+        (EGG_NAMES[1], 96, 10, x1 - 150, 8),
+        (EGG_NAMES[2], 104, -6, x1 - 110, 90),
+    ]
+    for name, size, angle, cx, cy in cluster_specs:
+        egg = load_egg(name, size)
+        rotated = egg.rotate(angle, expand=True, resample=Image.BICUBIC)
+        paste_rgba(canvas, rotated, cx, cy)
+
     # ---- Eyebrow label ----
     draw.text((x0, y), tracked("LAYANAN GAME  \u2022  STEAL AN EGG", 2),
                font=font("sans", 12), fill=DIM)
@@ -143,16 +177,22 @@ def render_poster(cfg: dict) -> Image.Image:
 
     name_font = font("serif", 21)
     price_font = font("sans_bold", 21)
-    for pkg in cfg.get("packages", []):
+    icon_size = 44
+    text_x0 = x0 + icon_size + 14
+    for i, pkg in enumerate(cfg.get("packages", [])):
         name = pkg.get("name", "")
         price = pkg.get("price", "")
+
+        egg = load_egg(EGG_NAMES[i % len(EGG_NAMES)], icon_size)
+        paste_rgba(canvas, egg, x0, y - 8)
+
         # wrap nama paket kalau kepanjangan, harga tetap di baris pertama
-        name_lines = wrap_text(draw, name, name_font, (x1 - x0) - 220)
+        name_lines = wrap_text(draw, name, name_font, (x1 - text_x0) - 220)
         dotted_leader_row(draw, y, name_lines[0], price, name_font, price_font,
-                           INK, ACCENT, x0, x1)
+                           INK, ACCENT, text_x0, x1)
         y += 30
         for extra in name_lines[1:]:
-            draw.text((x0, y), extra, font=name_font, fill=INK)
+            draw.text((text_x0, y), extra, font=name_font, fill=INK)
             y += 28
         y += 6
         hairline(draw, x0, x1, y)
