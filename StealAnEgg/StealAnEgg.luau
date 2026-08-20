@@ -1983,9 +1983,9 @@ do
 		Finished = true,
 	})
 	local hargaPerBInput = section:AddInput("StealAnEgg_HargaPerB", {
-		Title = "Harga per 1B/s Income Aktif (Rp, buat auto-hitung Price Acc)",
-		Placeholder = "cth: 5000",
-		Default = "5000",
+		Title = "Harga per 1B/s Income Aktif (ribuan -- isi 5 = Rp 5.000, 0.5 = Rp 500)",
+		Placeholder = "cth: 5 (= Rp 5.000)",
+		Default = "5",
 		Finished = true,
 	})
 	local ownerInput = section:AddInput("StealAnEgg_PosterOwner", {
@@ -2030,7 +2030,9 @@ do
 		if totalRate <= 0 then
 			return ""
 		end
-		local ratePerB = tonumber(hargaPerBInput.Value) or 5000
+		-- Input dalam satuan ribuan biar user ga usah ngetik nol -- "5" = Rp
+		-- 5.000, "0.5" = Rp 500.
+		local ratePerB = (tonumber(hargaPerBInput.Value) or 5) * 1000
 		local incomeB = totalRate / 1e9
 		return formatRupiah(incomeB * ratePerB)
 	end
