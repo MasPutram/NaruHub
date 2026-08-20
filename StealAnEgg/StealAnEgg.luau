@@ -1883,6 +1883,12 @@ do
 
 		local body = HttpService:JSONEncode(payload)
 		local serverUrl = posterServerInput.Value ~= "" and posterServerInput.Value or POSTER_SERVER_URL
+		-- User cuma paste domain tunnel-nya doang (tanpa /generate) tiap kali
+		-- URL ganti -- normalize di sini biar ngga 404 gara-gara lupa path.
+		serverUrl = serverUrl:gsub("/+$", "")
+		if not serverUrl:match("/generate$") then
+			serverUrl = serverUrl .. "/generate"
+		end
 
 		statusPara:SetContent("Render poster + kirim ke Discord...")
 
