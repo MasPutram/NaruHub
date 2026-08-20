@@ -1875,6 +1875,50 @@ do
 		return eggs
 	end
 
+	-- v2: telur yang MASIH DI TAS, belum ditaruh di kandang (dipetik/curi
+	-- tapi sengaja ga di-place biar script auto-nya ga tabrakan sama
+	-- fitur lain). Spesies & mutasi udah ke-roll server dari sejak
+	-- di-dapet, jadi tinggal baca lewat record yang sama, bedanya cuma
+	-- filter Placement == nil (bukan ~= nil kayak yang lagi tumbuh).
+	local function collectBackpackEggs()
+		pcall(function()
+			EggCmds.RequestRuntimeSnapshot()
+		end)
+		local records = EggCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+		local eggs = {}
+		for uid, rec in pairs(records) do
+			if rec.Placement == nil then
+				local weight = 0
+				pcall(function()
+					weight = AssetItemUtil.GetVisualWeightKg({
+						Category = rec.AssetCategory,
+						Scale = rec.AssetScale or 1,
+						Mutations = rec.Mutations or {},
+					})
+				end)
+				local rate = 0
+				pcall(function()
+					rate = AssetGenerationUtil.GetBaseRateMutationOnly({
+						Category = rec.AssetCategory,
+						Scale = rec.AssetScale or 1,
+						Mutations = rec.Mutations or {},
+					})
+				end)
+				table.insert(eggs, {
+					uid = uid,
+					category = rec.AssetCategory,
+					mutations = rec.Mutations or {},
+					weight = weight,
+					rate = rate,
+				})
+			end
+		end
+		table.sort(eggs, function(a, b)
+			return (a.rate or 0) > (b.rate or 0)
+		end)
+		return eggs
+	end
+
 	local SaveModule = require(ReplicatedStorage.Library.Client.Save)
 
 	local function collectAccountStats()
@@ -1966,6 +2010,7 @@ do
 		local allPets = collectBackpackPets()
 		local activePets = collectActivePets()
 		local growingEggs = collectGrowingEggs()
+		local backpackEggs = collectBackpackEggs()
 		local activeLimit = 0
 		pcall(function()
 			activeLimit = AssetCmds.RequestEquipLimit()
@@ -1982,6 +2027,7 @@ do
 			activePets = activePets,
 			activeLimit = activeLimit,
 			growingEggs = growingEggs,
+			backpackEggs = backpackEggs,
 			runSpeed = runSpeed,
 			totalMoneyPerSecond = moneyPerSecond,
 			kandangLevel = kandangLevel,

@@ -176,6 +176,7 @@ def render_poster(data: dict) -> Image.Image:
     active_pets = data.get("activePets") or []
     active_limit = data.get("activeLimit", len(active_pets))
     growing_eggs = data.get("growingEggs") or []
+    backpack_eggs = data.get("backpackEggs") or []
     run_speed = data.get("runSpeed")
     total_money_per_second = data.get("totalMoneyPerSecond")
     kandang_level = data.get("kandangLevel")
@@ -396,6 +397,39 @@ def render_poster(data: dict) -> Image.Image:
             if egg.get("weight"):
                 draw.text((tx, gy0 + 62), fmt_weight(egg["weight"]), font=font(11), fill=DIM)
         y += rows_needed * (egg_card_h + 8) + 16
+
+    # ---- Telur yang masih di tas, belum ditaruh (v2: metode curi-tanpa-place
+    # biar auto script ga tabrakan) -- spesies/mutasi tetap kebaca dari record
+    # yang sama, cuma ga ada countdown karena belum jalan pertumbuhannya. ----
+    if backpack_eggs:
+        rounded_card(draw, (left_x0, y, left_x1, y + 40), radius=20, fill=(226, 232, 240))
+        draw_text_centered(draw, ((left_x0 + left_x1) / 2, y + 20), "TELUR DI TAS (BELUM DITARUH)", font(18, bold=True), NAVY)
+        y += 52
+
+        bp_cols = 3
+        bp_card_w = (left_x1 - left_x0 - (bp_cols - 1) * 10) / bp_cols
+        bp_card_h = 86
+        bp_shown = backpack_eggs[:9]
+        bp_rows_needed = -(-len(bp_shown) // bp_cols)
+        for idx, egg in enumerate(bp_shown):
+            r, c = divmod(idx, bp_cols)
+            gx0 = left_x0 + c * (bp_card_w + 10)
+            gy0 = y + r * (bp_card_h + 8)
+            muts = egg.get("mutations") or []
+            icon = find_icon(egg.get("category", ""), muts)
+            paste_icon(canvas, icon, (int(gx0), int(gy0), int(gx0 + bp_card_h), int(gy0 + bp_card_h)))
+            tx = gx0 + bp_card_h + 8
+            name = egg.get("category", "?")
+            if muts:
+                name = f"{' + '.join(m.upper() for m in muts)} {name}"
+            if len(name) > 22:
+                name = name[:21] + "…"
+            draw.text((tx, gy0 + 8), name, font=font(12, bold=True), fill=NAVY)
+            if egg.get("rate"):
+                draw.text((tx, gy0 + 28), fmt_money(egg["rate"]), font=font(14, bold=True), fill=GREEN)
+            if egg.get("weight"):
+                draw.text((tx, gy0 + 50), fmt_weight(egg["weight"]), font=font(11), fill=DIM)
+        y += bp_rows_needed * (bp_card_h + 8) + 16
 
     # ---- Detail checklist -- item dari user + stat auto-detect (Speed,
     # Income Aktif, Level Kandang, Level Treadmill), tetep juga dipajang di
