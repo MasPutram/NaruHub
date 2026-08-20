@@ -1,0 +1,17 @@
+{
+  "title": "Joki Steal An Egg",
+  "tagline": "Cepat, aman, dan hasil sesuai request.",
+  "packages": [
+    { "name": "Boost Kandang ke Level 10", "price": "Rp 15.000" },
+    { "name": "Boost Treadmill ke Level 10", "price": "Rp 15.000" },
+    { "name": "Farming Sesi 1 Jam (auto equip + laporan hasil)", "price": "Rp 10.000" },
+    { "name": "Paket Lengkap (Kandang + Treadmill Max, Farming 3 Jam)", "price": "Rp 35.000" }
+  ],
+  "steps": [
+    "Chat kontak di bawah, sebutkan paket yang mau diambil",
+    "Kirim akun (join link / kredensial sesuai kesepakatan)",
+    "Tunggu proses selesai, hasil dilaporkan lewat screenshot/poster"
+  ],
+  "contact": "Order: -",
+  "note": "Harga & paket di atas contoh -- edit config.json sesuai kebutuhan."
+}
