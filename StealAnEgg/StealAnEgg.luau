@@ -1602,6 +1602,115 @@ do
 end
 
 ------------------------------------------------------------
+-- 3.5. Auto Upgrade Kandang & Treadmill (sampai level target, ga upgrade
+-- terus-terusan)
+------------------------------------------------------------
+do
+	local BaseUpgradeClient = require(ReplicatedStorage.Library.Client.BaseUpgradeClient)
+	local TreadmillClient = require(LocalPlayer.PlayerScripts.GUI.TreadmillUpgrade.Client)
+	local SaveModule = require(ReplicatedStorage.Library.Client.Save)
+
+	local section = Tab:AddSection("Auto Upgrade Kandang & Treadmill")
+
+	local kandangTargetInput = section:AddInput("StealAnEgg_KandangTarget", {
+		Title = "Target Level Kandang (kosongin = MAX)",
+		Placeholder = "cth: 15",
+		Default = "",
+		Finished = true,
+	})
+	local treadmillTargetInput = section:AddInput("StealAnEgg_TreadmillTarget", {
+		Title = "Target Level Treadmill (kosongin = MAX)",
+		Placeholder = "cth: 12",
+		Default = "",
+		Finished = true,
+	})
+
+	local function parseTarget(input)
+		local n = tonumber(input.Value)
+		if n and n > 0 then
+			return math.floor(n)
+		end
+		return math.huge -- kosong = ga dibatasin, upgrade sampai MAX beneran
+	end
+
+	local upgradeStatusPara = section:AddParagraph({
+		Title = "Status Upgrade",
+		Content = "-",
+	})
+
+	local function tryUpgradeKandang()
+		local stats = SaveModule.Get(LocalPlayer)
+		local target = parseTarget(kandangTargetInput)
+		if stats.BaseUpgradeLevel >= target then
+			return "Kandang: udah di target (Lv." .. stats.BaseUpgradeLevel .. ")"
+		end
+		local nextLevel, config = BaseUpgradeClient.GetNextConfig(stats)
+		if not nextLevel or not config then
+			return "Kandang: udah MAX level (Lv." .. stats.BaseUpgradeLevel .. ")"
+		end
+		if nextLevel > target then
+			return "Kandang: nyampe target di Lv." .. stats.BaseUpgradeLevel
+		end
+		if not BaseUpgradeClient.CanAffordNext(stats) then
+			return "Kandang: uang kurang buat Lv." .. nextLevel .. " (butuh $" .. tostring(config.Cost) .. ")"
+		end
+		BaseUpgradeClient.RequestCashUpgrade()
+		return "Kandang: upgrade ke Lv." .. nextLevel .. " diminta"
+	end
+
+	local function tryUpgradeTreadmill()
+		local stats = SaveModule.Get(LocalPlayer)
+		local target = parseTarget(treadmillTargetInput)
+		if stats.TreadmillUpgradeLevel >= target then
+			return "Treadmill: udah di target (Lv." .. stats.TreadmillUpgradeLevel .. ")"
+		end
+		local nextLevel, config = TreadmillClient.GetNextConfig(stats)
+		if not nextLevel or not config then
+			return "Treadmill: udah MAX level (Lv." .. stats.TreadmillUpgradeLevel .. ")"
+		end
+		if nextLevel > target then
+			return "Treadmill: nyampe target di Lv." .. stats.TreadmillUpgradeLevel
+		end
+		if not TreadmillClient.CanAffordNext(stats) then
+			return "Treadmill: uang kurang buat Lv." .. nextLevel .. " (butuh $" .. tostring(config.Price) .. ")"
+		end
+		TreadmillClient.RequestCashUpgrade()
+		return "Treadmill: upgrade ke Lv." .. nextLevel .. " diminta"
+	end
+
+	local autoUpgradeRunning = false
+	section:AddToggle("StealAnEgg_AutoUpgrade", {
+		Title = "Auto Upgrade (cek tiap 5 detik, berhenti sendiri di level target)",
+		Default = false,
+		Callback = function(enabled)
+			autoUpgradeRunning = enabled
+			if enabled then
+				task.spawn(function()
+					while autoUpgradeRunning and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+						local kOk, kMsg = pcall(tryUpgradeKandang)
+						local tOk, tMsg = pcall(tryUpgradeTreadmill)
+						upgradeStatusPara:SetContent(
+							(kOk and kMsg or ("Kandang: error - " .. tostring(kMsg)))
+								.. "\n"
+								.. (tOk and tMsg or ("Treadmill: error - " .. tostring(tMsg)))
+						)
+						task.wait(5)
+					end
+				end)
+			end
+		end,
+	})
+
+	section:AddParagraph({
+		Title = "Catatan",
+		Content = "Target dibaca dari input di atas tiap kali cek (ganti kapan aja, ga perlu "
+			.. "matiin toggle dulu). Kosongin field = upgrade terus sampai level MAX beneran. "
+			.. "Loop otomatis berhenti minta upgrade begitu level sekarang udah >= target atau "
+			.. "udah MAX, tapi toggle-nya sendiri tetap nyala (buat terus mantau kalau kamu naikin target).",
+	})
+end
+
+------------------------------------------------------------
 -- 4. Auto Generate Poster "Jual Akun" -> kirim ke Discord webhook
 ------------------------------------------------------------
 -- Render gambar (font/gradient/composit) ga bisa dilakuin di Luau, jadi bagian
