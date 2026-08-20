@@ -42,6 +42,17 @@ PET_FILES = {p.stem.split(" [")[0]: p for p in PET_DIR.glob("*.png")}
 
 HEADER_EGGS = [n for n in ["Eternal Lunar Dragon", "Unicorn", "Ascended Vermilion Phoenix"] if n in EGG_NAMES]
 TOP_PETS = ["Archdemon Dragon", "Unicorn", "Ascended Vermilion Phoenix"]
+COSMIC_PET_NAMES = [n for n in [
+    "Bronto", "Basilisk", "Whale Shark", "Colossal Mammoth",
+    "Hellhound", "Triceratops", "Irihorus", "Alabaster Whale",
+] if n in PET_FILES]
+
+# ---- Palet space/neon buat poster "Jasa Joki Ambil Egg" (referensi biru-ungu). ----
+SPACE_INNER = (70, 45, 150)
+SPACE_OUTER = (6, 5, 20)
+NEON_PURPLE = (150, 80, 235)
+NEON_CYAN = (70, 210, 235)
+NEON_PINK = (230, 70, 175)
 
 RARITY_COLORS = {
     "COSMIC": (130, 90, 230),
@@ -812,6 +823,172 @@ def render_wireframe_layout(cfg: dict, w: int = 1920, h: int = 1080) -> Image.Im
     return canvas.convert("RGB")
 
 
+def starfield(canvas, w, h, n=140, seed=7):
+    import random
+    rnd = random.Random(seed)
+    draw = ImageDraw.Draw(canvas, "RGBA")
+    for _ in range(n):
+        x, y = rnd.uniform(0, w), rnd.uniform(0, h)
+        r = rnd.choice([1, 1, 1, 2])
+        a = rnd.randint(60, 200)
+        draw.ellipse((x - r, y - r, x + r, y + r), fill=(255, 255, 255, a))
+
+
+def render_ambil_egg(cfg: dict, w: int = 1920, h: int = 1080) -> Image.Image:
+    """Poster "Jasa Joki Ambil Egg" -- referensi biru-ungu neon. Harga per
+    kuantitas telur (bukan per paket kayak poster utama): tabel Cosmic
+    (per 5 egg), rate flat buat Secret & Eternal."""
+    canvas = radial_gradient(w, h, SPACE_INNER, SPACE_OUTER, center=(0.5, 0.35)).convert("RGBA")
+    starfield(canvas, w, h)
+    draw = ImageDraw.Draw(canvas)
+
+    margin = 56
+    x0, x1 = margin, w - margin
+
+    # ---- Header: judul + subjudul ----
+    title = cfg.get("ambil_egg_title", "JASA JOKI AMBIL EGG")
+    title_f = font("bold", 66)
+    ty = 60
+    text_centered(draw, (w / 2, ty + 40), title, title_f, WHITE,
+                  stroke_width=6, stroke_fill=NEON_PURPLE, anchor="mm")
+    subtitle = cfg.get("ambil_egg_subtitle", "CEPAT • AMAN • TERPERCAYA")
+    text_centered(draw, (w / 2, ty + 92), subtitle, font("bold", 20), NEON_CYAN, anchor="mm")
+
+    body_y0 = 170
+
+    # ---- Kolom kiri: tabel harga Cosmic (per kuantitas) ----
+    left_x0, left_x1 = x0, 900
+    left_box = (left_x0, body_y0, left_x1, 800)
+    lglow = rounded_glow_rect(w, h, left_box, NEON_PURPLE, radius=24, blur=26, alpha=120)
+    canvas = Image.alpha_composite(canvas, lglow)
+    draw = ImageDraw.Draw(canvas)
+    draw.rounded_rectangle(left_box, radius=20, fill=(18, 12, 40, 235), outline=NEON_PURPLE, width=3)
+
+    hdr_h = 60
+    draw.rounded_rectangle((left_box[0], left_box[1], left_box[2], left_box[1] + hdr_h),
+                            radius=20, fill=NEON_PURPLE)
+    draw.rectangle((left_box[0], left_box[1] + hdr_h - 20, left_box[2], left_box[1] + hdr_h), fill=NEON_PURPLE)
+    text_centered(draw, ((left_box[0] + left_box[2]) / 2, left_box[1] + hdr_h / 2),
+                  "HARGA JASA AMBIL EGG (COSMIC)", font("bold", 20), WHITE)
+
+    tiers = cfg.get("cosmic_egg_tiers", [])
+    cols = 2
+    rows = math.ceil(len(tiers) / cols) if tiers else 0
+    grid_x0, grid_y0 = left_box[0] + 24, left_box[1] + hdr_h + 20
+    grid_w = (left_box[2] - left_box[0]) - 48
+    cell_w = (grid_w - 16) / cols
+    cell_h = 62
+    for i, tier in enumerate(tiers):
+        c, r = i % cols, i // cols
+        cx0 = grid_x0 + c * (cell_w + 16)
+        cy0 = grid_y0 + r * (cell_h + 14)
+        cell_box = (cx0, cy0, cx0 + cell_w, cy0 + cell_h)
+        draw.rounded_rectangle(cell_box, radius=14, fill=(40, 26, 80), outline=(90, 60, 160), width=2)
+        text_centered(draw, (cx0 + cell_w * 0.32, cy0 + cell_h / 2), f"{tier['eggs']} EGG",
+                      font("bold", 18), WHITE)
+        divider_x = cx0 + cell_w * 0.58
+        draw.line([(divider_x, cy0 + 10), (divider_x, cy0 + cell_h - 10)], fill=(90, 60, 160), width=2)
+        text_centered(draw, (cx0 + cell_w * 0.8, cy0 + cell_h / 2), f"{tier['kah']} KAH",
+                      font("bold", 20), NEON_CYAN)
+
+    trust_y = grid_y0 + rows * (cell_h + 14) + 24
+    badges = cfg.get("trust_badges", [])
+    if badges:
+        bw = (left_box[2] - left_box[0] - 24 - (len(badges) - 1) * 12) / len(badges)
+        bx = left_box[0] + 12
+        badge_colors = [NEON_CYAN, GOLD, NEON_PINK, GREEN]
+        for i, b in enumerate(badges):
+            bcol = badge_colors[i % len(badge_colors)]
+            bcy = trust_y + 40
+            check_badge(draw, bx + bw / 2, bcy, r=18, color=bcol)
+            text_centered(draw, (bx + bw / 2, bcy + 34), b.upper(), font("bold", 12), WHITE)
+            bx += bw + 12
+
+    # ---- Kolom kanan atas: grid pet Cosmic ----
+    right_x0, right_x1 = 940, x1
+    pet_box = (right_x0, body_y0, right_x1, body_y0 + 430)
+    pglow = rounded_glow_rect(w, h, pet_box, NEON_CYAN, radius=24, blur=24, alpha=110)
+    canvas = Image.alpha_composite(canvas, pglow)
+    draw = ImageDraw.Draw(canvas)
+    draw.rounded_rectangle(pet_box, radius=20, fill=(10, 14, 40, 220), outline=NEON_CYAN, width=3)
+    draw.rounded_rectangle((pet_box[0], pet_box[1], pet_box[2], pet_box[1] + 56), radius=20, fill=NEON_CYAN)
+    draw.rectangle((pet_box[0], pet_box[1] + 36, pet_box[2], pet_box[1] + 56), fill=NEON_CYAN)
+    text_centered(draw, ((pet_box[0] + pet_box[2]) / 2, pet_box[1] + 28), "COSMIC PET", font("bold", 22), (10, 10, 30))
+
+    pcols = 4
+    prows = 2
+    pcell_w = (pet_box[2] - pet_box[0] - 40) / pcols
+    pcell_h = (pet_box[3] - pet_box[1] - 76 - 40) / prows
+    for i, pet_name in enumerate(COSMIC_PET_NAMES[: pcols * prows]):
+        c, r = i % pcols, i // pcols
+        cx0 = pet_box[0] + 20 + c * pcell_w
+        cy0 = pet_box[1] + 66 + r * (pcell_h + 8)
+        cell = (cx0 + 6, cy0, cx0 + pcell_w - 6, cy0 + pcell_h)
+        draw.rounded_rectangle(cell, radius=12, fill=(28, 20, 60), outline=(80, 70, 150), width=1)
+        pet_img = load_pet(pet_name, int(min(pcell_w - 24, pcell_h - 8)))
+        pcx, pcy = (cell[0] + cell[2]) / 2, (cell[1] + cell[3]) / 2
+        paste_rgba(canvas, pet_img, pcx - pet_img.width / 2, pcy - pet_img.height / 2)
+        draw = ImageDraw.Draw(canvas)
+
+    text_centered(draw, ((pet_box[0] + pet_box[2]) / 2, pet_box[3] - 14),
+                  f"{len(COSMIC_PET_NAMES)} PET COSMIC TERSEDIA", font("bold", 13), DIM)
+
+    # ---- Kolom kanan bawah: 2 kartu rarity (Secret / Eternal) ----
+    rarity_y0 = pet_box[3] + 24
+    rarity_y1 = 800
+    rar_gap = 20
+    rar_w = (right_x1 - right_x0 - rar_gap) / 2
+
+    def rarity_card(cx0, label, price, accent):
+        box = (cx0, rarity_y0, cx0 + rar_w, rarity_y1)
+        g = rounded_glow_rect(w, h, box, accent, radius=22, blur=22, alpha=130)
+        return box, g
+
+    secret = cfg.get("secret_egg_price", {"eggs": 1, "kah": 5})
+    eternal = cfg.get("eternal_egg_price", {"eggs": 1, "kah": 10})
+
+    box_s, g_s = rarity_card(right_x0, "SECRET", secret, NEON_PINK)
+    canvas = Image.alpha_composite(canvas, g_s)
+    draw = ImageDraw.Draw(canvas)
+    draw.rounded_rectangle(box_s, radius=20, fill=(35, 12, 30, 230), outline=NEON_PINK, width=3)
+    text_centered(draw, ((box_s[0] + box_s[2]) / 2, box_s[1] + 30), "SECRET RARITY", font("bold", 20), NEON_PINK)
+    text_centered(draw, ((box_s[0] + box_s[2]) / 2, (box_s[1] + box_s[3]) / 2 + 14),
+                  f"{secret.get('kah')} KAH", font("bold", 42), WHITE, stroke_width=2, stroke_fill=(70, 10, 50))
+    text_centered(draw, ((box_s[0] + box_s[2]) / 2, box_s[3] - 22),
+                  f"per {secret.get('eggs')} egg", font("reg", 14), DIM)
+
+    box_e, g_e = rarity_card(right_x0 + rar_w + rar_gap, "ETERNAL", eternal, NEON_CYAN)
+    canvas = Image.alpha_composite(canvas, g_e)
+    draw = ImageDraw.Draw(canvas)
+    draw.rounded_rectangle(box_e, radius=20, fill=(10, 30, 38, 230), outline=NEON_CYAN, width=3)
+    text_centered(draw, ((box_e[0] + box_e[2]) / 2, box_e[1] + 30), "ETERNAL RARITY", font("bold", 20), NEON_CYAN)
+    text_centered(draw, ((box_e[0] + box_e[2]) / 2, (box_e[1] + box_e[3]) / 2 + 14),
+                  f"{eternal.get('kah')} KAH", font("bold", 42), WHITE, stroke_width=2, stroke_fill=(6, 40, 46))
+    text_centered(draw, ((box_e[0] + box_e[2]) / 2, box_e[3] - 22),
+                  f"per {eternal.get('eggs')} egg", font("reg", 14), DIM)
+
+    # ---- CTA kontak, ngisi ruang kosong di bawah panel harga & rarity ----
+    contact = cfg.get("contact", "Order: -")
+    cta_y0, cta_y1 = 824, 896
+    cta_box = (x0, cta_y0, x1, cta_y1)
+    cta_glow = rounded_glow_rect(w, h, cta_box, NEON_CYAN, radius=20, blur=22, alpha=130)
+    canvas = Image.alpha_composite(canvas, cta_glow)
+    draw = ImageDraw.Draw(canvas)
+    draw.rounded_rectangle(cta_box, radius=18, fill=(14, 16, 46, 235), outline=NEON_CYAN, width=3)
+    check_badge(draw, cta_box[0] + 44, (cta_box[1] + cta_box[3]) / 2, r=20, color=GREEN)
+    draw.text((cta_box[0] + 84, (cta_box[1] + cta_box[3]) / 2 - 26), "SIAP JOKI SEKARANG?",
+               font=font("bold", 22), fill=WHITE)
+    draw.text((cta_box[0] + 84, (cta_box[1] + cta_box[3]) / 2 + 2),
+               f"Hubungi {contact} -- bayar kah setelah egg sudah di tangan kamu",
+               font=font("reg", 15), fill=(210, 225, 255))
+
+    note = cfg.get("note", "")
+    if note:
+        draw.text((x0, h - 34), note, font=font("reg", 13), fill=(180, 175, 210))
+
+    return canvas.convert("RGB")
+
+
 def main():
     cfg_path = HERE / "config.json"
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
@@ -824,6 +1001,9 @@ def main():
 
     render_wireframe_layout(cfg, 1920, 1080).save(HERE / "joki_poster_landscape.png")
     print(f"Saved: {HERE / 'joki_poster_landscape.png'}")
+
+    render_ambil_egg(cfg, 1920, 1080).save(HERE / "joki_poster_ambil_egg.png")
+    print(f"Saved: {HERE / 'joki_poster_ambil_egg.png'}")
 
 
 if __name__ == "__main__":

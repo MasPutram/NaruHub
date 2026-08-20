@@ -15,5 +15,23 @@
   ],
   "payment_methods": ["DANA", "GOPAY", "QRIS", "BCA"],
   "contact": "Order: -",
-  "note": "Harga & paket di atas contoh -- edit config.json sesuai kebutuhan."
+  "note": "Harga & paket di atas contoh -- edit config.json sesuai kebutuhan.",
+
+  "ambil_egg_title": "JASA JOKI AMBIL EGG",
+  "ambil_egg_subtitle": "CEPAT • AMAN • TERPERCAYA",
+  "cosmic_egg_tiers": [
+    { "eggs": 5, "kah": 1 },
+    { "eggs": 10, "kah": 2 },
+    { "eggs": 15, "kah": 3 },
+    { "eggs": 20, "kah": 4 },
+    { "eggs": 25, "kah": 5 },
+    { "eggs": 30, "kah": 6 },
+    { "eggs": 35, "kah": 7 },
+    { "eggs": 40, "kah": 8 },
+    { "eggs": 45, "kah": 9 },
+    { "eggs": 50, "kah": 10 }
+  ],
+  "secret_egg_price": { "eggs": 1, "kah": 5 },
+  "eternal_egg_price": { "eggs": 1, "kah": 10 },
+  "trust_badges": ["AMAN", "CEPAT", "GARANSI", "TERPERCAYA"]
 }
