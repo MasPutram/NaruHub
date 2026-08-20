@@ -486,6 +486,16 @@ def render_poster(data: dict) -> Image.Image:
             draw.text((cx + 40, cy), item, font=font(15), fill=NAVY)
         y += chk_h + 18
 
+    # Pet isi tas yang ga kepajang di mana pun di poster (bukan di kartu
+    # utama, bukan di grup mutasi, bukan di list panel kanan) -- ditampilin
+    # sebagai counter "+N" biar pembeli tau masih ada bonus pet lain.
+    group_shown_keys = set()
+    for _, items in groups[:6]:
+        for p in sorted(items, key=lambda p: p.get("rate", 0), reverse=True)[:6]:
+            group_shown_keys.add(pet_key(p))
+    shown_pet_keys = featured_keys | group_shown_keys | {pet_key(p) for p in right_panel_pets[:8]}
+    inactive_unlisted = [p for p in all_pets_sorted if pet_key(p) not in shown_pet_keys]
+
     # ================= RIGHT COLUMN =================
     ry = 40
     header_h = 48
@@ -531,6 +541,14 @@ def render_poster(data: dict) -> Image.Image:
             draw.line([right_x0 + 16, iy + 76, right_x1 - 16, iy + 76], fill=BORDER, width=1)
 
     ry += max(list_h, 100) + 24
+
+    if inactive_unlisted:
+        inv_h = 80
+        rounded_card(draw, (right_x0, ry, right_x1, ry + inv_h), fill=CARD_BG)
+        draw.text((right_x0 + 20, ry + 14), "PET INVENTORY (TIDAK AKTIF)", font=font(14, bold=True), fill=DIM)
+        draw.text((right_x0 + 20, ry + 34), f"+{len(inactive_unlisted)}", font=font(30, bold=True), fill=NAVY)
+        ry += inv_h + 24
+
     tv_h = 220
     rounded_card(draw, (right_x0, ry, right_x1, ry + tv_h), fill=CARD_BG)
     draw.text((right_x0 + 20, ry + 20), "PRICE ACC", font=font(22, bold=True), fill=NAVY)
