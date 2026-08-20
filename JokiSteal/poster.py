@@ -43,6 +43,13 @@ PET_FILES = {p.stem.split(" [")[0]: p for p in PET_DIR.glob("*.png")}
 HEADER_EGGS = [n for n in ["Eternal Lunar Dragon", "Unicorn", "Ascended Vermilion Phoenix"] if n in EGG_NAMES]
 TOP_PETS = ["Archdemon Dragon", "Unicorn", "Ascended Vermilion Phoenix"]
 
+RARITY_COLORS = {
+    "COSMIC": (130, 90, 230),
+    "SECRET": (214, 48, 48),
+    "ETERNAL": (56, 178, 214),
+    "DIVINE": (255, 205, 60),
+}
+
 
 def load_fonts():
     sans_bold = HERE / "fonts" / "DejaVuSans-Bold.ttf"
@@ -144,17 +151,51 @@ def check_badge(draw, cx, cy, r=16, color=BLUE):
                fill=WHITE, width=3, joint="curve")
 
 
-def render_poster(cfg: dict) -> Image.Image:
-    canvas = radial_gradient(W, H, BG_INNER, BG_OUTER).convert("RGBA")
+def rarity_pill_row(draw, x0, y, rarities, font_size=15, pill_h=32, gap=10):
+    """Baris pill kecil per tier rarity (COSMIC/SECRET/ETERNAL/DIVINE dst),
+    warna beda tiap tier. Return x setelah pill terakhir."""
+    f = font("bold", font_size)
+    mx = x0
+    for r in rarities:
+        color = RARITY_COLORS.get(r.upper(), GOLD)
+        w = draw.textlength(r.upper(), font=f) + 28
+        box = (mx, y, mx + w, y + pill_h)
+        draw.rounded_rectangle(box, radius=pill_h / 2, fill=color, outline=WHITE, width=2)
+        text_centered(draw, ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2), r.upper(), f, (18, 12, 8))
+        mx += w + gap
+    return mx
+
+
+def perks_line(draw, x0, y, perks, font_size=16, color=CREAM):
+    f = font("bold", font_size)
+    mx = x0
+    for p in perks:
+        txt = "✓ " + p
+        draw.text((mx, y), txt, font=f, fill=color)
+        mx += draw.textlength(txt, font=f) + 34
+
+
+def render_poster(cfg: dict, w: int = W, h: int = H) -> Image.Image:
+    """Layout landscape dua kolom. Dituning buat 1920x1080 (16:9); untuk
+    kanvas lain yang tingginya tetap 1080 tapi lebih sempit (mis. 4:3 =
+    1440x1080), semua koordinat X di-scale proporsional (hs) sementara
+    Y/font/ukuran tetap -- teks yang berpotensi kepanjangan sudah ada
+    logic shrink/ellipsis-nya sendiri jadi tetap aman lebih sempit."""
+    hs = w / W
+
+    def X(v):
+        return v * hs
+
+    canvas = radial_gradient(w, h, BG_INNER, BG_OUTER).convert("RGBA")
 
     # ---- Bintik telur dekoratif di background, opacity rendah -- ditaruh
     # cuma di area yang beneran kosong (bukan numpuk di atas panel/kartu). ----
     deco_specs = [
-        (EGG_NAMES[3 % len(EGG_NAMES)], 70, 1420, 40, 18),
-        (EGG_NAMES[7 % len(EGG_NAMES)], 60, 1560, 150, -25),
-        (EGG_NAMES[11 % len(EGG_NAMES)], 55, 260, 900, -15),
-        (EGG_NAMES[15 % len(EGG_NAMES)], 50, 700, 940, 20),
-        (EGG_NAMES[19 % len(EGG_NAMES)], 55, 900, 890, -10),
+        (EGG_NAMES[3 % len(EGG_NAMES)], 70, X(1420), 40, 18),
+        (EGG_NAMES[7 % len(EGG_NAMES)], 60, X(1560), 150, -25),
+        (EGG_NAMES[11 % len(EGG_NAMES)], 55, X(260), 900, -15),
+        (EGG_NAMES[15 % len(EGG_NAMES)], 50, X(700), 940, 20),
+        (EGG_NAMES[19 % len(EGG_NAMES)], 55, X(900), 890, -10),
     ]
     for name, size, x, y, angle in deco_specs:
         egg = load_egg(name, size)
@@ -167,8 +208,8 @@ def render_poster(cfg: dict) -> Image.Image:
     draw = ImageDraw.Draw(canvas)
 
     # ================= HEADER: badge bulat + ribbon judul =================
-    badge_cx, badge_cy, badge_r = 130, 110, 78
-    glow = glow_layer(W, H, (badge_cx - badge_r - 14, badge_cy - badge_r - 14,
+    badge_cx, badge_cy, badge_r = X(130), 110, 78
+    glow = glow_layer(w, h, (badge_cx - badge_r - 14, badge_cy - badge_r - 14,
                               badge_cx + badge_r + 14, badge_cy + badge_r + 14), GOLD, blur=18, alpha=180)
     canvas = Image.alpha_composite(canvas, glow)
     draw = ImageDraw.Draw(canvas)
@@ -177,20 +218,34 @@ def render_poster(cfg: dict) -> Image.Image:
     badge_egg = load_egg(HEADER_EGGS[0] if HEADER_EGGS else EGG_NAMES[0], int(badge_r * 1.5))
     paste_rgba(canvas, badge_egg, badge_cx - badge_egg.width / 2, badge_cy - badge_egg.height / 2)
 
-    ribbon_box = (250, 44, 1330, 176)
-    rglow = rounded_glow_rect(W, H, ribbon_box, RED, radius=30, blur=30, alpha=170)
+    ribbon_box = (X(250), 44, X(1330), 176)
+    rglow = rounded_glow_rect(w, h, ribbon_box, RED, radius=30, blur=30, alpha=170)
     canvas = Image.alpha_composite(canvas, rglow)
     draw = ImageDraw.Draw(canvas)
     draw.rounded_rectangle(ribbon_box, radius=26, fill=DARK_RED, outline=GOLD, width=4)
     title = cfg.get("title", "JOKI STEAL AN EGG")
+    title_f = font("bold", 58)
+    while draw.textlength(title, font=title_f) > (ribbon_box[2] - ribbon_box[0]) - 30 and title_f.size > 26:
+        title_f = font("bold", title_f.size - 2)
     text_centered(draw, ((ribbon_box[0] + ribbon_box[2]) / 2, (ribbon_box[1] + ribbon_box[3]) / 2),
-                  title, font("bold", 58), WHITE, stroke_width=6, stroke_fill=(70, 6, 6))
+                  title, title_f, WHITE, stroke_width=6, stroke_fill=(70, 6, 6))
+
+    # ================= Tagline + rarity pills + perks =================
+    info_x = X(250)
+    tagline = cfg.get("tagline", "")
+    if tagline:
+        draw.text((info_x, 190), tagline, font=font("bold", 20), fill=CREAM)
+        tw = draw.textlength(tagline, font=font("bold", 20))
+        rarity_pill_row(draw, info_x + tw + 16, 184, cfg.get("rarities", []))
+    perks = cfg.get("perks", [])
+    if perks:
+        perks_line(draw, info_x, 226, perks)
 
     # ================= TELUR COSMIC KE ATAS: mini item cards =================
-    card_y = 210
-    card_w, card_h = 240, 168
-    card_gap = 20
-    card_x0 = 250
+    card_y = 262
+    card_w, card_h = X(240), 150
+    card_gap = X(20)
+    card_x0 = X(250)
     label_font = font("bold", 15)
     tag_font = font("bold", 12)
     for i, egg_name in enumerate(HEADER_EGGS):
@@ -228,21 +283,22 @@ def render_poster(cfg: dict) -> Image.Image:
     draw = ImageDraw.Draw(canvas)
 
     # ================= PET RARITY TERTINGGI: showcase besar =================
-    show_y0, show_y1 = 420, 860
-    show_x0, show_x1 = 40, 1000
+    show_y0, show_y1 = 452, 880
+    show_x0, show_x1 = X(40), X(1000)
     draw.rounded_rectangle((show_x0, show_y0, show_x1, show_y1), radius=22, fill=(15, 8, 6, 160))
     text_centered(draw, ((show_x0 + show_x1) / 2, show_y0 + 34), "PET RARITY TERTINGGI DI GAME",
                   font("bold", 24), GOLD, stroke_width=2, stroke_fill=(40, 10, 4))
 
     pet_slot_w = (show_x1 - show_x0) / 3
+    pet_size = min(260, int(pet_slot_w - 20))
     for i, pet_name in enumerate(TOP_PETS):
         if pet_name not in PET_FILES:
             continue
         slot_cx = show_x0 + pet_slot_w * i + pet_slot_w / 2
         slot_cy = show_y0 + 250
-        g = glow_layer(W, H, (slot_cx - 150, slot_cy - 130, slot_cx + 150, slot_cy + 170), GOLD, blur=45, alpha=110)
+        g = glow_layer(w, h, (slot_cx - 150, slot_cy - 130, slot_cx + 150, slot_cy + 170), GOLD, blur=45, alpha=110)
         canvas = Image.alpha_composite(canvas, g)
-        pet_img = load_pet(pet_name, 260)
+        pet_img = load_pet(pet_name, pet_size)
         paste_rgba(canvas, pet_img, slot_cx - pet_img.width / 2, slot_cy - pet_img.height / 2 + 10)
         draw = ImageDraw.Draw(canvas)
         rank_box = (slot_cx - 26, show_y0 + 60, slot_cx + 26, show_y0 + 60 + 40)
@@ -257,22 +313,26 @@ def render_poster(cfg: dict) -> Image.Image:
         draw.text((show_x0 + 8, show_y1 + 24), note, font=font("reg", 15), fill=(255, 224, 190))
 
     # ================= PANEL KANAN: paket harga (pill) =================
-    panel_x0, panel_x1 = 1060, 1880
+    panel_x0, panel_x1 = X(1060), X(1880)
     py = 220
-    pill_colors = [GREEN, GOLD, BLUE, RED]
+    pill_colors = [GREEN, GOLD, BLUE, (150, 60, 220), RED]
     packages = cfg.get("packages", [])
-    pill_h = 108
+    pill_h = 92
     for i, pkg in enumerate(packages):
         color = pill_colors[i % len(pill_colors)]
         box = (panel_x0, py, panel_x1, py + pill_h)
-        draw.rounded_rectangle(box, radius=24, fill=color, outline=WHITE, width=3)
-        checklist_icon(draw, panel_x0 + 44, py + pill_h / 2, size=40)
+        draw.rounded_rectangle(box, radius=22, fill=color, outline=WHITE, width=3)
+        checklist_icon(draw, panel_x0 + 40, py + pill_h / 2, size=34)
         name = pkg.get("name", "")
         price = pkg.get("price", "")
-        text_x = panel_x0 + 84
-        draw.text((text_x, py + 18), name.upper(), font=font("bold", 24), fill=(20, 16, 10))
-        text_centered(draw, (panel_x1 - 46, py + pill_h / 2 + 4), price, font("bold", 40), (20, 16, 10), anchor="rm")
-        py += pill_h + 18
+        text_x = panel_x0 + 76
+        name_f = font("bold", 20)
+        max_name_w = panel_x1 - text_x - 140
+        while draw.textlength(name.upper(), font=name_f) > max_name_w and len(name) > 4:
+            name = name[:-2] + "…"
+        draw.text((text_x, py + pill_h / 2 - 12), name.upper(), font=name_f, fill=(20, 16, 10))
+        text_centered(draw, (panel_x1 - 40, py + pill_h / 2 + 2), price, font("bold", 34), (20, 16, 10), anchor="rm")
+        py += pill_h + 14
 
     # ---- Estimasi badge ----
     py += 6
@@ -312,13 +372,240 @@ def render_poster(cfg: dict) -> Image.Image:
     return canvas.convert("RGB")
 
 
+def render_portrait(cfg: dict, w: int, h: int, s: float) -> Image.Image:
+    """Layout satu kolom (badge+judul di atas, lalu ditumpuk ke bawah) --
+    dipakai buat 9:16 dan 3:4, beda cuma skala (s) spacing/ukuran icon biar
+    pas sama tinggi kanvas masing-masing (9:16 lebih lega, 3:4 lebih rapat)."""
+    canvas = radial_gradient(w, h, BG_INNER, BG_OUTER, center=(0.5, 0.22)).convert("RGBA")
+
+    def sz(v):
+        return int(v * s)
+
+    margin = sz(56)
+    x0, x1 = margin, w - margin
+
+    deco = [
+        (EGG_NAMES[2 % len(EGG_NAMES)], sz(70), w - sz(120), sz(20), 15),
+        (EGG_NAMES[9 % len(EGG_NAMES)], sz(55), sz(20), sz(140), -20),
+        (EGG_NAMES[17 % len(EGG_NAMES)], sz(60), w - sz(90), h - sz(160), 25),
+    ]
+    for name, size, x, y, angle in deco:
+        egg = load_egg(name, max(1, size))
+        egg = egg.rotate(angle, expand=True, resample=Image.BICUBIC)
+        r, g, b, a = egg.split()
+        a = a.point(lambda v: int(v * 0.25))
+        egg.putalpha(a)
+        paste_rgba(canvas, egg, x, y)
+
+    draw = ImageDraw.Draw(canvas)
+    y = sz(50)
+
+    # ---- Badge + judul (ditumpuk: badge kecil di atas, ribbon full width) ----
+    badge_r = sz(56)
+    badge_cx, badge_cy = w / 2, y + badge_r
+    glow = glow_layer(w, h, (badge_cx - badge_r - 12, badge_cy - badge_r - 12,
+                              badge_cx + badge_r + 12, badge_cy + badge_r + 12), GOLD, blur=sz(16), alpha=180)
+    canvas = Image.alpha_composite(canvas, glow)
+    draw = ImageDraw.Draw(canvas)
+    draw.ellipse((badge_cx - badge_r, badge_cy - badge_r, badge_cx + badge_r, badge_cy + badge_r),
+                 fill=(20, 10, 8), outline=GOLD, width=max(3, sz(5)))
+    badge_egg = load_egg(HEADER_EGGS[0] if HEADER_EGGS else EGG_NAMES[0], int(badge_r * 1.5))
+    paste_rgba(canvas, badge_egg, badge_cx - badge_egg.width / 2, badge_cy - badge_egg.height / 2)
+    y = badge_cy + badge_r + sz(18)
+
+    ribbon_h = sz(96)
+    ribbon_box = (x0, y, x1, y + ribbon_h)
+    rglow = rounded_glow_rect(w, h, ribbon_box, RED, radius=sz(24), blur=sz(24), alpha=170)
+    canvas = Image.alpha_composite(canvas, rglow)
+    draw = ImageDraw.Draw(canvas)
+    draw.rounded_rectangle(ribbon_box, radius=sz(20), fill=DARK_RED, outline=GOLD, width=max(3, sz(4)))
+    title = cfg.get("title", "JOKI STEAL AN EGG")
+    title_f = font("bold", sz(46))
+    while draw.textlength(title, font=title_f) > (x1 - x0) - sz(30) and title_f.size > sz(24):
+        title_f = font("bold", title_f.size - 2)
+    text_centered(draw, ((x0 + x1) / 2, y + ribbon_h / 2), title, title_f, WHITE,
+                  stroke_width=max(3, sz(5)), stroke_fill=(70, 6, 6))
+    y += ribbon_h + sz(22)
+
+    # ---- Tagline + rarity pills (wrap ke baris baru kalau kepanjangan) ----
+    tagline = cfg.get("tagline", "")
+    tag_f = font("bold", sz(20))
+    if tagline:
+        draw.text((x0, y), tagline, font=tag_f, fill=CREAM)
+        y += sz(30)
+    rarities = cfg.get("rarities", [])
+    if rarities:
+        rarity_pill_row(draw, x0, y, rarities, font_size=sz(15), pill_h=sz(32), gap=sz(10))
+        y += sz(32) + sz(14)
+    perks = cfg.get("perks", [])
+    if perks:
+        perks_line(draw, x0, y, perks, font_size=sz(16))
+        y += sz(30) + sz(10)
+
+    # ---- 3 kartu telur cosmic+ ----
+    card_gap = sz(16)
+    card_w = ((x1 - x0) - 2 * card_gap) / 3
+    card_h = sz(190)
+    name_font_base = sz(16)
+    tag_font = font("bold", sz(12))
+    label_font = font("bold", sz(14))
+    for i, egg_name in enumerate(HEADER_EGGS):
+        cx0 = x0 + i * (card_w + card_gap)
+        box = (cx0, y, cx0 + card_w, y + card_h)
+        draw.rounded_rectangle(box, radius=sz(14), fill=(18, 10, 8, 235), outline=GOLD, width=2)
+        egg_size = sz(96)
+        egg = load_egg(egg_name, egg_size)
+        paste_rgba(canvas, egg, cx0 + (card_w - egg_size) / 2, y + sz(16))
+        tag_w = sz(70)
+        tag_box = (cx0 + card_w - tag_w - sz(10), y + sz(10), cx0 + card_w - sz(10), y + sz(32))
+        draw.rounded_rectangle(tag_box, radius=sz(8), fill=GOLD)
+        text_centered(draw, ((tag_box[0] + tag_box[2]) / 2, (tag_box[1] + tag_box[3]) / 2),
+                      "COSMIC+", tag_font, (40, 24, 4))
+        name_font = font("bold", name_font_base)
+        words = egg_name.split(" ")
+        lines, cur = [], ""
+        for w_ in words:
+            trial = (cur + " " + w_).strip()
+            if draw.textlength(trial, font=name_font) > card_w - sz(16) and cur:
+                lines.append(cur)
+                cur = w_
+            else:
+                cur = trial
+        if cur:
+            lines.append(cur)
+        lines = lines[:2]
+        ny = y + card_h - (sz(46) if len(lines) > 1 else sz(32))
+        for line in lines:
+            text_centered(draw, (cx0 + card_w / 2, ny), line, name_font, WHITE)
+            ny += sz(18)
+        text_centered(draw, (cx0 + card_w / 2, y + card_h - sz(12)), "TELUR", label_font, DIM)
+    draw = ImageDraw.Draw(canvas)
+    y += card_h + sz(24)
+
+    # ---- Pet rarity tertinggi ----
+    show_h = sz(360)
+    show_box = (x0, y, x1, y + show_h)
+    draw.rounded_rectangle(show_box, radius=sz(18), fill=(15, 8, 6, 160))
+    text_centered(draw, ((x0 + x1) / 2, y + sz(28)), "PET RARITY TERTINGGI DI GAME",
+                  font("bold", sz(22)), GOLD, stroke_width=2, stroke_fill=(40, 10, 4))
+    pet_slot_w = (x1 - x0) / 3
+    pet_size = sz(150)
+    for i, pet_name in enumerate(TOP_PETS):
+        if pet_name not in PET_FILES:
+            continue
+        slot_cx = x0 + pet_slot_w * i + pet_slot_w / 2
+        slot_cy = y + sz(58) + pet_size / 2
+        g = glow_layer(w, h, (slot_cx - pet_size * 0.7, slot_cy - pet_size * 0.6,
+                               slot_cx + pet_size * 0.7, slot_cy + pet_size * 0.75), GOLD, blur=sz(30), alpha=110)
+        canvas = Image.alpha_composite(canvas, g)
+        pet_img = load_pet(pet_name, pet_size)
+        paste_rgba(canvas, pet_img, slot_cx - pet_img.width / 2, slot_cy - pet_img.height / 2)
+        draw = ImageDraw.Draw(canvas)
+        rank_r = sz(18)
+        rank_cy = y + sz(48)
+        draw.ellipse((slot_cx - rank_r, rank_cy - rank_r, slot_cx + rank_r, rank_cy + rank_r),
+                     fill=RED, outline=WHITE, width=2)
+        text_centered(draw, (slot_cx, rank_cy), f"#{i + 1}", font("bold", sz(15)), WHITE)
+        name_f = font("bold", sz(14))
+        pname = pet_name if draw.textlength(pet_name, font=name_f) <= pet_slot_w - sz(8) else pet_name.split(" ")[0]
+        text_centered(draw, (slot_cx, y + show_h - sz(34)), pname, name_f, WHITE)
+        text_centered(draw, (slot_cx, y + show_h - sz(14)), "RARITY TERTINGGI", font("bold", sz(11)), DIM)
+    y += show_h + sz(22)
+
+    # ---- Paket harga ----
+    packages = cfg.get("packages", [])
+    pill_colors = [GREEN, GOLD, BLUE, (150, 60, 220), RED]
+    pill_h = sz(78)
+    for i, pkg in enumerate(packages):
+        color = pill_colors[i % len(pill_colors)]
+        box = (x0, y, x1, y + pill_h)
+        draw.rounded_rectangle(box, radius=sz(18), fill=color, outline=WHITE, width=max(2, sz(3)))
+        checklist_icon(draw, x0 + sz(32), y + pill_h / 2, size=sz(28))
+        name = pkg.get("name", "")
+        price = pkg.get("price", "")
+        name_f = font("bold", sz(17))
+        text_x = x0 + sz(62)
+        max_name_w = (x1 - text_x) - sz(110)
+        while draw.textlength(name.upper(), font=name_f) > max_name_w and len(name) > 4:
+            name = name[:-2] + "…"
+        draw.text((text_x, y + pill_h / 2 - sz(10)), name.upper(), font=name_f, fill=(20, 16, 10))
+        text_centered(draw, (x1 - sz(28), y + pill_h / 2 + sz(2)), price, font("bold", sz(28)), (20, 16, 10), anchor="rm")
+        y += pill_h + sz(12)
+
+    # ---- Estimasi ----
+    est = cfg.get("estimasi", "")
+    if est:
+        y += sz(6)
+        est_h = sz(60)
+        box = (x0, y, x1, y + est_h)
+        draw.rounded_rectangle(box, radius=sz(16), fill=BLUE, outline=WHITE, width=max(2, sz(3)))
+        check_badge(draw, x0 + sz(34), y + est_h / 2, r=sz(15), color=GREEN)
+        draw.text((x0 + sz(62), y + est_h / 2 - sz(12)), est.upper(), font=font("bold", sz(22)), fill=WHITE)
+        y += est_h + sz(18)
+
+    # ---- Metode pembayaran ----
+    methods = cfg.get("payment_methods", [])
+    if methods:
+        draw.text((x0, y), "METODE PEMBAYARAN", font=font("bold", sz(13)), fill=DIM)
+        y += sz(24)
+        mx = x0
+        mf = font("bold", sz(15))
+        mh = sz(32)
+        for m in methods:
+            mw = draw.textlength(m, font=mf) + sz(28)
+            if mx + mw > x1:
+                mx = x0
+                y += mh + sz(10)
+            draw.rounded_rectangle((mx, y, mx + mw, y + mh), radius=sz(8), fill=WHITE)
+            text_centered(draw, (mx + mw / 2, y + mh / 2), m, mf, (20, 16, 10))
+            mx += mw + sz(10)
+        y += mh + sz(20)
+
+    # ---- Kontak ----
+    contact = cfg.get("contact", "Order: -")
+    box_h = sz(62)
+    box = (x0, y, x1, y + box_h)
+    draw.rounded_rectangle(box, radius=sz(16), fill=(20, 10, 8, 220), outline=GOLD, width=max(2, sz(3)))
+    bub_cx, bub_cy = x0 + sz(34), y + box_h / 2
+    bw, bh = sz(18), sz(14)
+    draw.rounded_rectangle((bub_cx - bw, bub_cy - bh, bub_cx + bw, bub_cy + bh * 0.85), radius=sz(9), fill=GOLD)
+    draw.polygon([(bub_cx - bw * 0.4, bub_cy + bh * 0.8), (bub_cx + bw * 0.1, bub_cy + bh * 0.8),
+                  (bub_cx - bw * 0.5, bub_cy + bh * 1.6)], fill=GOLD)
+    for dx in (-sz(8), 0, sz(8)):
+        rr = sz(3)
+        draw.ellipse((bub_cx + dx - rr, bub_cy - rr, bub_cx + dx + rr, bub_cy + rr), fill=(20, 10, 8))
+    draw.text((x0 + sz(62), y + box_h / 2 - sz(13)), contact, font=font("bold", sz(19)), fill=WHITE)
+    y += box_h + sz(16)
+
+    note = cfg.get("note", "")
+    if note:
+        note_f = font("reg", sz(13))
+        nlines, cur = [], ""
+        for w_ in note.split(" "):
+            trial = (cur + " " + w_).strip()
+            if draw.textlength(trial, font=note_f) > (x1 - x0) and cur:
+                nlines.append(cur)
+                cur = w_
+            else:
+                cur = trial
+        if cur:
+            nlines.append(cur)
+        for line in nlines:
+            draw.text((x0, y), line, font=note_f, fill=(255, 224, 190))
+            y += sz(18)
+
+    return canvas.convert("RGB")
+
+
 def main():
     cfg_path = HERE / "config.json"
     cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-    poster = render_poster(cfg)
-    out_path = HERE / "joki_poster.png"
-    poster.save(out_path)
-    print(f"Saved: {out_path}")
+
+    render_portrait(cfg, 1080, 1920, s=1.08).save(HERE / "joki_poster_9x16.png")
+    print(f"Saved: {HERE / 'joki_poster_9x16.png'}")
+
+    render_poster(cfg, 1440, 1080).save(HERE / "joki_poster_4x3.png")
+    print(f"Saved: {HERE / 'joki_poster_4x3.png'}")
 
 
 if __name__ == "__main__":

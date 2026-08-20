@@ -1,10 +1,14 @@
 {
   "title": "JOKI STEAL AN EGG",
+  "tagline": "Membantu mencuri telur dengan rarity:",
+  "rarities": ["COSMIC", "SECRET", "ETERNAL", "DIVINE"],
+  "perks": ["Tidak Terkena Stun", "Speed: -"],
   "estimasi": "ESTIMASI 1-3 JAM",
   "packages": [
     { "name": "Boost Kandang Lv.10", "price": "15K" },
     { "name": "Boost Treadmill Lv.10", "price": "15K" },
     { "name": "Farming 1 Jam", "price": "10K" },
+    { "name": "Farming Pakai Pet 100M/s", "price": "-" },
     { "name": "Paket Lengkap", "price": "35K" }
   ],
   "payment_methods": ["DANA", "GOPAY", "QRIS", "BCA"],
