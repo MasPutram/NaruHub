@@ -850,7 +850,13 @@ if BOT_ENABLED:
             return
 
         name = data.get("sourceAccount") or "?"
-        income = fmt_money(data.get("totalMoneyPerSecond") or 0)
+        # Total income aktif + potensi telur (backpack + lagi tumbuh) --
+        # bukan leaderstat Money/s mentah, yang bisa kebaca 0 kalau lagi ga
+        # ada pet ke-equip padahal potensi telurnya gede.
+        active_total = sum(p.get("rate", 0) for p in (data.get("activePets") or []))
+        egg_total = sum(e.get("rate", 0) for e in (data.get("growingEggs") or []))
+        egg_total += sum(e.get("rate", 0) for e in (data.get("backpackEggs") or []))
+        income = fmt_money(active_total + egg_total)
         speed = data.get("runSpeed")
         speed_text = f"{speed:,.0f}" if isinstance(speed, (int, float)) else str(speed or "-")
         price_value = parse_price_idr(price_text)
