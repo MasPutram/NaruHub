@@ -1279,6 +1279,7 @@ local Window = Fluent:CreateWindow({
 })
 
 local Tab = Window:AddTab({ Title = "Scanner" })
+local PosterTab = Window:AddTab({ Title = "Auto Poster" })
 
 ------------------------------------------------------------
 -- 1. Scan Isi Tas
@@ -1731,7 +1732,7 @@ do
 	local EggItemUtil = require(ReplicatedStorage.Library.Util.EggItemUtil)
 	local HttpService = game:GetService("HttpService")
 
-	local POSTER_SERVER_URL = "https://hansen-ricky-providers-barrel.trycloudflare.com/generate"
+	local POSTER_SERVER_URL = "https://ion-ministry-yes-carlo.trycloudflare.com/generate"
 
 	local function mutationNamesFromString(str)
 		if not str or str == "" then
@@ -1952,7 +1953,7 @@ do
 		return runSpeed, moneyPerSecond, kandangLevel, treadmillLevel
 	end
 
-	local section = Tab:AddSection("Jual Akun (Auto Poster)")
+	local section = PosterTab:AddSection("Jual Akun")
 
 	local posterServerInput = section:AddInput("StealAnEgg_PosterServerUrl", {
 		Title = "Poster Server URL",
@@ -2001,13 +2002,6 @@ do
 	local discordPriceFlowToggle = section:AddToggle("StealAnEgg_DiscordPriceFlow", {
 		Title = "Isi Harga di Discord (tombol + form)",
 		Default = false,
-	})
-	section:AddParagraph({
-		Title = "Catatan",
-		Content = "Kalau nyala: poster diposting TANPA harga ke channel \"isi harga\" di Discord dulu, "
-			.. "lengkap sama tombol. Klik tombol -> isi harga di form Discord -> poster final (dengan harga) "
-			.. "otomatis diposting ke channel satunya, dan bisa diedit lagi kapan aja lewat tombol yang sama "
-			.. "tanpa perlu buka game lagi. Butuh bot Discord aktif di poster_server.py (bot_config.json).",
 	})
 
 	local statusPara = section:AddParagraph({
@@ -2152,14 +2146,6 @@ do
 	end
 
 	section:AddButton({ Title = "Generate & Kirim ke Discord", Callback = generateAndSend })
-
-	section:AddParagraph({
-		Title = "Cara pakai",
-		Content = "1) Jalankan `python poster_server.py` di folder StealAnEgg (sekali aja, biarin jalan di background). "
-			.. "2) Isi Discord Webhook URL. 3) Klik Generate. Poster ngambil data dari isi tas + pet yang lagi aktif, "
-			.. "dihitung pakai rumus $/s asli game (AssetGenerationUtil), bukan tebakan. "
-			.. "Harga (opsional) kosongin = auto-hitung dari (income aktif + potensi telur netas) x Harga per 1B/s.",
-	})
 end
 
 Window:SelectTab(1)
