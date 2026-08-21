@@ -116,6 +116,15 @@ def fmt_money(v: float) -> str:
     return f"${v:.0f}/s"
 
 
+def fmt_currency(v: float) -> str:
+    """Sama kayak fmt_money tapi buat SALDO (bukan rate) -- ga ada '/s'."""
+    v = float(v)
+    for cut, suffix in [(1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")]:
+        if abs(v) >= cut:
+            return f"${v / cut:.1f}{suffix}"
+    return f"${v:.0f}"
+
+
 def fmt_weight(kg: float) -> str:
     return f"{kg:,.0f} Kg" if kg >= 1 else f"{kg:.2f} Kg"
 
@@ -198,6 +207,7 @@ def render_poster(data: dict) -> Image.Image:
     backpack_eggs = data.get("backpackEggs") or []
     run_speed = data.get("runSpeed")
     total_money_per_second = data.get("totalMoneyPerSecond")
+    current_money = data.get("currentMoney")
     kandang_level = data.get("kandangLevel")
     treadmill_level = data.get("treadmillLevel")
 
@@ -278,6 +288,8 @@ def render_poster(data: dict) -> Image.Image:
     stat_items = []
     if run_speed is not None:
         stat_items.append(("SPEED", f"{run_speed:,.0f}" if isinstance(run_speed, (int, float)) else str(run_speed)))
+    if current_money is not None:
+        stat_items.append(("UANG SEKARANG", fmt_currency(current_money)))
     if total_money_per_second is not None:
         stat_items.append(("INCOME POTENSI AKTIF", fmt_money(active_base_rate + egg_potential_rate)))
     stat_items.append(("INCOME AKTIF", fmt_money(active_base_rate)))
@@ -718,13 +730,20 @@ if BOT_ENABLED:
             super().__init__(timeout=None)
             self.poster_id = poster_id
             self.price_input = discord.ui.TextInput(
-                label="Harga",
+                label="Harga langsung (kosongin kalau pakai rate di bawah)",
                 placeholder="cth: 4 (= Rp 4.000), atau Rp 150.000 / 500rb",
                 default=str(suggested) if suggested else None,
-                required=True,
+                required=False,
                 max_length=40,
             )
+            self.rate_input = discord.ui.TextInput(
+                label="Atau: Rate per 1B/s (ribuan)",
+                placeholder="cth: 5 (= Rp 5.000 per 1B/s income aktif+potensi)",
+                required=False,
+                max_length=20,
+            )
             self.add_item(self.price_input)
+            self.add_item(self.rate_input)
 
         async def on_submit(self, interaction: discord.Interaction):
             # Render + upload gambar gampang lebih dari 3 detik (limit Discord
@@ -739,9 +758,35 @@ if BOT_ENABLED:
                     ephemeral=True,
                 )
                 return
-            # Angka polos = satuan ribuan ("4" -> "Rp 4.000"), biar ga usah
-            # ngetik nol-nol tiap kali isi harga.
-            price_text = format_price_shorthand(self.price_input.value)
+
+            raw_price = (self.price_input.value or "").strip()
+            raw_rate = (self.rate_input.value or "").strip()
+            base_data = entry["data"]
+            if raw_rate:
+                # Sama persis formula "Harga per 1B/s" di GUI script: rate x
+                # (income aktif + potensi telur netas), rate dalam ribuan.
+                try:
+                    rate_per_b = float(raw_rate.replace(",", ".")) * 1000
+                except ValueError:
+                    await interaction.followup.send(
+                        f"Rate '{raw_rate}' ga valid, harus angka. Coba lagi.", ephemeral=True,
+                    )
+                    return
+                active_total = sum(p.get("rate", 0) for p in (base_data.get("activePets") or []))
+                egg_total = sum(e.get("rate", 0) for e in (base_data.get("growingEggs") or []))
+                egg_total += sum(e.get("rate", 0) for e in (base_data.get("backpackEggs") or []))
+                income_b = (active_total + egg_total) / 1e9
+                price_value = int(round(income_b * rate_per_b))
+                price_text = "Rp " + f"{price_value:,}".replace(",", ".")
+            elif raw_price:
+                # Angka polos = satuan ribuan ("4" -> "Rp 4.000"), biar ga
+                # usah ngetik nol-nol tiap kali isi harga.
+                price_text = format_price_shorthand(raw_price)
+            else:
+                await interaction.followup.send(
+                    "Isi salah satu: Harga langsung ATAU Rate per 1B/s.", ephemeral=True,
+                )
+                return
 
             data = dict(entry["data"])
             data["price"] = price_text

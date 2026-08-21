@@ -1941,16 +1941,17 @@ do
 			end
 		end
 
-		local kandangLevel, treadmillLevel
+		local kandangLevel, treadmillLevel, currentMoney
 		pcall(function()
 			local stats = SaveModule.Get(LocalPlayer)
 			if stats then
 				kandangLevel = stats.BaseUpgradeLevel
 				treadmillLevel = stats.TreadmillUpgradeLevel
+				currentMoney = stats.Money -- saldo uang SEKARANG (bukan $/s), beda dari leaderstats "Money/s"
 			end
 		end)
 
-		return runSpeed, moneyPerSecond, kandangLevel, treadmillLevel
+		return runSpeed, moneyPerSecond, kandangLevel, treadmillLevel, currentMoney
 	end
 
 	local section = PosterTab:AddSection("Jual Akun")
@@ -2066,7 +2067,7 @@ do
 		pcall(function()
 			activeLimit = AssetCmds.RequestEquipLimit()
 		end)
-		local runSpeed, moneyPerSecond, kandangLevel, treadmillLevel = collectAccountStats()
+		local runSpeed, moneyPerSecond, kandangLevel, treadmillLevel, currentMoney = collectAccountStats()
 		local autoPrice = computeAutoPrice(activePets, growingEggs, backpackEggs)
 		-- Toggle nyala = jangan kirim harga sama sekali, biar poster_server
 		-- pakai alur bot (post draft + tombol "Isi Harga" di Discord) alih-
@@ -2088,6 +2089,7 @@ do
 			backpackEggs = backpackEggs,
 			runSpeed = runSpeed,
 			totalMoneyPerSecond = moneyPerSecond,
+			currentMoney = currentMoney,
 			kandangLevel = kandangLevel,
 			treadmillLevel = treadmillLevel,
 			ownerFacebook = ownerInput.Value,
