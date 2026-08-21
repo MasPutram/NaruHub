@@ -1058,7 +1058,8 @@ DASHBOARD_HTML = r"""<!doctype html>
   .sumcard .label { color: var(--dim); font-size: 11px; font-weight: 700; letter-spacing: .5px; }
   .sumcard .value { font-size: 24px; font-weight: 800; margin-top: 6px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
-  .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 14px; padding: 16px; }
+  .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 14px; padding: 16px; cursor: pointer; }
+  .card:hover { border-color: var(--accent); }
   .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
   .dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
@@ -1079,6 +1080,23 @@ DASHBOARD_HTML = r"""<!doctype html>
   .genbtn:disabled { opacity: .6; cursor: default; }
   .genmsg { font-size: 11px; color: var(--dim); margin-top: 6px; min-height: 14px; }
   .empty { color: var(--dim); text-align: center; padding: 60px 0; }
+
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; z-index: 50; }
+  .overlay.hidden { display: none; }
+  .modal { background: var(--card); border: 1px solid var(--card-border); border-radius: 16px; padding: 24px; width: 100%; max-width: 720px; }
+  .modal-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .modal-head .name { font-size: 20px; }
+  .modal-close { margin-left: auto; background: none; border: none; color: var(--dim); font-size: 22px; cursor: pointer; line-height: 1; }
+  .modal-close:hover { color: var(--ink); }
+  .modal-sub { color: var(--dim); font-size: 12px; margin-bottom: 18px; }
+  .section-title { color: var(--accent2); font-size: 12px; font-weight: 800; letter-spacing: .5px; margin: 18px 0 8px; }
+  .detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+  .dpet { background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 8px; padding: 6px 8px; display: flex; align-items: center; gap: 8px; }
+  .dpet img { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
+  .dpet .dinfo { min-width: 0; }
+  .dpet .dname { font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dpet .drate { font-size: 11px; color: var(--gold); font-weight: 700; }
+  .detail-empty { color: var(--dim); font-size: 12px; }
 </style>
 </head>
 <body>
@@ -1087,6 +1105,10 @@ DASHBOARD_HTML = r"""<!doctype html>
   <div class="summary" id="summary"></div>
   <div class="grid" id="grid"></div>
   <div class="empty" id="empty" style="display:none">Belum ada akun yang lapor. Nyalain "Auto Report ke Dashboard" di GUI game.</div>
+
+  <div class="overlay hidden" id="overlay">
+    <div class="modal" id="modal"></div>
+  </div>
 
 <script>
 function fmtMoney(v) {
@@ -1137,7 +1159,7 @@ async function refresh() {
 
   accounts.sort((a, b) => (b.money || 0) - (a.money || 0));
   document.getElementById("grid").innerHTML = accounts.map(a => `
-    <div class="card">
+    <div class="card" data-account="${a.sourceAccount.replace(/"/g, "&quot;")}">
       <div class="card-head">
         <span class="dot ${a.online ? 'online' : ''}"></span>
         <span class="name">${a.sourceAccount}</span>
@@ -1171,8 +1193,67 @@ async function refresh() {
 }
 document.getElementById("grid").addEventListener("click", (ev) => {
   const btn = ev.target.closest(".genbtn");
-  if (!btn) return;
-  generatePoster(btn.dataset.account, btn);
+  if (btn) {
+    generatePoster(btn.dataset.account, btn);
+    return;
+  }
+  const card = ev.target.closest(".card");
+  if (card) openDetail(card.dataset.account);
+});
+
+function petTile(p) {
+  return `
+    <div class="dpet">
+      <img src="${iconUrl(p)}" loading="lazy">
+      <div class="dinfo">
+        <div class="dname">${p.name || p.category}${(p.mutations||[]).length ? " (" + p.mutations.join(", ") + ")" : ""}</div>
+        <div class="drate">${fmtRate(p.rate)}</div>
+      </div>
+    </div>
+  `;
+}
+function petSection(title, list) {
+  const sorted = (list || []).slice().sort((x, y) => (y.rate || 0) - (x.rate || 0));
+  return `
+    <div class="section-title">${title} (${sorted.length})</div>
+    ${sorted.length
+      ? `<div class="detail-grid">${sorted.map(petTile).join("")}</div>`
+      : `<div class="detail-empty">Kosong.</div>`}
+  `;
+}
+async function openDetail(account) {
+  const overlay = document.getElementById("overlay");
+  const modal = document.getElementById("modal");
+  modal.innerHTML = `<div class="modal-head"><span class="name">${account}</span><button class="modal-close" id="modalClose">&times;</button></div><div class="modal-sub">Memuat...</div>`;
+  overlay.classList.remove("hidden");
+  document.getElementById("modalClose").onclick = closeDetail;
+  try {
+    const res = await fetch("/api/account-detail?account=" + encodeURIComponent(account));
+    const body = await res.json();
+    if (!res.ok || !body.ok) {
+      modal.innerHTML = `<div class="modal-head"><span class="name">${account}</span><button class="modal-close" id="modalClose">&times;</button></div><div class="modal-sub">${body.error || "Gagal memuat detail."}</div>`;
+      document.getElementById("modalClose").onclick = closeDetail;
+      return;
+    }
+    modal.innerHTML = `
+      <div class="modal-head"><span class="name">${account}</span><button class="modal-close" id="modalClose">&times;</button></div>
+      <div class="modal-sub">Active Limit: ${body.activeLimit ?? "-"}</div>
+      ${petSection("Pet Aktif", body.activePets)}
+      ${petSection("Isi Tas (Semua Pet)", body.allPets)}
+      ${petSection("Telur Sedang Tumbuh", body.growingEggs)}
+      ${petSection("Telur di Tas", body.backpackEggs)}
+    `;
+    document.getElementById("modalClose").onclick = closeDetail;
+  } catch (e) {
+    modal.innerHTML = `<div class="modal-head"><span class="name">${account}</span><button class="modal-close" id="modalClose">&times;</button></div><div class="modal-sub">Gagal memuat: ${e}</div>`;
+    document.getElementById("modalClose").onclick = closeDetail;
+  }
+}
+function closeDetail() {
+  document.getElementById("overlay").classList.add("hidden");
+}
+document.getElementById("overlay").addEventListener("click", (ev) => {
+  if (ev.target.id === "overlay") closeDetail();
 });
 async function generatePoster(account, btn) {
   const msgEl = btn.nextElementSibling;
@@ -1361,6 +1442,26 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _serve_account_detail(self, query: str):
+        from urllib.parse import parse_qs, unquote
+        q = parse_qs(query)
+        name = unquote((q.get("account") or [""])[0])
+        with ACCOUNTS_LOCK:
+            acc = ACCOUNTS.get(name)
+            full_data = acc.get("fullData") if acc else None
+        if not full_data:
+            self._send_json(404, {"ok": False, "error": "Belum ada data lengkap buat akun ini."})
+            return
+        self._send_json(200, {
+            "ok": True,
+            "sourceAccount": name,
+            "activePets": full_data.get("activePets") or [],
+            "activeLimit": full_data.get("activeLimit"),
+            "allPets": full_data.get("allPets") or [],
+            "growingEggs": full_data.get("growingEggs") or [],
+            "backpackEggs": full_data.get("backpackEggs") or [],
+        })
+
     def _serve_icon(self, query: str):
         from urllib.parse import parse_qs, unquote
         q = parse_qs(query)
@@ -1392,6 +1493,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/icon":
             self._serve_icon(query)
+            return
+        if path == "/api/account-detail":
+            self._serve_account_detail(query)
             return
         # Health check buat platform hosting (Render dst) + biar buka URL-nya
         # di browser ga cuma dapet 501.
