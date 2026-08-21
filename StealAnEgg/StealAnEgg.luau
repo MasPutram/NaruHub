@@ -1983,7 +1983,7 @@ do
 		Finished = true,
 	})
 	local hargaPerBInput = section:AddInput("StealAnEgg_HargaPerB", {
-		Title = "Harga per 1B/s Income Aktif (ribuan -- isi 5 = Rp 5.000, 0.5 = Rp 500)",
+		Title = "Harga per 1B/s Income Aktif + Potensi Telur (ribuan -- isi 5 = Rp 5.000, 0.5 = Rp 500)",
 		Placeholder = "cth: 5 (= Rp 5.000)",
 		Default = "5",
 		Finished = true,
@@ -2019,13 +2019,21 @@ do
 		return "Rp " .. (n < 0 and "-" or "") .. reversed
 	end
 
-	-- Price Acc auto-hitung dari total income pet aktif: tiap 1B/s income
-	-- dihargai sebesar StealAnEgg_HargaPerB (default Rp 5.000). Field harga
-	-- manual (priceInput) tetap menang kalau diisi -- ini cuma fallback.
-	local function computeAutoPrice(activePets)
+	-- Price Acc auto-hitung dari (income pet aktif + potensi total telur
+	-- netas -- baik yang lagi tumbuh di kandang maupun yang masih di tas):
+	-- tiap 1B/s gabungan dihargai sebesar StealAnEgg_HargaPerB (default Rp
+	-- 5.000). Field harga manual (priceInput) tetap menang kalau diisi --
+	-- ini cuma fallback.
+	local function computeAutoPrice(activePets, growingEggs, backpackEggs)
 		local totalRate = 0
 		for _, p in ipairs(activePets) do
 			totalRate += (p.rate or 0)
+		end
+		for _, e in ipairs(growingEggs) do
+			totalRate += (e.rate or 0)
+		end
+		for _, e in ipairs(backpackEggs) do
+			totalRate += (e.rate or 0)
 		end
 		if totalRate <= 0 then
 			return ""
@@ -2049,7 +2057,7 @@ do
 			activeLimit = AssetCmds.RequestEquipLimit()
 		end)
 		local runSpeed, moneyPerSecond, kandangLevel, treadmillLevel = collectAccountStats()
-		local autoPrice = computeAutoPrice(activePets)
+		local autoPrice = computeAutoPrice(activePets, growingEggs, backpackEggs)
 
 		local payload = {
 			title = titleInput.Value ~= "" and titleInput.Value or "Jual Akun GACOR",
