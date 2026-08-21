@@ -1073,6 +1073,11 @@ DASHBOARD_HTML = r"""<!doctype html>
   .pet { background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 8px; padding: 4px 6px; text-align: center; width: 64px; }
   .pet img { width: 36px; height: 36px; object-fit: contain; }
   .pet .pname { font-size: 9px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pet .prate { font-size: 9px; color: var(--gold); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .genbtn { margin-top: 12px; width: 100%; background: var(--accent); color: #1a1030; border: none; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 800; cursor: pointer; }
+  .genbtn:hover { filter: brightness(1.1); }
+  .genbtn:disabled { opacity: .6; cursor: default; }
+  .genmsg { font-size: 11px; color: var(--dim); margin-top: 6px; min-height: 14px; }
   .empty { color: var(--dim); text-align: center; padding: 60px 0; }
 </style>
 </head>
@@ -1155,11 +1160,47 @@ async function refresh() {
           <div class="pet">
             <img src="${iconUrl(p)}" loading="lazy">
             <div class="pname">${p.name || p.category}</div>
+            <div class="prate">${fmtRate(p.rate)}</div>
           </div>
         `).join("")}
       </div>
+      <button class="genbtn" data-account="${a.sourceAccount.replace(/"/g, "&quot;")}">Generate Poster</button>
+      <div class="genmsg"></div>
     </div>
   `).join("");
+}
+document.getElementById("grid").addEventListener("click", (ev) => {
+  const btn = ev.target.closest(".genbtn");
+  if (!btn) return;
+  generatePoster(btn.dataset.account, btn);
+});
+async function generatePoster(account, btn) {
+  const msgEl = btn.nextElementSibling;
+  btn.disabled = true;
+  msgEl.textContent = "Mengirim...";
+  msgEl.style.color = "var(--dim)";
+  try {
+    const res = await fetch("/api/generate-poster", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account }),
+    });
+    const body = await res.json();
+    if (res.ok && body.ok) {
+      msgEl.textContent = body.mode === "discord-price-flow"
+        ? "Draft terkirim ke Discord (isi harga di sana)."
+        : "Poster terkirim ke Discord.";
+      msgEl.style.color = "var(--green)";
+    } else {
+      msgEl.textContent = "Gagal: " + (body.error || "unknown error");
+      msgEl.style.color = "#f87171";
+    }
+  } catch (e) {
+    msgEl.textContent = "Gagal: " + e;
+    msgEl.style.color = "#f87171";
+  } finally {
+    btn.disabled = false;
+  }
 }
 refresh();
 setInterval(refresh, 5000);
@@ -1167,6 +1208,58 @@ setInterval(refresh, 5000);
 </body>
 </html>
 """
+
+
+def generate_and_deliver(data: dict) -> tuple[int, dict]:
+    """Render poster dari `data` dan kirim ke Discord -- dipakai bareng sama
+    /generate (dari game) dan /api/generate-poster (tombol di dashboard)."""
+    # Harga kosong + bot udah dikonfigurasi -> jangan langsung post ke
+    # webhook. Post draft (tanpa harga) ke channel "isi harga" via bot,
+    # dengan tombol; harga baru dipasang setelah user isi lewat modal, terus
+    # poster final diposting ke channel satunya.
+    if not (data.get("price") or "").strip() and BOT_ENABLED:
+        draft_img = render_poster(data)
+        draft_buf = io.BytesIO()
+        draft_img.save(draft_buf, format="PNG")
+        poster_id = uuid.uuid4().hex[:12]
+        suggested = data.get("suggestedPrice") or ""
+        PENDING[poster_id] = {"data": data, "suggested_price": suggested}
+        save_state()
+        schedule_post_draft(poster_id, draft_buf.getvalue(), data, suggested)
+        return 200, {"ok": True, "posterId": poster_id, "mode": "discord-price-flow"}
+
+    img = render_poster(data)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    webhook_url = data.get("webhookUrl")
+    if webhook_url:
+        content_lines = []
+        source_account = data.get("sourceAccount")
+        if source_account:
+            content_lines.append(f"Diambil dari akun: **{source_account}**")
+        if data.get("message"):
+            content_lines.append(data["message"])
+        resp = requests.post(
+            webhook_url,
+            data={"content": "\n".join(content_lines)},
+            files={"file": ("poster.png", buf.getvalue(), "image/png")},
+            timeout=20,
+        )
+        if resp.status_code not in (200, 204):
+            return 502, {"ok": False, "error": f"discord {resp.status_code}: {resp.text[:300]}"}
+
+    # Simpan salinan lokal buat debugging -- opsional, jangan sampai
+    # gagal-total kalau disk-nya read-only/ephemeral (misal di Render).
+    saved_to = None
+    try:
+        out_path = Path(__file__).parent / "last_poster.png"
+        out_path.write_bytes(buf.getvalue())
+        saved_to = str(out_path)
+    except OSError:
+        pass
+    return 200, {"ok": True, "saved": saved_to}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1182,6 +1275,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/monitor":
             self._handle_monitor()
             return
+        if self.path == "/api/generate-poster":
+            self._handle_generate_for_account()
+            return
         if self.path != "/generate":
             self._send_json(404, {"ok": False, "error": "not found"})
             return
@@ -1189,56 +1285,31 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", 0))
             raw = self.rfile.read(length)
             data = json.loads(raw.decode("utf-8"))
+            status, body = generate_and_deliver(data)
+            self._send_json(status, body)
+        except Exception as e:  # noqa: BLE001
+            self._send_json(500, {"ok": False, "error": str(e)})
 
-            # Harga kosong + bot udah dikonfigurasi -> jangan langsung post ke
-            # webhook. Post draft (tanpa harga) ke channel "isi harga" via
-            # bot, dengan tombol; harga baru dipasang setelah user isi lewat
-            # modal, terus poster final diposting ke channel satunya.
-            if not (data.get("price") or "").strip() and BOT_ENABLED:
-                draft_img = render_poster(data)
-                draft_buf = io.BytesIO()
-                draft_img.save(draft_buf, format="PNG")
-                poster_id = uuid.uuid4().hex[:12]
-                suggested = data.get("suggestedPrice") or ""
-                PENDING[poster_id] = {"data": data, "suggested_price": suggested}
-                save_state()
-                schedule_post_draft(poster_id, draft_buf.getvalue(), data, suggested)
-                self._send_json(200, {"ok": True, "posterId": poster_id, "mode": "discord-price-flow"})
+    def _handle_generate_for_account(self):
+        """Dipanggil dari tombol 'Generate Poster' di dashboard -- pakai
+        snapshot data lengkap yang udah kesimpen dari laporan /monitor
+        terakhir akun itu, jadi ga perlu game ngirim ulang apa-apa."""
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(length)
+            req = json.loads(raw.decode("utf-8"))
+            name = req.get("account") or ""
+            with ACCOUNTS_LOCK:
+                acc = ACCOUNTS.get(name)
+                full_data = acc.get("fullData") if acc else None
+            if not full_data:
+                self._send_json(404, {
+                    "ok": False,
+                    "error": "Belum ada data lengkap buat akun ini. Pastikan Auto Report ke Dashboard nyala & udah lapor minimal sekali.",
+                })
                 return
-
-            img = render_poster(data)
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            buf.seek(0)
-
-            webhook_url = data.get("webhookUrl")
-            if webhook_url:
-                content_lines = []
-                source_account = data.get("sourceAccount")
-                if source_account:
-                    content_lines.append(f"Diambil dari akun: **{source_account}**")
-                if data.get("message"):
-                    content_lines.append(data["message"])
-                resp = requests.post(
-                    webhook_url,
-                    data={"content": "\n".join(content_lines)},
-                    files={"file": ("poster.png", buf.getvalue(), "image/png")},
-                    timeout=20,
-                )
-                if resp.status_code not in (200, 204):
-                    self._send_json(502, {"ok": False, "error": f"discord {resp.status_code}: {resp.text[:300]}"})
-                    return
-
-            # Simpan salinan lokal buat debugging -- opsional, jangan sampai
-            # gagal-total kalau disk-nya read-only/ephemeral (misal di Render).
-            saved_to = None
-            try:
-                out_path = Path(__file__).parent / "last_poster.png"
-                out_path.write_bytes(buf.getvalue())
-                saved_to = str(out_path)
-            except OSError:
-                pass
-            self._send_json(200, {"ok": True, "saved": saved_to})
+            status, body = generate_and_deliver(full_data)
+            self._send_json(status, body)
         except Exception as e:  # noqa: BLE001
             self._send_json(500, {"ok": False, "error": str(e)})
 
@@ -1266,6 +1337,7 @@ class Handler(BaseHTTPRequestHandler):
                     "petsCount": data.get("petsCount", 0),
                     "stolenCount": data.get("stolenCount", 0),
                     "topPets": data.get("topPets") or [],
+                    "fullData": data.get("fullData"),
                     "lastSeen": time.time(),
                 }
             self._send_json(200, {"ok": True})
@@ -1277,7 +1349,7 @@ class Handler(BaseHTTPRequestHandler):
         with ACCOUNTS_LOCK:
             rows = []
             for name, acc in ACCOUNTS.items():
-                row = dict(acc)
+                row = {k: v for k, v in acc.items() if k != "fullData"}
                 row["sourceAccount"] = name
                 row["online"] = (now - acc.get("lastSeen", 0)) <= ONLINE_TIMEOUT_S
                 rows.append(row)

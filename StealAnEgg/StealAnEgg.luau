@@ -2220,6 +2220,38 @@ do
 				})
 			end
 
+			local activeLimit = 0
+			pcall(function()
+				activeLimit = AssetCmds.RequestEquipLimit()
+			end)
+			local autoPrice = computeAutoPrice(activePets, growingEggs, backpackEggs)
+			local useDiscordPriceFlow = discordPriceFlowToggle.Value == true
+
+			-- Snapshot lengkap sama persis kayak payload generateAndSend() --
+			-- disimpen server-side per akun biar tombol "Generate Poster" di
+			-- dashboard bisa mancing ulang generate tanpa perlu game ngirim
+			-- apa-apa lagi.
+			local fullData = {
+				title = titleInput.Value ~= "" and titleInput.Value or "Jual Akun GACOR",
+				badge = badgeInput.Value,
+				checklist = splitComma(checklistInput.Value or ""),
+				price = useDiscordPriceFlow and "" or (priceInput.Value ~= "" and priceInput.Value or autoPrice),
+				suggestedPrice = autoPrice,
+				webhookUrl = webhookInput.Value,
+				allPets = allPets,
+				activePets = activePets,
+				activeLimit = activeLimit,
+				growingEggs = growingEggs,
+				backpackEggs = backpackEggs,
+				runSpeed = runSpeed,
+				totalMoneyPerSecond = moneyPerSecond,
+				currentMoney = currentMoney,
+				kandangLevel = kandangLevel,
+				treadmillLevel = treadmillLevel,
+				ownerFacebook = ownerInput.Value,
+				sourceAccount = LocalPlayer.Name,
+			}
+
 			local payload = {
 				sourceAccount = LocalPlayer.Name,
 				money = currentMoney,
@@ -2234,6 +2266,7 @@ do
 				petsCount = #allPets + #activePets,
 				stolenCount = #backpackEggs,
 				topPets = topPets,
+				fullData = fullData,
 			}
 
 			local body = HttpService:JSONEncode(payload)
