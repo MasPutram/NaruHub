@@ -985,12 +985,31 @@ if BOT_ENABLED:
 
             lines = [
                 f"**{e['name']}** (Income {e['income_text']}, Speed {e['speed_text']}) - **{e['price_text']}** → [Lihat Poster]({e['jump_url']})"
-                for e in matches[:25]
+                for e in matches
             ]
             header = f"Ketemu **{len(matches)}** akun"
             if min_rp is not None or max_rp is not None:
                 header += f" (harga Rp {min_rp or 0:,} - {f'Rp {max_rp:,}' if max_rp is not None else 'tak terbatas'})".replace(",", ".")
-            await interaction.followup.send(header + ":\n" + "\n".join(lines), ephemeral=True)
+
+            # Discord batesin 1 pesan max 2000 karakter -- kalau match-nya
+            # banyak, gabungin semua jadi 1 pesan bisa kena limit itu dan
+            # gagal total. Pecah jadi beberapa pesan follow-up alih-alih
+            # motong daftarnya diam-diam.
+            DISCORD_MSG_LIMIT = 1900
+            chunks = []
+            current = header + ":\n"
+            for line in lines:
+                candidate = current + line + "\n"
+                if len(candidate) > DISCORD_MSG_LIMIT and current.strip():
+                    chunks.append(current.rstrip())
+                    current = line + "\n"
+                else:
+                    current = candidate
+            if current.strip():
+                chunks.append(current.rstrip())
+
+            for chunk in chunks:
+                await interaction.followup.send(chunk, ephemeral=True)
         except Exception as e:  # noqa: BLE001
             print(f"[discord_bot] /harga error: {e}")
             traceback.print_exc()
