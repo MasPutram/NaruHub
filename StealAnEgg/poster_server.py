@@ -265,10 +265,9 @@ def render_poster(data: dict) -> Image.Image:
             stats.append(("SPEED", f"{run_speed:,.0f}" if isinstance(run_speed, (int, float)) else str(run_speed)))
         if total_money_per_second is not None:
             stats.append(("INCOME POTENSI AKTIF", fmt_money(active_base_rate + egg_potential_rate)))
-        if egg_potential_rate:
-            stats.append(("POTENSI TELUR NETAS", fmt_money(egg_potential_rate)))
-        if backpack_egg_rate:
-            stats.append(("EGG BACKPACK", fmt_money(backpack_egg_rate)))
+        # Rincian (Potensi Telur Netas, Egg Backpack) sengaja GA dipasang di
+        # sini -- kepepet jadi 4 pill kecil bikin teksnya ga kebaca. Detail
+        # itu ditaruh di bawah kotak PRICE ACC di panel kanan (lihat bawah).
         gap = 10
         sw = min(190, (left_x1 - stat_x0 - gap * (len(stats) - 1)) / max(len(stats), 1))
         stat_x = stat_x0
@@ -578,8 +577,27 @@ def render_poster(data: dict) -> Image.Image:
         draw_text_centered(draw, ((right_x0 + right_x1) / 2, ry + tv_h / 2 + 10), str(price), font(30, bold=True), GREEN)
     else:
         draw.rounded_rectangle((right_x0 + 20, ry + 60, right_x1 - 20, ry + tv_h - 40), radius=12, outline=BORDER, width=2)
+    ry += tv_h + 20
 
-    bottom = max(y + 40, ry + tv_h + 40)
+    # ---- Rincian income (dipindah ke sini dari pill atas biar kebaca --
+    # pill kecil ga muat nampung 4 label sekaligus). ----
+    breakdown = []
+    if egg_potential_rate:
+        breakdown.append(("Potensi Telur Netas", fmt_money(egg_potential_rate)))
+    if backpack_egg_rate:
+        breakdown.append(("Egg Backpack", fmt_money(backpack_egg_rate)))
+    if breakdown:
+        bd_h = 34 + len(breakdown) * 26
+        rounded_card(draw, (right_x0, ry, right_x1, ry + bd_h), fill=CARD_BG)
+        draw.text((right_x0 + 20, ry + 12), "RINCIAN INCOME", font=font(14, bold=True), fill=DIM)
+        by = ry + 40
+        for label, val in breakdown:
+            draw.text((right_x0 + 20, by), label, font=font(15), fill=NAVY)
+            draw_text_centered(draw, (right_x1 - 20, by + 8), val, font(15, bold=True), GREEN, anchor="rm")
+            by += 26
+        ry += bd_h + 20
+
+    bottom = max(y + 40, ry)
     canvas = canvas.crop((0, 0, W, int(min(bottom, H))))
 
     owner = data.get("ownerFacebook")

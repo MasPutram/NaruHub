@@ -1438,7 +1438,7 @@ do
 
 	local autoEquipRunning = false
 	section:AddToggle("StealAnEgg_AutoEquip", {
-		Title = "Auto Equip (isi slot kosong, tiap 5 detik)",
+		Title = "Auto Equip",
 		Default = false,
 		Callback = function(enabled)
 			autoEquipRunning = enabled
@@ -1455,7 +1455,7 @@ do
 
 	local autoUnequipRunning = false
 	section:AddToggle("StealAnEgg_AutoUnequip", {
-		Title = "Auto Un-equip All (lepas semua pet aktif, tiap 2 detik)",
+		Title = "Auto Un-equip All",
 		Default = false,
 		Callback = function(enabled)
 			autoUnequipRunning = enabled
@@ -1468,6 +1468,11 @@ do
 				end)
 			end
 		end,
+	})
+
+	section:AddParagraph({
+		Title = "Catatan",
+		Content = "Auto Equip ngisi slot kosong tiap 5 detik. Auto Un-equip All lepas semua pet aktif tiap 2 detik.",
 	})
 
 	-- Total $/s dari pet aktif -- ditampilin langsung di GUI (bukan cuma di
@@ -1613,13 +1618,13 @@ do
 	local section = Tab:AddSection("Auto Upgrade Kandang & Treadmill")
 
 	local kandangTargetInput = section:AddInput("StealAnEgg_KandangTarget", {
-		Title = "Target Level Kandang (kosongin = MAX)",
+		Title = "Target Level Kandang",
 		Placeholder = "cth: 15",
 		Default = "",
 		Finished = true,
 	})
 	local treadmillTargetInput = section:AddInput("StealAnEgg_TreadmillTarget", {
-		Title = "Target Level Treadmill (kosongin = MAX)",
+		Title = "Target Level Treadmill",
 		Placeholder = "cth: 12",
 		Default = "",
 		Finished = true,
@@ -1680,7 +1685,7 @@ do
 
 	local autoUpgradeRunning = false
 	section:AddToggle("StealAnEgg_AutoUpgrade", {
-		Title = "Auto Upgrade (cek tiap 5 detik, berhenti sendiri di level target)",
+		Title = "Auto Upgrade",
 		Default = false,
 		Callback = function(enabled)
 			autoUpgradeRunning = enabled
@@ -1703,7 +1708,7 @@ do
 
 	section:AddParagraph({
 		Title = "Catatan",
-		Content = "Target dibaca dari input di atas tiap kali cek (ganti kapan aja, ga perlu "
+		Content = "Cek tiap 5 detik. Target dibaca dari input di atas tiap kali cek (ganti kapan aja, ga perlu "
 			.. "matiin toggle dulu). Kosongin field = upgrade terus sampai level MAX beneran. "
 			.. "Loop otomatis berhenti minta upgrade begitu level sekarang udah >= target atau "
 			.. "udah MAX, tapi toggle-nya sendiri tetap nyala (buat terus mantau kalau kamu naikin target).",
@@ -1977,13 +1982,13 @@ do
 		Finished = true,
 	})
 	local priceInput = section:AddInput("StealAnEgg_PosterPrice", {
-		Title = "Harga (opsional, kosongin buat auto-hitung dari income)",
-		Placeholder = "Rp 150.000",
+		Title = "Harga (opsional)",
+		Placeholder = "kosongin = auto-hitung",
 		Default = "",
 		Finished = true,
 	})
 	local hargaPerBInput = section:AddInput("StealAnEgg_HargaPerB", {
-		Title = "Harga per 1B/s Income Aktif + Potensi Telur (ribuan -- isi 5 = Rp 5.000, 0.5 = Rp 500)",
+		Title = "Harga per 1B/s (ribuan)",
 		Placeholder = "cth: 5 (= Rp 5.000)",
 		Default = "5",
 		Finished = true,
@@ -2135,7 +2140,8 @@ do
 		Title = "Cara pakai",
 		Content = "1) Jalankan `python poster_server.py` di folder StealAnEgg (sekali aja, biarin jalan di background). "
 			.. "2) Isi Discord Webhook URL. 3) Klik Generate. Poster ngambil data dari isi tas + pet yang lagi aktif, "
-			.. "dihitung pakai rumus $/s asli game (AssetGenerationUtil), bukan tebakan.",
+			.. "dihitung pakai rumus $/s asli game (AssetGenerationUtil), bukan tebakan. "
+			.. "Harga (opsional) kosongin = auto-hitung dari (income aktif + potensi telur netas) x Harga per 1B/s.",
 	})
 end
 
