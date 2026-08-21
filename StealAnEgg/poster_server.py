@@ -53,6 +53,13 @@ ACCOUNTS: dict[str, dict] = {}
 ACCOUNTS_LOCK = threading.Lock()
 ONLINE_TIMEOUT_S = 45  # ga lapor lebih dari ini dianggap OFFLINE di dashboard
 
+# Antrian command per akun -- dashboard nambahin command (misal
+# "restart_script") lewat POST /api/queue-command, terus agent Termux yang
+# jalan di instance itu polling GET /api/poll-command dan ngambil (pop)
+# command pertama buat dieksekusi. Di memori aja, sama kayak ACCOUNTS.
+COMMANDS: dict[str, list] = {}
+COMMANDS_LOCK = threading.Lock()
+
 # Font dibundling di repo (fonts/) biar jalan di Linux (Render dst) yang ga
 # punya C:\Windows\Fonts. Kalau ternyata jalan lokal di Windows dan folder
 # bundled-nya hilang, jatuh balik ke Arial bawaan OS.
@@ -1078,6 +1085,9 @@ DASHBOARD_HTML = r"""<!doctype html>
   .genbtn { margin-top: 12px; width: 100%; background: var(--accent); color: #1a1030; border: none; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 800; cursor: pointer; }
   .genbtn:hover { filter: brightness(1.1); }
   .genbtn:disabled { opacity: .6; cursor: default; }
+  .restartbtn { margin-top: 6px; width: 100%; background: #262636; color: var(--ink); border: 1px solid var(--card-border); border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 800; cursor: pointer; }
+  .restartbtn:hover { border-color: var(--accent2); }
+  .restartbtn:disabled { opacity: .6; cursor: default; }
   .genmsg { font-size: 11px; color: var(--dim); margin-top: 6px; min-height: 14px; }
   .empty { color: var(--dim); text-align: center; padding: 60px 0; }
 
@@ -1187,19 +1197,51 @@ async function refresh() {
         `).join("")}
       </div>
       <button class="genbtn" data-account="${a.sourceAccount.replace(/"/g, "&quot;")}">Generate Poster</button>
+      <button class="restartbtn" data-account="${a.sourceAccount.replace(/"/g, "&quot;")}">Restart Script</button>
       <div class="genmsg"></div>
     </div>
   `).join("");
 }
 document.getElementById("grid").addEventListener("click", (ev) => {
-  const btn = ev.target.closest(".genbtn");
-  if (btn) {
-    generatePoster(btn.dataset.account, btn);
+  const genBtn = ev.target.closest(".genbtn");
+  if (genBtn) {
+    generatePoster(genBtn.dataset.account, genBtn);
+    return;
+  }
+  const restartBtn = ev.target.closest(".restartbtn");
+  if (restartBtn) {
+    queueCommand(restartBtn.dataset.account, "restart_script", restartBtn, "Restart terkirim. Nunggu agent di instance ambil perintahnya.");
     return;
   }
   const card = ev.target.closest(".card");
   if (card) openDetail(card.dataset.account);
 });
+async function queueCommand(account, action, btn, successMsg) {
+  const msgEl = btn.nextElementSibling.classList.contains("genmsg") ? btn.nextElementSibling : btn.parentElement.querySelector(".genmsg");
+  btn.disabled = true;
+  if (msgEl) { msgEl.textContent = "Mengirim..."; msgEl.style.color = "var(--dim)"; }
+  try {
+    const res = await fetch("/api/queue-command", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account, action }),
+    });
+    const body = await res.json();
+    if (msgEl) {
+      if (res.ok && body.ok) {
+        msgEl.textContent = successMsg;
+        msgEl.style.color = "var(--green)";
+      } else {
+        msgEl.textContent = "Gagal: " + (body.error || "unknown error");
+        msgEl.style.color = "#f87171";
+      }
+    }
+  } catch (e) {
+    if (msgEl) { msgEl.textContent = "Gagal: " + e; msgEl.style.color = "#f87171"; }
+  } finally {
+    btn.disabled = false;
+  }
+}
 
 function petTile(p) {
   return `
@@ -1359,6 +1401,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/generate-poster":
             self._handle_generate_for_account()
             return
+        if self.path == "/api/queue-command":
+            self._handle_queue_command()
+            return
         if self.path != "/generate":
             self._send_json(404, {"ok": False, "error": "not found"})
             return
@@ -1368,6 +1413,26 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(raw.decode("utf-8"))
             status, body = generate_and_deliver(data)
             self._send_json(status, body)
+        except Exception as e:  # noqa: BLE001
+            self._send_json(500, {"ok": False, "error": str(e)})
+
+    def _handle_queue_command(self):
+        """Dashboard minta instance jalanin command tertentu (misal
+        restart_script) -- command masuk antrian per akun, nanti diambil
+        sendiri sama agent Termux yang polling di instance itu lewat
+        GET /api/poll-command."""
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(length)
+            req = json.loads(raw.decode("utf-8"))
+            name = req.get("account") or ""
+            action = req.get("action") or ""
+            if not name or not action:
+                self._send_json(400, {"ok": False, "error": "account & action wajib diisi"})
+                return
+            with COMMANDS_LOCK:
+                COMMANDS.setdefault(name, []).append({"action": action, "queuedAt": time.time()})
+            self._send_json(200, {"ok": True})
         except Exception as e:  # noqa: BLE001
             self._send_json(500, {"ok": False, "error": str(e)})
 
@@ -1462,6 +1527,17 @@ class Handler(BaseHTTPRequestHandler):
             "backpackEggs": full_data.get("backpackEggs") or [],
         })
 
+    def _serve_poll_command(self, query: str):
+        """Dipanggil sama agent Termux di tiap instance -- ambil (pop)
+        command pertama yang lagi ngantri buat akun ini, kalau ada."""
+        from urllib.parse import parse_qs, unquote
+        q = parse_qs(query)
+        name = unquote((q.get("account") or [""])[0])
+        with COMMANDS_LOCK:
+            queue = COMMANDS.get(name) or []
+            cmd = queue.pop(0) if queue else None
+        self._send_json(200, {"action": cmd["action"] if cmd else None})
+
     def _serve_icon(self, query: str):
         from urllib.parse import parse_qs, unquote
         q = parse_qs(query)
@@ -1496,6 +1572,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/account-detail":
             self._serve_account_detail(query)
+            return
+        if path == "/api/poll-command":
+            self._serve_poll_command(query)
             return
         # Health check buat platform hosting (Render dst) + biar buka URL-nya
         # di browser ga cuma dapet 501.
