@@ -1998,6 +1998,17 @@ do
 		Default = "Putra Ramadhan",
 		Finished = true,
 	})
+	local discordPriceFlowToggle = section:AddToggle("StealAnEgg_DiscordPriceFlow", {
+		Title = "Isi Harga di Discord (tombol + form)",
+		Default = false,
+	})
+	section:AddParagraph({
+		Title = "Catatan",
+		Content = "Kalau nyala: poster diposting TANPA harga ke channel \"isi harga\" di Discord dulu, "
+			.. "lengkap sama tombol. Klik tombol -> isi harga di form Discord -> poster final (dengan harga) "
+			.. "otomatis diposting ke channel satunya, dan bisa diedit lagi kapan aja lewat tombol yang sama "
+			.. "tanpa perlu buka game lagi. Butuh bot Discord aktif di poster_server.py (bot_config.json).",
+	})
 
 	local statusPara = section:AddParagraph({
 		Title = "Status",
@@ -2063,12 +2074,18 @@ do
 		end)
 		local runSpeed, moneyPerSecond, kandangLevel, treadmillLevel = collectAccountStats()
 		local autoPrice = computeAutoPrice(activePets, growingEggs, backpackEggs)
+		-- Toggle nyala = jangan kirim harga sama sekali, biar poster_server
+		-- pakai alur bot (post draft + tombol "Isi Harga" di Discord) alih-
+		-- alih langsung post lewat webhook. autoPrice tetap dikirim sebagai
+		-- suggestedPrice biar udah keisi default di form Discord-nya.
+		local useDiscordPriceFlow = discordPriceFlowToggle.Value == true
 
 		local payload = {
 			title = titleInput.Value ~= "" and titleInput.Value or "Jual Akun GACOR",
 			badge = badgeInput.Value,
 			checklist = splitComma(checklistInput.Value or ""),
-			price = priceInput.Value ~= "" and priceInput.Value or autoPrice,
+			price = useDiscordPriceFlow and "" or (priceInput.Value ~= "" and priceInput.Value or autoPrice),
+			suggestedPrice = autoPrice,
 			webhookUrl = webhookInput.Value,
 			allPets = allPets,
 			activePets = activePets,

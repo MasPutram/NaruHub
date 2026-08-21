@@ -4,20 +4,39 @@ StealAnEgg poster renderer.
 Runs a tiny local HTTP server. The Roblox script POSTs account data (JSON) to
 http://127.0.0.1:8765/generate and this renders a "jual akun" poster PNG
 (matching the reference layout: top picks, all-speed grid, active pets list,
-total value box) and pushes it straight to a Discord webhook.
+total value box).
+
+Delivery to Discord is either:
+  - Webhook (existing, unchanged): payload.price is already filled -> posted
+    straight to payload.webhookUrl, no interaction needed.
+  - Bot + button (new): payload.price is empty AND a bot is configured in
+    bot_config.json -> poster (no price yet) is posted by the bot to the
+    "draft" channel with an "Isi Harga" button. Clicking it opens a modal;
+    submitting re-renders the poster WITH the price and posts the final
+    image to a separate "final" channel.
 
 Run: python poster_server.py
 """
 
+import asyncio
 import io
 import json
 import os
 import re
+import threading
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import requests
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
+
+try:
+    import discord
+    from discord.ext import commands
+    DISCORD_AVAILABLE = True
+except ImportError:
+    DISCORD_AVAILABLE = False
 
 PORT = int(os.environ.get("PORT", 8765))
 ASSETS_DIR = Path(__file__).parent / "assets"
@@ -586,6 +605,174 @@ def add_watermark(canvas: Image.Image, text: str) -> Image.Image:
     return canvas.convert("RGB")
 
 
+# ============================================================
+# Discord bot: interactive "isi harga" flow (tombol + modal), alternatif
+# dari webhook langsung. Butuh bot_config.json (lihat bot_config.example.json)
+# -- token JANGAN pernah di-commit ke git (udah di-gitignore).
+# ============================================================
+BOT_CONFIG_PATH = Path(__file__).parent / "bot_config.json"
+
+
+def load_bot_config() -> dict:
+    cfg = {}
+    if BOT_CONFIG_PATH.exists():
+        try:
+            cfg = json.loads(BOT_CONFIG_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            cfg = {}
+    return {
+        "token": os.environ.get("DISCORD_BOT_TOKEN") or cfg.get("token"),
+        "draft_channel_id": os.environ.get("DISCORD_DRAFT_CHANNEL_ID") or cfg.get("draft_channel_id"),
+        "final_channel_id": os.environ.get("DISCORD_FINAL_CHANNEL_ID") or cfg.get("final_channel_id"),
+    }
+
+
+BOT_CFG = load_bot_config()
+# poster_id -> {"data": payload dict, "png": bytes} -- disimpan di memori aja,
+# ilang kalau server di-restart (poster yang belum diisi harga saat itu perlu
+# di-generate ulang dari game).
+PENDING: dict[str, dict] = {}
+
+bot = None
+bot_loop = None
+BOT_READY = threading.Event()
+BOT_ENABLED = DISCORD_AVAILABLE and bool(BOT_CFG["token"]) and bool(BOT_CFG["draft_channel_id"])
+
+if BOT_ENABLED:
+    intents = discord.Intents.default()
+    bot = commands.Bot(command_prefix="!", intents=intents)
+
+    class PriceModal(discord.ui.Modal, title="Isi / Edit Harga Acc"):
+        def __init__(self, poster_id: str, suggested: str):
+            super().__init__(timeout=None)
+            self.poster_id = poster_id
+            self.price_input = discord.ui.TextInput(
+                label="Harga",
+                placeholder="cth: Rp 150.000",
+                default=str(suggested) if suggested else None,
+                required=True,
+                max_length=40,
+            )
+            self.add_item(self.price_input)
+
+        async def on_submit(self, interaction: discord.Interaction):
+            entry = PENDING.get(self.poster_id)
+            if not entry:
+                await interaction.response.send_message(
+                    "Data poster ini udah ga ada (server di-restart?). Generate ulang dari game ya.",
+                    ephemeral=True,
+                )
+                return
+            data = dict(entry["data"])
+            data["price"] = self.price_input.value
+            entry["data"] = data  # inget harga terakhir buat jadi default lain kali diedit
+            entry["last_price"] = self.price_input.value
+
+            img = render_poster(data)
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            buf.seek(0)
+            file = discord.File(io.BytesIO(buf.getvalue()), filename="poster.png")
+            source_account = data.get("sourceAccount")
+            content = f"Diambil dari akun: **{source_account}**" if source_account else None
+
+            # Poster final ini boleh diedit berkali-kali lewat tombol yang sama
+            # tanpa perlu generate ulang dari game -- kalau udah pernah
+            # diposting, edit pesan yang sama; kalau belum, post baru.
+            final_ref = entry.get("final_message")
+            if final_ref:
+                try:
+                    channel = bot.get_channel(final_ref["channel_id"]) or await bot.fetch_channel(final_ref["channel_id"])
+                    msg = await channel.fetch_message(final_ref["message_id"])
+                    await msg.edit(content=content, attachments=[file])
+                    await interaction.response.send_message(
+                        f"Harga diupdate jadi **{self.price_input.value}** (poster final diedit di tempat).",
+                        ephemeral=True,
+                    )
+                    return
+                except (discord.NotFound, discord.Forbidden):
+                    final_ref = None  # pesan lama ilang -- fallback post baru di bawah
+
+            final_channel_id = BOT_CFG["final_channel_id"] or BOT_CFG["draft_channel_id"]
+            channel = bot.get_channel(int(final_channel_id))
+            if channel is None:
+                await interaction.response.send_message(
+                    f"Channel final (ID {final_channel_id}) ga ketemu -- cek lagi bot_config.json.",
+                    ephemeral=True,
+                )
+                return
+            sent = await channel.send(content=content, file=file, view=PriceView(self.poster_id, self.price_input.value))
+            entry["final_message"] = {"channel_id": sent.channel.id, "message_id": sent.id}
+            await interaction.response.send_message(
+                f"Harga **{self.price_input.value}** disimpan. Poster final diposting di {channel.mention} -- "
+                "bisa diedit lagi kapan aja lewat tombol di pesan itu, ga perlu generate ulang dari game.",
+                ephemeral=True,
+            )
+
+    class PriceView(discord.ui.View):
+        def __init__(self, poster_id: str, suggested: str):
+            super().__init__(timeout=None)
+            self.poster_id = poster_id
+            self.suggested = suggested
+
+        @discord.ui.button(label="Isi / Edit Harga", style=discord.ButtonStyle.success, custom_id="steal_an_egg_fill_price")
+        async def fill_price(self, interaction: discord.Interaction, button: discord.ui.Button):
+            entry = PENDING.get(self.poster_id)
+            if not entry:
+                await interaction.response.send_message(
+                    "Data poster ini udah ga ada (server di-restart?). Generate ulang dari game ya.",
+                    ephemeral=True,
+                )
+                return
+            suggested = entry.get("last_price") or self.suggested
+            await interaction.response.send_modal(PriceModal(self.poster_id, suggested))
+
+    @bot.event
+    async def on_ready():
+        print(f"[discord_bot] logged in as {bot.user}")
+        BOT_READY.set()
+
+    def start_bot_thread():
+        def runner():
+            global bot_loop
+            bot_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(bot_loop)
+            try:
+                bot_loop.run_until_complete(bot.start(BOT_CFG["token"]))
+            except Exception as e:  # noqa: BLE001
+                print(f"[discord_bot] failed to start: {e}")
+
+        threading.Thread(target=runner, daemon=True, name="discord-bot").start()
+
+    def schedule_post_draft(poster_id: str, png_bytes: bytes, data: dict, suggested: str):
+        async def _post():
+            await bot.wait_until_ready()
+            channel = bot.get_channel(int(BOT_CFG["draft_channel_id"]))
+            if channel is None:
+                print(f"[discord_bot] draft channel not found: {BOT_CFG['draft_channel_id']}")
+                return
+            file = discord.File(io.BytesIO(png_bytes), filename="poster.png")
+            source_account = data.get("sourceAccount")
+            content = (
+                f"Diambil dari akun: **{source_account}** -- klik tombol di bawah buat isi harga."
+                if source_account else "Klik tombol di bawah buat isi harga."
+            )
+            view = PriceView(poster_id, suggested)
+            await channel.send(content=content, file=file, view=view)
+
+        if bot_loop is not None:
+            asyncio.run_coroutine_threadsafe(_post(), bot_loop)
+else:
+    def start_bot_thread():
+        if DISCORD_AVAILABLE:
+            print("[discord_bot] bot_config.json belum diisi (token/draft_channel_id) -- fitur isi harga interaktif nonaktif.")
+        else:
+            print("[discord_bot] discord.py belum keinstall -- fitur isi harga interaktif nonaktif.")
+
+    def schedule_post_draft(*_args, **_kwargs):
+        pass
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send_json(self, status: int, payload: dict):
         body = json.dumps(payload).encode("utf-8")
@@ -603,6 +790,21 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", 0))
             raw = self.rfile.read(length)
             data = json.loads(raw.decode("utf-8"))
+
+            # Harga kosong + bot udah dikonfigurasi -> jangan langsung post ke
+            # webhook. Post draft (tanpa harga) ke channel "isi harga" via
+            # bot, dengan tombol; harga baru dipasang setelah user isi lewat
+            # modal, terus poster final diposting ke channel satunya.
+            if not (data.get("price") or "").strip() and BOT_ENABLED:
+                draft_img = render_poster(data)
+                draft_buf = io.BytesIO()
+                draft_img.save(draft_buf, format="PNG")
+                poster_id = uuid.uuid4().hex[:12]
+                PENDING[poster_id] = {"data": data}
+                suggested = data.get("suggestedPrice") or ""
+                schedule_post_draft(poster_id, draft_buf.getvalue(), data, suggested)
+                self._send_json(200, {"ok": True, "posterId": poster_id, "mode": "discord-price-flow"})
+                return
 
             img = render_poster(data)
             buf = io.BytesIO()
@@ -662,6 +864,10 @@ def get_lan_ip() -> str:
 
 
 def main():
+    start_bot_thread()
+    if BOT_ENABLED:
+        print("[discord_bot] starting -- fitur 'Isi Harga di Discord' aktif")
+
     # 0.0.0.0 biar bisa diakses dari device lain (HP dll) di WiFi yang sama,
     # ga cuma dari PC ini sendiri (127.0.0.1).
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
