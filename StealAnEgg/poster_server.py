@@ -624,14 +624,85 @@ def load_bot_config() -> dict:
         "token": os.environ.get("DISCORD_BOT_TOKEN") or cfg.get("token"),
         "draft_channel_id": os.environ.get("DISCORD_DRAFT_CHANNEL_ID") or cfg.get("draft_channel_id"),
         "final_channel_id": os.environ.get("DISCORD_FINAL_CHANNEL_ID") or cfg.get("final_channel_id"),
+        "index_channel_id": os.environ.get("DISCORD_INDEX_CHANNEL_ID") or cfg.get("index_channel_id"),
     }
 
 
+def parse_price_idr(text: str):
+    """'Rp 30.000' / '500rb' / '20K' / '1.5jt' / '30000' -> int rupiah, atau
+    None kalau ga bisa diparse (biar filter harga ga salah include harga
+    yang bentuknya aneh)."""
+    if not text:
+        return None
+    t = text.strip().lower().replace("rp", "").strip()
+    m = re.match(r"^([\d.,]+)\s*(rb|ribu|k|jt|juta|m|b)?$", t)
+    if not m:
+        return None
+    num_str, suffix = m.group(1), m.group(2)
+    # Kalau ada suffix (rb/jt/dst), titik/koma di angka itu desimal (1.5jt).
+    # Kalau ga ada suffix, titik itu pemisah ribuan gaya Indonesia (30.000).
+    if suffix:
+        num_str = num_str.replace(",", ".")
+    else:
+        num_str = num_str.replace(".", "").replace(",", "")
+    try:
+        num = float(num_str)
+    except ValueError:
+        return None
+    mult = {"rb": 1_000, "ribu": 1_000, "k": 1_000, "jt": 1_000_000, "juta": 1_000_000,
+            "m": 1_000_000, "b": 1_000_000_000}.get(suffix, 1)
+    return int(num * mult)
+
+
+def format_price_shorthand(raw: str) -> str:
+    """Input harga di modal Discord -- kalau user cuma ngetik angka polos
+    (boleh desimal), dianggap satuan RIBUAN biar ga usah ngetik nol-nol:
+    '4' -> 'Rp 4.000', '21' -> 'Rp 21.000', '0.5' -> 'Rp 500'. Kalau udah
+    ada format sendiri ('500rb', 'Rp 20.000'), dipakai apa adanya."""
+    raw = raw.strip()
+    if re.fullmatch(r"\d+([.,]\d+)?", raw):
+        value = int(round(float(raw.replace(",", ".")) * 1000))
+        return "Rp " + f"{value:,}".replace(",", ".")
+    return raw
+
+
 BOT_CFG = load_bot_config()
-# poster_id -> {"data": payload dict, "png": bytes} -- disimpan di memori aja,
-# ilang kalau server di-restart (poster yang belum diisi harga saat itu perlu
-# di-generate ulang dari game).
+# poster_id -> {"data": payload dict, "last_price", "final_message"} --
+# disimpan ke disk (STATE_PATH) tiap kali berubah, jadi tetap ada meskipun
+# poster_server di-restart -- harga bisa diedit kapan aja tanpa perlu buka
+# game lagi buat generate ulang.
 PENDING: dict[str, dict] = {}
+# poster_id -> {"name", "price_text", "price_value", "income_text",
+# "speed_text", "jump_url", "index_message"} -- katalog ringkas buat channel
+# index + filter harga. Ikut disimpan ke disk juga.
+CATALOG: dict[str, dict] = {}
+
+STATE_PATH = Path(__file__).parent / "bot_state.json"
+
+
+def load_state():
+    global PENDING, CATALOG
+    if STATE_PATH.exists():
+        try:
+            saved = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+            PENDING = saved.get("pending", {})
+            CATALOG = saved.get("catalog", {})
+            print(f"[discord_bot] loaded state: {len(PENDING)} pending, {len(CATALOG)} catalog entr(y/ies)")
+        except (OSError, json.JSONDecodeError) as e:
+            print(f"[discord_bot] failed to load {STATE_PATH.name}: {e}")
+
+
+def save_state():
+    try:
+        STATE_PATH.write_text(
+            json.dumps({"pending": PENDING, "catalog": CATALOG}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except OSError as e:
+        print(f"[discord_bot] failed to save {STATE_PATH.name}: {e}")
+
+
+load_state()
 
 bot = None
 bot_loop = None
@@ -648,7 +719,7 @@ if BOT_ENABLED:
             self.poster_id = poster_id
             self.price_input = discord.ui.TextInput(
                 label="Harga",
-                placeholder="cth: Rp 150.000",
+                placeholder="cth: 4 (= Rp 4.000), atau Rp 150.000 / 500rb",
                 default=str(suggested) if suggested else None,
                 required=True,
                 max_length=40,
@@ -668,10 +739,15 @@ if BOT_ENABLED:
                     ephemeral=True,
                 )
                 return
+            # Angka polos = satuan ribuan ("4" -> "Rp 4.000"), biar ga usah
+            # ngetik nol-nol tiap kali isi harga.
+            price_text = format_price_shorthand(self.price_input.value)
+
             data = dict(entry["data"])
-            data["price"] = self.price_input.value
+            data["price"] = price_text
             entry["data"] = data  # inget harga terakhir buat jadi default lain kali diedit
-            entry["last_price"] = self.price_input.value
+            entry["last_price"] = price_text
+            save_state()
 
             img = render_poster(data)
             buf = io.BytesIO()
@@ -690,8 +766,9 @@ if BOT_ENABLED:
                     channel = bot.get_channel(final_ref["channel_id"]) or await bot.fetch_channel(final_ref["channel_id"])
                     msg = await channel.fetch_message(final_ref["message_id"])
                     await msg.edit(content=content, attachments=[file])
+                    await upsert_catalog_entry(self.poster_id, data, price_text, msg.jump_url)
                     await interaction.followup.send(
-                        f"Harga diupdate jadi **{self.price_input.value}** (poster final diedit di tempat).",
+                        f"Harga diupdate jadi **{price_text}** (poster final diedit di tempat).",
                         ephemeral=True,
                     )
                     return
@@ -706,10 +783,12 @@ if BOT_ENABLED:
                     ephemeral=True,
                 )
                 return
-            sent = await channel.send(content=content, file=file, view=PriceView(self.poster_id, self.price_input.value))
+            sent = await channel.send(content=content, file=file, view=PriceView(self.poster_id, price_text))
             entry["final_message"] = {"channel_id": sent.channel.id, "message_id": sent.id}
+            save_state()
+            await upsert_catalog_entry(self.poster_id, data, price_text, sent.jump_url)
             await interaction.followup.send(
-                f"Harga **{self.price_input.value}** disimpan. Poster final diposting di {channel.mention} -- "
+                f"Harga **{price_text}** disimpan. Poster final diposting di {channel.mention} -- "
                 "bisa diedit lagi kapan aja lewat tombol di pesan itu, ga perlu generate ulang dari game.",
                 ephemeral=True,
             )
@@ -724,17 +803,110 @@ if BOT_ENABLED:
         async def fill_price(self, interaction: discord.Interaction, button: discord.ui.Button):
             entry = PENDING.get(self.poster_id)
             if not entry:
+                # Data-nya udah ga ada (server pernah restart) -- tombolnya
+                # bakal terus gagal kalau diklik lagi, jadi hapus aja dari
+                # pesan ini biar ga ada tombol mati yang nggantung.
+                try:
+                    await interaction.message.edit(view=None)
+                except discord.HTTPException:
+                    pass
                 await interaction.response.send_message(
-                    "Data poster ini udah ga ada (server di-restart?). Generate ulang dari game ya.",
+                    "Data poster ini udah ga ada (server di-restart?). Generate ulang dari game ya. "
+                    "Tombolnya udah dihapus dari pesan ini.",
                     ephemeral=True,
                 )
                 return
             suggested = entry.get("last_price") or self.suggested
             await interaction.response.send_modal(PriceModal(self.poster_id, suggested))
 
+    async def upsert_catalog_entry(poster_id: str, data: dict, price_text: str, jump_url: str):
+        """Post/update satu baris ringkas di channel katalog: nama akun,
+        income + speed, harga, link ke poster final -- biar ga perlu buka
+        satu-satu poster buat bandingin harga."""
+        index_channel_id = BOT_CFG.get("index_channel_id")
+        if not index_channel_id:
+            return
+        channel = bot.get_channel(int(index_channel_id))
+        if channel is None:
+            print(f"[discord_bot] index channel not found: {index_channel_id}")
+            return
+
+        name = data.get("sourceAccount") or "?"
+        income = fmt_money(data.get("totalMoneyPerSecond") or 0)
+        speed = data.get("runSpeed")
+        speed_text = f"{speed:,.0f}" if isinstance(speed, (int, float)) else str(speed or "-")
+        price_value = parse_price_idr(price_text)
+        line = f"**{name}** (Income {income}, Speed {speed_text}) - **{price_text}** → [Lihat Poster]({jump_url})"
+
+        entry = CATALOG.get(poster_id, {})
+        entry.update({
+            "name": name, "price_text": price_text, "price_value": price_value,
+            "income_text": income, "speed_text": speed_text, "jump_url": jump_url,
+        })
+        CATALOG[poster_id] = entry
+
+        idx_ref = entry.get("index_message")
+        if idx_ref:
+            try:
+                idx_channel = bot.get_channel(idx_ref["channel_id"]) or await bot.fetch_channel(idx_ref["channel_id"])
+                idx_msg = await idx_channel.fetch_message(idx_ref["message_id"])
+                await idx_msg.edit(content=line)
+                save_state()
+                return
+            except (discord.NotFound, discord.Forbidden):
+                pass  # pesan lama ilang -- post baru di bawah
+        sent = await channel.send(content=line)
+        entry["index_message"] = {"channel_id": sent.channel.id, "message_id": sent.id}
+        save_state()
+
+    @bot.tree.command(name="harga", description="Filter akun di katalog berdasarkan range harga (satuan RIBUAN)")
+    @discord.app_commands.describe(min="Harga minimum dalam ribuan -- isi 4 = Rp 4.000 (kosongin = ga ada batas bawah)",
+                                    max="Harga maksimum dalam ribuan -- isi 30 = Rp 30.000 (kosongin = ga ada batas atas)")
+    async def harga_command(interaction: discord.Interaction, min: int = None, max: int = None):
+        # Konsisten sama input harga di tempat lain: angka polos = satuan
+        # ribuan ("4" -> Rp 4.000), biar ga ketuker kayak sebelumnya.
+        min_rp = min * 1000 if min is not None else None
+        max_rp = max * 1000 if max is not None else None
+
+        matches = []
+        for entry in CATALOG.values():
+            pv = entry.get("price_value")
+            if pv is None:
+                continue
+            if min_rp is not None and pv < min_rp:
+                continue
+            if max_rp is not None and pv > max_rp:
+                continue
+            matches.append(entry)
+        matches.sort(key=lambda e: e["price_value"])
+
+        if not matches:
+            await interaction.response.send_message("Ga ada akun yang cocok sama range harga itu.", ephemeral=True)
+            return
+
+        lines = [
+            f"**{e['name']}** (Income {e['income_text']}, Speed {e['speed_text']}) - **{e['price_text']}** → [Lihat Poster]({e['jump_url']})"
+            for e in matches[:25]
+        ]
+        header = f"Ketemu **{len(matches)}** akun"
+        if min_rp is not None or max_rp is not None:
+            header += f" (harga Rp {min_rp or 0:,} - {f'Rp {max_rp:,}' if max_rp is not None else 'tak terbatas'})".replace(",", ".")
+        await interaction.response.send_message(header + ":\n" + "\n".join(lines), ephemeral=True)
+
     @bot.event
     async def on_ready():
         print(f"[discord_bot] logged in as {bot.user}")
+        for guild in bot.guilds:
+            try:
+                # Command didaftar global (bot.tree.command tanpa guild=),
+                # tapi guild-sync cuma pick up command yang di-scope ke guild
+                # itu -- copy_global_to biar langsung kepake instan, ga usah
+                # nunggu propagasi global (bisa sampe 1 jam).
+                bot.tree.copy_global_to(guild=guild)
+                synced = await bot.tree.sync(guild=guild)
+                print(f"[discord_bot] synced {len(synced)} slash command(s) to {guild.name}: {[c.name for c in synced]}")
+            except discord.HTTPException as e:
+                print(f"[discord_bot] slash command sync failed for {guild.name}: {e}")
         BOT_READY.set()
 
     def start_bot_thread():
@@ -806,6 +978,7 @@ class Handler(BaseHTTPRequestHandler):
                 draft_img.save(draft_buf, format="PNG")
                 poster_id = uuid.uuid4().hex[:12]
                 PENDING[poster_id] = {"data": data}
+                save_state()
                 suggested = data.get("suggestedPrice") or ""
                 schedule_post_draft(poster_id, draft_buf.getvalue(), data, suggested)
                 self._send_json(200, {"ok": True, "posterId": poster_id, "mode": "discord-price-flow"})

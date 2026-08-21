@@ -1,5 +1,6 @@
 {
   "token": "PASTE_BOT_TOKEN_DI_SINI",
   "draft_channel_id": "PASTE_CHANNEL_ID_ISI_HARGA",
-  "final_channel_id": "PASTE_CHANNEL_ID_HASIL_FINAL"
+  "final_channel_id": "PASTE_CHANNEL_ID_HASIL_FINAL",
+  "index_channel_id": "PASTE_CHANNEL_ID_KATALOG_AKUN"
 }
