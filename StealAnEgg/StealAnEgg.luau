@@ -1276,6 +1276,7 @@ local Window = Fluent:CreateWindow({
 	Badge = "BETA",
 	TabWidth = 150,
 	Size = UDim2.fromOffset(680, 460),
+	AutoStartMinimized = true,
 })
 
 local Tab = Window:AddTab({ Title = "Scanner" })
