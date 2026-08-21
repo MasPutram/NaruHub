@@ -2160,7 +2160,7 @@ do
 	local monitorSection = PosterTab:AddSection("Monitor Lokal (Dashboard)")
 
 	local monitorUrlInput = monitorSection:AddInput("StealAnEgg_MonitorUrl", {
-		Title = "Monitor Server URL",
+		Title = "Monitor Server URL (kosongin = pakai domain Poster Server di atas)",
 		Placeholder = "http://127.0.0.1:8765/monitor",
 		Default = "",
 		Finished = true,
@@ -2270,7 +2270,17 @@ do
 			}
 
 			local body = HttpService:JSONEncode(payload)
-			local url = monitorUrlInput.Value ~= "" and monitorUrlInput.Value or "http://127.0.0.1:8765/monitor"
+			-- Kalau field ini dikosongin, pakai domain yang sama dengan Poster
+			-- Server URL (yang lebih sering di-set user, termasuk buat akun di
+			-- cloud phone / device yang beda jaringan dari PC) -- ganti path
+			-- "/generate" jadi "/monitor". Fallback ke localhost cuma buat PC
+			-- yang jalanin poster_server.py sendiri.
+			local url = monitorUrlInput.Value
+			if url == "" then
+				local base = posterServerInput.Value ~= "" and posterServerInput.Value or POSTER_SERVER_URL
+				base = base:gsub("/+$", ""):gsub("/generate$", "")
+				url = base ~= "" and (base .. "/monitor") or "http://127.0.0.1:8765/monitor"
+			end
 			request({
 				Url = url,
 				Method = "POST",
