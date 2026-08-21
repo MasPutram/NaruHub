@@ -298,7 +298,7 @@ def render_poster(data: dict) -> Image.Image:
     if run_speed is not None:
         stat_items.append(("SPEED", f"{run_speed:,.0f}" if isinstance(run_speed, (int, float)) else str(run_speed)))
     if current_money is not None:
-        stat_items.append(("UANG SEKARANG", fmt_currency(current_money)))
+        stat_items.append(("CASH", fmt_currency(current_money)))
     if total_money_per_second is not None:
         stat_items.append(("INCOME POTENSI AKTIF", fmt_money(active_base_rate + egg_potential_rate)))
     stat_items.append(("INCOME AKTIF", fmt_money(active_base_rate)))
@@ -1140,7 +1140,7 @@ async function refresh() {
       </div>
       <div class="stats">
         <div class="stat speed"><div class="label">SPEED</div><div class="value">${fmtNum(a.speed)}</div></div>
-        <div class="stat money"><div class="label">UANG SEKARANG</div><div class="value">${fmtMoney(a.money)}</div></div>
+        <div class="stat money"><div class="label">CASH</div><div class="value">${fmtMoney(a.money)}</div></div>
         <div class="stat"><div class="label">INCOME POTENSI AKTIF</div><div class="value">${fmtRate(a.incomePotensiAktif)}</div></div>
         <div class="stat"><div class="label">INCOME AKTIF</div><div class="value">${fmtRate(a.incomeAktif)}</div></div>
         <div class="stat"><div class="label">INCOME EGG BACKPACK</div><div class="value">${fmtRate(a.incomeEggBackpack)}</div></div>
