@@ -813,29 +813,34 @@ if BOT_ENABLED:
 
     @bot.event
     async def on_interaction(interaction: discord.Interaction):
-        if interaction.type != discord.InteractionType.component:
-            return
-        custom_id = interaction.data.get("custom_id", "")
-        if not custom_id.startswith(FILL_PRICE_PREFIX):
-            return
-        poster_id = custom_id[len(FILL_PRICE_PREFIX):]
-        entry = PENDING.get(poster_id)
-        if not entry:
-            # Data-nya udah ga ada (poster dari sebelum bot_state.json ada,
-            # atau kekorupsi) -- tombolnya bakal terus gagal kalau diklik
-            # lagi, jadi hapus aja dari pesan ini biar ga ada tombol mati
-            # yang nggantung.
-            try:
-                await interaction.message.edit(view=None)
-            except discord.HTTPException:
-                pass
-            await interaction.response.send_message(
-                "Data poster ini udah ga ada. Generate ulang dari game ya. Tombolnya udah dihapus dari pesan ini.",
-                ephemeral=True,
-            )
-            return
-        suggested = entry.get("last_price") or entry.get("suggested_price") or ""
-        await interaction.response.send_modal(PriceModal(poster_id, suggested))
+        try:
+            if interaction.type != discord.InteractionType.component:
+                return
+            custom_id = interaction.data.get("custom_id", "")
+            if not custom_id.startswith(FILL_PRICE_PREFIX):
+                return
+            poster_id = custom_id[len(FILL_PRICE_PREFIX):]
+            entry = PENDING.get(poster_id)
+            if not entry:
+                # Data-nya udah ga ada (poster dari sebelum bot_state.json ada,
+                # atau kekorupsi) -- tombolnya bakal terus gagal kalau diklik
+                # lagi, jadi hapus aja dari pesan ini biar ga ada tombol mati
+                # yang nggantung.
+                try:
+                    await interaction.message.edit(view=None)
+                except discord.HTTPException:
+                    pass
+                await interaction.response.send_message(
+                    "Data poster ini udah ga ada. Generate ulang dari game ya. Tombolnya udah dihapus dari pesan ini.",
+                    ephemeral=True,
+                )
+                return
+            suggested = entry.get("last_price") or entry.get("suggested_price") or ""
+            await interaction.response.send_modal(PriceModal(poster_id, suggested))
+        except Exception as e:  # noqa: BLE001
+            import traceback
+            print(f"[discord_bot] on_interaction error: {e}")
+            traceback.print_exc()
 
     async def upsert_catalog_entry(poster_id: str, data: dict, price_text: str, jump_url: str):
         """Post/update satu baris ringkas di channel katalog: nama akun,
