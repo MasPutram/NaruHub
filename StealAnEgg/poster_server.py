@@ -656,9 +656,14 @@ if BOT_ENABLED:
             self.add_item(self.price_input)
 
         async def on_submit(self, interaction: discord.Interaction):
+            # Render + upload gambar gampang lebih dari 3 detik (limit Discord
+            # buat acknowledge interaksi) -- defer dulu biar ga "Something
+            # went wrong", baru jawab pakai followup di akhir.
+            await interaction.response.defer(ephemeral=True, thinking=True)
+
             entry = PENDING.get(self.poster_id)
             if not entry:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     "Data poster ini udah ga ada (server di-restart?). Generate ulang dari game ya.",
                     ephemeral=True,
                 )
@@ -685,7 +690,7 @@ if BOT_ENABLED:
                     channel = bot.get_channel(final_ref["channel_id"]) or await bot.fetch_channel(final_ref["channel_id"])
                     msg = await channel.fetch_message(final_ref["message_id"])
                     await msg.edit(content=content, attachments=[file])
-                    await interaction.response.send_message(
+                    await interaction.followup.send(
                         f"Harga diupdate jadi **{self.price_input.value}** (poster final diedit di tempat).",
                         ephemeral=True,
                     )
@@ -696,14 +701,14 @@ if BOT_ENABLED:
             final_channel_id = BOT_CFG["final_channel_id"] or BOT_CFG["draft_channel_id"]
             channel = bot.get_channel(int(final_channel_id))
             if channel is None:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     f"Channel final (ID {final_channel_id}) ga ketemu -- cek lagi bot_config.json.",
                     ephemeral=True,
                 )
                 return
             sent = await channel.send(content=content, file=file, view=PriceView(self.poster_id, self.price_input.value))
             entry["final_message"] = {"channel_id": sent.channel.id, "message_id": sent.id}
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"Harga **{self.price_input.value}** disimpan. Poster final diposting di {channel.mention} -- "
                 "bisa diedit lagi kapan aja lewat tombol di pesan itu, ga perlu generate ulang dari game.",
                 ephemeral=True,
