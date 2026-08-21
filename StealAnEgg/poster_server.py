@@ -248,57 +248,48 @@ def render_poster(data: dict) -> Image.Image:
         rounded_card(draw, (left_x0, by, left_x0 + bw, by + bh), radius=20, fill=(226, 232, 240), outline=BLUE, width=2)
         draw_text_centered(draw, (left_x0 + bw / 2, by + bh / 2), badge, font(18, bold=True), BLUE)
 
-    # ---- Auto-detected stats: run speed + income (row 1) ----
-    # "Income Potensi Aktif" = income aktif + potensi semua telur netas
-    # (growing + backpack) -- sama persis formula yang dipakai auto Price
-    # Acc, biar konsisten sama harga yang ditampilin di panel kanan.
-    egg_potential_rate = sum(e.get("rate", 0) for e in growing_eggs) + sum(e.get("rate", 0) for e in backpack_eggs)
+    # ---- Stat grid: 7 label penting, gede & jelas kebaca (bukan pill kecil
+    # yang dipepetin) -- Speed, Income Potensi Aktif, Income Aktif, Income
+    # Egg Backpack, Income Egg Sedang Tumbuh, Kandang Level, Treadmill Level. ----
+    growing_egg_rate = sum(e.get("rate", 0) for e in growing_eggs)
     backpack_egg_rate = sum(e.get("rate", 0) for e in backpack_eggs)
+    egg_potential_rate = growing_egg_rate + backpack_egg_rate
     active_base_rate = total_money_per_second if total_money_per_second is not None else sum(p.get("rate", 0) for p in active_pets)
 
-    y = 178
-    if run_speed is not None or total_money_per_second is not None or egg_potential_rate:
-        stat_y = 108
-        stat_x0 = left_x0 + 210
-        stats = []
-        if run_speed is not None:
-            stats.append(("SPEED", f"{run_speed:,.0f}" if isinstance(run_speed, (int, float)) else str(run_speed)))
-        if total_money_per_second is not None:
-            stats.append(("INCOME POTENSI AKTIF", fmt_money(active_base_rate + egg_potential_rate)))
-        # Rincian (Potensi Telur Netas, Egg Backpack) sengaja GA dipasang di
-        # sini -- kepepet jadi 4 pill kecil bikin teksnya ga kebaca. Detail
-        # itu ditaruh di bawah kotak PRICE ACC di panel kanan (lihat bawah).
-        gap = 10
-        sw = min(190, (left_x1 - stat_x0 - gap * (len(stats) - 1)) / max(len(stats), 1))
-        stat_x = stat_x0
-        for label, val in stats:
-            rounded_card(draw, (stat_x, stat_y, stat_x + sw, stat_y + 44), radius=20, fill=(236, 253, 245), outline=GREEN, width=2)
-            max_w = sw - 20
-            lf = 10
-            while lf > 6 and draw.textlength(label, font=font(lf, bold=True)) > max_w:
-                lf -= 1
-            draw.text((stat_x + 10, stat_y + 7), label, font=font(lf, bold=True), fill=DIM)
-            vf = 15
-            while vf > 10 and draw.textlength(val, font=font(vf, bold=True)) > max_w:
-                vf -= 1
-            draw.text((stat_x + 10, stat_y + 22), val, font=font(vf, bold=True), fill=GREEN)
-            stat_x += sw + gap
+    stat_items = []
+    if run_speed is not None:
+        stat_items.append(("SPEED", f"{run_speed:,.0f}" if isinstance(run_speed, (int, float)) else str(run_speed)))
+    if total_money_per_second is not None:
+        stat_items.append(("INCOME POTENSI AKTIF", fmt_money(active_base_rate + egg_potential_rate)))
+    stat_items.append(("INCOME AKTIF", fmt_money(active_base_rate)))
+    stat_items.append(("INCOME EGG BACKPACK", fmt_money(backpack_egg_rate)))
+    stat_items.append(("INCOME EGG SEDANG TUMBUH", fmt_money(growing_egg_rate)))
+    if kandang_level is not None:
+        stat_items.append(("KANDANG LEVEL", f"Lv. {kandang_level}"))
+    if treadmill_level is not None:
+        stat_items.append(("TREADMILL LEVEL", f"Lv. {treadmill_level}"))
 
-    # ---- Level Kandang / Level Treadmill (row 2, compact) ----
-    if kandang_level is not None or treadmill_level is not None:
-        lvl_y = 156
-        lvl_x = left_x0 + 210
-        lvl_stats = []
-        if kandang_level is not None:
-            lvl_stats.append(("KANDANG", f"Lv. {kandang_level}"))
-        if treadmill_level is not None:
-            lvl_stats.append(("TREADMILL", f"Lv. {treadmill_level}"))
-        for label, val in lvl_stats:
-            lw = 118
-            rounded_card(draw, (lvl_x, lvl_y, lvl_x + lw, lvl_y + 32), radius=16, fill=(238, 242, 255), outline=BLUE, width=2)
-            draw_text_centered(draw, (lvl_x + lw / 2, lvl_y + 16), f"{label} {val}", font(11, bold=True), BLUE)
-            lvl_x += lw + 8
-        y = 214
+    grid_y0 = 156 if badge else 108
+    cols = 2
+    gcell_gap = 12
+    gcell_w = (left_x1 - left_x0 - gcell_gap) / cols
+    gcell_h = 78
+    for i, (label, val) in enumerate(stat_items):
+        c, r = i % cols, i // cols
+        cx0 = left_x0 + c * (gcell_w + gcell_gap)
+        cy0 = grid_y0 + r * (gcell_h + 10)
+        rounded_card(draw, (cx0, cy0, cx0 + gcell_w, cy0 + gcell_h), radius=16, fill=(236, 253, 245), outline=GREEN, width=2)
+        label_f = font(13, bold=True)
+        while draw.textlength(label, font=label_f) > gcell_w - 24 and label_f.size > 9:
+            label_f = font(label_f.size - 1, bold=True)
+        draw.text((cx0 + 14, cy0 + 10), label, font=label_f, fill=DIM)
+        val_f = font(28, bold=True)
+        while draw.textlength(val, font=val_f) > gcell_w - 24 and val_f.size > 16:
+            val_f = font(val_f.size - 1, bold=True)
+        draw.text((cx0 + 14, cy0 + 34), val, font=val_f, fill=GREEN)
+
+    rows_used = -(-len(stat_items) // cols)
+    y = grid_y0 + rows_used * (gcell_h + 10) + 10
 
     # ---- Top 3 pick cards ----
     card_w = (left_x1 - left_x0 - 2 * 14) / 3
@@ -579,23 +570,8 @@ def render_poster(data: dict) -> Image.Image:
         draw.rounded_rectangle((right_x0 + 20, ry + 60, right_x1 - 20, ry + tv_h - 40), radius=12, outline=BORDER, width=2)
     ry += tv_h + 20
 
-    # ---- Rincian income (dipindah ke sini dari pill atas biar kebaca --
-    # pill kecil ga muat nampung 4 label sekaligus). ----
-    breakdown = []
-    if egg_potential_rate:
-        breakdown.append(("Potensi Telur Netas", fmt_money(egg_potential_rate)))
-    if backpack_egg_rate:
-        breakdown.append(("Egg Backpack", fmt_money(backpack_egg_rate)))
-    if breakdown:
-        bd_h = 34 + len(breakdown) * 26
-        rounded_card(draw, (right_x0, ry, right_x1, ry + bd_h), fill=CARD_BG)
-        draw.text((right_x0 + 20, ry + 12), "RINCIAN INCOME", font=font(14, bold=True), fill=DIM)
-        by = ry + 40
-        for label, val in breakdown:
-            draw.text((right_x0 + 20, by), label, font=font(15), fill=NAVY)
-            draw_text_centered(draw, (right_x1 - 20, by + 8), val, font(15, bold=True), GREEN, anchor="rm")
-            by += 26
-        ry += bd_h + 20
+    # (Rincian Income Egg Backpack / Sedang Tumbuh sekarang udah gede & jelas
+    # di stat grid atas -- ga perlu diulang lagi di sini biar ga dobel.)
 
     bottom = max(y + 40, ry)
     canvas = canvas.crop((0, 0, W, int(min(bottom, H))))
