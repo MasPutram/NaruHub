@@ -25,6 +25,7 @@ import os
 import re
 import threading
 import time
+import traceback
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -953,35 +954,66 @@ if BOT_ENABLED:
     @discord.app_commands.describe(min="Harga minimum dalam ribuan -- isi 4 = Rp 4.000 (kosongin = ga ada batas bawah)",
                                     max="Harga maksimum dalam ribuan -- isi 30 = Rp 30.000 (kosongin = ga ada batas atas)")
     async def harga_command(interaction: discord.Interaction, min: int = None, max: int = None):
-        # Konsisten sama input harga di tempat lain: angka polos = satuan
-        # ribuan ("4" -> Rp 4.000), biar ga ketuker kayak sebelumnya.
-        min_rp = min * 1000 if min is not None else None
-        max_rp = max * 1000 if max is not None else None
+        # Defer duluan sebelum ngapa-ngapain -- kalau ada apa aja yang bikin
+        # event loop sempet sibuk (rate limit backoff, dst), window 3 detik
+        # awal Discord gampang kelewat dan hasilnya "The application did not
+        # respond" walau command-nya sendiri ga error. Defer ngasih waktu
+        # sampe 15 menit buat followup.
+        try:
+            await interaction.response.defer(ephemeral=True, thinking=True)
 
-        matches = []
-        for entry in CATALOG.values():
-            pv = entry.get("price_value")
-            if pv is None:
-                continue
-            if min_rp is not None and pv < min_rp:
-                continue
-            if max_rp is not None and pv > max_rp:
-                continue
-            matches.append(entry)
-        matches.sort(key=lambda e: e["price_value"])
+            # Konsisten sama input harga di tempat lain: angka polos = satuan
+            # ribuan ("4" -> Rp 4.000), biar ga ketuker kayak sebelumnya.
+            min_rp = min * 1000 if min is not None else None
+            max_rp = max * 1000 if max is not None else None
 
-        if not matches:
-            await interaction.response.send_message("Ga ada akun yang cocok sama range harga itu.", ephemeral=True)
-            return
+            matches = []
+            for entry in CATALOG.values():
+                pv = entry.get("price_value")
+                if pv is None:
+                    continue
+                if min_rp is not None and pv < min_rp:
+                    continue
+                if max_rp is not None and pv > max_rp:
+                    continue
+                matches.append(entry)
+            matches.sort(key=lambda e: e["price_value"])
 
-        lines = [
-            f"**{e['name']}** (Income {e['income_text']}, Speed {e['speed_text']}) - **{e['price_text']}** → [Lihat Poster]({e['jump_url']})"
-            for e in matches[:25]
-        ]
-        header = f"Ketemu **{len(matches)}** akun"
-        if min_rp is not None or max_rp is not None:
-            header += f" (harga Rp {min_rp or 0:,} - {f'Rp {max_rp:,}' if max_rp is not None else 'tak terbatas'})".replace(",", ".")
-        await interaction.response.send_message(header + ":\n" + "\n".join(lines), ephemeral=True)
+            if not matches:
+                await interaction.followup.send("Ga ada akun yang cocok sama range harga itu.", ephemeral=True)
+                return
+
+            lines = [
+                f"**{e['name']}** (Income {e['income_text']}, Speed {e['speed_text']}) - **{e['price_text']}** → [Lihat Poster]({e['jump_url']})"
+                for e in matches[:25]
+            ]
+            header = f"Ketemu **{len(matches)}** akun"
+            if min_rp is not None or max_rp is not None:
+                header += f" (harga Rp {min_rp or 0:,} - {f'Rp {max_rp:,}' if max_rp is not None else 'tak terbatas'})".replace(",", ".")
+            await interaction.followup.send(header + ":\n" + "\n".join(lines), ephemeral=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"[discord_bot] /harga error: {e}")
+            traceback.print_exc()
+            try:
+                await interaction.followup.send(f"Error waktu jalanin /harga: {e}", ephemeral=True)
+            except discord.HTTPException:
+                pass
+
+    @bot.tree.error
+    async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
+        """Safety net buat semua slash command -- tanpa ini, error yang
+        kelewat sebelum command sempet kirim response cuma nongol di log
+        internal discord.py (ga keliatan di console kita), dan Discord cuma
+        nunjukkin 'The application did not respond' tanpa alasan jelas."""
+        print(f"[discord_bot] app command error di /{interaction.command.name if interaction.command else '?'}: {error}")
+        traceback.print_exc()
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(f"Error: {error}", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"Error: {error}", ephemeral=True)
+        except discord.HTTPException:
+            pass
 
     @bot.event
     async def on_ready():
