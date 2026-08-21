@@ -457,42 +457,11 @@ def render_poster(data: dict) -> Image.Image:
                 draw.text((tx, gy0 + 50), fmt_weight(egg["weight"]), font=font(11), fill=DIM)
         y += bp_rows_needed * (bp_card_h + 8) + 16
 
-    # ---- Detail checklist -- item dari user + stat auto-detect (Speed,
-    # Income Aktif, Level Kandang, Level Treadmill), tetep juga dipajang di
-    # atas sebagai pill, ini cuma duplikat biar kebaca sebagai "detail acc". ----
-    auto_detail_lines = []
-    if run_speed is not None:
-        auto_detail_lines.append(
-            f"Speed: {run_speed:,.0f}" if isinstance(run_speed, (int, float)) else f"Speed: {run_speed}"
-        )
-    active_total_rate = sum(p.get("rate", 0) for p in active_pets)
-    if active_total_rate:
-        auto_detail_lines.append(f"Income Aktif: {fmt_money(active_total_rate)}")
-    egg_potential_rate = sum(e.get("rate", 0) for e in growing_eggs) + sum(e.get("rate", 0) for e in backpack_eggs)
-    if egg_potential_rate:
-        auto_detail_lines.append(f"Potensi + Telur Netas: {fmt_money(active_total_rate + egg_potential_rate)}")
-    if kandang_level is not None:
-        auto_detail_lines.append(f"Level Kandang: {kandang_level}")
-    if treadmill_level is not None:
-        auto_detail_lines.append(f"Level Treadmill: {treadmill_level}")
-
-    full_checklist = list(checklist) + auto_detail_lines
-    if full_checklist:
-        detail_cols = 2
-        col_w = (left_x1 - left_x0) / detail_cols
-        rows_needed = -(-len(full_checklist) // detail_cols)
-        chk_h = 34 + rows_needed * 26
-        rounded_card(draw, (left_x0, y, left_x1, y + chk_h))
-        draw.text((left_x0 + 16, y + 12), "DETAIL ACC", font=font(16, bold=True), fill=NAVY)
-        for idx, item in enumerate(full_checklist):
-            r, c = divmod(idx, detail_cols)
-            cx = left_x0 + c * col_w
-            cy = y + 40 + r * 26
-            draw.ellipse([cx + 18, cy + 3, cx + 32, cy + 17], outline=GREEN, width=2)
-            draw.line([cx + 21, cy + 10, cx + 24, cy + 14], fill=GREEN, width=2)
-            draw.line([cx + 24, cy + 14, cx + 30, cy + 6], fill=GREEN, width=2)
-            draw.text((cx + 40, cy), item, font=font(15), fill=NAVY)
-        y += chk_h + 18
+    # Item checklist buat "DETAIL ACC" -- dipindah ke panel kanan (di bawah
+    # PRICE ACC) biar poster ga makin manjang ke bawah. Cuma checklist dari
+    # user aja di sini; Speed/Income/Level udah gede-gede di grid atas jadi
+    # ga perlu diulang lagi (dulu sempet double, sekarang engga).
+    full_checklist = list(checklist)
 
     # Pet isi tas yang ga kepajang di mana pun di poster (bukan di kartu
     # utama, bukan di grup mutasi, bukan di list panel kanan) -- ditampilin
@@ -572,6 +541,22 @@ def render_poster(data: dict) -> Image.Image:
 
     # (Rincian Income Egg Backpack / Sedang Tumbuh sekarang udah gede & jelas
     # di stat grid atas -- ga perlu diulang lagi di sini biar ga dobel.)
+
+    # ---- Detail Acc (checklist manual dari user) -- ditaruh di sini, di
+    # bawah Price Acc, biar poster ga makin manjang ke bawah kolom kiri. ----
+    if full_checklist:
+        detail_cols = 1
+        rows_needed = -(-len(full_checklist) // detail_cols)
+        chk_h = 34 + rows_needed * 26
+        rounded_card(draw, (right_x0, ry, right_x1, ry + chk_h))
+        draw.text((right_x0 + 16, ry + 12), "DETAIL ACC", font=font(16, bold=True), fill=NAVY)
+        for idx, item in enumerate(full_checklist):
+            cy = ry + 40 + idx * 26
+            draw.ellipse([right_x0 + 18, cy + 3, right_x0 + 32, cy + 17], outline=GREEN, width=2)
+            draw.line([right_x0 + 21, cy + 10, right_x0 + 24, cy + 14], fill=GREEN, width=2)
+            draw.line([right_x0 + 24, cy + 14, right_x0 + 30, cy + 6], fill=GREEN, width=2)
+            draw.text((right_x0 + 40, cy), item, font=font(15), fill=NAVY)
+        ry += chk_h + 18
 
     bottom = max(y + 40, ry)
     canvas = canvas.crop((0, 0, W, int(min(bottom, H))))
