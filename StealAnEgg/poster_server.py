@@ -793,31 +793,49 @@ if BOT_ENABLED:
                 ephemeral=True,
             )
 
-    class PriceView(discord.ui.View):
-        def __init__(self, poster_id: str, suggested: str):
-            super().__init__(timeout=None)
-            self.poster_id = poster_id
-            self.suggested = suggested
+    FILL_PRICE_PREFIX = "steal_an_egg_fill_price:"
 
-        @discord.ui.button(label="Isi / Edit Harga", style=discord.ButtonStyle.success, custom_id="steal_an_egg_fill_price")
-        async def fill_price(self, interaction: discord.Interaction, button: discord.ui.Button):
-            entry = PENDING.get(self.poster_id)
-            if not entry:
-                # Data-nya udah ga ada (server pernah restart) -- tombolnya
-                # bakal terus gagal kalau diklik lagi, jadi hapus aja dari
-                # pesan ini biar ga ada tombol mati yang nggantung.
-                try:
-                    await interaction.message.edit(view=None)
-                except discord.HTTPException:
-                    pass
-                await interaction.response.send_message(
-                    "Data poster ini udah ga ada (server di-restart?). Generate ulang dari game ya. "
-                    "Tombolnya udah dihapus dari pesan ini.",
-                    ephemeral=True,
-                )
-                return
-            suggested = entry.get("last_price") or self.suggested
-            await interaction.response.send_modal(PriceModal(self.poster_id, suggested))
+    class PriceView(discord.ui.View):
+        """poster_id di-encode LANGSUNG ke custom_id (bukan cuma disimpan
+        sebagai atribut Python di instance View) -- biar tombol tetap
+        kepanggil walau poster_server di-restart dan instance View lama ini
+        udah ga ada lagi di memori. Dispatch aktualnya ditangani on_interaction
+        di bawah, bukan callback bawaan View, karena itu satu-satunya cara
+        yang beneran restart-proof di discord.py."""
+        def __init__(self, poster_id: str, suggested: str = ""):
+            super().__init__(timeout=None)
+            button = discord.ui.Button(
+                label="Isi / Edit Harga",
+                style=discord.ButtonStyle.success,
+                custom_id=f"{FILL_PRICE_PREFIX}{poster_id}",
+            )
+            self.add_item(button)
+
+    @bot.event
+    async def on_interaction(interaction: discord.Interaction):
+        if interaction.type != discord.InteractionType.component:
+            return
+        custom_id = interaction.data.get("custom_id", "")
+        if not custom_id.startswith(FILL_PRICE_PREFIX):
+            return
+        poster_id = custom_id[len(FILL_PRICE_PREFIX):]
+        entry = PENDING.get(poster_id)
+        if not entry:
+            # Data-nya udah ga ada (poster dari sebelum bot_state.json ada,
+            # atau kekorupsi) -- tombolnya bakal terus gagal kalau diklik
+            # lagi, jadi hapus aja dari pesan ini biar ga ada tombol mati
+            # yang nggantung.
+            try:
+                await interaction.message.edit(view=None)
+            except discord.HTTPException:
+                pass
+            await interaction.response.send_message(
+                "Data poster ini udah ga ada. Generate ulang dari game ya. Tombolnya udah dihapus dari pesan ini.",
+                ephemeral=True,
+            )
+            return
+        suggested = entry.get("last_price") or entry.get("suggested_price") or ""
+        await interaction.response.send_modal(PriceModal(poster_id, suggested))
 
     async def upsert_catalog_entry(poster_id: str, data: dict, price_text: str, jump_url: str):
         """Post/update satu baris ringkas di channel katalog: nama akun,
@@ -977,9 +995,9 @@ class Handler(BaseHTTPRequestHandler):
                 draft_buf = io.BytesIO()
                 draft_img.save(draft_buf, format="PNG")
                 poster_id = uuid.uuid4().hex[:12]
-                PENDING[poster_id] = {"data": data}
-                save_state()
                 suggested = data.get("suggestedPrice") or ""
+                PENDING[poster_id] = {"data": data, "suggested_price": suggested}
+                save_state()
                 schedule_post_draft(poster_id, draft_buf.getvalue(), data, suggested)
                 self._send_json(200, {"ok": True, "posterId": poster_id, "mode": "discord-price-flow"})
                 return
