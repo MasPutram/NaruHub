@@ -730,7 +730,7 @@ if BOT_ENABLED:
             super().__init__(timeout=None)
             self.poster_id = poster_id
             self.price_input = discord.ui.TextInput(
-                label="Harga langsung (kosongin kalau pakai rate di bawah)",
+                label="Harga Langsung (opsional)",
                 placeholder="cth: 4 (= Rp 4.000), atau Rp 150.000 / 500rb",
                 default=str(suggested) if suggested else None,
                 required=False,
