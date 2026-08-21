@@ -248,23 +248,41 @@ def render_poster(data: dict) -> Image.Image:
         rounded_card(draw, (left_x0, by, left_x0 + bw, by + bh), radius=20, fill=(226, 232, 240), outline=BLUE, width=2)
         draw_text_centered(draw, (left_x0 + bw / 2, by + bh / 2), badge, font(18, bold=True), BLUE)
 
-    # ---- Auto-detected stats: run speed + account income/s (row 1) ----
+    # ---- Auto-detected stats: run speed + income (row 1) ----
+    # "Income Potensi Aktif" = income aktif + potensi semua telur netas
+    # (growing + backpack) -- sama persis formula yang dipakai auto Price
+    # Acc, biar konsisten sama harga yang ditampilin di panel kanan.
+    egg_potential_rate = sum(e.get("rate", 0) for e in growing_eggs) + sum(e.get("rate", 0) for e in backpack_eggs)
+    backpack_egg_rate = sum(e.get("rate", 0) for e in backpack_eggs)
+    active_base_rate = total_money_per_second if total_money_per_second is not None else sum(p.get("rate", 0) for p in active_pets)
+
     y = 178
-    if run_speed is not None or total_money_per_second is not None:
+    if run_speed is not None or total_money_per_second is not None or egg_potential_rate:
         stat_y = 108
         stat_x0 = left_x0 + 210
         stats = []
         if run_speed is not None:
             stats.append(("SPEED", f"{run_speed:,.0f}" if isinstance(run_speed, (int, float)) else str(run_speed)))
         if total_money_per_second is not None:
-            stats.append(("INCOME", fmt_money(total_money_per_second)))
+            stats.append(("INCOME POTENSI AKTIF", fmt_money(active_base_rate + egg_potential_rate)))
+        if egg_potential_rate:
+            stats.append(("POTENSI TELUR NETAS", fmt_money(egg_potential_rate)))
+        if backpack_egg_rate:
+            stats.append(("EGG BACKPACK", fmt_money(backpack_egg_rate)))
         gap = 10
         sw = min(190, (left_x1 - stat_x0 - gap * (len(stats) - 1)) / max(len(stats), 1))
         stat_x = stat_x0
         for label, val in stats:
             rounded_card(draw, (stat_x, stat_y, stat_x + sw, stat_y + 44), radius=20, fill=(236, 253, 245), outline=GREEN, width=2)
-            draw.text((stat_x + 14, stat_y + 8), label, font=font(10, bold=True), fill=DIM)
-            draw.text((stat_x + 14, stat_y + 20), val, font=font(15, bold=True), fill=GREEN)
+            max_w = sw - 20
+            lf = 10
+            while lf > 6 and draw.textlength(label, font=font(lf, bold=True)) > max_w:
+                lf -= 1
+            draw.text((stat_x + 10, stat_y + 7), label, font=font(lf, bold=True), fill=DIM)
+            vf = 15
+            while vf > 10 and draw.textlength(val, font=font(vf, bold=True)) > max_w:
+                vf -= 1
+            draw.text((stat_x + 10, stat_y + 22), val, font=font(vf, bold=True), fill=GREEN)
             stat_x += sw + gap
 
     # ---- Level Kandang / Level Treadmill (row 2, compact) ----
