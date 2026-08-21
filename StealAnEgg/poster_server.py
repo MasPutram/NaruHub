@@ -24,6 +24,7 @@ import json
 import os
 import re
 import threading
+import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -43,6 +44,14 @@ ASSETS_DIR = Path(__file__).parent / "assets"
 NORMAL_DIR = ASSETS_DIR / "Normal"
 MUTATION_DIR = ASSETS_DIR / "Mutation"
 COMBO_DIR = ASSETS_DIR / "MutationCombo"
+
+# Dashboard "Monitor Lokal" -- sourceAccount -> {money, speed, income,
+# petsCount, stolenCount, topPets, lastSeen}. Di memori aja (ga persist),
+# tiap akun lapor sendiri berkala lewat POST /monitor jadi ilang pas
+# server restart itu ga masalah -- kembali muncul begitu akun lapor lagi.
+ACCOUNTS: dict[str, dict] = {}
+ACCOUNTS_LOCK = threading.Lock()
+ONLINE_TIMEOUT_S = 45  # ga lapor lebih dari ini dianggap OFFLINE di dashboard
 
 # Font dibundling di repo (fonts/) biar jalan di Linux (Render dst) yang ga
 # punya C:\Windows\Fonts. Kalau ternyata jalan lokal di Windows dan folder
@@ -1024,6 +1033,128 @@ else:
         pass
 
 
+DASHBOARD_HTML = r"""<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Steal An Egg -- Monitor Lokal</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0b0b12; --card: #14141f; --card-border: #262636;
+    --ink: #e8e8f0; --dim: #8b8ba3; --accent: #a78bfa; --accent2: #22d3ee;
+    --green: #34d399; --gold: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 28px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .eyebrow { color: var(--accent2); font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin: 20px 0 26px; }
+  .sumcard { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px 16px; }
+  .sumcard .label { color: var(--dim); font-size: 11px; font-weight: 700; letter-spacing: .5px; }
+  .sumcard .value { font-size: 24px; font-weight: 800; margin-top: 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 14px; padding: 16px; }
+  .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
+  .dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .name { font-weight: 800; font-size: 15px; }
+  .status { color: var(--dim); font-size: 11px; margin-left: auto; }
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
+  .stat .label { color: var(--dim); font-size: 10px; font-weight: 700; }
+  .stat .value { font-size: 15px; font-weight: 700; }
+  .stat.money .value { color: var(--gold); }
+  .stat.speed .value { color: var(--accent); }
+  .toppets { display: flex; gap: 6px; }
+  .pet { background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 8px; padding: 4px 6px; text-align: center; width: 64px; }
+  .pet img { width: 36px; height: 36px; object-fit: contain; }
+  .pet .pname { font-size: 9px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .empty { color: var(--dim); text-align: center; padding: 60px 0; }
+</style>
+</head>
+<body>
+  <div class="eyebrow">STEAL AN EGG</div>
+  <h1>Monitor Lokal -- Akun & Pet</h1>
+  <div class="summary" id="summary"></div>
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" style="display:none">Belum ada akun yang lapor. Nyalain "Auto Report ke Dashboard" di GUI game.</div>
+
+<script>
+function fmtMoney(v) {
+  if (v === null || v === undefined) return "-";
+  v = Number(v);
+  const abs = Math.abs(v);
+  if (abs >= 1e12) return "$" + (v/1e12).toFixed(1) + "T";
+  if (abs >= 1e9) return "$" + (v/1e9).toFixed(1) + "B";
+  if (abs >= 1e6) return "$" + (v/1e6).toFixed(1) + "M";
+  if (abs >= 1e3) return "$" + (v/1e3).toFixed(1) + "K";
+  return "$" + v.toFixed(0);
+}
+function fmtNum(v) {
+  if (v === null || v === undefined) return "-";
+  return Number(v).toLocaleString("en-US");
+}
+function iconUrl(pet) {
+  const muts = (pet.mutations || []).join(",");
+  return "/api/icon?category=" + encodeURIComponent(pet.category || "") + "&mutations=" + encodeURIComponent(muts);
+}
+async function refresh() {
+  const res = await fetch("/api/accounts");
+  const data = await res.json();
+  const accounts = data.accounts || [];
+  document.getElementById("empty").style.display = accounts.length ? "none" : "block";
+
+  const online = accounts.filter(a => a.online).length;
+  const totalMoney = accounts.reduce((s, a) => s + (Number(a.money) || 0), 0);
+  const totalSpeed = accounts.reduce((s, a) => s + (Number(a.speed) || 0), 0);
+  const totalPets = accounts.reduce((s, a) => s + (Number(a.petsCount) || 0), 0);
+  const totalStolen = accounts.reduce((s, a) => s + (Number(a.stolenCount) || 0), 0);
+
+  document.getElementById("summary").innerHTML = `
+    <div class="sumcard"><div class="label">ACTIVE ACCOUNTS</div><div class="value">${online} / ${accounts.length}</div></div>
+    <div class="sumcard"><div class="label">TOTAL MONEY</div><div class="value">${fmtMoney(totalMoney)}</div></div>
+    <div class="sumcard"><div class="label">TOTAL SPEED</div><div class="value">${fmtNum(totalSpeed)}</div></div>
+    <div class="sumcard"><div class="label">TOTAL PETS</div><div class="value">${fmtNum(totalPets)}</div></div>
+    <div class="sumcard"><div class="label">TOTAL EGGS STOLEN</div><div class="value">${fmtNum(totalStolen)}</div></div>
+  `;
+
+  accounts.sort((a, b) => (b.money || 0) - (a.money || 0));
+  document.getElementById("grid").innerHTML = accounts.map(a => `
+    <div class="card">
+      <div class="card-head">
+        <span class="dot ${a.online ? 'online' : ''}"></span>
+        <span class="name">${a.sourceAccount}</span>
+        <span class="status">${a.online ? "Active" : "Offline"}</span>
+      </div>
+      <div class="stats">
+        <div class="stat money"><div class="label">MONEY</div><div class="value">${fmtMoney(a.money)}</div></div>
+        <div class="stat speed"><div class="label">SPEED</div><div class="value">${fmtNum(a.speed)}</div></div>
+        <div class="stat"><div class="label">PETS</div><div class="value">${fmtNum(a.petsCount)} pets</div></div>
+        <div class="stat"><div class="label">STOLEN</div><div class="value">${fmtNum(a.stolenCount)} eggs</div></div>
+      </div>
+      <div class="toppets">
+        ${(a.topPets || []).map(p => `
+          <div class="pet">
+            <img src="${iconUrl(p)}" loading="lazy">
+            <div class="pname">${p.name || p.category}</div>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `).join("");
+}
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
+"""
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send_json(self, status: int, payload: dict):
         body = json.dumps(payload).encode("utf-8")
@@ -1034,6 +1165,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
+        if self.path == "/monitor":
+            self._handle_monitor()
+            return
         if self.path != "/generate":
             self._send_json(404, {"ok": False, "error": "not found"})
             return
@@ -1094,7 +1228,78 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:  # noqa: BLE001
             self._send_json(500, {"ok": False, "error": str(e)})
 
+    def _handle_monitor(self):
+        """Satu akun lapor stat ringan (Money/Speed/Pets/Stolen/Top Pets)
+        buat dashboard 'Monitor Lokal' -- dipanggil berkala dari game, bukan
+        sekali generate manual kayak /generate."""
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(length)
+            data = json.loads(raw.decode("utf-8"))
+            name = data.get("sourceAccount") or "?"
+            with ACCOUNTS_LOCK:
+                ACCOUNTS[name] = {
+                    "money": data.get("money"),
+                    "speed": data.get("speed"),
+                    "income": data.get("income"),
+                    "petsCount": data.get("petsCount", 0),
+                    "stolenCount": data.get("stolenCount", 0),
+                    "topPets": data.get("topPets") or [],
+                    "lastSeen": time.time(),
+                }
+            self._send_json(200, {"ok": True})
+        except Exception as e:  # noqa: BLE001
+            self._send_json(500, {"ok": False, "error": str(e)})
+
+    def _serve_accounts_json(self):
+        now = time.time()
+        with ACCOUNTS_LOCK:
+            rows = []
+            for name, acc in ACCOUNTS.items():
+                row = dict(acc)
+                row["sourceAccount"] = name
+                row["online"] = (now - acc.get("lastSeen", 0)) <= ONLINE_TIMEOUT_S
+                rows.append(row)
+        body = json.dumps({"accounts": rows}).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_icon(self, query: str):
+        from urllib.parse import parse_qs, unquote
+        q = parse_qs(query)
+        category = unquote((q.get("category") or [""])[0])
+        mutations = [unquote(m) for m in (q.get("mutations") or [""])[0].split(",") if m]
+        img = find_icon(category, mutations) or Image.new("RGBA", (200, 200), (0, 0, 0, 0))
+        buf = io.BytesIO()
+        img.convert("RGBA").save(buf, format="PNG")
+        body = buf.getvalue()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "public, max-age=86400")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
+        path, _, query = self.path.partition("?")
+        if path == "/dashboard":
+            body = DASHBOARD_HTML.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path == "/api/accounts":
+            self._serve_accounts_json()
+            return
+        if path == "/api/icon":
+            self._serve_icon(query)
+            return
         # Health check buat platform hosting (Render dst) + biar buka URL-nya
         # di browser ga cuma dapet 501.
         self._send_json(200, {"ok": True, "service": "poster_server", "hint": "POST JSON to /generate"})

@@ -2149,6 +2149,102 @@ do
 	end
 
 	section:AddButton({ Title = "Generate & Kirim ke Discord", Callback = generateAndSend })
+
+	------------------------------------------------------------
+	-- Monitor Lokal (Dashboard) -- lapor stat ringan berkala ke
+	-- poster_server.py biar bisa dipantau semua akun sekaligus dari satu
+	-- dashboard HTML lokal (http://<PC>:8765/dashboard), kayak alt-account
+	-- tracker. Beda dari "Jual Akun": ini otomatis & berkala, bukan sekali
+	-- generate manual.
+	------------------------------------------------------------
+	local monitorSection = PosterTab:AddSection("Monitor Lokal (Dashboard)")
+
+	local monitorUrlInput = monitorSection:AddInput("StealAnEgg_MonitorUrl", {
+		Title = "Monitor Server URL",
+		Placeholder = "http://127.0.0.1:8765/monitor",
+		Default = "",
+		Finished = true,
+	})
+
+	local monitorStatusPara = monitorSection:AddParagraph({
+		Title = "Status",
+		Content = "-",
+	})
+
+	local function reportToMonitor()
+		local ok, err = pcall(function()
+			local allPets = collectBackpackPets()
+			local activePets = collectActivePets()
+			local backpackEggs = collectBackpackEggs()
+			local runSpeed, moneyPerSecond, kandangLevel, treadmillLevel, currentMoney = collectAccountStats()
+
+			-- Top 3 pet by rate, gabungan pet aktif + isi tas -- buat kartu
+			-- "TOP PETS" di dashboard.
+			local pool = {}
+			for _, p in ipairs(activePets) do
+				table.insert(pool, p)
+			end
+			for _, p in ipairs(allPets) do
+				table.insert(pool, p)
+			end
+			table.sort(pool, function(a, b)
+				return (a.rate or 0) > (b.rate or 0)
+			end)
+			local topPets = {}
+			for i = 1, math.min(3, #pool) do
+				local p = pool[i]
+				table.insert(topPets, {
+					name = p.name or p.category,
+					category = p.category,
+					mutations = p.mutations or {},
+					rate = p.rate or 0,
+				})
+			end
+
+			local payload = {
+				sourceAccount = LocalPlayer.Name,
+				money = currentMoney,
+				speed = runSpeed,
+				income = moneyPerSecond,
+				petsCount = #allPets + #activePets,
+				stolenCount = #backpackEggs,
+				topPets = topPets,
+			}
+
+			local body = HttpService:JSONEncode(payload)
+			local url = monitorUrlInput.Value ~= "" and monitorUrlInput.Value or "http://127.0.0.1:8765/monitor"
+			request({
+				Url = url,
+				Method = "POST",
+				Headers = { ["Content-Type"] = "application/json" },
+				Body = body,
+			})
+		end)
+		if ok then
+			monitorStatusPara:SetContent("Terakhir lapor: " .. os.date("%H:%M:%S"))
+		else
+			monitorStatusPara:SetContent("Gagal lapor: " .. tostring(err))
+		end
+	end
+
+	local monitorRunning = false
+	monitorSection:AddToggle("StealAnEgg_MonitorReport", {
+		Title = "Auto Report ke Dashboard (tiap 15 detik)",
+		Default = false,
+		Callback = function(enabled)
+			monitorRunning = enabled
+			if enabled then
+				task.spawn(function()
+					while monitorRunning and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+						pcall(reportToMonitor)
+						task.wait(15)
+					end
+				end)
+			end
+		end,
+	})
+
+	monitorSection:AddButton({ Title = "Lapor Sekarang", Callback = reportToMonitor })
 end
 
 Window:SelectTab(1)
