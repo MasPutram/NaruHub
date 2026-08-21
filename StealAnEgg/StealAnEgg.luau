@@ -2175,8 +2175,27 @@ do
 		local ok, err = pcall(function()
 			local allPets = collectBackpackPets()
 			local activePets = collectActivePets()
+			local growingEggs = collectGrowingEggs()
 			local backpackEggs = collectBackpackEggs()
 			local runSpeed, moneyPerSecond, kandangLevel, treadmillLevel, currentMoney = collectAccountStats()
+
+			-- Sama persis label & rumus yang dipajang di poster (Speed, Uang
+			-- Sekarang, Income Potensi Aktif, Income Aktif, Income Egg
+			-- Backpack, Income Egg Sedang Tumbuh, Kandang/Treadmill Level) --
+			-- biar dashboard nunjukkin info yang sama, bukan versi beda.
+			local incomeAktif = 0
+			for _, p in ipairs(activePets) do
+				incomeAktif += (p.rate or 0)
+			end
+			local incomeEggBackpack = 0
+			for _, e in ipairs(backpackEggs) do
+				incomeEggBackpack += (e.rate or 0)
+			end
+			local incomeEggSedangTumbuh = 0
+			for _, e in ipairs(growingEggs) do
+				incomeEggSedangTumbuh += (e.rate or 0)
+			end
+			local incomePotensiAktif = (moneyPerSecond or incomeAktif) + incomeEggBackpack + incomeEggSedangTumbuh
 
 			-- Top 3 pet by rate, gabungan pet aktif + isi tas -- buat kartu
 			-- "TOP PETS" di dashboard.
@@ -2206,6 +2225,12 @@ do
 				money = currentMoney,
 				speed = runSpeed,
 				income = moneyPerSecond,
+				incomeAktif = incomeAktif,
+				incomePotensiAktif = incomePotensiAktif,
+				incomeEggBackpack = incomeEggBackpack,
+				incomeEggSedangTumbuh = incomeEggSedangTumbuh,
+				kandangLevel = kandangLevel,
+				treadmillLevel = treadmillLevel,
 				petsCount = #allPets + #activePets,
 				stolenCount = #backpackEggs,
 				topPets = topPets,
@@ -2227,10 +2252,14 @@ do
 		end
 	end
 
+	-- Default NYALA -- begitu script di-exe, akun langsung kedeteksi otomatis
+	-- di dashboard tanpa perlu klak-klik toggle dulu. (AddToggle otomatis
+	-- fire Callback(true) sendiri kalau Default=true & belum ada config
+	-- tersimpan; kalau user pernah matiin & tersimpan false, itu dihormati.)
 	local monitorRunning = false
 	monitorSection:AddToggle("StealAnEgg_MonitorReport", {
 		Title = "Auto Report ke Dashboard (tiap 15 detik)",
-		Default = false,
+		Default = true,
 		Callback = function(enabled)
 			monitorRunning = enabled
 			if enabled then

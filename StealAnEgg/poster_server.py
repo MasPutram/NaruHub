@@ -1098,6 +1098,14 @@ function fmtNum(v) {
   if (v === null || v === undefined) return "-";
   return Number(v).toLocaleString("en-US");
 }
+function fmtRate(v) {
+  if (v === null || v === undefined) return "-";
+  return fmtMoney(v) + "/s";
+}
+function fmtLevel(v) {
+  if (v === null || v === undefined) return "-";
+  return "Lv. " + v;
+}
 function iconUrl(pet) {
   const muts = (pet.mutations || []).join(",");
   return "/api/icon?category=" + encodeURIComponent(pet.category || "") + "&mutations=" + encodeURIComponent(muts);
@@ -1131,8 +1139,14 @@ async function refresh() {
         <span class="status">${a.online ? "Active" : "Offline"}</span>
       </div>
       <div class="stats">
-        <div class="stat money"><div class="label">MONEY</div><div class="value">${fmtMoney(a.money)}</div></div>
         <div class="stat speed"><div class="label">SPEED</div><div class="value">${fmtNum(a.speed)}</div></div>
+        <div class="stat money"><div class="label">UANG SEKARANG</div><div class="value">${fmtMoney(a.money)}</div></div>
+        <div class="stat"><div class="label">INCOME POTENSI AKTIF</div><div class="value">${fmtRate(a.incomePotensiAktif)}</div></div>
+        <div class="stat"><div class="label">INCOME AKTIF</div><div class="value">${fmtRate(a.incomeAktif)}</div></div>
+        <div class="stat"><div class="label">INCOME EGG BACKPACK</div><div class="value">${fmtRate(a.incomeEggBackpack)}</div></div>
+        <div class="stat"><div class="label">INCOME EGG SEDANG TUMBUH</div><div class="value">${fmtRate(a.incomeEggSedangTumbuh)}</div></div>
+        <div class="stat"><div class="label">KANDANG LEVEL</div><div class="value">${fmtLevel(a.kandangLevel)}</div></div>
+        <div class="stat"><div class="label">TREADMILL LEVEL</div><div class="value">${fmtLevel(a.treadmillLevel)}</div></div>
         <div class="stat"><div class="label">PETS</div><div class="value">${fmtNum(a.petsCount)} pets</div></div>
         <div class="stat"><div class="label">STOLEN</div><div class="value">${fmtNum(a.stolenCount)} eggs</div></div>
       </div>
@@ -1242,6 +1256,13 @@ class Handler(BaseHTTPRequestHandler):
                     "money": data.get("money"),
                     "speed": data.get("speed"),
                     "income": data.get("income"),
+                    # Sama persis label yang dipajang di poster.
+                    "incomeAktif": data.get("incomeAktif"),
+                    "incomePotensiAktif": data.get("incomePotensiAktif"),
+                    "incomeEggBackpack": data.get("incomeEggBackpack"),
+                    "incomeEggSedangTumbuh": data.get("incomeEggSedangTumbuh"),
+                    "kandangLevel": data.get("kandangLevel"),
+                    "treadmillLevel": data.get("treadmillLevel"),
                     "petsCount": data.get("petsCount", 0),
                     "stolenCount": data.get("stolenCount", 0),
                     "topPets": data.get("topPets") or [],
