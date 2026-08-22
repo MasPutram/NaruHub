@@ -208,6 +208,20 @@ def pet_key(p: dict):
     return (p.get("category"), tuple(sorted(p.get("mutations") or [])), p.get("rate"))
 
 
+def account_initials(name: str) -> str:
+    """Singkatan buat label kecil di poster -- "BlekokGong20" -> "BG20"
+    (huruf kapital di nama + angka di belakangnya)."""
+    if not name:
+        return ""
+    m = re.search(r"(\d+)$", name)
+    digits = m.group(1) if m else ""
+    letters_part = name[: len(name) - len(digits)] if digits else name
+    caps = "".join(ch for ch in letters_part if ch.isupper())
+    if not caps:
+        caps = letters_part[:2].upper()
+    return caps + digits
+
+
 def render_poster(data: dict) -> Image.Image:
     W, H = 1080, 2000
     canvas = Image.new("RGB", (W, H), BG)
@@ -612,6 +626,20 @@ def render_poster(data: dict) -> Image.Image:
     owner = data.get("ownerFacebook")
     if owner:
         canvas = add_watermark(canvas, owner)
+
+    # Label kecil di pojok kanan bawah -- inisial akun (misal "BG20") biar
+    # kelihatan poster ini diambil dari akun mana, kebaca meski gambarnya
+    # dishare lepas dari caption Discord-nya.
+    initials = account_initials(data.get("sourceAccount"))
+    if initials:
+        draw_label = ImageDraw.Draw(canvas)
+        label_font = font(20, bold=True)
+        bbox = draw_label.textbbox((0, 0), initials, font=label_font)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        margin = 16
+        lx = canvas.width - margin - tw
+        ly = canvas.height - margin - th
+        draw_label.text((lx, ly), initials, font=label_font, fill=DIM)
 
     return canvas
 
