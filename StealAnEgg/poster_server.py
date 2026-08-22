@@ -1567,13 +1567,16 @@ def lookup_full_data(account: str) -> dict:
 
 
 def known_poster_accounts() -> list:
-    """Semua nama akun yang punya data poster (dari ACCOUNTS atau PENDING),
-    dipakai buat /downloadposter account:all."""
+    """Akun yang BENERAN udah pernah di-generate (punya entri di PENDING --
+    baik masih draft nunggu harga, maupun udah final), dipakai buat
+    /downloadposter account:all.
+
+    Sengaja BUKAN dari ACCOUNTS (semua akun yang lagi ngereport lewat
+    /monitor) -- itu jalan otomatis tiap 15 detik buat akun manapun yang
+    toggle-nya nyala, terlepas dari udah pernah di-generate apa belum.
+    Kalau dipakai, download-all bakal narik akun yang cuma lagi
+    dimonitor tapi belum pernah kamu generate sama sekali."""
     names = set()
-    with ACCOUNTS_LOCK:
-        for name, acc in ACCOUNTS.items():
-            if acc.get("fullData"):
-                names.add(name)
     for entry in PENDING.values():
         sa = entry.get("data", {}).get("sourceAccount")
         if sa:
