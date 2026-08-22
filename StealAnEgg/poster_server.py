@@ -1535,12 +1535,31 @@ setInterval(refresh, 5000);
 def lookup_full_data(account: str) -> dict:
     """Cari snapshot poster-shaped data buat 1 akun: pertama dari fullData
     laporan /monitor terakhir (ACCOUNTS), fallback ke draft yang masih
-    ngantri di PENDING kalau akunnya lagi ga ngereport."""
+    ngantri di PENDING kalau akunnya lagi ga ngereport.
+
+    Laporan /monitor SENGAJA selalu ngirim price kosong (biar alur "isi
+    harga di Discord" tetap jalan tiap kali tombol Generate Poster
+    dipencet) -- begitu harga diisi lewat modal, itu cuma keupdate di
+    PENDING punya bot, bukan ikut kebawa balik ke laporan game berikutnya.
+    Jadi buat /downloadposter (yang mestinya nunjukkin harga TERAKHIR yang
+    beneran keisi, bukan mulai draft baru), harga dari PENDING itu yang
+    ditimpakan ke atas snapshot fullData yang paling baru."""
     with ACCOUNTS_LOCK:
         acc = ACCOUNTS.get(account)
         full_data = acc.get("fullData") if acc else None
+
+    filled_price = None
+    for entry in PENDING.values():
+        d = entry.get("data") or {}
+        if d.get("sourceAccount") == account and (d.get("price") or "").strip():
+            filled_price = d.get("price")  # entri terakhir yang match menang
+
     if full_data:
+        if filled_price and not (full_data.get("price") or "").strip():
+            full_data = dict(full_data)
+            full_data["price"] = filled_price
         return full_data
+
     for entry in PENDING.values():
         if entry.get("data", {}).get("sourceAccount") == account:
             return entry["data"]
