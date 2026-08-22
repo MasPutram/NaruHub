@@ -1718,6 +1718,82 @@ do
 end
 
 ------------------------------------------------------------
+-- 3b. Deteksi Hasil Fuse -- baca hasil LANGSUNG dari signal server
+-- (Constants.SIGNALS_MAP.Client.FuseMachine.FUSE_STARTED), bukan nebak
+-- dari animasi reveal-nya. Server udah nentuin & ngirim hasilnya (Category,
+-- Scale, Mutations) SEBELUM animasi kelar, jadi kita bisa tau persis dapet
+-- apa -- kecil atau gede -- begitu itu ditentukan, bukan cuma keliatan dari
+-- ukuran modelnya doang di layar. Ini BUKAN prediksi sebelum nge-fuse (hasil
+-- fuse itu roll acak asli di server, ga bisa ditebak sebelum aksinya
+-- dilakuin) -- ini cuma bikin hasilnya jelas & instan begitu udah kejadian.
+do
+	local section = Tab:AddSection("Deteksi Hasil Fuse")
+
+	local fusePara = section:AddParagraph({
+		Title = "Hasil Fuse Terakhir",
+		Content = "Belum ada -- otomatis muncul begitu kamu fuse pet.",
+	})
+
+	local Constants = require(ReplicatedStorage.Library.Globals.Constants)
+	local GameSignal = require(ReplicatedStorage.Library.Signal)
+	local AssetGenerationUtil = require(ReplicatedStorage.Library.Util.AssetGenerationUtil)
+	local AssetItemUtil = require(ReplicatedStorage.Library.Util.AssetItemUtil)
+
+	local function formatRate(v)
+		v = v or 0
+		local abs = math.abs(v)
+		if abs >= 1e12 then
+			return string.format("$%.2fT/s", v / 1e12)
+		elseif abs >= 1e9 then
+			return string.format("$%.2fB/s", v / 1e9)
+		elseif abs >= 1e6 then
+			return string.format("$%.2fM/s", v / 1e6)
+		elseif abs >= 1e3 then
+			return string.format("$%.2fK/s", v / 1e3)
+		end
+		return string.format("$%d/s", v)
+	end
+
+	local function formatFuseResult(result)
+		local rate = 0
+		pcall(function()
+			rate = AssetGenerationUtil.GetBaseRateMutationOnly({
+				Category = result.AssetCategory,
+				Scale = result.AssetScale,
+				Mutations = result.Mutations or {},
+			})
+		end)
+		local weight = 0
+		pcall(function()
+			weight = AssetItemUtil.GetVisualWeightKg({
+				Category = result.AssetCategory,
+				Scale = result.AssetScale,
+				Mutations = result.Mutations or {},
+			})
+		end)
+		local mutText = (result.Mutations and #result.Mutations > 0) and table.concat(result.Mutations, ", ") or "Tidak ada"
+		return string.format(
+			"%s\nBerat: %.2f Kg\nRate: %s\nMutasi: %s\nJam: %s",
+			result.AssetCategory or "?",
+			weight,
+			formatRate(rate),
+			mutText,
+			os.date("%H:%M:%S")
+		)
+	end
+
+	local ok, err = pcall(function()
+		GameSignal.Fired(Constants.SIGNALS_MAP.Client.FuseMachine.FUSE_STARTED):Connect(function(result)
+			local formatOk, content = pcall(formatFuseResult, result)
+			fusePara:SetContent(formatOk and content or ("Fuse kedeteksi tapi gagal diformat: " .. tostring(content)))
+		end)
+	end)
+	if not ok then
+		fusePara:SetContent("Gagal pasang detector: " .. tostring(err))
+	end
+end
+
+------------------------------------------------------------
 -- 4. Auto Generate Poster "Jual Akun" -> kirim ke Discord webhook
 ------------------------------------------------------------
 -- Render gambar (font/gradient/composit) ga bisa dilakuin di Luau, jadi bagian
