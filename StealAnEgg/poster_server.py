@@ -1018,6 +1018,35 @@ if BOT_ENABLED:
             except discord.HTTPException:
                 pass
 
+    @bot.tree.command(name="hapusallchat", description="Hapus semua pesan di channel ini biar bersih")
+    @discord.app_commands.default_permissions(manage_messages=True)
+    async def hapusallchat_command(interaction: discord.Interaction):
+        # Discord bulk-delete cuma bisa buat pesan yang umurnya < 14 hari --
+        # channel.purge() otomatis fallback ke hapus satu-satu buat yang lebih
+        # tua dari itu, jadi ga perlu ditangani manual di sini.
+        try:
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            channel = interaction.channel
+            deleted_total = 0
+            while True:
+                deleted = await channel.purge(limit=100)
+                deleted_total += len(deleted)
+                if len(deleted) < 100:
+                    break
+            await interaction.followup.send(f"Selesai -- {deleted_total} pesan dihapus.", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.followup.send(
+                "Bot ga punya izin 'Manage Messages' di channel ini -- kasih izin itu dulu ke role bot-nya.",
+                ephemeral=True,
+            )
+        except Exception as e:  # noqa: BLE001
+            print(f"[discord_bot] /hapusallchat error: {e}")
+            traceback.print_exc()
+            try:
+                await interaction.followup.send(f"Error waktu jalanin /hapusallchat: {e}", ephemeral=True)
+            except discord.HTTPException:
+                pass
+
     @bot.tree.error
     async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
         """Safety net buat semua slash command -- tanpa ini, error yang
