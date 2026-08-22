@@ -1908,7 +1908,7 @@ do
 	local EggItemUtil = require(ReplicatedStorage.Library.Util.EggItemUtil)
 	local HttpService = game:GetService("HttpService")
 
-	local POSTER_SERVER_URL = "https://marvel-henderson-baskets-thread.trycloudflare.com/generate"
+	local POSTER_SERVER_URL = "https://builders-frank-holidays-valve.trycloudflare.com/generate"
 
 	local function mutationNamesFromString(str)
 		if not str or str == "" then
@@ -2606,8 +2606,16 @@ do
 
 	local statusPara = section:AddParagraph({ Title = "Status Auto Steal", Content = "-" })
 
+	-- pcall-wrapped SENGAJA -- kalau toggle "Auto Steal" ke-restore otomatis
+	-- dari config tersimpan (task.defer di internal NaruUI), SetContent yang
+	-- dipanggil dari thread restore itu bisa throw ("lacking capability
+	-- Plugin") di beberapa executor. Kalau setStatus sendiri yang crash,
+	-- seluruh Callback toggle berhenti SEBELUM sempat task.spawn loop
+	-- utamanya -- toggle keliatan ON tapi loop-nya ga pernah beneran mulai.
 	local function setStatus(msg)
-		statusPara:SetContent(tostring(msg))
+		pcall(function()
+			statusPara:SetContent(tostring(msg))
+		end)
 	end
 
 	local function getHRP()
@@ -2705,7 +2713,7 @@ do
 		end
 		if next(selectedRarities) then
 			local cfg = Assets.Directory[record.AssetCategory]
-			local rarityName = cfg and cfg.Rarity and cfg.Rarity.Name
+			local rarityName = cfg and cfg.Rarity and cfg.Rarity.DisplayName
 			if not (rarityName and selectedRarities[rarityName]) then
 				return false
 			end
@@ -2764,14 +2772,20 @@ do
 		if not stagingPos then
 			return false
 		end
+		setStatus("Parkir di titik tunggu...")
 		moveTo(stagingPos, tonumber(tweenSpeedInput.Value) or 150, function()
 			return autoStealRunning
 		end)
+		local lastReported = nil
 		while autoStealRunning do
 			local closed = true
 			pcall(function()
 				closed = AreaEggResetWall.IsClosed()
 			end)
+			if lastReported ~= closed then
+				lastReported = closed
+				setStatus(closed and "Nunggu tembok kebuka..." or "Tembok kebuka! Jalan...")
+			end
 			if not closed then
 				task.wait(0.4) -- kasih waktu animasi Collapse (~0.35s) beneran kelar
 				return true
@@ -2893,8 +2907,8 @@ do
 		Callback = function(enabled)
 			autoStealRunning = enabled
 			if enabled then
-				captureStagingPos()
 				task.spawn(function()
+					pcall(captureStagingPos)
 					while autoStealRunning do
 						local ok, err = pcall(autoStealCycle)
 						if not ok then
