@@ -2529,6 +2529,7 @@ do
 	local __OBJECTS = Workspace:WaitForChild("__OBJECTS")
 	local Areas = __OBJECTS:WaitForChild("Areas")
 	local SeparationLine = Areas:WaitForChild("SeparationLine")
+	local GuardAreas = Areas:WaitForChild("GuardAreas")
 
 	local RARITY_LIST = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Cosmic", "Eternal", "Secret" }
 	local allCategories = {}
@@ -2537,9 +2538,19 @@ do
 	end
 	table.sort(allCategories)
 
+	-- GuardAreas.AreaId itu zona bertema (Volcano, Jungle, Cosmic, dst) --
+	-- BUKAN per-player -- semuanya dibalik dari 1 wall/corridor bareng
+	-- (SeparationLine), jadi milih area di sini cuma nyaring TARGET egg-nya,
+	-- ga ngubah titik parkir nunggu tembok buka.
+	local allAreaIds = {}
+	for _, child in ipairs(GuardAreas:GetChildren()) do
+		table.insert(allAreaIds, child.Name)
+	end
+	table.sort(allAreaIds)
+
 	local section = FarmTab:AddSection("Auto Steal Egg")
 
-	local selectedCategories, selectedRarities = {}, {}
+	local selectedCategories, selectedRarities, selectedAreas = {}, {}, {}
 
 	local categoryDropdown = section:AddDropdown("StealAnEgg_StealCategories", {
 		Title = "Kategori Pet (kosong = semua)",
@@ -2561,6 +2572,16 @@ do
 		selectedRarities = sel or {}
 	end)
 
+	local areaDropdown = section:AddDropdown("StealAnEgg_StealAreas", {
+		Title = "Area (kosong = semua)",
+		Values = allAreaIds,
+		Multi = true,
+		Default = {},
+	})
+	areaDropdown:OnChanged(function(sel)
+		selectedAreas = sel or {}
+	end)
+
 	local thresholdInput = section:AddInput("StealAnEgg_StealThreshold", {
 		Title = "Threshold Minimum ($/s, 0 = tanpa batas)",
 		Placeholder = "0",
@@ -2574,6 +2595,7 @@ do
 		Default = "150",
 		Finished = true,
 	})
+
 
 	local boostSpeedValueInput = section:AddInput("StealAnEgg_BoostSpeedValue", {
 		Title = "WalkSpeed Boost Target",
@@ -2678,6 +2700,9 @@ do
 		if next(selectedCategories) and not selectedCategories[record.AssetCategory] then
 			return false
 		end
+		if next(selectedAreas) and not selectedAreas[record.AreaId] then
+			return false
+		end
 		if next(selectedRarities) then
 			local cfg = Assets.Directory[record.AssetCategory]
 			local rarityName = cfg and cfg.Rarity and cfg.Rarity.Name
@@ -2692,6 +2717,10 @@ do
 		return true
 	end
 
+	-- GetAreaEggSnapshot() ngebalikin SEMUA area egg dari SEMUA zona (Volcano,
+	-- Jungle, dst) sekaligus -- tanpa filter Area, "pilih rate tertinggi" bisa
+	-- nyeret karakter ke zona yang beda jauh dari yang lagi didatengin. Filter
+	-- Area (selectedAreas) di matchesFilter yang jadi kendali utamanya.
 	local function pickBestTarget()
 		local ok, snapshot = pcall(function()
 			return EggCmds.GetAreaEggSnapshot()
