@@ -1062,13 +1062,9 @@ if BOT_ENABLED:
 
         threading.Thread(target=runner, daemon=True, name="discord-bot").start()
 
-    def schedule_post_draft(poster_id: str, png_bytes: bytes, data: dict, suggested: str):
+    def schedule_post_draft(poster_id: str, png_bytes: bytes, data: dict, suggested: str, existing_draft_ref: dict = None):
         async def _post():
             await bot.wait_until_ready()
-            channel = bot.get_channel(int(BOT_CFG["draft_channel_id"]))
-            if channel is None:
-                print(f"[discord_bot] draft channel not found: {BOT_CFG['draft_channel_id']}")
-                return
             file = discord.File(io.BytesIO(png_bytes), filename="poster.png")
             source_account = data.get("sourceAccount")
             content = (
@@ -1076,7 +1072,25 @@ if BOT_ENABLED:
                 if source_account else "Klik tombol di bawah buat isi harga."
             )
             view = PriceView(poster_id, suggested)
-            await channel.send(content=content, file=file, view=view)
+
+            if existing_draft_ref:
+                try:
+                    channel = bot.get_channel(existing_draft_ref["channel_id"]) or await bot.fetch_channel(existing_draft_ref["channel_id"])
+                    msg = await channel.fetch_message(existing_draft_ref["message_id"])
+                    await msg.edit(content=content, attachments=[file], view=view)
+                    return
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    pass  # pesan lama ilang -- fallback post baru di bawah
+
+            channel = bot.get_channel(int(BOT_CFG["draft_channel_id"]))
+            if channel is None:
+                print(f"[discord_bot] draft channel not found: {BOT_CFG['draft_channel_id']}")
+                return
+            sent = await channel.send(content=content, file=file, view=view)
+            entry = PENDING.get(poster_id)
+            if entry is not None:
+                entry["draft_message"] = {"channel_id": sent.channel.id, "message_id": sent.id}
+                save_state()
 
         if bot_loop is not None:
             asyncio.run_coroutine_threadsafe(_post(), bot_loop)
@@ -1395,12 +1409,27 @@ def generate_and_deliver(data: dict) -> tuple[int, dict]:
         draft_img = render_poster(data)
         draft_buf = io.BytesIO()
         draft_img.save(draft_buf, format="PNG")
-        poster_id = uuid.uuid4().hex[:12]
+
+        # Kalau akun ini udah punya draft yang belum dikasih harga (belum
+        # final), edit pesan itu di tempat alih-alih posting draft baru --
+        # tanpa ini, tiap kali /generate ke-panggil ulang buat akun yang sama
+        # (double click, restart, dashboard + in-game bareng, dst) bakal numpuk
+        # pesan duplikat di channel "isi harga" (ini yang bikin "spam" tadi).
+        source_account = data.get("sourceAccount")
+        existing_id = None
+        if source_account:
+            for pid, entry in PENDING.items():
+                if entry.get("data", {}).get("sourceAccount") == source_account and not entry.get("final_message"):
+                    existing_id = pid
+                    break
+
+        poster_id = existing_id or uuid.uuid4().hex[:12]
         suggested = data.get("suggestedPrice") or ""
-        PENDING[poster_id] = {"data": data, "suggested_price": suggested}
+        prev_entry = PENDING.get(poster_id, {})
+        PENDING[poster_id] = {**prev_entry, "data": data, "suggested_price": suggested}
         save_state()
-        schedule_post_draft(poster_id, draft_buf.getvalue(), data, suggested)
-        return 200, {"ok": True, "posterId": poster_id, "mode": "discord-price-flow"}
+        schedule_post_draft(poster_id, draft_buf.getvalue(), data, suggested, existing_draft_ref=prev_entry.get("draft_message"))
+        return 200, {"ok": True, "posterId": poster_id, "mode": "discord-price-flow", "updated": bool(existing_id)}
 
     img = render_poster(data)
     buf = io.BytesIO()
