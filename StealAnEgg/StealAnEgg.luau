@@ -2494,4 +2494,364 @@ do
 	monitorSection:AddButton({ Title = "Lapor Sekarang", Callback = reportToMonitor })
 end
 
+------------------------------------------------------------
+-- 5. Auto Steal Egg -- curi telur di Area Eggs (mekanisme "tembok malam")
+------------------------------------------------------------
+-- Dibongkar dari kode game sendiri (ReplicatedStorage.Library.Client.EggCmds,
+-- .AreaEggResetWall, .Util.AreaEggSlotIdentity, .Util.GuardAreaLookupUtil):
+--   - Server nentuin & ngirim SEMUA area egg lewat EggCmds.GetAreaEggSnapshot()
+--     (tiap record udah bawa BottomCFrame -- posisi dunia -- jadi ga perlu resolve
+--     manual dari Nest/AreaId).
+--   - Aksi curinya sendiri 1 remote: EggCmds.RequestCarryAreaEgg(uid, slotKey).
+--     slotKey cuma perlu buat uid "FirstAreaEgg_..." (AreaEggSlotIdentity).
+--   - "Tembok malam" itu AreaEggResetWall -- collapse (ga collide, area kebuka)
+--     vs reveal (naik lagi, collide, area ketutup). IsClosed()==true berarti
+--     lagi naik/nutup.
+--   - Kena gigit pet penjaga = DropReasons.GuardHit -> record state jadi
+--     "Dropped" (ke-uid yang sama), bukan hilang -- tinggal samperin posisi
+--     barunya & RequestCarryAreaEgg lagi (uid sama, slotKey nil).
+-- CATATAN: ini v1 -- gerakan pakai CFrame-walk manual (bukan physics
+-- Humanoid) biar bisa disetel kecepatannya & diinterupsi kapan aja (buat
+-- ngejar egg yang jatuh kena gigit). Belum divalidasi penuh terhadap semua
+-- kondisi tepi game (banyak guard sekaligus, banyak area aktif, dll) --
+-- perlu dites & di-tuning langsung di game.
+do
+	local FarmTab = Window:AddTab({ Title = "Farming" })
+
+	local RunService = game:GetService("RunService")
+	local Assets = require(ReplicatedStorage.Directory.Assets)
+	local EggCmds = require(ReplicatedStorage.Library.Client.EggCmds)
+	local AreaEggSlotIdentity = require(ReplicatedStorage.Library.Util.AreaEggSlotIdentity)
+	local AreaEggResetWall = require(ReplicatedStorage.Library.Client.AreaEggResetWall)
+	local PlotCmds = require(ReplicatedStorage.Library.Client.PlotCmds)
+	local AssetGenerationUtil = require(ReplicatedStorage.Library.Util.AssetGenerationUtil)
+
+	local __OBJECTS = Workspace:WaitForChild("__OBJECTS")
+	local Areas = __OBJECTS:WaitForChild("Areas")
+	local SeparationLine = Areas:WaitForChild("SeparationLine")
+
+	local RARITY_LIST = { "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic", "Divine", "Cosmic", "Eternal", "Secret" }
+	local allCategories = {}
+	for cat in pairs(Assets.Directory) do
+		table.insert(allCategories, cat)
+	end
+	table.sort(allCategories)
+
+	local section = FarmTab:AddSection("Auto Steal Egg")
+
+	local selectedCategories, selectedRarities = {}, {}
+
+	local categoryDropdown = section:AddDropdown("StealAnEgg_StealCategories", {
+		Title = "Kategori Pet (kosong = semua)",
+		Values = allCategories,
+		Multi = true,
+		Default = {},
+	})
+	categoryDropdown:OnChanged(function(sel)
+		selectedCategories = sel or {}
+	end)
+
+	local rarityDropdown = section:AddDropdown("StealAnEgg_StealRarities", {
+		Title = "Rarity (kosong = semua)",
+		Values = RARITY_LIST,
+		Multi = true,
+		Default = {},
+	})
+	rarityDropdown:OnChanged(function(sel)
+		selectedRarities = sel or {}
+	end)
+
+	local thresholdInput = section:AddInput("StealAnEgg_StealThreshold", {
+		Title = "Threshold Minimum ($/s, 0 = tanpa batas)",
+		Placeholder = "0",
+		Default = "0",
+		Finished = true,
+	})
+
+	local tweenSpeedInput = section:AddInput("StealAnEgg_TweenSpeed", {
+		Title = "Tween Speed (studs/detik)",
+		Placeholder = "150",
+		Default = "150",
+		Finished = true,
+	})
+
+	local boostSpeedValueInput = section:AddInput("StealAnEgg_BoostSpeedValue", {
+		Title = "WalkSpeed Boost Target",
+		Placeholder = "100",
+		Default = "100",
+		Finished = true,
+	})
+
+	local statusPara = section:AddParagraph({ Title = "Status Auto Steal", Content = "-" })
+
+	local function setStatus(msg)
+		statusPara:SetContent(tostring(msg))
+	end
+
+	local function getHRP()
+		local char = LocalPlayer.Character
+		return char and char:FindFirstChild("HumanoidRootPart")
+	end
+
+	local function getHumanoid()
+		local char = LocalPlayer.Character
+		return char and char:FindFirstChildOfClass("Humanoid")
+	end
+
+	-- Auto Boost Speed -- paksa WalkSpeed terus-terusan selama toggle nyala,
+	-- independen dari loop steal (biar tetap ngebut pas jalan biasa juga).
+	local boostSpeedRunning = false
+	section:AddToggle("StealAnEgg_BoostSpeed", {
+		Title = "Auto Boost Speed (paksa WalkSpeed)",
+		Default = false,
+		Callback = function(enabled)
+			boostSpeedRunning = enabled
+			if enabled then
+				task.spawn(function()
+					while boostSpeedRunning do
+						local hum = getHumanoid()
+						local target = tonumber(boostSpeedValueInput.Value) or 100
+						if hum and hum.WalkSpeed ~= target then
+							hum.WalkSpeed = target
+						end
+						task.wait(1)
+					end
+				end)
+			end
+		end,
+	})
+
+	-- CFrame-walk manual: gerakin HumanoidRootPart tiap Heartbeat menuju target
+	-- di kecepatan (studs/detik) yang ditentuin, bisa diinterupsi via
+	-- shouldContinue() (dipanggil tiap tick -- return false buat berhenti lebih
+	-- awal, misal pas kena gigit di tengah jalan atau toggle dimatiin).
+	local function moveTo(targetPosition, speed, shouldContinue)
+		speed = math.max(speed or 150, 10)
+		while true do
+			if shouldContinue and not shouldContinue() then
+				return false
+			end
+			local hrp = getHRP()
+			if not hrp then
+				return false
+			end
+			local current = hrp.Position
+			local flat = Vector3.new(targetPosition.X - current.X, 0, targetPosition.Z - current.Z)
+			local dist = flat.Magnitude
+			if dist < 3 then
+				return true
+			end
+			local dt = RunService.Heartbeat:Wait()
+			local step = math.min(speed * dt, dist)
+			local direction = flat.Unit
+			local newPos = current + direction * step
+			hrp.CFrame = CFrame.new(newPos, newPos + direction)
+		end
+	end
+
+	local autoStealRunning = false
+	local isCarrying, carryingUid = false, nil
+
+	EggCmds.AreaEggCarryStateChanged:Connect(function(state)
+		isCarrying = state.IsCarrying
+		carryingUid = state.IsCarrying and state.Uid or nil
+	end)
+
+	local function computeRate(record)
+		local ok, rate = pcall(function()
+			return AssetGenerationUtil.GetBaseRateMutationOnly({
+				Category = record.AssetCategory,
+				Scale = record.AssetScale,
+				Mutations = record.Mutations or {},
+			})
+		end)
+		return ok and rate or 0
+	end
+
+	local function matchesFilter(record)
+		if record.State ~= "Slot" and record.State ~= "Dropped" then
+			return false
+		end
+		if record.CarrierUserId ~= nil then
+			return false
+		end
+		if next(selectedCategories) and not selectedCategories[record.AssetCategory] then
+			return false
+		end
+		if next(selectedRarities) then
+			local cfg = Assets.Directory[record.AssetCategory]
+			local rarityName = cfg and cfg.Rarity and cfg.Rarity.Name
+			if not (rarityName and selectedRarities[rarityName]) then
+				return false
+			end
+		end
+		local threshold = tonumber(thresholdInput.Value) or 0
+		if computeRate(record) < threshold then
+			return false
+		end
+		return true
+	end
+
+	local function pickBestTarget()
+		local ok, snapshot = pcall(function()
+			return EggCmds.GetAreaEggSnapshot()
+		end)
+		if not ok or not snapshot then
+			return nil
+		end
+		local best, bestRate = nil, -1
+		for _, record in ipairs(snapshot.Records) do
+			if matchesFilter(record) then
+				local rate = computeRate(record)
+				if rate > bestRate then
+					best, bestRate = record, rate
+				end
+			end
+		end
+		return best
+	end
+
+	-- Tunggu tembok kebuka penuh SAMBIL parkir di tengah jalur (SeparationLine)
+	-- biar begitu kebuka langsung tinggal tancap ke egg-nya.
+	local function waitForWallOpen()
+		local stagingPos = SeparationLine.Position
+		moveTo(stagingPos, tonumber(tweenSpeedInput.Value) or 150, function()
+			return autoStealRunning
+		end)
+		while autoStealRunning do
+			local closed = true
+			pcall(function()
+				closed = AreaEggResetWall.IsClosed()
+			end)
+			if not closed then
+				task.wait(0.4) -- kasih waktu animasi Collapse (~0.35s) beneran kelar
+				return true
+			end
+			task.wait(0.2)
+		end
+		return false
+	end
+
+	-- Bawa telur curian balik nyebrang -- kalau di tengah jalan kena gigit
+	-- (dijatohin), otomatis kejar posisi barunya & ambil ulang (uid sama).
+	local function carryEggHome(uid)
+		local staging = SeparationLine.Position
+		local ticks = 0
+		while autoStealRunning do
+			ticks += 1
+			if ticks > 600 then
+				return false -- safety timeout (~1 menit) biar ga infinite loop
+			end
+
+			if not (isCarrying and carryingUid == uid) then
+				local rec
+				pcall(function()
+					rec = EggCmds.GetAreaEggRecord(uid)
+				end)
+				if rec == nil then
+					return true -- uid udah ga ada -- paling besar kemungkinan udah diklaim
+				elseif rec.State == "Dropped" then
+					setStatus("Kena gigit! Ambil lagi telurnya...")
+					if moveTo(rec.BottomCFrame.Position, tonumber(tweenSpeedInput.Value) or 150, function()
+						return autoStealRunning
+					end) then
+						EggCmds.RequestCarryAreaEgg(uid, nil)
+					end
+				else
+					return false -- direbut orang lain / state lain yang ga bisa dikejar lagi
+				end
+			end
+
+			if isCarrying and carryingUid == uid then
+				local hrp = getHRP()
+				if hrp and (Vector3.new(hrp.Position.X, 0, hrp.Position.Z) - Vector3.new(staging.X, 0, staging.Z)).Magnitude < 4 then
+					return true
+				end
+				moveTo(staging, tonumber(tweenSpeedInput.Value) or 150, function()
+					return autoStealRunning and isCarrying and carryingUid == uid
+				end)
+			end
+			task.wait(0.1)
+		end
+		return false
+	end
+
+	local function autoStealCycle()
+		if not waitForWallOpen() then
+			return
+		end
+		local target = pickBestTarget()
+		if not target then
+			setStatus("Ga ada egg yang cocok filter saat ini.")
+			task.wait(1)
+			return
+		end
+
+		-- Lepas dari treadmill dulu (kalau lagi di atasnya) biar gerakan steal
+		-- ga tabrakan sama physics treadmill -- jump sebentar buat detach.
+		local hum = getHumanoid()
+		if hum then
+			pcall(function()
+				hum.Jump = true
+			end)
+			task.wait(0.15)
+		end
+
+		setStatus("Menuju egg: " .. tostring(target.AssetCategory))
+		if not moveTo(target.BottomCFrame.Position, tonumber(tweenSpeedInput.Value) or 150, function()
+			return autoStealRunning
+		end) then
+			return
+		end
+
+		local slotKey = nil
+		if AreaEggSlotIdentity.IsFirstAreaUid(target.Uid) then
+			slotKey = AreaEggSlotIdentity.BuildSlotKey(target.AreaId, target.NestId)
+		end
+		local ok, err = EggCmds.RequestCarryAreaEgg(target.Uid, slotKey)
+		if not ok then
+			setStatus("Gagal curi " .. tostring(target.AssetCategory) .. ": " .. tostring(err))
+			return
+		end
+
+		setStatus("Berhasil ambil " .. tostring(target.AssetCategory) .. ", balik ke rumah...")
+		local success = carryEggHome(target.Uid)
+		if not success then
+			setStatus("Gagal bawa pulang " .. tostring(target.AssetCategory) .. " (direbut/ilang).")
+			return
+		end
+
+		setStatus("Sampai rumah bawa " .. tostring(target.AssetCategory) .. " -- taruh di treadmill...")
+		pcall(function()
+			local plotData = PlotCmds.GetPlotData()
+			if plotData and plotData.CenterPoint then
+				local localCFrame = plotData.CenterPoint.CFrame:ToObjectSpace(CFrame.new(plotData.CenterPoint.Position))
+				local placeOk, placeErr = EggCmds.RequestPlaceEgg(target.Uid, localCFrame)
+				setStatus(placeOk and ("Egg " .. tostring(target.AssetCategory) .. " ditaruh di treadmill.")
+					or ("Diklaim tapi gagal ditaruh: " .. tostring(placeErr)))
+			end
+		end)
+	end
+
+	section:AddToggle("StealAnEgg_AutoSteal", {
+		Title = "Auto Steal (loop utama)",
+		Default = false,
+		Callback = function(enabled)
+			autoStealRunning = enabled
+			if enabled then
+				task.spawn(function()
+					while autoStealRunning do
+						local ok, err = pcall(autoStealCycle)
+						if not ok then
+							setStatus("Error: " .. tostring(err))
+						end
+						task.wait(0.5)
+					end
+					setStatus("Auto Steal dimatikan.")
+				end)
+			end
+		end,
+	})
+end
+
 Window:SelectTab(1)
