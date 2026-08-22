@@ -1791,6 +1791,105 @@ do
 	if not ok then
 		fusePara:SetContent("Gagal pasang detector: " .. tostring(err))
 	end
+
+	-- Kalkulator Peluang Fuse -- dibongkar dari kode game sendiri
+	-- (ReplicatedStorage.Library.Util.WeightedScaleRollUtil + EggItemUtil).
+	-- Ini bukan tabel rahasia, semuanya kebaca dari client:
+	--   - 11 tier ukuran (SCALE_TIER_TABLE) dengan base weight masing2 --
+	--     tier "normal" (~1x scale) base weight-nya 2000, JAUH di atas
+	--     gabungan semua tier lain (~510) -- makanya default-nya emang
+	--     condong ke hasil kecil.
+	--   - "Makin gede pet, makin gede peluang" itu beneran ada rumusnya
+	--     (exponent 0.6, skala logaritmik) -- tapi efeknya sub-linear,
+	--     jadi butuh rata2 scale yang GEDE BANGET buat beneran nggeser
+	--     peluang ke tier atas. Pet yang cuma "lumayan" tetap mayoritas
+	--     jatuh ke tier kecil/sedang.
+	--   - Di luar itu ada bonus "double atau nggak": abis scale-nya
+	--     keroll, ada peluang 1% dia di-dobel lagi (berulang, tiap step
+	--     peluangnya independen 1%), selama hasilnya belum lewat cap 150.
+	--     Ini yang jelasin hasil "jackpot" yang kadang jauh di luar nalar.
+	local SCALE_TIER_TABLE = {
+		{ min = 0.1, max = 0.2, weight = 5 },
+		{ min = 0.3, max = 0.45, weight = 18 },
+		{ min = 0.85, max = 1.05, weight = 2000 },
+		{ min = 1.45, max = 1.55, weight = 250 },
+		{ min = 1.9, max = 2.1, weight = 125 },
+		{ min = 2.85, max = 3.15, weight = 62.5 },
+		{ min = 3.8, max = 4.2, weight = 31.25 },
+		{ min = 5.8, max = 6.2, weight = 15.625 },
+		{ min = 9.5, max = 12.5, weight = 3 },
+		{ min = 12, max = 17, weight = 0.05 },
+		{ min = 20, max = 35, weight = 0.0001 },
+	}
+	local DOUBLE_BONUS_CHANCE = 0.01 -- 1% per step, berulang, dibatasi cap 150
+	local DOUBLE_BONUS_CAP = 150
+
+	local function tierWeightMultiplier(avgScale, tierMin, tierMax)
+		local tierMid = (tierMin + tierMax) / 2
+		local logAvg = math.log(avgScale) / math.log(2)
+		local logMid = math.log(tierMid) / math.log(2)
+		return math.exp(logAvg * logMid * 0.6)
+	end
+
+	local function computeFuseOdds(scales)
+		local avgScale = (scales[1] + scales[2] + scales[3]) / 3
+		local total = 0
+		local adjusted = {}
+		for _, tier in ipairs(SCALE_TIER_TABLE) do
+			local mult = tierWeightMultiplier(avgScale, tier.min, tier.max)
+			local w = tier.weight * mult
+			table.insert(adjusted, { min = tier.min, max = tier.max, weight = w })
+			total += w
+		end
+		return adjusted, total, avgScale
+	end
+
+	local fuseOddsPara = section:AddParagraph({
+		Title = "Peluang Fuse (dari 3 pet di slot sekarang)",
+		Content = "Klik \"Hitung Peluang Sekarang\" -- taruh dulu 3 pet di mesin fuse.",
+	})
+
+	local function hitungPeluangFuse()
+		local SaveModule = require(ReplicatedStorage.Library.Client.Save)
+		local ok2, stats = pcall(SaveModule.Get)
+		if not ok2 or not stats or not stats.Inventory then
+			fuseOddsPara:SetContent("Gagal baca data akun.")
+			return
+		end
+
+		local scales, category = {}, nil
+		for _, item in pairs(stats.Inventory) do
+			if item.InFuse == true then
+				table.insert(scales, item.Scale)
+				category = category or item.Category
+			end
+		end
+
+		if #scales ~= 3 then
+			fuseOddsPara:SetContent(string.format(
+				"Baru %d/3 slot keisi -- taruh dulu 3 pet kategori sama di mesin fuse.",
+				#scales
+			))
+			return
+		end
+
+		local adjusted, total, avgScale = computeFuseOdds(scales)
+		local lines = {}
+		for _, tier in ipairs(adjusted) do
+			local pct = (tier.weight / total) * 100
+			table.insert(lines, string.format("%.2f-%.2fx: %s", tier.min, tier.max,
+				pct < 0.01 and string.format("%.4f%%", pct) or string.format("%.2f%%", pct)))
+		end
+
+		fuseOddsPara:SetContent(string.format(
+			"%s | Rata2 scale input: %.2f\n%s\n+ Bonus: tiap hasil ada ~1%% peluang di-dobel lagi (berulang, dibatasi scale 150) -- di luar tabel di atas.",
+			category or "?",
+			avgScale,
+			table.concat(lines, "\n")
+		))
+	end
+
+	section:AddButton({ Title = "Hitung Peluang Sekarang", Callback = hitungPeluangFuse })
 end
 
 ------------------------------------------------------------
