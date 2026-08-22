@@ -1046,27 +1046,48 @@ if BOT_ENABLED:
             except discord.HTTPException:
                 pass
 
-    @bot.tree.command(name="hapusallchat", description="Hapus semua pesan di channel ini biar bersih")
+    @bot.tree.command(name="hapusallchat", description="Reset total: hapus semua pesan poster + semua data harga/katalog")
     @discord.app_commands.default_permissions(manage_messages=True)
     async def hapusallchat_command(interaction: discord.Interaction):
-        # Discord bulk-delete cuma bisa buat pesan yang umurnya < 14 hari --
-        # channel.purge() otomatis fallback ke hapus satu-satu buat yang lebih
-        # tua dari itu, jadi ga perlu ditangani manual di sini.
+        # Full reset -- bukan cuma bersihin pesan Discord, tapi juga data
+        # PENDING/CATALOG sendiri (yang persist di bot_state.json). Tanpa ini,
+        # data lama numpuk terus di belakang layar walau chat-nya udah keliatan
+        # bersih, dan /downloadposter account:all jadi nyeret akun-akun basi.
+        # Setelah direset, /generate berikutnya bikin entri fresh dari nol.
         try:
             await interaction.response.defer(ephemeral=True, thinking=True)
-            channel = interaction.channel
+
+            channel_ids = {interaction.channel.id}
+            for key in ("draft_channel_id", "final_channel_id", "index_channel_id"):
+                cid = BOT_CFG.get(key)
+                if cid:
+                    channel_ids.add(int(cid))
+
             deleted_total = 0
-            while True:
-                deleted = await channel.purge(limit=100)
-                deleted_total += len(deleted)
-                if len(deleted) < 100:
-                    break
-            await interaction.followup.send(f"Selesai -- {deleted_total} pesan dihapus.", ephemeral=True)
-        except discord.Forbidden:
-            await interaction.followup.send(
-                "Bot ga punya izin 'Manage Messages' di channel ini -- kasih izin itu dulu ke role bot-nya.",
-                ephemeral=True,
-            )
+            failed_channels = []
+            for cid in channel_ids:
+                try:
+                    channel = bot.get_channel(cid) or await bot.fetch_channel(cid)
+                    if channel is None:
+                        continue
+                    while True:
+                        deleted = await channel.purge(limit=100)
+                        deleted_total += len(deleted)
+                        if len(deleted) < 100:
+                            break
+                except discord.Forbidden:
+                    failed_channels.append(str(cid))
+                except discord.HTTPException as e:
+                    print(f"[discord_bot] /hapusallchat gagal purge channel {cid}: {e}")
+
+            PENDING.clear()
+            CATALOG.clear()
+            save_state()
+
+            msg = f"Selesai -- {deleted_total} pesan dihapus & semua data harga/katalog direset."
+            if failed_channels:
+                msg += f" (Ga punya izin di: {', '.join(failed_channels)})"
+            await interaction.followup.send(msg, ephemeral=True)
         except Exception as e:  # noqa: BLE001
             print(f"[discord_bot] /hapusallchat error: {e}")
             traceback.print_exc()
