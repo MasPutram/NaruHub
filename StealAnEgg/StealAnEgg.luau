@@ -2628,6 +2628,31 @@ do
 		return char and char:FindFirstChildOfClass("Humanoid")
 	end
 
+	-- Kena trap (dipasang pemain lain) nyetel attribute "IsTrapped" di
+	-- karakter (dipakai game sendiri buat lock backpack & prompt sementara
+	-- -- Tools.TrappedBackpackController). Selama masih trapped, gerakan &
+	-- steal server kemungkinan ditolak, jadi kita cuma nunggu lepas dulu
+	-- alih-alih maksa terus nabrak penolakan.
+	local function isTrapped()
+		local char = LocalPlayer.Character
+		return char and char:GetAttribute("IsTrapped") == true
+	end
+
+	local function waitUntilNotTrapped(shouldContinue)
+		if not isTrapped() then
+			return true
+		end
+		setStatus("Kena trap! Nunggu lepas...")
+		while isTrapped() do
+			if shouldContinue and not shouldContinue() then
+				return false
+			end
+			task.wait(0.25)
+		end
+		setStatus("Udah lepas dari trap, lanjut...")
+		return true
+	end
+
 	-- Auto Boost Speed -- paksa WalkSpeed terus-terusan selama toggle nyala,
 	-- independen dari loop steal (biar tetap ngebut pas jalan biasa juga).
 	local boostSpeedRunning = false
@@ -2807,6 +2832,9 @@ do
 			end
 
 			if not (isCarrying and carryingUid == uid) then
+				if not waitUntilNotTrapped(function() return autoStealRunning end) then
+					return false
+				end
 				local rec
 				pcall(function()
 					rec = EggCmds.GetAreaEggRecord(uid)
@@ -2814,10 +2842,11 @@ do
 				if rec == nil then
 					return true -- uid udah ga ada -- paling besar kemungkinan udah diklaim
 				elseif rec.State == "Dropped" then
-					setStatus("Kena gigit! Ambil lagi telurnya...")
+					setStatus("Kena gigit/trap! Ambil lagi telurnya...")
 					if moveTo(rec.BottomCFrame.Position, tonumber(tweenSpeedInput.Value) or 150, function()
 						return autoStealRunning
 					end) then
+						waitUntilNotTrapped(function() return autoStealRunning end)
 						EggCmds.RequestCarryAreaEgg(uid, nil)
 					end
 				else
@@ -2840,6 +2869,9 @@ do
 	end
 
 	local function autoStealCycle()
+		if not waitUntilNotTrapped(function() return autoStealRunning end) then
+			return
+		end
 		if not waitForWallOpen() then
 			return
 		end
@@ -2864,6 +2896,10 @@ do
 		if not moveTo(target.BottomCFrame.Position, tonumber(tweenSpeedInput.Value) or 150, function()
 			return autoStealRunning
 		end) then
+			return
+		end
+
+		if not waitUntilNotTrapped(function() return autoStealRunning end) then
 			return
 		end
 
