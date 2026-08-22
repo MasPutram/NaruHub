@@ -2740,10 +2740,30 @@ do
 		return best
 	end
 
-	-- Tunggu tembok kebuka penuh SAMBIL parkir di tengah jalur (SeparationLine)
-	-- biar begitu kebuka langsung tinggal tancap ke egg-nya.
+	-- Titik parkir nunggu tembok kebuka -- SENGAJA BUKAN dihitung dari
+	-- geometri SeparationLine (part-nya lebar 393 studs, titik tengahnya
+	-- kebetulan jatuh di tengah "Zona Aman", bukan di mulut jalur beneran).
+	-- Dipakein dari posisi player sendiri: capture otomatis pas toggle Auto
+	-- Steal dinyalain, atau manual lewat tombol "Set Titik Parkir" di bawah.
+	local stagingPos = nil
+
+	local function captureStagingPos()
+		local hrp = getHRP()
+		if hrp then
+			stagingPos = hrp.Position
+			setStatus("Titik parkir di-set ke posisi sekarang: " .. tostring(stagingPos))
+		end
+	end
+
+	-- Tunggu tembok kebuka penuh SAMBIL parkir di titik yang udah di-set.
+	-- Begitu kebuka langsung tinggal tancap ke egg-nya.
 	local function waitForWallOpen()
-		local stagingPos = SeparationLine.Position
+		if not stagingPos then
+			captureStagingPos()
+		end
+		if not stagingPos then
+			return false
+		end
 		moveTo(stagingPos, tonumber(tweenSpeedInput.Value) or 150, function()
 			return autoStealRunning
 		end)
@@ -2764,7 +2784,7 @@ do
 	-- Bawa telur curian balik nyebrang -- kalau di tengah jalan kena gigit
 	-- (dijatohin), otomatis kejar posisi barunya & ambil ulang (uid sama).
 	local function carryEggHome(uid)
-		local staging = SeparationLine.Position
+		local staging = stagingPos or SeparationLine.Position
 		local ticks = 0
 		while autoStealRunning do
 			ticks += 1
@@ -2862,12 +2882,18 @@ do
 		end)
 	end
 
+	section:AddButton({
+		Title = "Set Titik Parkir (pakai posisi sekarang)",
+		Callback = captureStagingPos,
+	})
+
 	section:AddToggle("StealAnEgg_AutoSteal", {
 		Title = "Auto Steal (loop utama)",
 		Default = false,
 		Callback = function(enabled)
 			autoStealRunning = enabled
 			if enabled then
+				captureStagingPos()
 				task.spawn(function()
 					while autoStealRunning do
 						local ok, err = pcall(autoStealCycle)
