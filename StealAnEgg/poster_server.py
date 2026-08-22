@@ -1075,6 +1075,62 @@ if BOT_ENABLED:
             except discord.HTTPException:
                 pass
 
+    DOWNLOAD_ALL_DIR = Path(r"D:\FACEBOOK\JB")
+
+    @bot.tree.command(name="downloadposter", description="Download poster satu akun (Discord) atau semua akun sekaligus (disimpan ke disk)")
+    @discord.app_commands.describe(account="Nama akun persis kayak di dashboard, atau 'all' buat semua akun sekaligus")
+    async def downloadposter_command(interaction: discord.Interaction, account: str):
+        try:
+            await interaction.response.defer(ephemeral=True, thinking=True)
+
+            if account.strip().lower() == "all":
+                names = known_poster_accounts()
+                if not names:
+                    await interaction.followup.send("Belum ada data poster akun apapun.", ephemeral=True)
+                    return
+                DOWNLOAD_ALL_DIR.mkdir(parents=True, exist_ok=True)
+                saved, failed = [], []
+                for name in names:
+                    full_data = lookup_full_data(name)
+                    try:
+                        img = render_poster(full_data)
+                        img.save(DOWNLOAD_ALL_DIR / f"{name}_poster.png", format="PNG")
+                        saved.append(name)
+                    except Exception as e:  # noqa: BLE001
+                        print(f"[discord_bot] /downloadposter all -- gagal render {name}: {e}")
+                        failed.append(name)
+                msg = f"Tersimpan **{len(saved)}** poster ke `{DOWNLOAD_ALL_DIR}`."
+                if failed:
+                    msg += f" Gagal ({len(failed)}): {', '.join(failed)}."
+                await interaction.followup.send(msg, ephemeral=True)
+                return
+
+            full_data = lookup_full_data(account)
+            if not full_data:
+                await interaction.followup.send(
+                    f"Ga ketemu data poster buat akun '{account}'. Pastikan nama-nya persis sama kayak di "
+                    "dashboard, dan akunnya udah pernah generate/report minimal sekali.",
+                    ephemeral=True,
+                )
+                return
+
+            img = render_poster(full_data)
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            buf.seek(0)
+            await interaction.followup.send(
+                content=f"Poster akun **{account}**:",
+                file=discord.File(buf, filename=f"{account}_poster.png"),
+                ephemeral=True,
+            )
+        except Exception as e:  # noqa: BLE001
+            print(f"[discord_bot] /downloadposter error: {e}")
+            traceback.print_exc()
+            try:
+                await interaction.followup.send(f"Error waktu jalanin /downloadposter: {e}", ephemeral=True)
+            except discord.HTTPException:
+                pass
+
     @bot.tree.error
     async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
         """Safety net buat semua slash command -- tanpa ini, error yang
@@ -1453,6 +1509,36 @@ setInterval(refresh, 5000);
 </body>
 </html>
 """
+
+
+def lookup_full_data(account: str) -> dict:
+    """Cari snapshot poster-shaped data buat 1 akun: pertama dari fullData
+    laporan /monitor terakhir (ACCOUNTS), fallback ke draft yang masih
+    ngantri di PENDING kalau akunnya lagi ga ngereport."""
+    with ACCOUNTS_LOCK:
+        acc = ACCOUNTS.get(account)
+        full_data = acc.get("fullData") if acc else None
+    if full_data:
+        return full_data
+    for entry in PENDING.values():
+        if entry.get("data", {}).get("sourceAccount") == account:
+            return entry["data"]
+    return None
+
+
+def known_poster_accounts() -> list:
+    """Semua nama akun yang punya data poster (dari ACCOUNTS atau PENDING),
+    dipakai buat /downloadposter account:all."""
+    names = set()
+    with ACCOUNTS_LOCK:
+        for name, acc in ACCOUNTS.items():
+            if acc.get("fullData"):
+                names.add(name)
+    for entry in PENDING.values():
+        sa = entry.get("data", {}).get("sourceAccount")
+        if sa:
+            names.add(sa)
+    return sorted(names)
 
 
 def generate_and_deliver(data: dict) -> tuple[int, dict]:
