@@ -3074,4 +3074,160 @@ do
 	})
 end
 
+------------------------------------------------------------
+-- 7. Misc -- Performance Booster
+------------------------------------------------------------
+-- Semua efek di sini murni visual/client-side rendering, ga nyentuh
+-- Humanoid/WalkSpeed/CFrame karakter atau state apapun yang direplikasi
+-- ke server -- jadi ga ada resiko kena anticheat kayak kasus speed dulu.
+--
+-- Hide All Pet -> target-nya Workspace.ClientRenderedAssets (folder pet
+-- yang lagi kerender, punya sendiri maupun punya pemain lain, isinya Model
+-- bernama "<assetId>_<uid>"). Ini folder BEDA TOTAL sama
+-- Workspace.__ClientTreadmillRenders (dipake Auto Treadmill), jadi ga ada
+-- konflik. Hide-nya pake LocalTransparencyModifier (cuma override render
+-- lokal, bukan ubah property Transparency asli) supaya ga nyentuh apapun
+-- yang mungkin dibaca game logic, dan langsung reversible pas dimatiin.
+do
+	local MiscTab = Window:AddTab({ Title = "Misc" })
+	local section = MiscTab:AddSection("Performance Booster")
+
+	local statusPara = section:AddParagraph({
+		Title = "Status",
+		Content = "-",
+	})
+
+	local function setStatus(msg)
+		pcall(function()
+			statusPara:SetContent(tostring(msg))
+		end)
+	end
+
+	----------------------------------------------------------
+	-- Hide All Pet
+	----------------------------------------------------------
+	local hidePetsEnabled = false
+	local petAddedConn = nil
+
+	local function hidePetEntry(entry)
+		pcall(function()
+			for _, desc in ipairs(entry:GetDescendants()) do
+				if desc:IsA("BasePart") then
+					desc.LocalTransparencyModifier = 1
+				elseif desc:IsA("Decal") or desc:IsA("Texture") then
+					desc.Transparency = 1
+				end
+			end
+			local data = entry:FindFirstChild("Data")
+			if data and data:IsA("BillboardGui") then
+				data.Enabled = false
+			end
+		end)
+	end
+
+	local function showPetEntry(entry)
+		pcall(function()
+			for _, desc in ipairs(entry:GetDescendants()) do
+				if desc:IsA("BasePart") then
+					desc.LocalTransparencyModifier = 0
+				elseif desc:IsA("Decal") or desc:IsA("Texture") then
+					desc.Transparency = 0
+				end
+			end
+			local data = entry:FindFirstChild("Data")
+			if data and data:IsA("BillboardGui") then
+				data.Enabled = true
+			end
+		end)
+	end
+
+	section:AddToggle("StealAnEgg_HideAllPet", {
+		Title = "Hide All Pet (kurangin lag render)",
+		Default = false,
+		Callback = function(enabled)
+			hidePetsEnabled = enabled
+			local folder = Workspace:FindFirstChild("ClientRenderedAssets")
+			if not folder then
+				setStatus("Hide All Pet: folder ClientRenderedAssets ga ketemu.")
+				return
+			end
+
+			if enabled then
+				for _, entry in ipairs(folder:GetChildren()) do
+					hidePetEntry(entry)
+				end
+				if not petAddedConn then
+					petAddedConn = folder.ChildAdded:Connect(function(entry)
+						if hidePetsEnabled then
+							task.defer(hidePetEntry, entry)
+						end
+					end)
+				end
+				setStatus("Semua pet disembunyiin.")
+			else
+				if petAddedConn then
+					petAddedConn:Disconnect()
+					petAddedConn = nil
+				end
+				for _, entry in ipairs(folder:GetChildren()) do
+					showPetEntry(entry)
+				end
+				setStatus("Pet dimunculin lagi.")
+			end
+		end,
+	})
+
+	----------------------------------------------------------
+	-- Soft Graphics
+	----------------------------------------------------------
+	local originalTerrainSettings = nil
+
+	section:AddToggle("StealAnEgg_SoftGraphics", {
+		Title = "Soft Graphics (grafik seminim mungkin)",
+		Default = false,
+		Callback = function(enabled)
+			pcall(function()
+				local UserGameSettings = UserSettings():GetService("UserGameSettings")
+				UserGameSettings.SavedQualityLevel = enabled and Enum.SavedQualitySetting.QualityLevel1
+					or Enum.SavedQualitySetting.Automatic
+			end)
+
+			pcall(function()
+				local Lighting = game:GetService("Lighting")
+				for _, effect in ipairs(Lighting:GetChildren()) do
+					if effect:IsA("PostEffect") then
+						effect.Enabled = not enabled
+					end
+				end
+				Lighting.GlobalShadows = not enabled
+			end)
+
+			pcall(function()
+				local terrain = Workspace.Terrain
+				if enabled then
+					if not originalTerrainSettings then
+						originalTerrainSettings = {
+							Decoration = terrain.Decoration,
+							WaterWaveSize = terrain.WaterWaveSize,
+							WaterWaveSpeed = terrain.WaterWaveSpeed,
+							WaterReflectance = terrain.WaterReflectance,
+						}
+					end
+					terrain.Decoration = false
+					terrain.WaterWaveSize = 0
+					terrain.WaterWaveSpeed = 0
+					terrain.WaterReflectance = 0
+				elseif originalTerrainSettings then
+					terrain.Decoration = originalTerrainSettings.Decoration
+					terrain.WaterWaveSize = originalTerrainSettings.WaterWaveSize
+					terrain.WaterWaveSpeed = originalTerrainSettings.WaterWaveSpeed
+					terrain.WaterReflectance = originalTerrainSettings.WaterReflectance
+				end
+			end)
+
+			setStatus(enabled and "Soft Graphics nyala." or "Soft Graphics dimatiin.")
+		end,
+	})
+end
+
 Window:SelectTab(1)
