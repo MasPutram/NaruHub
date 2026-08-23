@@ -2611,13 +2611,6 @@ do
 	end
 
 
-	local boostSpeedValueInput = section:AddInput("StealAnEgg_BoostSpeedValue", {
-		Title = "WalkSpeed Boost Target",
-		Placeholder = "100",
-		Default = "100",
-		Finished = true,
-	})
-
 	local statusPara = section:AddParagraph({ Title = "Status Auto Steal", Content = "-" })
 
 	-- pcall-wrapped SENGAJA -- kalau toggle "Auto Steal" ke-restore otomatis
@@ -2667,28 +2660,13 @@ do
 		return true
 	end
 
-	-- Auto Boost Speed -- paksa WalkSpeed terus-terusan selama toggle nyala,
-	-- independen dari loop steal (biar tetap ngebut pas jalan biasa juga).
-	local boostSpeedRunning = false
-	section:AddToggle("StealAnEgg_BoostSpeed", {
-		Title = "Auto Boost Speed (paksa WalkSpeed)",
-		Default = false,
-		Callback = function(enabled)
-			boostSpeedRunning = enabled
-			if enabled then
-				task.spawn(function()
-					while boostSpeedRunning do
-						local hum = getHumanoid()
-						local target = tonumber(boostSpeedValueInput.Value) or 100
-						if hum and hum.WalkSpeed ~= target then
-							hum.WalkSpeed = target
-						end
-						task.wait(1)
-					end
-				end)
-			end
-		end,
-	})
+	-- "Auto Boost Speed" (fitur lama yang paksa set hum.WalkSpeed manual)
+	-- DIHAPUS -- dites langsung di game dan kebukti: nyetel Humanoid.WalkSpeed
+	-- manual (bukan lewat upgrade/item resmi) bikin KARAKTER MATI INSTAN.
+	-- Server plainly own & validasi WalkSpeed; override client-side ke-detect
+	-- selevel sama kayak CFrame-teleport ketauan. Jangan diaktifin lagi
+	-- dengan cara ini -- kalau butuh lebih cepat, satu-satunya jalur yang
+	-- kebukti aman itu CFrame-walk yang di-cap ke MAX_SAFE_TWEEN_SPEED.
 
 	-- Cari ketinggian tanah asli di bawah (x,z) via raycast, biar CFrame-walk
 	-- NGIKUTIN kontur tanah -- sebelumnya Y dipatok tetap dari posisi awal,
