@@ -3090,6 +3090,7 @@ end
 -- lokal, bukan ubah property Transparency asli) supaya ga nyentuh apapun
 -- yang mungkin dibaca game logic, dan langsung reversible pas dimatiin.
 do
+	local PlotCmds = require(ReplicatedStorage.Library.Client.PlotCmds)
 	local section = MiscTab:AddSection("Performance Booster")
 
 	local statusPara = section:AddParagraph({
@@ -3106,8 +3107,16 @@ do
 	----------------------------------------------------------
 	-- Hide All Pet
 	----------------------------------------------------------
+	-- Catatan penting: BillboardGui "Data" (nametag/rate di atas pet) itu
+	-- di-ENABLE ULANG SENDIRI sama sistem culling game tiap ada pet yang
+	-- deket/kelihatan kamera (dibuktikan: set false, tunggu 1 detik, balik
+	-- true lagi). LocalTransparencyModifier di BasePart-nya sendiri AMAN
+	-- (ga direset). Makanya buat teks bener-bener ilang, tiap entry di-hook
+	-- GetPropertyChangedSignal("Enabled") dan dipaksa balik false selama
+	-- toggle nyala -- bukan cuma di-set sekali.
 	local hidePetsEnabled = false
 	local petAddedConn = nil
+	local petEnabledConns = {}
 
 	local function hidePetEntry(entry)
 		pcall(function()
@@ -3121,6 +3130,13 @@ do
 			local data = entry:FindFirstChild("Data")
 			if data and data:IsA("BillboardGui") then
 				data.Enabled = false
+				if not petEnabledConns[data] then
+					petEnabledConns[data] = data:GetPropertyChangedSignal("Enabled"):Connect(function()
+						if hidePetsEnabled and data.Enabled then
+							data.Enabled = false
+						end
+					end)
+				end
 			end
 		end)
 	end
@@ -3136,6 +3152,10 @@ do
 			end
 			local data = entry:FindFirstChild("Data")
 			if data and data:IsA("BillboardGui") then
+				if petEnabledConns[data] then
+					petEnabledConns[data]:Disconnect()
+					petEnabledConns[data] = nil
+				end
 				data.Enabled = true
 			end
 		end)
@@ -3163,7 +3183,7 @@ do
 						end
 					end)
 				end
-				setStatus("Semua pet disembunyiin.")
+				setStatus("Semua pet + nametag-nya disembunyiin.")
 			else
 				if petAddedConn then
 					petAddedConn:Disconnect()
@@ -3173,6 +3193,128 @@ do
 					showPetEntry(entry)
 				end
 				setStatus("Pet dimunculin lagi.")
+			end
+		end,
+	})
+
+	----------------------------------------------------------
+	-- Hide Other Treadmill
+	----------------------------------------------------------
+	-- Treadmill visual per-plot ada di Workspace.Plots.<slot>.TreadmillUpgrade
+	-- / TreadmillBottom -- folder ini BEDA sama Workspace.__ClientTreadmillRenders
+	-- yang dipake Auto Treadmill buat deteksi posisi. Jadi sembunyiin punya
+	-- plot orang lain di sini ga bakal ganggu Auto Treadmill kita sama sekali.
+	-- Punya slot sendiri sengaja TETEP KELIATAN (ga di-hide).
+	-- Sama kayak nametag pet: LocalTransparencyModifier treadmill plot orang
+	-- lain juga kena reset sama sistem LOD/streaming jarak punya game pas
+	-- kamu deket-deket situ. Jadi tiap part di-hook juga biar tetep 1
+	-- selama toggle nyala.
+	local hideTreadmillsEnabled = false
+	local treadmillAddedConn = nil
+	local treadmillModConns = {}
+
+	local function partsOf(model)
+		local parts = {}
+		if model:IsA("BasePart") then
+			table.insert(parts, model)
+		end
+		for _, desc in ipairs(model:GetDescendants()) do
+			if desc:IsA("BasePart") then
+				table.insert(parts, desc)
+			end
+		end
+		return parts
+	end
+
+	local function hideTreadmillModel(model)
+		pcall(function()
+			for _, part in ipairs(partsOf(model)) do
+				part.LocalTransparencyModifier = 1
+				if not treadmillModConns[part] then
+					treadmillModConns[part] = part:GetPropertyChangedSignal("LocalTransparencyModifier"):Connect(function()
+						if hideTreadmillsEnabled and part.LocalTransparencyModifier ~= 1 then
+							part.LocalTransparencyModifier = 1
+						end
+					end)
+				end
+			end
+		end)
+	end
+
+	local function showTreadmillModel(model)
+		pcall(function()
+			for _, part in ipairs(partsOf(model)) do
+				if treadmillModConns[part] then
+					treadmillModConns[part]:Disconnect()
+					treadmillModConns[part] = nil
+				end
+				part.LocalTransparencyModifier = 0
+			end
+		end)
+	end
+
+	local function forEachOtherPlotTreadmill(mySlot, fn)
+		local plots = Workspace:FindFirstChild("Plots")
+		if not plots then
+			return
+		end
+		for _, plot in ipairs(plots:GetChildren()) do
+			if plot.Name ~= tostring(mySlot) then
+				local upgrade = plot:FindFirstChild("TreadmillUpgrade")
+				local bottom = plot:FindFirstChild("TreadmillBottom")
+				if upgrade then
+					fn(upgrade)
+				end
+				if bottom then
+					fn(bottom)
+				end
+			end
+		end
+	end
+
+	section:AddToggle("StealAnEgg_HideOtherTreadmill", {
+		Title = "Hide Other Treadmill (punya sendiri tetep keliatan)",
+		Default = false,
+		Callback = function(enabled)
+			hideTreadmillsEnabled = enabled
+			local plots = Workspace:FindFirstChild("Plots")
+			if not plots then
+				setStatus("Hide Other Treadmill: folder Plots ga ketemu.")
+				return
+			end
+
+			local ok, mySlot = pcall(function()
+				return PlotCmds.GetMySlot()
+			end)
+			if not ok or not mySlot then
+				setStatus("Hide Other Treadmill: plot sendiri belum kebaca.")
+				return
+			end
+
+			if enabled then
+				forEachOtherPlotTreadmill(mySlot, hideTreadmillModel)
+				if not treadmillAddedConn then
+					treadmillAddedConn = plots.DescendantAdded:Connect(function(desc)
+						if not hideTreadmillsEnabled then
+							return
+						end
+						if desc.Name ~= "TreadmillUpgrade" and desc.Name ~= "TreadmillBottom" then
+							return
+						end
+						local plot = desc.Parent
+						if plot and plot.Name ~= tostring(mySlot) then
+							task.defer(hideTreadmillModel, desc)
+						end
+					end)
+				end
+				setStatus("Treadmill orang lain disembunyiin (punya sendiri tetep keliatan).")
+			else
+				if treadmillAddedConn then
+					treadmillAddedConn:Disconnect()
+					treadmillAddedConn = nil
+				end
+				forEachOtherPlotTreadmill(mySlot, showTreadmillModel)
+				setStatus("Treadmill orang lain dimunculin lagi.")
 			end
 		end,
 	})
