@@ -2987,8 +2987,9 @@ end
 -- TreadmillStaticController pas plot sendiri kerender -- jadi "naik
 -- treadmill" cuma butuh char nyampe titik itu SEKALI, ga perlu tombol
 -- apa-apa. Abis itu treadmill-nya sendiri yang jalanin karakternya terus.
+local MiscTab = Window:AddTab({ Title = "Misc" })
+
 do
-	local MiscTab = Window:AddTab({ Title = "Misc" })
 	local section = MiscTab:AddSection("Auto Treadmill")
 
 	local statusPara = section:AddParagraph({
@@ -3089,7 +3090,6 @@ end
 -- lokal, bukan ubah property Transparency asli) supaya ga nyentuh apapun
 -- yang mungkin dibaca game logic, dan langsung reversible pas dimatiin.
 do
-	local MiscTab = Window:AddTab({ Title = "Misc" })
 	local section = MiscTab:AddSection("Performance Booster")
 
 	local statusPara = section:AddParagraph({
