@@ -2959,4 +2959,100 @@ do
 	})
 end
 
+------------------------------------------------------------
+-- 6. Misc -- Auto Treadmill
+------------------------------------------------------------
+-- Karakter yang lagi aktif jalan di treadmill posisinya PERSIS nempel di
+-- Workspace.__ClientTreadmillRenders.TreadmillRender_<slot>.Root (dicek
+-- langsung: jarak 0 studs). Render itu dibangun otomatis sama
+-- TreadmillStaticController pas plot sendiri kerender -- jadi "naik
+-- treadmill" cuma butuh char nyampe titik itu SEKALI, ga perlu tombol
+-- apa-apa. Abis itu treadmill-nya sendiri yang jalanin karakternya terus.
+do
+	local MiscTab = Window:AddTab({ Title = "Misc" })
+	local section = MiscTab:AddSection("Auto Treadmill")
+
+	local statusPara = section:AddParagraph({
+		Title = "Status",
+		Content = "-",
+	})
+
+	local function setStatus(msg)
+		pcall(function()
+			statusPara:SetContent(tostring(msg))
+		end)
+	end
+
+	local PlotCmds = require(ReplicatedStorage.Library.Client.PlotCmds)
+
+	local function boardTreadmillOnce()
+		local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+		local hrp = char:WaitForChild("HumanoidRootPart", 10)
+		if not hrp then
+			setStatus("Gagal: HumanoidRootPart ga ketemu.")
+			return false
+		end
+
+		local ok, slot = pcall(function()
+			return PlotCmds.GetMySlot()
+		end)
+		if not ok or not slot then
+			setStatus("Gagal: plot sendiri belum kebaca.")
+			return false
+		end
+
+		local renderName = "TreadmillRender_" .. tostring(slot)
+		local rendersFolder = Workspace:WaitForChild("__ClientTreadmillRenders", 10)
+		if not rendersFolder then
+			setStatus("Gagal: render treadmill belum muncul (folder ga ada).")
+			return false
+		end
+
+		local render = rendersFolder:FindFirstChild(renderName)
+		local waited = 0
+		while not render and waited < 15 do
+			task.wait(0.5)
+			waited += 0.5
+			render = rendersFolder:FindFirstChild(renderName)
+		end
+		if not render then
+			setStatus("Gagal: " .. renderName .. " ga muncul dalam 15 detik.")
+			return false
+		end
+
+		local root = render:WaitForChild("Root", 5)
+		if not root then
+			setStatus("Gagal: Root treadmill ga ketemu.")
+			return false
+		end
+
+		hrp.CFrame = root.CFrame
+		setStatus("Berhasil naik treadmill (slot " .. tostring(slot) .. ").")
+		return true
+	end
+
+	-- Kepake sekali doang -- toggle ini bukan loop, cuma pemicu. Nyala
+	-- (baik dipencet manual maupun ke-restore otomatis dari config
+	-- tersimpan pas load) = eksekusi boardTreadmillOnce() SEKALI, abis itu
+	-- flag ini bikin toggle-nya ga ngapa-ngapain lagi walau dipencet ulang.
+	local hasBoarded = false
+	section:AddToggle("StealAnEgg_AutoTreadmill", {
+		Title = "Auto Treadmill (naik sekali di awal)",
+		Default = true,
+		Callback = function(enabled)
+			if not enabled or hasBoarded then
+				return
+			end
+			hasBoarded = true
+			task.spawn(function()
+				if not LocalPlayer.Character then
+					LocalPlayer.CharacterAdded:Wait()
+				end
+				task.wait(1) -- kasih waktu plot & render awal kebentuk
+				boardTreadmillOnce()
+			end)
+		end,
+	})
+end
+
 Window:SelectTab(1)
