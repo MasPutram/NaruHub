@@ -1349,17 +1349,19 @@ function iconUrl(pet) {
 async function refresh() {
   const res = await fetch("/api/accounts");
   const data = await res.json();
-  const accounts = data.accounts || [];
+  // Cuma tampilin yang online -- akun offline itu paling sering cache basi
+  // dari sesi tunnel/server yang beda (tunnel URL ganti-ganti tiap direfresh),
+  // bukan akun yang beneran lagi kamu pantau sekarang.
+  const accounts = (data.accounts || []).filter(a => a.online);
   document.getElementById("empty").style.display = accounts.length ? "none" : "block";
 
-  const online = accounts.filter(a => a.online).length;
   const totalMoney = accounts.reduce((s, a) => s + (Number(a.money) || 0), 0);
   const totalSpeed = accounts.reduce((s, a) => s + (Number(a.speed) || 0), 0);
   const totalPets = accounts.reduce((s, a) => s + (Number(a.petsCount) || 0), 0);
   const totalStolen = accounts.reduce((s, a) => s + (Number(a.stolenCount) || 0), 0);
 
   document.getElementById("summary").innerHTML = `
-    <div class="sumcard"><div class="label">ACTIVE ACCOUNTS</div><div class="value">${online} / ${accounts.length}</div></div>
+    <div class="sumcard"><div class="label">ACTIVE ACCOUNTS</div><div class="value">${accounts.length}</div></div>
     <div class="sumcard"><div class="label">TOTAL MONEY</div><div class="value">${fmtMoney(totalMoney)}</div></div>
     <div class="sumcard"><div class="label">TOTAL SPEED</div><div class="value">${fmtNum(totalSpeed)}</div></div>
     <div class="sumcard"><div class="label">TOTAL PETS</div><div class="value">${fmtNum(totalPets)}</div></div>
