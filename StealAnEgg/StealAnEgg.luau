@@ -2589,12 +2589,26 @@ do
 		Finished = true,
 	})
 
+	-- PENTING: dites langsung di game -- gerakan CFrame-walk di atas ~60
+	-- studs/detik sustained kena semacam deteksi anti-cheat (kemungkinan
+	-- speedhack detection akumulatif, bukan instant): speed 60 aman jalan
+	-- 30 detik penuh (0 masalah), speed 120 mati di ~12 detik, speed 300
+	-- mati dalam ~1 detik. Kecepatan makin tinggi = makin cepat ke-detect,
+	-- bukan langsung instant di semua speed. Di-cap ke MAX_SAFE_TWEEN_SPEED
+	-- biar user ga bisa nyetel angka yang bikin karakter mati.
+	local MAX_SAFE_TWEEN_SPEED = 60
+
 	local tweenSpeedInput = section:AddInput("StealAnEgg_TweenSpeed", {
-		Title = "Tween Speed (studs/detik)",
-		Placeholder = "150",
-		Default = "150",
+		Title = "Tween Speed (studs/detik, MAX 60 -- di atas itu kedetect anti-cheat & karakter mati)",
+		Placeholder = "60",
+		Default = "60",
 		Finished = true,
 	})
+
+	local function getTweenSpeed()
+		local v = tonumber(tweenSpeedInput.Value) or MAX_SAFE_TWEEN_SPEED
+		return math.clamp(v, 10, MAX_SAFE_TWEEN_SPEED)
+	end
 
 
 	local boostSpeedValueInput = section:AddInput("StealAnEgg_BoostSpeedValue", {
@@ -2676,12 +2690,32 @@ do
 		end,
 	})
 
+	-- Cari ketinggian tanah asli di bawah (x,z) via raycast, biar CFrame-walk
+	-- NGIKUTIN kontur tanah -- sebelumnya Y dipatok tetap dari posisi awal,
+	-- yang ketauan bikin karakter mati: kalau target egg-nya di zona dengan
+	-- ketinggian tanah beda (Volcano/Lake/dst topografinya beda-beda), pas
+	-- gerakan selesai & fisika normal balik ambil alih, karakter jatuh dari
+	-- ketinggian yang salah dan kena fall damage/mati.
+	local function findGroundY(x, z, fromY)
+		local char = LocalPlayer.Character
+		if not char then
+			return nil
+		end
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = { char }
+		local origin = Vector3.new(x, fromY + 50, z)
+		local result = Workspace:Raycast(origin, Vector3.new(0, -1000, 0), params)
+		return result and result.Position.Y or nil
+	end
+
 	-- CFrame-walk manual: gerakin HumanoidRootPart tiap Heartbeat menuju target
-	-- di kecepatan (studs/detik) yang ditentuin, bisa diinterupsi via
-	-- shouldContinue() (dipanggil tiap tick -- return false buat berhenti lebih
-	-- awal, misal pas kena gigit di tengah jalan atau toggle dimatiin).
+	-- di kecepatan (studs/detik) yang ditentuin, ngikutin kontur tanah (bukan
+	-- Y tetap), bisa diinterupsi via shouldContinue() (dipanggil tiap tick --
+	-- return false buat berhenti lebih awal, misal pas kena gigit di tengah
+	-- jalan atau toggle dimatiin).
 	local function moveTo(targetPosition, speed, shouldContinue)
-		speed = math.max(speed or 150, 10)
+		speed = math.clamp(speed or MAX_SAFE_TWEEN_SPEED, 10, MAX_SAFE_TWEEN_SPEED)
 		while true do
 			if shouldContinue and not shouldContinue() then
 				return false
@@ -2690,6 +2724,9 @@ do
 			if not hrp then
 				return false
 			end
+			local hum = getHumanoid()
+			local standOffset = (hum and hum.HipHeight or 2) + hrp.Size.Y / 2
+
 			local current = hrp.Position
 			local flat = Vector3.new(targetPosition.X - current.X, 0, targetPosition.Z - current.Z)
 			local dist = flat.Magnitude
@@ -2700,6 +2737,10 @@ do
 			local step = math.min(speed * dt, dist)
 			local direction = flat.Unit
 			local newPos = current + direction * step
+
+			local groundY = findGroundY(newPos.X, newPos.Z, current.Y)
+			local newY = groundY and (groundY + standOffset) or current.Y
+			newPos = Vector3.new(newPos.X, newY, newPos.Z)
 			hrp.CFrame = CFrame.new(newPos, newPos + direction)
 		end
 	end
@@ -2798,7 +2839,7 @@ do
 			return false
 		end
 		setStatus("Parkir di titik tunggu...")
-		moveTo(stagingPos, tonumber(tweenSpeedInput.Value) or 150, function()
+		moveTo(stagingPos, getTweenSpeed(), function()
 			return autoStealRunning
 		end)
 		local lastReported = nil
@@ -2843,7 +2884,7 @@ do
 					return true -- uid udah ga ada -- paling besar kemungkinan udah diklaim
 				elseif rec.State == "Dropped" then
 					setStatus("Kena gigit/trap! Ambil lagi telurnya...")
-					if moveTo(rec.BottomCFrame.Position, tonumber(tweenSpeedInput.Value) or 150, function()
+					if moveTo(rec.BottomCFrame.Position, getTweenSpeed(), function()
 						return autoStealRunning
 					end) then
 						waitUntilNotTrapped(function() return autoStealRunning end)
@@ -2859,7 +2900,7 @@ do
 				if hrp and (Vector3.new(hrp.Position.X, 0, hrp.Position.Z) - Vector3.new(staging.X, 0, staging.Z)).Magnitude < 4 then
 					return true
 				end
-				moveTo(staging, tonumber(tweenSpeedInput.Value) or 150, function()
+				moveTo(staging, getTweenSpeed(), function()
 					return autoStealRunning and isCarrying and carryingUid == uid
 				end)
 			end
@@ -2893,7 +2934,7 @@ do
 		end
 
 		setStatus("Menuju egg: " .. tostring(target.AssetCategory))
-		if not moveTo(target.BottomCFrame.Position, tonumber(tweenSpeedInput.Value) or 150, function()
+		if not moveTo(target.BottomCFrame.Position, getTweenSpeed(), function()
 			return autoStealRunning
 		end) then
 			return
