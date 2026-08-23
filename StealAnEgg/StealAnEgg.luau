@@ -3322,12 +3322,46 @@ do
 	----------------------------------------------------------
 	-- Soft Graphics
 	----------------------------------------------------------
+	-- Lighting PostEffect (ColorCorrection, SunRays, dll) juga kena reset
+	-- balik Enabled=true sama game (kemungkinan dipicu event/animasi
+	-- tertentu, kayak buka layar treadmill), sama kayak kasus nametag pet
+	-- & treadmill di atas. Makanya effect yang ada di-hook, dan effect BARU
+	-- yang nongol pas toggle nyala langsung dimatiin juga.
+	local softGraphicsEnabled = false
 	local originalTerrainSettings = nil
+	local lightingEffectConns = {}
+	local lightingChildAddedConn = nil
+
+	local function suppressEffect(effect)
+		if not effect:IsA("PostEffect") then
+			return
+		end
+		effect.Enabled = false
+		if not lightingEffectConns[effect] then
+			lightingEffectConns[effect] = effect:GetPropertyChangedSignal("Enabled"):Connect(function()
+				if softGraphicsEnabled and effect.Enabled then
+					effect.Enabled = false
+				end
+			end)
+		end
+	end
+
+	local function releaseEffect(effect)
+		if lightingEffectConns[effect] then
+			lightingEffectConns[effect]:Disconnect()
+			lightingEffectConns[effect] = nil
+		end
+		if effect:IsA("PostEffect") then
+			effect.Enabled = true
+		end
+	end
 
 	section:AddToggle("StealAnEgg_SoftGraphics", {
 		Title = "Soft Graphics (grafik seminim mungkin)",
 		Default = false,
 		Callback = function(enabled)
+			softGraphicsEnabled = enabled
+
 			pcall(function()
 				local UserGameSettings = UserSettings():GetService("UserGameSettings")
 				UserGameSettings.SavedQualityLevel = enabled and Enum.SavedQualitySetting.QualityLevel1
@@ -3336,9 +3370,24 @@ do
 
 			pcall(function()
 				local Lighting = game:GetService("Lighting")
-				for _, effect in ipairs(Lighting:GetChildren()) do
-					if effect:IsA("PostEffect") then
-						effect.Enabled = not enabled
+				if enabled then
+					for _, effect in ipairs(Lighting:GetChildren()) do
+						suppressEffect(effect)
+					end
+					if not lightingChildAddedConn then
+						lightingChildAddedConn = Lighting.ChildAdded:Connect(function(child)
+							if softGraphicsEnabled then
+								task.defer(suppressEffect, child)
+							end
+						end)
+					end
+				else
+					if lightingChildAddedConn then
+						lightingChildAddedConn:Disconnect()
+						lightingChildAddedConn = nil
+					end
+					for _, effect in ipairs(Lighting:GetChildren()) do
+						releaseEffect(effect)
 					end
 				end
 				Lighting.GlobalShadows = not enabled
