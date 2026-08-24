@@ -3421,4 +3421,104 @@ do
 	})
 end
 
+------------------------------------------------------------
+-- 4b. Auto Buy Trail Shop -- beliin trail cash (bukan Robux) dari
+-- ReplicatedStorage.Directory.Trails.Directory secara otomatis, mulai dari
+-- yang termurah, tiap kali Money cukup. Pakai remote yang sama kayak tombol
+-- "Buy" di TrailShop GUI aslinya (Constants.NETWORK_MAP.Trails.REQUEST_PURCHASE
+-- via Network.Invoke) jadi server-side sepenuhnya sah, cuma diklik otomatis.
+do
+	local section = MiscTab:AddSection("Auto Buy Trail Shop")
+
+	local trailStatusPara = section:AddParagraph({
+		Title = "Status Auto Buy Trail",
+		Content = "-",
+	})
+
+	local autoBuyTrailRunning = false
+	section:AddToggle("StealAnEgg_AutoBuyTrail", {
+		Title = "Auto Buy Trail Shop",
+		Default = false,
+		Callback = function(enabled)
+			autoBuyTrailRunning = enabled
+			if not enabled then
+				return
+			end
+			task.spawn(function()
+				local Save = require(ReplicatedStorage.Library.Client.Save)
+				local Network = require(ReplicatedStorage.Library.Client.Network)
+				local Constants = require(ReplicatedStorage.Library.Globals.Constants)
+				local Trails = require(ReplicatedStorage.Directory.Trails)
+				local Simple = require(ReplicatedStorage.Library.Modules.FormatNumber.Simple)
+				local TrailsNet = Constants.NETWORK_MAP.Trails
+
+				if not Save.IsLocalDataLoaded() then
+					Save.LoadedStats:Wait()
+				end
+
+				local function fmtPrice(price)
+					return "$" .. Simple.FormatCompact(price, ".#")
+				end
+
+				local sortedKeys = {}
+				for key, cfg in pairs(Trails.Directory) do
+					if cfg.DisplayInShop and cfg.Price then
+						table.insert(sortedKeys, key)
+					end
+				end
+				table.sort(sortedKeys, function(a, b)
+					return Trails.Directory[a].Price < Trails.Directory[b].Price
+				end)
+
+				while autoBuyTrailRunning and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+					local data = Save.Get()
+					local boughtThisPass = false
+					for _, key in ipairs(sortedKeys) do
+						if not autoBuyTrailRunning then
+							break
+						end
+						local cfg = Trails.Directory[key]
+						if not data.TrailInventory[key] and data.Money >= cfg.Price then
+							local invokeOk, purchaseOk, err = pcall(Network.Invoke, TrailsNet.REQUEST_PURCHASE, key)
+							if invokeOk and purchaseOk then
+								trailStatusPara:SetContent("Beli " .. cfg.DisplayName .. " (" .. fmtPrice(cfg.Price) .. ")")
+								boughtThisPass = true
+								data = Save.Get() -- refresh Money & TrailInventory buat cek item berikutnya di pass yang sama
+							else
+								trailStatusPara:SetContent(
+									"Gagal beli " .. cfg.DisplayName .. ": " .. tostring(invokeOk and err or purchaseOk)
+								)
+							end
+							task.wait(0.5)
+						end
+					end
+					if not boughtThisPass then
+						local nextKey
+						for _, key in ipairs(sortedKeys) do
+							if not data.TrailInventory[key] then
+								nextKey = key
+								break
+							end
+						end
+						if nextKey then
+							local cfg = Trails.Directory[nextKey]
+							trailStatusPara:SetContent("Nunggu uang buat " .. cfg.DisplayName .. " (" .. fmtPrice(cfg.Price) .. ")")
+						else
+							trailStatusPara:SetContent("Semua trail di toko (cash) udah kebeli.")
+						end
+					end
+					task.wait(3)
+				end
+			end)
+		end,
+	})
+
+	section:AddParagraph({
+		Title = "Catatan",
+		Content = "Otomatis beli trail dari TrailShop (harga cash, bukan yang Robux-only) mulai dari yang "
+			.. "termurah, tiap kali Money cukup. Dicek tiap 3 detik, ga otomatis equip -- equip manual sendiri "
+			.. "dari TrailShop kalau mau ganti-ganti trail yang udah kebeli.",
+	})
+end
+
 Window:SelectTab(1)
