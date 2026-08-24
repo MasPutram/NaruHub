@@ -2976,6 +2976,210 @@ do
 			end
 		end,
 	})
+
+	------------------------------------------------------------
+	-- Auto Place Egg -- taro telur yang masih di tas (belum di-place) ke
+	-- kandang sendiri, otomatis, buat telur yang rate-nya di bawah
+	-- threshold ($/s). Pakai remote yang sama persis kayak tombol "Place
+	-- Egg" (R2) di game aslinya: EggCmds.RequestPlaceEgg(uid, LocalCFrame)
+	-- via ReplicatedStorage.Library.Client.EggCmds -- LocalCFrame dihitung
+	-- dari titik acak di atas PetArea sendiri (PlotCmds.GetPlotData().PetArea),
+	-- dikonversi ke object space CenterPoint, PERSIS rumus yang dipakai
+	-- EggPlacementController pas kamu klik manual (bedanya cuma titiknya
+	-- acak, bukan hasil raycast mouse).
+	--
+	-- PENTING (sudah dites langsung di game): server nolak placement kalau
+	-- karakter ga cukup deket ("Get closer to your area to place an egg!")
+	-- -- ~50 studs dari PetArea GAGAL, ~10 studs BERHASIL. Makanya sebelum
+	-- naro, karakter jalan dulu ke PetArea pakai moveTo() yang sama kayak
+	-- Auto Steal (speed di-cap MAX_SAFE_TWEEN_SPEED, bukan teleport instan
+	-- -- teleport sekali gerak gede kemungkinan malah lebih gampang
+	-- kedetect daripada CFrame-walk bertahap yang udah divalidasi aman).
+	do
+		local section = FarmTab:AddSection("Auto Place Egg")
+
+		local placeThresholdInput = section:AddInput("StealAnEgg_PlaceEggThreshold", {
+			Title = "Threshold Maksimum ($/s, telur DI BAWAH ini di-taro otomatis; 0 = semua telur di tas)",
+			Placeholder = "1000000000",
+			Default = "1000000000",
+			Finished = true,
+		})
+
+		local placeStatusPara = section:AddParagraph({ Title = "Status Auto Place Egg", Content = "-" })
+
+		-- pcall-wrapped SENGAJA -- toggle yang ke-restore otomatis dari config
+		-- tersimpan bisa manggil SetContent dari thread yang "lacking capability
+		-- Plugin" (pola yang sama kayak Auto Steal/Auto Buy Trail).
+		local function setPlaceStatus(msg)
+			pcall(function()
+				placeStatusPara:SetContent(tostring(msg))
+			end)
+		end
+
+		local function getPlaceThreshold()
+			local n = tonumber(placeThresholdInput.Value)
+			if n == nil then
+				return 1000000000
+			end
+			if n <= 0 then
+				return math.huge
+			end
+			return n
+		end
+
+		local autoPlaceEggRunning = false
+
+		local function collectUnplacedBelowThreshold(threshold)
+			pcall(function()
+				EggCmds.RequestRuntimeSnapshot()
+			end)
+			local records = EggCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+			local candidates = {}
+			for uid, rec in pairs(records) do
+				if rec.Placement == nil then
+					local rate = computeRate(rec)
+					if rate < threshold then
+						table.insert(candidates, { uid = uid, category = rec.AssetCategory, rate = rate })
+					end
+				end
+			end
+			table.sort(candidates, function(a, b)
+				return a.rate < b.rate
+			end)
+			return candidates
+		end
+
+		-- Titik taro dipilih di sekitar POSISI KARAKTER SEKARANG (bukan
+		-- random di seluruh PetArea) -- dites langsung: server nolak
+		-- ("Get closer to your area to place an egg!") kalau titik
+		-- taronya jauh dari karakter walau karakter sendiri udah deket
+		-- CenterPoint PetArea. Radius kecil dari HRP jauh lebih konsisten
+		-- lolos cek proximity server daripada random di seluruh area.
+		local function tryPlaceAt(uid, petArea, centerPoint)
+			local size = petArea.Size
+			local halfX, halfZ = size.X / 2 * 0.9, size.Z / 2 * 0.9
+			local lastErr
+			for attempt = 1, 10 do
+				if not autoPlaceEggRunning then
+					return false, lastErr
+				end
+				local hrp = getHRP()
+				if not hrp then
+					return false, lastErr
+				end
+				-- Radius jitter dari HRP dinaikin bertahap tiap gagal --
+				-- attempt awal nyoba deket banget (spot kosong di sekitar
+				-- kaki), attempt belakangan nyebar lebih jauh buat ngindarin
+				-- "Egg is too close to another egg!" begitu area sekitar HRP
+				-- udah penuh (dites langsung: 8 studs tetap ke-block kalau
+				-- banyak telur numpuk di 1 titik).
+				local radius = 6 + attempt * 2
+				local localHRP = petArea.CFrame:PointToObjectSpace(hrp.Position)
+				local x = math.clamp(localHRP.X + (math.random() * 2 - 1) * radius, -halfX, halfX)
+				local z = math.clamp(localHRP.Z + (math.random() * 2 - 1) * radius, -halfZ, halfZ)
+				local worldPos = (petArea.CFrame * CFrame.new(x, size.Y / 2, z)).Position
+				local placeCFrame = centerPoint.CFrame:ToObjectSpace(CFrame.new(worldPos))
+				local ok, err = EggCmds.RequestPlaceEgg(uid, placeCFrame)
+				if ok then
+					return true
+				end
+				lastErr = err
+				task.wait(0.25)
+			end
+			return false, lastErr
+		end
+
+		local function autoPlaceEggCycle()
+			local threshold = getPlaceThreshold()
+			local candidates = collectUnplacedBelowThreshold(threshold)
+			if #candidates == 0 then
+				setPlaceStatus("Ga ada telur di tas yang di bawah threshold.")
+				return
+			end
+
+			local plotData = PlotCmds.GetPlotData()
+			local petArea = plotData and plotData.PetArea
+			local centerPoint = plotData and plotData.CenterPoint
+			if not petArea or not centerPoint then
+				setPlaceStatus("Ga nemu kandang sendiri (plot belum kerender?).")
+				return
+			end
+
+			-- Fitur lain (mis. Auto Treadmill) bisa narik karakter balik ke
+			-- posisi lain KAPAN AJA di tengah-tengah naro banyak telur --
+			-- dites langsung: sekali cek jarak di awal doang ga cukup,
+			-- karakter kedapetan udah balik ~50 studs lagi pas mau naro
+			-- telur ke-2/ke-3. Makanya jaraknya dicek ULANG per telur.
+			local function ensureNearPetArea()
+				local hrp = getHRP()
+				if not hrp then
+					return false
+				end
+				if (hrp.Position - petArea.Position).Magnitude <= 15 then
+					return true
+				end
+				setPlaceStatus("Jalan ke kandang sendiri buat naro telur...")
+				return moveTo(petArea.Position, getTweenSpeed(), function()
+					return autoPlaceEggRunning
+				end)
+			end
+
+			local placedCount = 0
+			local lastFailErr
+			for _, c in ipairs(candidates) do
+				if not autoPlaceEggRunning then
+					break
+				end
+				if ensureNearPetArea() then
+					local placed, err = tryPlaceAt(c.uid, petArea, centerPoint)
+					if placed then
+						placedCount = placedCount + 1
+						setPlaceStatus(
+							"Naro " .. c.category .. " ($" .. tostring(math.floor(c.rate)) .. "/s) -- total " .. placedCount .. " telur dipasang."
+						)
+					else
+						lastFailErr = err
+					end
+				end
+				task.wait(0.4)
+			end
+			if placedCount == 0 then
+				setPlaceStatus(
+					"Ga ada telur yang berhasil ditaro"
+						.. (lastFailErr and (" (" .. tostring(lastFailErr) .. ")") or " (kandang penuh / posisi ga valid).")
+				)
+			end
+		end
+
+		section:AddToggle("StealAnEgg_AutoPlaceEgg", {
+			Title = "Auto Place Egg",
+			Default = false,
+			Callback = function(enabled)
+				autoPlaceEggRunning = enabled
+				if enabled then
+					task.spawn(function()
+						while autoPlaceEggRunning do
+							local ok, err = pcall(autoPlaceEggCycle)
+							if not ok then
+								setPlaceStatus("Error: " .. tostring(err))
+							end
+							task.wait(3)
+						end
+						setPlaceStatus("Auto Place Egg dimatikan.")
+					end)
+				end
+			end,
+		})
+
+		section:AddParagraph({
+			Title = "Catatan",
+			Content = "Cuma naro telur yang masih di TAS (belum ke-place), rate di bawah threshold, mulai dari yang "
+				.. "termurah. Kalau karakter jauh dari kandang sendiri, jalan dulu otomatis (speed dicap sama kayak "
+				.. "Auto Steal, bukan teleport). Telur di atas threshold sengaja dibiarin di tas. JANGAN nyalain "
+				.. "bareng Auto Treadmill/Auto Steal -- sama-sama gerakin karakter, jadi bisa rebutan posisi & "
+				.. "placement-nya gagal terus (dites langsung: kejadian).",
+		})
+	end
 end
 
 ------------------------------------------------------------
@@ -3435,6 +3639,15 @@ do
 		Content = "-",
 	})
 
+	-- pcall-wrapped SENGAJA -- toggle yang ke-restore otomatis dari config
+	-- tersimpan bisa manggil SetContent dari thread yang "lacking capability
+	-- Plugin" (dites langsung: bikin whole loop mati kalau ga di-guard).
+	local function setTrailStatus(msg)
+		pcall(function()
+			trailStatusPara:SetContent(tostring(msg))
+		end)
+	end
+
 	local autoBuyTrailRunning = false
 	section:AddToggle("StealAnEgg_AutoBuyTrail", {
 		Title = "Auto Buy Trail Shop",
@@ -3481,11 +3694,11 @@ do
 						if not data.TrailInventory[key] and data.Money >= cfg.Price then
 							local invokeOk, purchaseOk, err = pcall(Network.Invoke, TrailsNet.REQUEST_PURCHASE, key)
 							if invokeOk and purchaseOk then
-								trailStatusPara:SetContent("Beli " .. cfg.DisplayName .. " (" .. fmtPrice(cfg.Price) .. ")")
+								setTrailStatus("Beli " .. cfg.DisplayName .. " (" .. fmtPrice(cfg.Price) .. ")")
 								boughtThisPass = true
 								data = Save.Get() -- refresh Money & TrailInventory buat cek item berikutnya di pass yang sama
 							else
-								trailStatusPara:SetContent(
+								setTrailStatus(
 									"Gagal beli " .. cfg.DisplayName .. ": " .. tostring(invokeOk and err or purchaseOk)
 								)
 							end
@@ -3502,9 +3715,9 @@ do
 						end
 						if nextKey then
 							local cfg = Trails.Directory[nextKey]
-							trailStatusPara:SetContent("Nunggu uang buat " .. cfg.DisplayName .. " (" .. fmtPrice(cfg.Price) .. ")")
+							setTrailStatus("Nunggu uang buat " .. cfg.DisplayName .. " (" .. fmtPrice(cfg.Price) .. ")")
 						else
-							trailStatusPara:SetContent("Semua trail di toko (cash) udah kebeli.")
+							setTrailStatus("Semua trail di toko (cash) udah kebeli.")
 						end
 					end
 					task.wait(3)
