@@ -3044,7 +3044,7 @@ do
 				end
 			end
 			table.sort(candidates, function(a, b)
-				return a.rate < b.rate
+				return a.rate > b.rate
 			end)
 			return candidates
 		end
@@ -3174,7 +3174,7 @@ do
 		section:AddParagraph({
 			Title = "Catatan",
 			Content = "Cuma naro telur yang masih di TAS (belum ke-place), rate di bawah threshold, mulai dari yang "
-				.. "termurah. Kalau karakter jauh dari kandang sendiri, jalan dulu otomatis (speed dicap sama kayak "
+				.. "PALING TINGGI rate-nya (yang masih di bawah threshold). Kalau karakter jauh dari kandang sendiri, jalan dulu otomatis (speed dicap sama kayak "
 				.. "Auto Steal, bukan teleport). Telur di atas threshold sengaja dibiarin di tas. JANGAN nyalain "
 				.. "bareng Auto Treadmill/Auto Steal -- sama-sama gerakin karakter, jadi bisa rebutan posisi & "
 				.. "placement-nya gagal terus (dites langsung: kejadian).",
