@@ -883,7 +883,56 @@ if BOT_ENABLED:
                 ephemeral=True,
             )
 
+    class TitleModal(discord.ui.Modal, title="Edit Judul Poster"):
+        def __init__(self, poster_id: str, current_title: str):
+            super().__init__(timeout=None)
+            self.poster_id = poster_id
+            self.title_input = discord.ui.TextInput(
+                label="Judul",
+                placeholder="cth: Jual Akun GACOR",
+                default=current_title or "Jual Akun GACOR",
+                required=True,
+                max_length=60,
+            )
+            self.add_item(self.title_input)
+
+        async def on_submit(self, interaction: discord.Interaction):
+            # Render ulang gambar bisa lebih dari 3 detik -- defer dulu biar
+            # ga "Something went wrong", sama kayak PriceModal.
+            await interaction.response.defer(ephemeral=True, thinking=True)
+
+            entry = PENDING.get(self.poster_id)
+            if not entry:
+                await interaction.followup.send(
+                    "Data poster ini udah ga ada (server di-restart?). Generate ulang dari game ya.",
+                    ephemeral=True,
+                )
+                return
+
+            new_title = self.title_input.value.strip() or "Jual Akun GACOR"
+            data = dict(entry["data"])
+            data["title"] = new_title
+            entry["data"] = data  # inget judul terakhir buat jadi default lain kali diedit
+            save_state()
+
+            img = render_poster(data)
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            buf.seek(0)
+            file = discord.File(io.BytesIO(buf.getvalue()), filename="poster.png")
+
+            # Judul cuma ganti tampilan gambar -- edit langsung pesan yang
+            # tombolnya diklik (bisa draft ATAU final, dua-duanya valid).
+            try:
+                await interaction.message.edit(attachments=[file])
+            except discord.HTTPException as e:
+                await interaction.followup.send(f"Gagal update gambar: {e}", ephemeral=True)
+                return
+
+            await interaction.followup.send(f"Judul diupdate jadi **{new_title}**.", ephemeral=True)
+
     FILL_PRICE_PREFIX = "steal_an_egg_fill_price:"
+    FILL_TITLE_PREFIX = "steal_an_egg_fill_title:"
 
     class PriceView(discord.ui.View):
         """poster_id di-encode LANGSUNG ke custom_id (bukan cuma disimpan
@@ -894,12 +943,18 @@ if BOT_ENABLED:
         yang beneran restart-proof di discord.py."""
         def __init__(self, poster_id: str, suggested: str = ""):
             super().__init__(timeout=None)
-            button = discord.ui.Button(
+            price_button = discord.ui.Button(
                 label="Isi / Edit Harga",
                 style=discord.ButtonStyle.success,
                 custom_id=f"{FILL_PRICE_PREFIX}{poster_id}",
             )
-            self.add_item(button)
+            title_button = discord.ui.Button(
+                label="Edit Judul",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"{FILL_TITLE_PREFIX}{poster_id}",
+            )
+            self.add_item(price_button)
+            self.add_item(title_button)
 
     @bot.event
     async def on_interaction(interaction: discord.Interaction):
@@ -907,6 +962,20 @@ if BOT_ENABLED:
             if interaction.type != discord.InteractionType.component:
                 return
             custom_id = interaction.data.get("custom_id", "")
+
+            if custom_id.startswith(FILL_TITLE_PREFIX):
+                poster_id = custom_id[len(FILL_TITLE_PREFIX):]
+                entry = PENDING.get(poster_id)
+                if not entry:
+                    await interaction.response.send_message(
+                        "Data poster ini udah ga ada. Generate ulang dari game ya.",
+                        ephemeral=True,
+                    )
+                    return
+                current_title = entry["data"].get("title") or "Jual Akun GACOR"
+                await interaction.response.send_modal(TitleModal(poster_id, current_title))
+                return
+
             if not custom_id.startswith(FILL_PRICE_PREFIX):
                 return
             poster_id = custom_id[len(FILL_PRICE_PREFIX):]
