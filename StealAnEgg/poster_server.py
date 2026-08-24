@@ -1293,6 +1293,12 @@ DASHBOARD_HTML = r"""<!doctype html>
     border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 700; cursor: pointer;
   }
   .sortbar select:focus { outline: none; border-color: var(--accent); }
+  .sortbar input#deviceFilter {
+    background: var(--card); color: var(--ink); border: 1px solid var(--card-border);
+    border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 700;
+    width: 190px;
+  }
+  .sortbar input#deviceFilter:focus { outline: none; border-color: var(--accent); }
   .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin: 20px 0 26px; }
   .sumcard { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px 16px; }
   .sumcard .label { color: var(--dim); font-size: 11px; font-weight: 700; letter-spacing: .5px; }
@@ -1304,6 +1310,7 @@ DASHBOARD_HTML = r"""<!doctype html>
   .dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
   .dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
   .name { font-weight: 800; font-size: 15px; }
+  .devicetag { color: var(--accent2); font-size: 10px; font-weight: 700; background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 6px; padding: 2px 6px; }
   .status { color: var(--dim); font-size: 11px; margin-left: auto; }
   .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
   .stat .label { color: var(--dim); font-size: 10px; font-weight: 700; }
@@ -1354,6 +1361,8 @@ DASHBOARD_HTML = r"""<!doctype html>
       <option value="income_pasif_desc">Income Pasif (Tertinggi)</option>
       <option value="egg_desc">Egg Terbanyak</option>
     </select>
+    <label for="deviceFilter">Device:</label>
+    <input type="text" id="deviceFilter" placeholder="mis: SAE 21 (isi 21-30)">
   </div>
   <div class="summary" id="summary"></div>
   <div class="grid" id="grid"></div>
@@ -1391,6 +1400,28 @@ function iconUrl(pet) {
   return "/api/icon?category=" + encodeURIComponent(pet.category || "") + "&mutations=" + encodeURIComponent(muts);
 }
 let lastAccounts = [];
+function accountNumber(name) {
+  const m = (name || "").match(/\d+/);
+  return m ? parseInt(m[0], 10) : null;
+}
+// Device dibagi per blok 10 nomor: SAE 21 isinya akun nomor 21-30, SAE 101
+// isinya nomor 101-110, dst -- blok dimulai dari (n-1)/10*10 + 1.
+function deviceBlockStart(num) {
+  if (num === null || isNaN(num)) return null;
+  return Math.floor((num - 1) / 10) * 10 + 1;
+}
+function deviceLabel(name) {
+  const start = deviceBlockStart(accountNumber(name));
+  return start === null ? null : "SAE " + start;
+}
+function filterByDevice(list) {
+  const raw = document.getElementById("deviceFilter").value.trim();
+  if (!raw) return list;
+  const queryNum = accountNumber(raw);
+  if (queryNum === null) return list;
+  const wantBlock = deviceBlockStart(queryNum);
+  return list.filter(a => deviceBlockStart(accountNumber(a.sourceAccount)) === wantBlock);
+}
 function sortAccounts(list) {
   const mode = document.getElementById("sortSelect").value;
   const sorted = list.slice();
@@ -1424,12 +1455,22 @@ function sortAccounts(list) {
   return sorted;
 }
 function renderGrid() {
-  const accounts = sortAccounts(lastAccounts);
+  const accounts = sortAccounts(filterByDevice(lastAccounts));
+  const emptyEl = document.getElementById("empty");
+  if (accounts.length) {
+    emptyEl.style.display = "none";
+  } else {
+    emptyEl.style.display = "block";
+    emptyEl.textContent = lastAccounts.length
+      ? "Ga ada akun yang cocok sama filter device itu."
+      : "Belum ada akun yang lapor. Nyalain \"Auto Report ke Dashboard\" di GUI game.";
+  }
   document.getElementById("grid").innerHTML = accounts.map(a => `
     <div class="card" data-account="${a.sourceAccount.replace(/"/g, "&quot;")}">
       <div class="card-head">
         <span class="dot ${a.online ? 'online' : ''}"></span>
         <span class="name">${a.sourceAccount}</span>
+        <span class="devicetag">${deviceLabel(a.sourceAccount) || ""}</span>
         <span class="status">${a.online ? "Active" : "Offline"}</span>
       </div>
       <div class="stats">
@@ -1466,7 +1507,6 @@ async function refresh() {
   // dari sesi tunnel/server yang beda (tunnel URL ganti-ganti tiap direfresh),
   // bukan akun yang beneran lagi kamu pantau sekarang.
   const accounts = (data.accounts || []).filter(a => a.online);
-  document.getElementById("empty").style.display = accounts.length ? "none" : "block";
 
   const totalMoney = accounts.reduce((s, a) => s + (Number(a.money) || 0), 0);
   const totalSpeed = accounts.reduce((s, a) => s + (Number(a.speed) || 0), 0);
@@ -1485,6 +1525,7 @@ async function refresh() {
   renderGrid();
 }
 document.getElementById("sortSelect").addEventListener("change", renderGrid);
+document.getElementById("deviceFilter").addEventListener("input", renderGrid);
 document.getElementById("grid").addEventListener("click", (ev) => {
   const genBtn = ev.target.closest(".genbtn");
   if (genBtn) {
