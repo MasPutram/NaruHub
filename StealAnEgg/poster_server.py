@@ -770,10 +770,19 @@ if BOT_ENABLED:
     intents = discord.Intents.default()
     bot = commands.Bot(command_prefix="!", intents=intents)
 
-    class PriceModal(discord.ui.Modal, title="Isi / Edit Harga Acc"):
-        def __init__(self, poster_id: str, suggested: str):
+    class PriceModal(discord.ui.Modal, title="Edit Poster"):
+        """Satu form buat judul + harga sekaligus -- harga boleh dikosongin
+        kalau cuma mau ganti judul (ga maksa finalize/pindah channel)."""
+        def __init__(self, poster_id: str, current_title: str, suggested: str):
             super().__init__(timeout=None)
             self.poster_id = poster_id
+            self.title_input = discord.ui.TextInput(
+                label="Judul",
+                placeholder="cth: Jual Akun GACOR",
+                default=current_title or "Jual Akun GACOR",
+                required=True,
+                max_length=60,
+            )
             self.price_input = discord.ui.TextInput(
                 label="Harga Langsung (opsional)",
                 placeholder="cth: 4 (= Rp 4.000), atau Rp 150.000 / 500rb",
@@ -787,6 +796,7 @@ if BOT_ENABLED:
                 required=False,
                 max_length=20,
             )
+            self.add_item(self.title_input)
             self.add_item(self.price_input)
             self.add_item(self.rate_input)
 
@@ -804,9 +814,13 @@ if BOT_ENABLED:
                 )
                 return
 
+            base_data = entry["data"]
+            new_title = self.title_input.value.strip() or "Jual Akun GACOR"
+
             raw_price = (self.price_input.value or "").strip()
             raw_rate = (self.rate_input.value or "").strip()
-            base_data = entry["data"]
+            price_changed = False
+            price_text = base_data.get("price", "")
             if raw_rate:
                 # Sama persis formula "Harga per 1B/s" di GUI script: rate x
                 # (income aktif + potensi telur netas), rate dalam ribuan.
@@ -823,20 +837,19 @@ if BOT_ENABLED:
                 income_b = (active_total + egg_total) / 1e9
                 price_value = int(round(income_b * rate_per_b))
                 price_text = "Rp " + f"{price_value:,}".replace(",", ".")
+                price_changed = True
             elif raw_price:
                 # Angka polos = satuan ribuan ("4" -> "Rp 4.000"), biar ga
                 # usah ngetik nol-nol tiap kali isi harga.
                 price_text = format_price_shorthand(raw_price)
-            else:
-                await interaction.followup.send(
-                    "Isi salah satu: Harga langsung ATAU Rate per 1B/s.", ephemeral=True,
-                )
-                return
+                price_changed = True
 
-            data = dict(entry["data"])
+            data = dict(base_data)
+            data["title"] = new_title
             data["price"] = price_text
-            entry["data"] = data  # inget harga terakhir buat jadi default lain kali diedit
-            entry["last_price"] = price_text
+            entry["data"] = data  # inget judul & harga terakhir buat jadi default lain kali diedit
+            if price_changed:
+                entry["last_price"] = price_text
             save_state()
 
             img = render_poster(data)
@@ -844,6 +857,19 @@ if BOT_ENABLED:
             img.save(buf, format="PNG")
             buf.seek(0)
             file = discord.File(io.BytesIO(buf.getvalue()), filename="poster.png")
+
+            if not price_changed:
+                # Cuma judul yang ganti -- edit langsung pesan yang tombolnya
+                # diklik (draft ATAU final, dua-duanya valid), ga usah pindah
+                # channel / upsert katalog kayak alur finalize harga.
+                try:
+                    await interaction.message.edit(attachments=[file])
+                except discord.HTTPException as e:
+                    await interaction.followup.send(f"Gagal update gambar: {e}", ephemeral=True)
+                    return
+                await interaction.followup.send(f"Judul diupdate jadi **{new_title}**.", ephemeral=True)
+                return
+
             source_account = data.get("sourceAccount")
             content = f"Diambil dari akun: **{source_account}**" if source_account else None
 
@@ -858,7 +884,7 @@ if BOT_ENABLED:
                     await msg.edit(content=content, attachments=[file])
                     await upsert_catalog_entry(self.poster_id, data, price_text, msg.jump_url)
                     await interaction.followup.send(
-                        f"Harga diupdate jadi **{price_text}** (poster final diedit di tempat).",
+                        f"Harga diupdate jadi **{price_text}**, judul **{new_title}** (poster final diedit di tempat).",
                         ephemeral=True,
                     )
                     return
@@ -878,61 +904,12 @@ if BOT_ENABLED:
             save_state()
             await upsert_catalog_entry(self.poster_id, data, price_text, sent.jump_url)
             await interaction.followup.send(
-                f"Harga **{price_text}** disimpan. Poster final diposting di {channel.mention} -- "
+                f"Harga **{price_text}** & judul **{new_title}** disimpan. Poster final diposting di {channel.mention} -- "
                 "bisa diedit lagi kapan aja lewat tombol di pesan itu, ga perlu generate ulang dari game.",
                 ephemeral=True,
             )
 
-    class TitleModal(discord.ui.Modal, title="Edit Judul Poster"):
-        def __init__(self, poster_id: str, current_title: str):
-            super().__init__(timeout=None)
-            self.poster_id = poster_id
-            self.title_input = discord.ui.TextInput(
-                label="Judul",
-                placeholder="cth: Jual Akun GACOR",
-                default=current_title or "Jual Akun GACOR",
-                required=True,
-                max_length=60,
-            )
-            self.add_item(self.title_input)
-
-        async def on_submit(self, interaction: discord.Interaction):
-            # Render ulang gambar bisa lebih dari 3 detik -- defer dulu biar
-            # ga "Something went wrong", sama kayak PriceModal.
-            await interaction.response.defer(ephemeral=True, thinking=True)
-
-            entry = PENDING.get(self.poster_id)
-            if not entry:
-                await interaction.followup.send(
-                    "Data poster ini udah ga ada (server di-restart?). Generate ulang dari game ya.",
-                    ephemeral=True,
-                )
-                return
-
-            new_title = self.title_input.value.strip() or "Jual Akun GACOR"
-            data = dict(entry["data"])
-            data["title"] = new_title
-            entry["data"] = data  # inget judul terakhir buat jadi default lain kali diedit
-            save_state()
-
-            img = render_poster(data)
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            buf.seek(0)
-            file = discord.File(io.BytesIO(buf.getvalue()), filename="poster.png")
-
-            # Judul cuma ganti tampilan gambar -- edit langsung pesan yang
-            # tombolnya diklik (bisa draft ATAU final, dua-duanya valid).
-            try:
-                await interaction.message.edit(attachments=[file])
-            except discord.HTTPException as e:
-                await interaction.followup.send(f"Gagal update gambar: {e}", ephemeral=True)
-                return
-
-            await interaction.followup.send(f"Judul diupdate jadi **{new_title}**.", ephemeral=True)
-
     FILL_PRICE_PREFIX = "steal_an_egg_fill_price:"
-    FILL_TITLE_PREFIX = "steal_an_egg_fill_title:"
 
     class PriceView(discord.ui.View):
         """poster_id di-encode LANGSUNG ke custom_id (bukan cuma disimpan
@@ -943,18 +920,12 @@ if BOT_ENABLED:
         yang beneran restart-proof di discord.py."""
         def __init__(self, poster_id: str, suggested: str = ""):
             super().__init__(timeout=None)
-            price_button = discord.ui.Button(
-                label="Isi / Edit Harga",
+            button = discord.ui.Button(
+                label="Edit Poster",
                 style=discord.ButtonStyle.success,
                 custom_id=f"{FILL_PRICE_PREFIX}{poster_id}",
             )
-            title_button = discord.ui.Button(
-                label="Edit Judul",
-                style=discord.ButtonStyle.secondary,
-                custom_id=f"{FILL_TITLE_PREFIX}{poster_id}",
-            )
-            self.add_item(price_button)
-            self.add_item(title_button)
+            self.add_item(button)
 
     @bot.event
     async def on_interaction(interaction: discord.Interaction):
@@ -962,20 +933,6 @@ if BOT_ENABLED:
             if interaction.type != discord.InteractionType.component:
                 return
             custom_id = interaction.data.get("custom_id", "")
-
-            if custom_id.startswith(FILL_TITLE_PREFIX):
-                poster_id = custom_id[len(FILL_TITLE_PREFIX):]
-                entry = PENDING.get(poster_id)
-                if not entry:
-                    await interaction.response.send_message(
-                        "Data poster ini udah ga ada. Generate ulang dari game ya.",
-                        ephemeral=True,
-                    )
-                    return
-                current_title = entry["data"].get("title") or "Jual Akun GACOR"
-                await interaction.response.send_modal(TitleModal(poster_id, current_title))
-                return
-
             if not custom_id.startswith(FILL_PRICE_PREFIX):
                 return
             poster_id = custom_id[len(FILL_PRICE_PREFIX):]
@@ -995,7 +952,8 @@ if BOT_ENABLED:
                 )
                 return
             suggested = entry.get("last_price") or entry.get("suggested_price") or ""
-            await interaction.response.send_modal(PriceModal(poster_id, suggested))
+            current_title = entry["data"].get("title") or "Jual Akun GACOR"
+            await interaction.response.send_modal(PriceModal(poster_id, current_title, suggested))
         except Exception as e:  # noqa: BLE001
             import traceback
             print(f"[discord_bot] on_interaction error: {e}")
