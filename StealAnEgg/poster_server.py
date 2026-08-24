@@ -1348,7 +1348,7 @@ DASHBOARD_HTML = r"""<!doctype html>
   <div class="sortbar">
     <label for="sortSelect">Urutkan:</label>
     <select id="sortSelect">
-      <option value="name_asc">Nama Akun (A-Z)</option>
+      <option value="name_asc">Nama Akun (Nomor)</option>
       <option value="speed_desc">Speed (Tertinggi)</option>
       <option value="income_aktif_desc">Income Aktif (Tertinggi)</option>
       <option value="income_pasif_desc">Income Pasif (Tertinggi)</option>
@@ -1413,7 +1413,12 @@ function sortAccounts(list) {
       break;
     case "name_asc":
     default:
-      sorted.sort((a, b) => (a.sourceAccount || "").localeCompare(b.sourceAccount || ""));
+      sorted.sort((a, b) => {
+        const na = parseInt((a.sourceAccount || "").match(/\d+/)?.[0], 10);
+        const nb = parseInt((b.sourceAccount || "").match(/\d+/)?.[0], 10);
+        if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
+        return (a.sourceAccount || "").localeCompare(b.sourceAccount || "");
+      });
       break;
   }
   return sorted;
