@@ -1235,13 +1235,17 @@ if BOT_ENABLED:
             view = PriceView(poster_id, suggested)
 
             if existing_draft_ref:
+                # SENGAJA dihapus terus di-post ULANG (bukan edit in-place)
+                # -- edit in-place bikin draft lama yang udah ke-scroll ke
+                # atas ke-update diem-diem tanpa Discord notify/highlight,
+                # jadi user ngerasa tombol "Generate Poster" di web ga ada
+                # efeknya padahal sukses. Post baru di bawah = keliatan.
                 try:
                     channel = bot.get_channel(existing_draft_ref["channel_id"]) or await bot.fetch_channel(existing_draft_ref["channel_id"])
                     msg = await channel.fetch_message(existing_draft_ref["message_id"])
-                    await msg.edit(content=content, attachments=[file], view=view)
-                    return
+                    await msg.delete()
                 except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                    pass  # pesan lama ilang -- fallback post baru di bawah
+                    pass  # pesan lama ilang/ga bisa dihapus -- lanjut post baru aja
 
             channel = bot.get_channel(int(BOT_CFG["draft_channel_id"]))
             if channel is None:
