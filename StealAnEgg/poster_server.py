@@ -1286,6 +1286,13 @@ DASHBOARD_HTML = r"""<!doctype html>
   }
   h1 { font-size: 22px; margin: 0 0 4px; }
   .eyebrow { color: var(--accent2); font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+  .sortbar { display: flex; align-items: center; gap: 8px; margin: 16px 0 0; }
+  .sortbar label { color: var(--dim); font-size: 12px; font-weight: 700; }
+  .sortbar select {
+    background: var(--card); color: var(--ink); border: 1px solid var(--card-border);
+    border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 700; cursor: pointer;
+  }
+  .sortbar select:focus { outline: none; border-color: var(--accent); }
   .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin: 20px 0 26px; }
   .sumcard { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px 16px; }
   .sumcard .label { color: var(--dim); font-size: 11px; font-weight: 700; letter-spacing: .5px; }
@@ -1338,6 +1345,16 @@ DASHBOARD_HTML = r"""<!doctype html>
 <body>
   <div class="eyebrow">STEAL AN EGG</div>
   <h1>Monitor Lokal -- Akun & Pet</h1>
+  <div class="sortbar">
+    <label for="sortSelect">Urutkan:</label>
+    <select id="sortSelect">
+      <option value="name_asc">Nama Akun (A-Z)</option>
+      <option value="speed_desc">Speed (Tertinggi)</option>
+      <option value="income_aktif_desc">Income Aktif (Tertinggi)</option>
+      <option value="income_pasif_desc">Income Pasif (Tertinggi)</option>
+      <option value="egg_desc">Egg Terbanyak</option>
+    </select>
+  </div>
   <div class="summary" id="summary"></div>
   <div class="grid" id="grid"></div>
   <div class="empty" id="empty" style="display:none">Belum ada akun yang lapor. Nyalain "Auto Report ke Dashboard" di GUI game.</div>
@@ -1373,29 +1390,36 @@ function iconUrl(pet) {
   const muts = (pet.mutations || []).join(",");
   return "/api/icon?category=" + encodeURIComponent(pet.category || "") + "&mutations=" + encodeURIComponent(muts);
 }
-async function refresh() {
-  const res = await fetch("/api/accounts");
-  const data = await res.json();
-  // Cuma tampilin yang online -- akun offline itu paling sering cache basi
-  // dari sesi tunnel/server yang beda (tunnel URL ganti-ganti tiap direfresh),
-  // bukan akun yang beneran lagi kamu pantau sekarang.
-  const accounts = (data.accounts || []).filter(a => a.online);
-  document.getElementById("empty").style.display = accounts.length ? "none" : "block";
-
-  const totalMoney = accounts.reduce((s, a) => s + (Number(a.money) || 0), 0);
-  const totalSpeed = accounts.reduce((s, a) => s + (Number(a.speed) || 0), 0);
-  const totalPets = accounts.reduce((s, a) => s + (Number(a.petsCount) || 0), 0);
-  const totalStolen = accounts.reduce((s, a) => s + (Number(a.stolenCount) || 0), 0);
-
-  document.getElementById("summary").innerHTML = `
-    <div class="sumcard"><div class="label">ACTIVE ACCOUNTS</div><div class="value">${accounts.length}</div></div>
-    <div class="sumcard"><div class="label">TOTAL MONEY</div><div class="value">${fmtMoney(totalMoney)}</div></div>
-    <div class="sumcard"><div class="label">TOTAL SPEED</div><div class="value">${fmtNum(totalSpeed)}</div></div>
-    <div class="sumcard"><div class="label">TOTAL PETS</div><div class="value">${fmtNum(totalPets)}</div></div>
-    <div class="sumcard"><div class="label">TOTAL EGGS STOLEN</div><div class="value">${fmtNum(totalStolen)}</div></div>
-  `;
-
-  accounts.sort((a, b) => (b.money || 0) - (a.money || 0));
+let lastAccounts = [];
+function sortAccounts(list) {
+  const mode = document.getElementById("sortSelect").value;
+  const sorted = list.slice();
+  switch (mode) {
+    case "speed_desc":
+      sorted.sort((a, b) => (Number(b.speed) || 0) - (Number(a.speed) || 0));
+      break;
+    case "income_aktif_desc":
+      sorted.sort((a, b) =>
+        ((Number(b.incomeAktif) || 0) + (Number(b.incomePotensiAktif) || 0)) -
+        ((Number(a.incomeAktif) || 0) + (Number(a.incomePotensiAktif) || 0)));
+      break;
+    case "income_pasif_desc":
+      sorted.sort((a, b) =>
+        ((Number(b.incomeEggBackpack) || 0) + (Number(b.incomeEggSedangTumbuh) || 0)) -
+        ((Number(a.incomeEggBackpack) || 0) + (Number(a.incomeEggSedangTumbuh) || 0)));
+      break;
+    case "egg_desc":
+      sorted.sort((a, b) => (Number(b.stolenCount) || 0) - (Number(a.stolenCount) || 0));
+      break;
+    case "name_asc":
+    default:
+      sorted.sort((a, b) => (a.sourceAccount || "").localeCompare(b.sourceAccount || ""));
+      break;
+  }
+  return sorted;
+}
+function renderGrid() {
+  const accounts = sortAccounts(lastAccounts);
   document.getElementById("grid").innerHTML = accounts.map(a => `
     <div class="card" data-account="${a.sourceAccount.replace(/"/g, "&quot;")}">
       <div class="card-head">
@@ -1430,6 +1454,32 @@ async function refresh() {
     </div>
   `).join("");
 }
+async function refresh() {
+  const res = await fetch("/api/accounts");
+  const data = await res.json();
+  // Cuma tampilin yang online -- akun offline itu paling sering cache basi
+  // dari sesi tunnel/server yang beda (tunnel URL ganti-ganti tiap direfresh),
+  // bukan akun yang beneran lagi kamu pantau sekarang.
+  const accounts = (data.accounts || []).filter(a => a.online);
+  document.getElementById("empty").style.display = accounts.length ? "none" : "block";
+
+  const totalMoney = accounts.reduce((s, a) => s + (Number(a.money) || 0), 0);
+  const totalSpeed = accounts.reduce((s, a) => s + (Number(a.speed) || 0), 0);
+  const totalPets = accounts.reduce((s, a) => s + (Number(a.petsCount) || 0), 0);
+  const totalStolen = accounts.reduce((s, a) => s + (Number(a.stolenCount) || 0), 0);
+
+  document.getElementById("summary").innerHTML = `
+    <div class="sumcard"><div class="label">ACTIVE ACCOUNTS</div><div class="value">${accounts.length}</div></div>
+    <div class="sumcard"><div class="label">TOTAL MONEY</div><div class="value">${fmtMoney(totalMoney)}</div></div>
+    <div class="sumcard"><div class="label">TOTAL SPEED</div><div class="value">${fmtNum(totalSpeed)}</div></div>
+    <div class="sumcard"><div class="label">TOTAL PETS</div><div class="value">${fmtNum(totalPets)}</div></div>
+    <div class="sumcard"><div class="label">TOTAL EGGS STOLEN</div><div class="value">${fmtNum(totalStolen)}</div></div>
+  `;
+
+  lastAccounts = accounts;
+  renderGrid();
+}
+document.getElementById("sortSelect").addEventListener("change", renderGrid);
 document.getElementById("grid").addEventListener("click", (ev) => {
   const genBtn = ev.target.closest(".genbtn");
   if (genBtn) {
