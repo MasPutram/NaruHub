@@ -2631,11 +2631,6 @@ do
 				end
 			end
 
-			-- Income Potensi Aktif = moneyPerSecond APA ADANYA (rate real dari
-			-- game, udah termasuk speed boost dkk) + potensi income telur --
-			-- TIDAK DIUBAH, ini beda konsep dari Income Aktif di atas.
-			local incomePotensiAktif = (moneyPerSecond or 0) + incomeEggBackpack + incomeEggSedangTumbuh
-
 			-- Top 3 pet by rate, gabungan pet aktif + isi tas -- buat kartu
 			-- "TOP PETS" di dashboard.
 			local pool = {}
@@ -2697,7 +2692,6 @@ do
 				speed = runSpeed,
 				income = moneyPerSecond,
 				incomeAktif = incomeAktif,
-				incomePotensiAktif = incomePotensiAktif,
 				incomeEggBackpack = incomeEggBackpack,
 				incomeEggSedangTumbuh = incomeEggSedangTumbuh,
 				highValuePetTotal = highValuePetTotal,

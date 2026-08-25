@@ -333,21 +333,12 @@ def render_poster(data: dict) -> Image.Image:
         rounded_card(draw, (left_x0, by, left_x0 + bw, by + bh), radius=20, fill=(226, 232, 240), outline=BLUE, width=2)
         draw_text_centered(draw, (left_x0 + bw / 2, by + bh / 2), badge, font(18, bold=True), BLUE)
 
-    # ---- Stat grid: 6 label penting, gede & jelas kebaca (bukan pill kecil
-    # yang dipepetin) -- Speed, Cash, Income Potensi Aktif, Income Aktif,
-    # Total Pet >= 1B/s, Kandang Level, Treadmill Level. ----
-    growing_egg_rate = sum(e.get("rate", 0) for e in growing_eggs)
-    backpack_egg_rate = sum(e.get("rate", 0) for e in backpack_eggs)
-    egg_potential_rate = growing_egg_rate + backpack_egg_rate
-
-    # Income Potensi Aktif = total_money_per_second APA ADANYA (rate real
-    # dari game, udah termasuk speed boost dkk yang ga kebaca dari rate per
-    # pet) + potensi income telur. INI YANG ASLI/TIDAK DIUBAH.
-    active_base_rate = total_money_per_second if total_money_per_second is not None else sum(p.get("rate", 0) for p in active_pets)
-
-    # Income Aktif = 17 pet RATE TERTINGGI (pool yang sama kayak
-    # active_pets_sorted di atas) -- dihitung TERLEPAS lagi keequip apa
-    # ngga, sesuai definisi "aktif" yang baru.
+    # ---- Stat grid: 5 label penting, gede & jelas kebaca (bukan pill kecil
+    # yang dipepetin) -- Speed, Cash, Income Potensi Pet Aktif, Total Pet
+    # >= 1B/s, Kandang Level, Treadmill Level. ----
+    # Income Potensi Pet Aktif = 17 rate TERTINGGI (pool yang sama kayak
+    # active_pets_sorted di atas) -- dihitung TERLEPAS lagi keequip/ditaro
+    # apa ngga.
     potential_active_rate = sum(p.get("rate", 0) for p in active_pets_sorted)
 
     # Total gabungan pet yang masing-masing rate-nya >= 1B/s -- ganti slot
@@ -361,8 +352,6 @@ def render_poster(data: dict) -> Image.Image:
         stat_items.append(("SPEED", fmt_number_compact(run_speed) if isinstance(run_speed, (int, float)) else str(run_speed)))
     if current_money is not None:
         stat_items.append(("CASH", fmt_currency(current_money)))
-    if total_money_per_second is not None:
-        stat_items.append(("INCOME POTENSI AKTIF", fmt_money(active_base_rate + egg_potential_rate)))
     stat_items.append(("INCOME POTENSI PET AKTIF", fmt_money(potential_active_rate)))
     stat_items.append(("TOTAL PET >= 1B/S", fmt_money(high_value_pet_total)))
     if kandang_level is not None:
@@ -1542,9 +1531,7 @@ function sortAccounts(list) {
       sorted.sort((a, b) => (Number(b.speed) || 0) - (Number(a.speed) || 0));
       break;
     case "income_aktif_desc":
-      sorted.sort((a, b) =>
-        ((Number(b.incomeAktif) || 0) + (Number(b.incomePotensiAktif) || 0)) -
-        ((Number(a.incomeAktif) || 0) + (Number(a.incomePotensiAktif) || 0)));
+      sorted.sort((a, b) => (Number(b.incomeAktif) || 0) - (Number(a.incomeAktif) || 0));
       break;
     case "income_pasif_desc":
       sorted.sort((a, b) =>
@@ -1588,7 +1575,6 @@ function renderGrid() {
       <div class="stats">
         <div class="stat speed"><div class="label">SPEED</div><div class="value">${fmtCompactNum(a.speed)}</div></div>
         <div class="stat money"><div class="label">CASH</div><div class="value">${fmtMoney(a.money)}</div></div>
-        <div class="stat"><div class="label">INCOME POTENSI AKTIF</div><div class="value">${fmtRate(a.incomePotensiAktif)}</div></div>
         <div class="stat"><div class="label">INCOME POTENSI PET AKTIF</div><div class="value">${fmtRate(a.incomeAktif)}</div></div>
         <div class="stat"><div class="label">TOTAL PET >= 1B/S</div><div class="value">${fmtRate(a.highValuePetTotal)}</div></div>
         <div class="stat"><div class="label">KANDANG LEVEL</div><div class="value">${fmtLevel(a.kandangLevel)}</div></div>
@@ -2027,7 +2013,6 @@ class Handler(BaseHTTPRequestHandler):
                     "income": data.get("income"),
                     # Sama persis label yang dipajang di poster.
                     "incomeAktif": data.get("incomeAktif"),
-                    "incomePotensiAktif": data.get("incomePotensiAktif"),
                     "incomeEggBackpack": data.get("incomeEggBackpack"),
                     "incomeEggSedangTumbuh": data.get("incomeEggSedangTumbuh"),
                     "highValuePetTotal": data.get("highValuePetTotal"),
