@@ -2559,17 +2559,6 @@ do
 
 	section:AddButton({ Title = "Generate & Kirim ke Discord", Callback = generateAndSend })
 
-	-- Auto-generate SEKALI aja pas script pertama kali jalan -- ga perlu
-	-- klik tombol manual lagi tiap kali exe. Delay dikit biar data game
-	-- (pet/egg/kandang) udah sempet ke-load duluan sebelum di-scan.
-	task.spawn(function()
-		task.wait(5)
-		local ok, err = pcall(generateAndSend)
-		if not ok then
-			statusPara:SetContent("Auto-generate awal gagal: " .. tostring(err))
-		end
-	end)
-
 	------------------------------------------------------------
 	-- Monitor Lokal (Dashboard) -- lapor stat ringan berkala ke
 	-- poster_server.py biar bisa dipantau semua akun sekaligus dari satu
