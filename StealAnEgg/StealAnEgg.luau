@@ -2189,6 +2189,28 @@ do
 		return pets
 	end
 
+	-- Tool pet yang lagi "aktif" ternyata TETEP masih ada di Backpack
+	-- (game ini ga mindahin Tool keluar Backpack pas diaktifin, beda sama
+	-- Humanoid:EquipTool biasa) -- jadi collectBackpackPets() bisa ngambil
+	-- pet yang sama kayak collectActivePets(), bikin dobel di "Pet Aktif"
+	-- DAN "Isi Tas (Semua Pet)" sekaligus. Buang yang uid-nya udah ada di
+	-- activePets biar ga dobel.
+	local function excludeActiveFromBackpack(backpackPets, activePets)
+		local activeUids = {}
+		for _, p in ipairs(activePets) do
+			if p.uid then
+				activeUids[p.uid] = true
+			end
+		end
+		local result = {}
+		for _, p in ipairs(backpackPets) do
+			if not p.uid or not activeUids[p.uid] then
+				table.insert(result, p)
+			end
+		end
+		return result
+	end
+
 	-- Telur yang lagi tumbuh di kandang -- spesies & mutasi udah di-roll
 	-- server sejak ditaruh (EggItemUtil sama persis kayak yang dipakai di
 	-- "Monitor Telur & Kandang"), cuma disembunyikan visualnya sampai hatch.
@@ -2443,8 +2465,8 @@ do
 	local function generateAndSend()
 		statusPara:SetContent("Mengumpulkan data akun...")
 
-		local allPets = collectBackpackPets()
 		local activePets = collectActivePets()
+		local allPets = excludeActiveFromBackpack(collectBackpackPets(), activePets)
 		local growingEggs = collectGrowingEggs()
 		local backpackEggs = collectBackpackEggs()
 		local activeLimit = 0
@@ -2577,8 +2599,8 @@ do
 
 	local function reportToMonitor()
 		local ok, err = pcall(function()
-			local allPets = collectBackpackPets()
 			local activePets = collectActivePets()
+			local allPets = excludeActiveFromBackpack(collectBackpackPets(), activePets)
 			local growingEggs = collectGrowingEggs()
 			local backpackEggs = collectBackpackEggs()
 			local runSpeed, moneyPerSecond, kandangLevel, treadmillLevel, currentMoney = collectAccountStats()
