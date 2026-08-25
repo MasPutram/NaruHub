@@ -85,9 +85,21 @@ do
 		return false, parsed.error or "Key salah."
 	end
 
-	-- Coba lolos otomatis dulu lewat HWID (key kosong -- server cuma
-	-- ngecek device-nya). Device admin/whitelist lewat sini tanpa prompt.
-	local granted = checkAccess("")
+	-- Support model kayak script gated laen: key bisa ditaro di _G SEBELUM
+	-- loadstring (_G.NaruHub_Key = "KEY-DI-SINI"), jadi user yang udah
+	-- punya key ga usah lewat prompt tiap execute. Kalau ga di-set, ini
+	-- kosong -- checkAccess("") tetep jalan normal (cuma ngecek HWID).
+	local globalKey = ""
+	pcall(function()
+		if type(_G.NaruHub_Key) == "string" then
+			globalKey = _G.NaruHub_Key
+		end
+	end)
+
+	-- Coba lolos otomatis dulu lewat HWID atau _G.NaruHub_Key. Device
+	-- admin/whitelist ATAU yang udah nyimpen key valid di _G lewat sini
+	-- tanpa prompt.
+	local granted = checkAccess(globalKey)
 
 	if not granted then
 		local container
