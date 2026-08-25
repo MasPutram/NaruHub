@@ -689,6 +689,11 @@ def load_bot_config() -> dict:
         # allowlist ini ga pernah kecommit jadi ga bisa ditebak orang lain
         # yang cuma baca script-nya.
         "allowed_hwids": cfg.get("allowed_hwids") or [],
+        # Key gate: satu shared key buat SEMUA user non-whitelisted, dicek
+        # ke server tiap kali script di-execute. Key ini SENGAJA ga pernah
+        # nempel di StealAnEgg.luau -- kalau kosong, key gate nonaktif
+        # (siapa aja lolos, sama kayak sebelum fitur ini ada).
+        "access_key": os.environ.get("POSTER_ACCESS_KEY") or cfg.get("access_key"),
     }
 
 
@@ -746,6 +751,26 @@ def check_device(handler) -> bool:
         return True
     device_id = handler.headers.get("X-Device-Id") or ""
     return device_id in ALLOWED_HWIDS
+
+
+ACCESS_KEY = BOT_CFG.get("access_key") or ""
+
+
+def check_access(hwid: str, key: str) -> tuple[bool, str]:
+    """Dipanggil dari StealAnEgg.luau tiap kali script di-execute, SEBELUM
+    GUI kebuka -- ini yang jadi gerbang key system-nya. Device yang HWID-nya
+    ada di ALLOWED_HWIDS lolos otomatis tanpa key (buat admin/device kamu
+    sendiri). Device lain wajib kirim key yang cocok ACCESS_KEY. Kalau
+    ACCESS_KEY belum di-setup di bot_config.json, gerbangnya dianggap
+    nonaktif -- semua device lolos (biar ga langsung ngunci semua user
+    begitu fitur ini kepasang sebelum key-nya sempet di-generate/di-isi)."""
+    if hwid and hwid in ALLOWED_HWIDS:
+        return True, "device"
+    if not ACCESS_KEY:
+        return True, "key gate nonaktif"
+    if key and key == ACCESS_KEY:
+        return True, "key"
+    return False, "Key salah atau belum diisi."
 
 
 # poster_id -> {"data": payload dict, "last_price", "final_message"} --
@@ -1824,6 +1849,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
+        if self.path == "/api/check-access":
+            self._handle_check_access()
+            return
         if self.path in ("/monitor", "/generate") and not check_device(self):
             device_id = self.headers.get("X-Device-Id") or "(kosong)"
             print(f"[poster_server] BLOCKED {self.path} dari device ga dikenal: {device_id}")
@@ -1847,6 +1875,23 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(raw.decode("utf-8"))
             status, body = generate_and_deliver(data)
             self._send_json(status, body)
+        except Exception as e:  # noqa: BLE001
+            self._send_json(500, {"ok": False, "error": str(e)})
+
+    def _handle_check_access(self):
+        """Key gate -- dipanggil StealAnEgg.luau SEBELUM GUI kebuka. SENGAJA
+        dibiarkan bisa diakses siapa aja tanpa auth apa pun (endpoint ini
+        JUSTRU buat orang yang belum "masuk" sama sekali), makanya key-nya
+        dibuat panjang & random (bukan angka pendek gampang ditebak) --
+        lihat check_access() buat logic HWID-bypass + key-cocok-nya."""
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(length)
+            data = json.loads(raw.decode("utf-8")) if raw else {}
+            hwid = (data.get("hwid") or "").strip()
+            key = (data.get("key") or "").strip()
+            ok, reason = check_access(hwid, key)
+            self._send_json(200 if ok else 401, {"ok": ok, "error": None if ok else reason})
         except Exception as e:  # noqa: BLE001
             self._send_json(500, {"ok": False, "error": str(e)})
 

@@ -6,5 +6,6 @@
   "allowed_hwids": [
     "PASTE_HWID_DEVICE_1_DI_SINI",
     "PASTE_HWID_DEVICE_2_DI_SINI"
-  ]
+  ],
+  "access_key": "PASTE_SHARED_ACCESS_KEY_DI_SINI"
 }

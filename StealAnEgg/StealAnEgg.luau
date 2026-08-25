@@ -40,6 +40,161 @@ do
 end
 
 ------------------------------------------------------------
+-- Key Gate -- device yang HWID-nya di-whitelist di bot_config.json
+-- (server-side, gitignored -- ga pernah nempel di repo public ini) lolos
+-- otomatis tanpa key. Device lain WAJIB masukin access key yang valid,
+-- dicek langsung ke server tiap kali script di-execute. Kalau server ga
+-- bisa dihubungin sama sekali, script BERHENTI di sini (fail-closed) --
+-- sengaja, biar key-check ga bisa dilewatin cuma dengan mastiin server-nya
+-- lagi down.
+------------------------------------------------------------
+local SERVER_BASE_URL = "https://portal-sale-linked-titten.trycloudflare.com"
+
+local DEVICE_ID = "unknown"
+pcall(function()
+	if gethwid then
+		DEVICE_ID = gethwid()
+	end
+end)
+
+do
+	local HttpService = game:GetService("HttpService")
+
+	local function checkAccess(key)
+		local body = HttpService:JSONEncode({ hwid = DEVICE_ID, key = key or "" })
+		local ok, res = pcall(function()
+			return request({
+				Url = SERVER_BASE_URL .. "/api/check-access",
+				Method = "POST",
+				Headers = { ["Content-Type"] = "application/json" },
+				Body = body,
+			})
+		end)
+		if not ok or not res or not res.Body then
+			return false, "Ga bisa hubungin server verifikasi -- coba lagi bentar."
+		end
+		local decodeOk, parsed = pcall(function()
+			return HttpService:JSONDecode(res.Body)
+		end)
+		if not decodeOk or type(parsed) ~= "table" then
+			return false, "Respon server ga valid."
+		end
+		if parsed.ok then
+			return true
+		end
+		return false, parsed.error or "Key salah."
+	end
+
+	-- Coba lolos otomatis dulu lewat HWID (key kosong -- server cuma
+	-- ngecek device-nya). Device admin/whitelist lewat sini tanpa prompt.
+	local granted = checkAccess("")
+
+	if not granted then
+		local container
+		pcall(function()
+			container = gethui and gethui()
+		end)
+		container = container or game:GetService("CoreGui")
+
+		local screenGui = Instance.new("ScreenGui")
+		screenGui.Name = "StealAnEggKeyGate"
+		screenGui.ResetOnSpawn = false
+		screenGui.DisplayOrder = 9999
+		screenGui.IgnoreGuiInset = true
+		screenGui.Parent = container
+
+		local frame = Instance.new("Frame")
+		frame.Size = UDim2.new(0, 340, 0, 196)
+		frame.Position = UDim2.new(0.5, -170, 0.5, -98)
+		frame.BackgroundColor3 = Color3.fromRGB(20, 20, 31)
+		frame.BorderSizePixel = 0
+		frame.Parent = screenGui
+		Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+
+		local title = Instance.new("TextLabel")
+		title.Text = "StealAnEgg -- Masukin Access Key"
+		title.Font = Enum.Font.GothamBold
+		title.TextSize = 16
+		title.TextColor3 = Color3.fromRGB(232, 232, 240)
+		title.BackgroundTransparency = 1
+		title.Size = UDim2.new(1, -20, 0, 28)
+		title.Position = UDim2.new(0, 10, 0, 12)
+		title.TextXAlignment = Enum.TextXAlignment.Left
+		title.Parent = frame
+
+		local input = Instance.new("TextBox")
+		input.PlaceholderText = "Access key..."
+		input.Text = ""
+		input.Font = Enum.Font.Gotham
+		input.TextSize = 14
+		input.TextColor3 = Color3.fromRGB(232, 232, 240)
+		input.BackgroundColor3 = Color3.fromRGB(28, 28, 43)
+		input.Size = UDim2.new(1, -20, 0, 36)
+		input.Position = UDim2.new(0, 10, 0, 52)
+		input.ClearTextOnFocus = false
+		input.Parent = frame
+		Instance.new("UICorner", input).CornerRadius = UDim.new(0, 8)
+
+		local status = Instance.new("TextLabel")
+		status.Text = "Device kamu belum di-whitelist. Masukin access key buat lanjut."
+		status.Font = Enum.Font.Gotham
+		status.TextSize = 12
+		status.TextColor3 = Color3.fromRGB(139, 139, 163)
+		status.TextWrapped = true
+		status.BackgroundTransparency = 1
+		status.Size = UDim2.new(1, -20, 0, 54)
+		status.Position = UDim2.new(0, 10, 0, 96)
+		status.TextXAlignment = Enum.TextXAlignment.Left
+		status.TextYAlignment = Enum.TextYAlignment.Top
+		status.Parent = frame
+
+		local submit = Instance.new("TextButton")
+		submit.Text = "Submit"
+		submit.Font = Enum.Font.GothamBold
+		submit.TextSize = 14
+		submit.TextColor3 = Color3.fromRGB(26, 16, 48)
+		submit.BackgroundColor3 = Color3.fromRGB(167, 139, 250)
+		submit.Size = UDim2.new(1, -20, 0, 34)
+		submit.Position = UDim2.new(0, 10, 0, 154)
+		submit.Parent = frame
+		Instance.new("UICorner", submit).CornerRadius = UDim.new(0, 8)
+
+		local resultEvent = Instance.new("BindableEvent")
+		local submitting = false
+
+		local function trySubmit()
+			if submitting then
+				return
+			end
+			submitting = true
+			status.Text = "Ngecek key..."
+			status.TextColor3 = Color3.fromRGB(139, 139, 163)
+			local okNow, reason = checkAccess(input.Text)
+			if okNow then
+				status.Text = "Key valid, lanjut..."
+				status.TextColor3 = Color3.fromRGB(52, 211, 153)
+				task.wait(0.3)
+				resultEvent:Fire()
+			else
+				status.Text = tostring(reason)
+				status.TextColor3 = Color3.fromRGB(248, 113, 113)
+				submitting = false
+			end
+		end
+
+		submit.MouseButton1Click:Connect(trySubmit)
+		input.FocusLost:Connect(function(enterPressed)
+			if enterPressed then
+				trySubmit()
+			end
+		end)
+
+		resultEvent.Event:Wait()
+		screenGui:Destroy()
+	end
+end
+
+------------------------------------------------------------
 -- NaruUI (embedded, self-contained UI lib -- lihat ui-template/NaruUI.luau)
 ------------------------------------------------------------
 local NaruUI = (function()
@@ -1908,20 +2063,9 @@ do
 	local EggItemUtil = require(ReplicatedStorage.Library.Util.EggItemUtil)
 	local HttpService = game:GetService("HttpService")
 
-	local POSTER_SERVER_URL = "https://portal-sale-linked-titten.trycloudflare.com/generate"
-
-	-- Dikirim sebagai header X-Device-Id ke /monitor & /generate. Server
-	-- (poster_server.py) nyocokin ini ke allowlist di bot_config.json --
-	-- allowlist itu ga pernah kecommit ke repo (gitignored), beda sama
-	-- POSTER_SERVER_URL di atas yang nempel di script public ini. Jadi
-	-- walau URL tunnel-nya bocor/ketauan orang, request tetep ditolak
-	-- kecuali dari device yang udah di-whitelist manual.
-	local DEVICE_ID = "unknown"
-	pcall(function()
-		if gethwid then
-			DEVICE_ID = gethwid()
-		end
-	end)
+	-- SERVER_BASE_URL & DEVICE_ID (gethwid()) udah dihitung sekali di Key
+	-- Gate paling atas script -- dipakai ulang di sini, ga usah hitung lagi.
+	local POSTER_SERVER_URL = SERVER_BASE_URL .. "/generate"
 
 	local function mutationNamesFromString(str)
 		if not str or str == "" then
