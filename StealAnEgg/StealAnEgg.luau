@@ -58,11 +58,18 @@ pcall(function()
 	end
 end)
 
+-- true HANYA kalau lolos diam-diam lewat _G.NaruHub_Key (atau key gate
+-- lagi nonaktif total di server) -- false kalau harus lewat prompt manual.
+-- Dipakai buat matiin tab "Auto Poster" (generate poster + monitor
+-- dashboard) buat siapapun yang masuk lewat prompt, bukan _G.
+local GRANTED_VIA_GLOBAL = false
+local ACCESS_KEY_USED = ""
+
 do
 	local HttpService = game:GetService("HttpService")
 
 	local function checkAccess(key)
-		local body = HttpService:JSONEncode({ hwid = DEVICE_ID, key = key or "" })
+		local body = HttpService:JSONEncode({ key = key or "" })
 		local ok, res = pcall(function()
 			return request({
 				Url = SERVER_BASE_URL .. "/api/check-access",
@@ -102,6 +109,8 @@ do
 	-- Kalau _G.NaruHub_Key kosong/salah, checkAccess bakal gagal di sini
 	-- dan prompt di bawah bakal muncul minta key manual.
 	local granted = checkAccess(globalKey)
+	GRANTED_VIA_GLOBAL = granted
+	ACCESS_KEY_USED = globalKey
 
 	if not granted then
 		local container
@@ -1449,7 +1458,10 @@ local Window = Fluent:CreateWindow({
 })
 
 local Tab = Window:AddTab({ Title = "Scanner" })
-local PosterTab = Window:AddTab({ Title = "Auto Poster" })
+-- Tab-nya sendiri baru dibikin kalau GRANTED_VIA_GLOBAL (lihat blok
+-- "Auto Generate Poster" di bawah) -- kalau ga, biar ga ada tab kosong
+-- "Auto Poster" yang keliatan buat user yang masuk lewat prompt manual.
+local PosterTab
 
 ------------------------------------------------------------
 -- 1. Scan Isi Tas
@@ -2068,6 +2080,12 @@ end
 -- itu dilempar ke local render server (poster_server.py, jalan di
 -- 127.0.0.1:8765) lewat request() bawaan executor. Script cuma ngumpulin data
 -- akun (isi tas + pet aktif + $/s tiap item) dan kirim sebagai JSON.
+--
+-- Tab ini SENGAJA cuma kebentuk kalau masuk lewat _G.NaruHub_Key
+-- (GRANTED_VIA_GLOBAL) -- siapapun yang masuk lewat prompt manual ga
+-- dapet fitur generate poster / monitor dashboard sama sekali.
+if GRANTED_VIA_GLOBAL then
+PosterTab = Window:AddTab({ Title = "Auto Poster" })
 do
 	local AssetGenerationUtil = require(ReplicatedStorage.Library.Util.AssetGenerationUtil)
 	local AssetItemUtil = require(ReplicatedStorage.Library.Util.AssetItemUtil)
@@ -2464,7 +2482,11 @@ do
 				return request({
 					Url = serverUrl,
 					Method = "POST",
-					Headers = { ["Content-Type"] = "application/json", ["X-Device-Id"] = DEVICE_ID },
+					Headers = {
+						["Content-Type"] = "application/json",
+						["X-Device-Id"] = DEVICE_ID,
+						["X-Access-Key"] = ACCESS_KEY_USED,
+					},
 					Body = body,
 				})
 			end)
@@ -2507,9 +2529,8 @@ do
 
 	monitorSection:AddParagraph({
 		Title = "Device ID kamu",
-		Content = DEVICE_ID .. "\n\nCopy ID ini, taro di array \"allowed_hwids\" pada bot_config.json (di PC "
-			.. "yang jalanin poster_server.py) biar device ini di-whitelist. Device yang belum di-whitelist bakal "
-			.. "ditolak server begitu allowlist-nya diisi minimal 1 device.",
+		Content = DEVICE_ID .. "\n\nDikirim ke server bareng tiap laporan monitor, buat identifikasi device -- "
+			.. "ga ngaruh ke akses (akses sepenuhnya dari access key).",
 	})
 
 	local monitorUrlInput = monitorSection:AddInput("StealAnEgg_MonitorUrl", {
@@ -2637,7 +2658,11 @@ do
 			request({
 				Url = url,
 				Method = "POST",
-				Headers = { ["Content-Type"] = "application/json", ["X-Device-Id"] = DEVICE_ID },
+				Headers = {
+					["Content-Type"] = "application/json",
+					["X-Device-Id"] = DEVICE_ID,
+					["X-Access-Key"] = ACCESS_KEY_USED,
+				},
 				Body = body,
 			})
 		end)
@@ -2670,6 +2695,7 @@ do
 	})
 
 	monitorSection:AddButton({ Title = "Lapor Sekarang", Callback = reportToMonitor })
+end
 end
 
 ------------------------------------------------------------

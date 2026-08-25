@@ -3,9 +3,5 @@
   "draft_channel_id": "PASTE_CHANNEL_ID_ISI_HARGA",
   "final_channel_id": "PASTE_CHANNEL_ID_HASIL_FINAL",
   "index_channel_id": "PASTE_CHANNEL_ID_KATALOG_AKUN",
-  "allowed_hwids": [
-    "PASTE_HWID_DEVICE_1_DI_SINI",
-    "PASTE_HWID_DEVICE_2_DI_SINI"
-  ],
   "access_key": "PASTE_SHARED_ACCESS_KEY_DI_SINI"
 }

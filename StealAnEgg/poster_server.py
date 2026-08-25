@@ -682,16 +682,11 @@ def load_bot_config() -> dict:
         "draft_channel_id": os.environ.get("DISCORD_DRAFT_CHANNEL_ID") or cfg.get("draft_channel_id"),
         "final_channel_id": os.environ.get("DISCORD_FINAL_CHANNEL_ID") or cfg.get("final_channel_id"),
         "index_channel_id": os.environ.get("DISCORD_INDEX_CHANNEL_ID") or cfg.get("index_channel_id"),
-        # Whitelist per-DEVICE (gethwid() di executor), bukan per-akun --
-        # satu device bisa jalanin banyak akun sekaligus. Daftar ini SENGAJA
-        # cuma ada di bot_config.json (gitignored) -- beda sama
-        # POSTER_SERVER_URL yang nempel di StealAnEgg.luau (public repo),
-        # allowlist ini ga pernah kecommit jadi ga bisa ditebak orang lain
-        # yang cuma baca script-nya.
-        "allowed_hwids": cfg.get("allowed_hwids") or [],
-        # Key gate: satu shared key buat SEMUA user non-whitelisted, dicek
-        # ke server tiap kali script di-execute. Key ini SENGAJA ga pernah
-        # nempel di StealAnEgg.luau -- kalau kosong, key gate nonaktif
+        # Key gate: satu shared key buat SEMUA user, dicek ke server tiap
+        # kali script di-execute DAN tiap kali /monitor atau /generate
+        # dipanggil. Key ini SENGAJA ga pernah nempel di StealAnEgg.luau --
+        # cuma dititip lewat _G.NaruHub_Key sebelum loadstring. Kalau kosong,
+        # key gate nonaktif
         # (siapa aja lolos, sama kayak sebelum fitur ini ada).
         "access_key": os.environ.get("POSTER_ACCESS_KEY") or cfg.get("access_key"),
     }
@@ -737,37 +732,31 @@ def format_price_shorthand(raw: str) -> str:
 
 BOT_CFG = load_bot_config()
 
-ALLOWED_HWIDS = set(BOT_CFG.get("allowed_hwids") or [])
-
-
-def check_device(handler) -> bool:
-    """/monitor & /generate dipanggil LANGSUNG dari StealAnEgg.luau di tiap
-    device -- endpoint ini yang paling rawan disalahgunain kalau URL tunnel
-    bocor (bisa dipakai ngirim data /monitor palsu ngaku-ngaku jadi akun
-    manapun, atau nge-generate poster asal). Kalau allowlist masih kosong
-    (belum di-setup), SENGAJA ga di-block dulu -- daripada langsung ngunci
-    diri sendiri gara-gara lupa isi bot_config.json."""
-    if not ALLOWED_HWIDS:
-        return True
-    device_id = handler.headers.get("X-Device-Id") or ""
-    return device_id in ALLOWED_HWIDS
-
-
 ACCESS_KEY = BOT_CFG.get("access_key") or ""
 
 
-def check_access(hwid: str, key: str) -> tuple[bool, str]:
+def check_key_header(handler) -> bool:
+    """/monitor & /generate dipanggil LANGSUNG dari StealAnEgg.luau -- ini
+    endpoint yang paling rawan disalahgunain kalau URL tunnel bocor (bisa
+    dipakai ngirim data /monitor palsu ngaku-ngaku jadi akun manapun, atau
+    nge-generate poster asal). Sekarang dijaga pakai key yang sama kayak
+    key gate (bukan HWID lagi -- satu mekanisme buat semuanya). Kalau
+    ACCESS_KEY belum di-setup, SENGAJA ga di-block dulu -- daripada
+    langsung ngunci diri sendiri gara-gara lupa isi bot_config.json."""
+    if not ACCESS_KEY:
+        return True
+    key = handler.headers.get("X-Access-Key") or ""
+    return key == ACCESS_KEY
+
+
+def check_access(key: str) -> tuple[bool, str]:
     """Dipanggil dari StealAnEgg.luau tiap kali script di-execute, SEBELUM
-    GUI kebuka -- ini yang jadi gerbang key system-nya. SENGAJA BUKAN
-    HWID-based -- loadstring publik (tanpa _G.NaruHub_Key) wajib masukin
-    key APAPUN device/HWID-nya, ga ada pengecualian. Satu-satunya cara
-    lolos tanpa prompt adalah _G.NaruHub_Key yang di-set SEBELUM loadstring
-    dengan value yang cocok ACCESS_KEY -- portable, jalan di device manapun,
-    ga perlu di-whitelist satu-satu (beda sama ALLOWED_HWIDS yang dipakai
-    buat proteksi /monitor & /generate, itu urusan lain). Kalau ACCESS_KEY
-    belum di-setup di bot_config.json, gerbangnya dianggap nonaktif --
-    semua device lolos (biar ga langsung ngunci semua user begitu fitur
-    ini kepasang sebelum key-nya sempet di-generate/di-isi)."""
+    GUI kebuka -- ini yang jadi gerbang key system-nya. Loadstring publik
+    (tanpa _G.NaruHub_Key) wajib masukin key, device/HWID apapun, ga ada
+    pengecualian. Kalau ACCESS_KEY belum di-setup di bot_config.json,
+    gerbangnya dianggap nonaktif -- semua device lolos (biar ga langsung
+    ngunci semua user begitu fitur ini kepasang sebelum key-nya sempet
+    di-generate/di-isi)."""
     if not ACCESS_KEY:
         return True, "key gate nonaktif"
     if key and key == ACCESS_KEY:
@@ -1854,10 +1843,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/check-access":
             self._handle_check_access()
             return
-        if self.path in ("/monitor", "/generate") and not check_device(self):
-            device_id = self.headers.get("X-Device-Id") or "(kosong)"
-            print(f"[poster_server] BLOCKED {self.path} dari device ga dikenal: {device_id}")
-            self._send_json(401, {"ok": False, "error": "unknown device"})
+        if self.path in ("/monitor", "/generate") and not check_key_header(self):
+            print(f"[poster_server] BLOCKED {self.path} -- key salah/kosong (X-Access-Key)")
+            self._send_json(401, {"ok": False, "error": "invalid key"})
             return
         if self.path == "/monitor":
             self._handle_monitor()
@@ -1883,16 +1871,14 @@ class Handler(BaseHTTPRequestHandler):
     def _handle_check_access(self):
         """Key gate -- dipanggil StealAnEgg.luau SEBELUM GUI kebuka. SENGAJA
         dibiarkan bisa diakses siapa aja tanpa auth apa pun (endpoint ini
-        JUSTRU buat orang yang belum "masuk" sama sekali), makanya key-nya
-        dibuat panjang & random (bukan angka pendek gampang ditebak) --
-        lihat check_access() buat logic HWID-bypass + key-cocok-nya."""
+        JUSTRU buat orang yang belum "masuk" sama sekali) -- lihat
+        check_access() buat logic key-cocok-nya."""
         try:
             length = int(self.headers.get("Content-Length", 0))
             raw = self.rfile.read(length)
             data = json.loads(raw.decode("utf-8")) if raw else {}
-            hwid = (data.get("hwid") or "").strip()
             key = (data.get("key") or "").strip()
-            ok, reason = check_access(hwid, key)
+            ok, reason = check_access(key)
             self._send_json(200 if ok else 401, {"ok": ok, "error": None if ok else reason})
         except Exception as e:  # noqa: BLE001
             self._send_json(500, {"ok": False, "error": str(e)})
