@@ -363,7 +363,7 @@ def render_poster(data: dict) -> Image.Image:
         stat_items.append(("CASH", fmt_currency(current_money)))
     if total_money_per_second is not None:
         stat_items.append(("INCOME POTENSI AKTIF", fmt_money(active_base_rate + egg_potential_rate)))
-    stat_items.append(("INCOME AKTIF", fmt_money(potential_active_rate)))
+    stat_items.append(("INCOME POTENSI PET AKTIF", fmt_money(potential_active_rate)))
     stat_items.append(("TOTAL PET >= 1B/S", fmt_money(high_value_pet_total)))
     if kandang_level is not None:
         stat_items.append(("KANDANG LEVEL", f"Lv. {kandang_level}"))
@@ -1456,7 +1456,7 @@ DASHBOARD_HTML = r"""<!doctype html>
     <select id="sortSelect">
       <option value="name_asc">Nama Akun (Nomor)</option>
       <option value="speed_desc">Speed (Tertinggi)</option>
-      <option value="income_aktif_desc">Income Aktif (Tertinggi)</option>
+      <option value="income_aktif_desc">Income Potensi Pet Aktif (Tertinggi)</option>
       <option value="income_pasif_desc">Income Pasif (Tertinggi)</option>
       <option value="egg_desc">Egg Terbanyak</option>
     </select>
@@ -1589,7 +1589,7 @@ function renderGrid() {
         <div class="stat speed"><div class="label">SPEED</div><div class="value">${fmtCompactNum(a.speed)}</div></div>
         <div class="stat money"><div class="label">CASH</div><div class="value">${fmtMoney(a.money)}</div></div>
         <div class="stat"><div class="label">INCOME POTENSI AKTIF</div><div class="value">${fmtRate(a.incomePotensiAktif)}</div></div>
-        <div class="stat"><div class="label">INCOME AKTIF</div><div class="value">${fmtRate(a.incomeAktif)}</div></div>
+        <div class="stat"><div class="label">INCOME POTENSI PET AKTIF</div><div class="value">${fmtRate(a.incomeAktif)}</div></div>
         <div class="stat"><div class="label">TOTAL PET >= 1B/S</div><div class="value">${fmtRate(a.highValuePetTotal)}</div></div>
         <div class="stat"><div class="label">KANDANG LEVEL</div><div class="value">${fmtLevel(a.kandangLevel)}</div></div>
         <div class="stat"><div class="label">TREADMILL LEVEL</div><div class="value">${fmtLevel(a.treadmillLevel)}</div></div>
