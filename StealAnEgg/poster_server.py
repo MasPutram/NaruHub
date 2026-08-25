@@ -243,18 +243,21 @@ def render_poster(data: dict) -> Image.Image:
     treadmill_level = data.get("treadmillLevel")
 
     all_pets_sorted = sorted(all_pets, key=lambda p: p.get("rate", 0), reverse=True)
-
-    # "Aktif" di sini artinya 17 pet RATE TERTINGGI dari SEMUA pet yang
-    # dimiliki (aktif + isi tas) -- 17 = max slot equip pet di game ini --
-    # BUKAN cuma yang secara harfiah lagi keequip sekarang. Jadi kartu di
-    # panel "ACTIVE" bisa nampilin pet isi tas yang belum di-equip juga,
-    # asal dia termasuk top 17 rate tertinggi.
-    MAX_EQUIP_PETS = 17
-    pet_pool_sorted = sorted(active_pets + all_pets, key=lambda p: p.get("rate", 0), reverse=True)
-    active_pets_sorted = pet_pool_sorted[:MAX_EQUIP_PETS]
     growing_eggs_sorted = sorted(growing_eggs, key=lambda p: p.get("rate", 0), reverse=True)
     backpack_eggs_sorted = sorted(backpack_eggs, key=lambda p: p.get("rate", 0), reverse=True)
     egg_keys = {pet_key(e) for e in growing_eggs_sorted + backpack_eggs_sorted}
+
+    # "Aktif" di sini artinya 17 rate TERTINGGI dari SEMUA yang dimiliki --
+    # pet (aktif + isi tas) DAN telur (lagi tumbuh + di tas), semua ikut
+    # bersaing -- BUKAN cuma yang secara harfiah lagi keequip sekarang.
+    # Jadi kartu di panel "ACTIVE" bisa nampilin telur/pet isi tas yang
+    # belum di-equip juga, asal dia termasuk top 17 rate tertinggi.
+    MAX_EQUIP_PETS = 17
+    pet_pool_sorted = sorted(
+        active_pets + all_pets + growing_eggs + backpack_eggs,
+        key=lambda p: p.get("rate", 0), reverse=True,
+    )
+    active_pets_sorted = pet_pool_sorted[:MAX_EQUIP_PETS]
 
     # Kandidat 3 Card Utama + Paling Gacor: pet AKTIF + isi tas + telur (baik
     # yang lagi tumbuh maupun yang masih di tas) semua ikut bersaing -- kalau

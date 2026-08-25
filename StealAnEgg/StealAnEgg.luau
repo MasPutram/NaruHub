@@ -2582,10 +2582,11 @@ do
 				incomeEggSedangTumbuh += (e.rate or 0)
 			end
 
-			-- "Aktif" = 17 pet RATE TERTINGGI dari SEMUA pet yang dimiliki
-			-- (aktif + isi tas), TERLEPAS lagi keequip apa ngga -- 17 = max
-			-- slot equip pet di game ini. Dipakai buat Income Aktif DAN
-			-- Total Pet >= 1B/s (pool yang sama).
+			-- "Aktif" = 17 RATE TERTINGGI dari SEMUA yang dimiliki -- pet
+			-- (aktif + isi tas) DAN telur (lagi tumbuh + di tas), TERLEPAS
+			-- lagi keequip/ditaro apa ngga -- 17 = max slot equip pet di
+			-- game ini. Dipakai buat Income Aktif DAN Total Pet >= 1B/s
+			-- (pool yang sama).
 			local MAX_EQUIP_PETS = 17
 			local petPool = {}
 			for _, p in ipairs(activePets) do
@@ -2593,6 +2594,12 @@ do
 			end
 			for _, p in ipairs(allPets) do
 				table.insert(petPool, p)
+			end
+			for _, e in ipairs(growingEggs) do
+				table.insert(petPool, e)
+			end
+			for _, e in ipairs(backpackEggs) do
+				table.insert(petPool, e)
 			end
 			table.sort(petPool, function(a, b)
 				return (a.rate or 0) > (b.rate or 0)
