@@ -758,14 +758,16 @@ ACCESS_KEY = BOT_CFG.get("access_key") or ""
 
 def check_access(hwid: str, key: str) -> tuple[bool, str]:
     """Dipanggil dari StealAnEgg.luau tiap kali script di-execute, SEBELUM
-    GUI kebuka -- ini yang jadi gerbang key system-nya. Device yang HWID-nya
-    ada di ALLOWED_HWIDS lolos otomatis tanpa key (buat admin/device kamu
-    sendiri). Device lain wajib kirim key yang cocok ACCESS_KEY. Kalau
-    ACCESS_KEY belum di-setup di bot_config.json, gerbangnya dianggap
-    nonaktif -- semua device lolos (biar ga langsung ngunci semua user
-    begitu fitur ini kepasang sebelum key-nya sempet di-generate/di-isi)."""
-    if hwid and hwid in ALLOWED_HWIDS:
-        return True, "device"
+    GUI kebuka -- ini yang jadi gerbang key system-nya. SENGAJA BUKAN
+    HWID-based -- loadstring publik (tanpa _G.NaruHub_Key) wajib masukin
+    key APAPUN device/HWID-nya, ga ada pengecualian. Satu-satunya cara
+    lolos tanpa prompt adalah _G.NaruHub_Key yang di-set SEBELUM loadstring
+    dengan value yang cocok ACCESS_KEY -- portable, jalan di device manapun,
+    ga perlu di-whitelist satu-satu (beda sama ALLOWED_HWIDS yang dipakai
+    buat proteksi /monitor & /generate, itu urusan lain). Kalau ACCESS_KEY
+    belum di-setup di bot_config.json, gerbangnya dianggap nonaktif --
+    semua device lolos (biar ga langsung ngunci semua user begitu fitur
+    ini kepasang sebelum key-nya sempet di-generate/di-isi)."""
     if not ACCESS_KEY:
         return True, "key gate nonaktif"
     if key and key == ACCESS_KEY:

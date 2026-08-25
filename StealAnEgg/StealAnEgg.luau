@@ -40,13 +40,14 @@ do
 end
 
 ------------------------------------------------------------
--- Key Gate -- device yang HWID-nya di-whitelist di bot_config.json
--- (server-side, gitignored -- ga pernah nempel di repo public ini) lolos
--- otomatis tanpa key. Device lain WAJIB masukin access key yang valid,
--- dicek langsung ke server tiap kali script di-execute. Kalau server ga
--- bisa dihubungin sama sekali, script BERHENTI di sini (fail-closed) --
--- sengaja, biar key-check ga bisa dilewatin cuma dengan mastiin server-nya
--- lagi down.
+-- Key Gate -- SIAPAPUN yang loadstring script ini, device/HWID apapun,
+-- WAJIB masukin access key yang valid sebelum GUI kebuka -- dicek langsung
+-- ke server (bot_config.json, gitignored -- key-nya ga pernah nempel di
+-- repo public ini). Satu-satunya cara skip prompt: set _G.NaruHub_Key ke
+-- key yang valid SEBELUM loadstring (portable, jalan di device manapun).
+-- Kalau server ga bisa dihubungin sama sekali, script BERHENTI di sini
+-- (fail-closed) -- sengaja, biar key-check ga bisa dilewatin cuma dengan
+-- mastiin server-nya lagi down.
 ------------------------------------------------------------
 local SERVER_BASE_URL = "https://portal-sale-linked-titten.trycloudflare.com"
 
@@ -85,10 +86,12 @@ do
 		return false, parsed.error or "Key salah."
 	end
 
-	-- Support model kayak script gated laen: key bisa ditaro di _G SEBELUM
-	-- loadstring (_G.NaruHub_Key = "KEY-DI-SINI"), jadi user yang udah
-	-- punya key ga usah lewat prompt tiap execute. Kalau ga di-set, ini
-	-- kosong -- checkAccess("") tetep jalan normal (cuma ngecek HWID).
+	-- Model kayak script gated laen: key ditaro di _G SEBELUM loadstring
+	-- (_G.NaruHub_Key = "KEY-DI-SINI"). Ini SATU-SATUNYA cara lolos tanpa
+	-- prompt -- loadstring publik biasa (tanpa _G ini) WAJIB masukin key
+	-- manual, device/HWID apapun, ga ada pengecualian otomatis buat device
+	-- tertentu. Portable: key yang sama jalan di device manapun, ga perlu
+	-- di-whitelist satu-satu.
 	local globalKey = ""
 	pcall(function()
 		if type(_G.NaruHub_Key) == "string" then
@@ -96,9 +99,8 @@ do
 		end
 	end)
 
-	-- Coba lolos otomatis dulu lewat HWID atau _G.NaruHub_Key. Device
-	-- admin/whitelist ATAU yang udah nyimpen key valid di _G lewat sini
-	-- tanpa prompt.
+	-- Kalau _G.NaruHub_Key kosong/salah, checkAccess bakal gagal di sini
+	-- dan prompt di bawah bakal muncul minta key manual.
 	local granted = checkAccess(globalKey)
 
 	if not granted then
