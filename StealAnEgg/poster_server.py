@@ -1387,6 +1387,13 @@ DASHBOARD_HTML = r"""<!doctype html>
     width: 190px;
   }
   .sortbar input#deviceFilter:focus { outline: none; border-color: var(--accent); }
+  .genallbtn {
+    margin-left: auto; background: var(--accent); color: #1a1030; border: none; border-radius: 8px;
+    padding: 7px 14px; font-size: 12px; font-weight: 800; cursor: pointer;
+  }
+  .genallbtn:hover { filter: brightness(1.1); }
+  .genallbtn:disabled { opacity: .6; cursor: default; }
+  .genallstatus { color: var(--dim); font-size: 12px; min-width: 160px; }
   .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin: 20px 0 26px; }
   .sumcard { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px 16px; }
   .sumcard .label { color: var(--dim); font-size: 11px; font-weight: 700; letter-spacing: .5px; }
@@ -1451,6 +1458,8 @@ DASHBOARD_HTML = r"""<!doctype html>
     </select>
     <label for="deviceFilter">Device:</label>
     <input type="text" id="deviceFilter" placeholder="mis: SAE 21 (isi 21-30)">
+    <button id="generateAllBtn" class="genallbtn">Generate All Poster</button>
+    <span id="generateAllStatus" class="genallstatus"></span>
   </div>
   <div class="summary" id="summary"></div>
   <div class="grid" id="grid"></div>
@@ -1746,6 +1755,42 @@ async function generatePoster(account, btn) {
     btn.disabled = false;
   }
 }
+async function generateAllPosters() {
+  const btn = document.getElementById("generateAllBtn");
+  const status = document.getElementById("generateAllStatus");
+  // Generate buat akun yang lagi KELIATAN (kena filter device kalau ada),
+  // bukan pukul rata semua akun -- biar konsisten sama apa yang user liat.
+  const accounts = filterByDevice(lastAccounts);
+  if (!accounts.length) {
+    status.textContent = "Ga ada akun buat di-generate.";
+    return;
+  }
+  btn.disabled = true;
+  let ok = 0, fail = 0;
+  for (let i = 0; i < accounts.length; i++) {
+    const acc = accounts[i].sourceAccount;
+    status.textContent = `Generate ${i + 1}/${accounts.length}: ${acc}...`;
+    try {
+      const res = await fetch("/api/generate-poster", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account: acc }),
+      });
+      const body = await res.json();
+      if (res.ok && body.ok) ok++; else fail++;
+    } catch (e) {
+      fail++;
+    }
+    // Jeda dikit antar request -- ga mau nembak Discord/bot kebanyakan
+    // sekaligus dalam waktu singkat.
+    if (i < accounts.length - 1) {
+      await new Promise(r => setTimeout(r, 700));
+    }
+  }
+  status.textContent = `Selesai: ${ok} berhasil${fail ? `, ${fail} gagal` : ""}.`;
+  btn.disabled = false;
+}
+document.getElementById("generateAllBtn").addEventListener("click", generateAllPosters);
 refresh();
 setInterval(refresh, 5000);
 </script>
