@@ -682,6 +682,13 @@ def load_bot_config() -> dict:
         "draft_channel_id": os.environ.get("DISCORD_DRAFT_CHANNEL_ID") or cfg.get("draft_channel_id"),
         "final_channel_id": os.environ.get("DISCORD_FINAL_CHANNEL_ID") or cfg.get("final_channel_id"),
         "index_channel_id": os.environ.get("DISCORD_INDEX_CHANNEL_ID") or cfg.get("index_channel_id"),
+        # Whitelist per-DEVICE (gethwid() di executor), bukan per-akun --
+        # satu device bisa jalanin banyak akun sekaligus. Daftar ini SENGAJA
+        # cuma ada di bot_config.json (gitignored) -- beda sama
+        # POSTER_SERVER_URL yang nempel di StealAnEgg.luau (public repo),
+        # allowlist ini ga pernah kecommit jadi ga bisa ditebak orang lain
+        # yang cuma baca script-nya.
+        "allowed_hwids": cfg.get("allowed_hwids") or [],
     }
 
 
@@ -724,6 +731,23 @@ def format_price_shorthand(raw: str) -> str:
 
 
 BOT_CFG = load_bot_config()
+
+ALLOWED_HWIDS = set(BOT_CFG.get("allowed_hwids") or [])
+
+
+def check_device(handler) -> bool:
+    """/monitor & /generate dipanggil LANGSUNG dari StealAnEgg.luau di tiap
+    device -- endpoint ini yang paling rawan disalahgunain kalau URL tunnel
+    bocor (bisa dipakai ngirim data /monitor palsu ngaku-ngaku jadi akun
+    manapun, atau nge-generate poster asal). Kalau allowlist masih kosong
+    (belum di-setup), SENGAJA ga di-block dulu -- daripada langsung ngunci
+    diri sendiri gara-gara lupa isi bot_config.json."""
+    if not ALLOWED_HWIDS:
+        return True
+    device_id = handler.headers.get("X-Device-Id") or ""
+    return device_id in ALLOWED_HWIDS
+
+
 # poster_id -> {"data": payload dict, "last_price", "final_message"} --
 # disimpan ke disk (STATE_PATH) tiap kali berubah, jadi tetap ada meskipun
 # poster_server di-restart -- harga bisa diedit kapan aja tanpa perlu buka
@@ -1800,6 +1824,11 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
+        if self.path in ("/monitor", "/generate") and not check_device(self):
+            device_id = self.headers.get("X-Device-Id") or "(kosong)"
+            print(f"[poster_server] BLOCKED {self.path} dari device ga dikenal: {device_id}")
+            self._send_json(401, {"ok": False, "error": "unknown device"})
+            return
         if self.path == "/monitor":
             self._handle_monitor()
             return

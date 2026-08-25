@@ -1910,6 +1910,19 @@ do
 
 	local POSTER_SERVER_URL = "https://portal-sale-linked-titten.trycloudflare.com/generate"
 
+	-- Dikirim sebagai header X-Device-Id ke /monitor & /generate. Server
+	-- (poster_server.py) nyocokin ini ke allowlist di bot_config.json --
+	-- allowlist itu ga pernah kecommit ke repo (gitignored), beda sama
+	-- POSTER_SERVER_URL di atas yang nempel di script public ini. Jadi
+	-- walau URL tunnel-nya bocor/ketauan orang, request tetep ditolak
+	-- kecuali dari device yang udah di-whitelist manual.
+	local DEVICE_ID = "unknown"
+	pcall(function()
+		if gethwid then
+			DEVICE_ID = gethwid()
+		end
+	end)
+
 	local function mutationNamesFromString(str)
 		if not str or str == "" then
 			return {}
@@ -2293,7 +2306,7 @@ do
 				return request({
 					Url = serverUrl,
 					Method = "POST",
-					Headers = { ["Content-Type"] = "application/json" },
+					Headers = { ["Content-Type"] = "application/json", ["X-Device-Id"] = DEVICE_ID },
 					Body = body,
 				})
 			end)
@@ -2333,6 +2346,13 @@ do
 	-- generate manual.
 	------------------------------------------------------------
 	local monitorSection = PosterTab:AddSection("Monitor Lokal (Dashboard)")
+
+	monitorSection:AddParagraph({
+		Title = "Device ID kamu",
+		Content = DEVICE_ID .. "\n\nCopy ID ini, taro di array \"allowed_hwids\" pada bot_config.json (di PC "
+			.. "yang jalanin poster_server.py) biar device ini di-whitelist. Device yang belum di-whitelist bakal "
+			.. "ditolak server begitu allowlist-nya diisi minimal 1 device.",
+	})
 
 	local monitorUrlInput = monitorSection:AddInput("StealAnEgg_MonitorUrl", {
 		Title = "Monitor Server URL (kosongin = pakai domain Poster Server di atas)",
@@ -2459,7 +2479,7 @@ do
 			request({
 				Url = url,
 				Method = "POST",
-				Headers = { ["Content-Type"] = "application/json" },
+				Headers = { ["Content-Type"] = "application/json", ["X-Device-Id"] = DEVICE_ID },
 				Body = body,
 			})
 		end)
