@@ -49,7 +49,7 @@ end
 -- (fail-closed) -- sengaja, biar key-check ga bisa dilewatin cuma dengan
 -- mastiin server-nya lagi down.
 ------------------------------------------------------------
-local SERVER_BASE_URL = "https://portal-sale-linked-titten.trycloudflare.com"
+local SERVER_BASE_URL = "https://integrate-processor-persian-international.trycloudflare.com"
 
 local DEVICE_ID = "unknown"
 pcall(function()
