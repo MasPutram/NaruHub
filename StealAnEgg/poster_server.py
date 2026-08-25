@@ -1796,27 +1796,37 @@ def generate_and_deliver(data: dict) -> tuple[int, dict]:
         schedule_post_draft(poster_id, draft_buf.getvalue(), data, suggested, existing_draft_ref=prev_entry.get("draft_message"))
         return 200, {"ok": True, "posterId": poster_id, "mode": "discord-price-flow", "updated": bool(existing_id)}
 
+    webhook_url = data.get("webhookUrl")
+    if not webhook_url:
+        # Sebelumnya di-skip diam-diam di bawah (abis render) -- balikin
+        # ok:True padahal ga pernah ngirim apa-apa ke Discord (ketauan pas
+        # user lapor "generate ngga masuk Discord" tapi response-nya
+        # sukses). Sekarang ini dianggap error jelas, bukan no-op senyap --
+        # dicek SEBELUM render biar ga buang kerjaan pas emang bakal gagal.
+        return 400, {
+            "ok": False,
+            "error": "Ga ada tujuan Discord -- nyalain toggle \"Isi Harga di Discord\" ATAU isi field \"Webhook URL\".",
+        }
+
     img = render_poster(data)
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
 
-    webhook_url = data.get("webhookUrl")
-    if webhook_url:
-        content_lines = []
-        source_account = data.get("sourceAccount")
-        if source_account:
-            content_lines.append(f"Diambil dari akun: **{source_account}**")
-        if data.get("message"):
-            content_lines.append(data["message"])
-        resp = requests.post(
-            webhook_url,
-            data={"content": "\n".join(content_lines)},
-            files={"file": ("poster.png", buf.getvalue(), "image/png")},
-            timeout=20,
-        )
-        if resp.status_code not in (200, 204):
-            return 502, {"ok": False, "error": f"discord {resp.status_code}: {resp.text[:300]}"}
+    content_lines = []
+    source_account = data.get("sourceAccount")
+    if source_account:
+        content_lines.append(f"Diambil dari akun: **{source_account}**")
+    if data.get("message"):
+        content_lines.append(data["message"])
+    resp = requests.post(
+        webhook_url,
+        data={"content": "\n".join(content_lines)},
+        files={"file": ("poster.png", buf.getvalue(), "image/png")},
+        timeout=20,
+    )
+    if resp.status_code not in (200, 204):
+        return 502, {"ok": False, "error": f"discord {resp.status_code}: {resp.text[:300]}"}
 
     # Simpan salinan lokal buat debugging -- opsional, jangan sampai
     # gagal-total kalau disk-nya read-only/ephemeral (misal di Render).
