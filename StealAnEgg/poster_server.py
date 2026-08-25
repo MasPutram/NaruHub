@@ -146,6 +146,17 @@ def fmt_weight(kg: float) -> str:
     return f"{kg:,.0f} Kg" if kg >= 1 else f"{kg:.2f} Kg"
 
 
+def fmt_number_compact(v: float) -> str:
+    """Buat angka gede yang BUKAN uang (misal Speed) -- disingkat kayak
+    fmt_money (K/M/B/T) tapi ga ada '$' di depan / '/s' di belakang. '+'
+    nandain angkanya dibulatin ke bawah, bukan pas."""
+    v = float(v)
+    for cut, suffix in [(1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")]:
+        if abs(v) >= cut:
+            return f"{v / cut:.1f}{suffix}+"
+    return f"{v:,.0f}"
+
+
 def fmt_duration(seconds: float) -> str:
     seconds = max(0, int(seconds))
     h, rem = divmod(seconds, 3600)
@@ -302,10 +313,13 @@ def render_poster(data: dict) -> Image.Image:
             right_panel_pets.append(p)
     right_panel_pets.sort(key=lambda p: p.get("rate", 0), reverse=True)
 
-    # Telur yang udah kepromosi ke 3 card utama / Paling Gacor ga usah
-    # dobel muncul lagi di section "sedang tumbuh" / "di tas" di bawah.
-    growing_eggs_remaining = [e for e in growing_eggs_sorted if pet_key(e) not in featured_keys]
-    backpack_eggs_remaining = [e for e in backpack_eggs_sorted if pet_key(e) not in featured_keys]
+    # Telur yang udah kepromosi ke 3 card utama / Paling Gacor / panel
+    # "ACTIVE" (bisa kejadian sekarang -- telur ikut bersaing masuk top 17)
+    # ga usah dobel muncul lagi di section "sedang tumbuh" / "di tas" di
+    # bawah.
+    shown_in_active_keys = {pet_key(p) for p in right_panel_pets[:8]}
+    growing_eggs_remaining = [e for e in growing_eggs_sorted if pet_key(e) not in featured_keys and pet_key(e) not in shown_in_active_keys]
+    backpack_eggs_remaining = [e for e in backpack_eggs_sorted if pet_key(e) not in featured_keys and pet_key(e) not in shown_in_active_keys]
 
     left_x0, left_x1 = 32, 640
     right_x0, right_x1 = 656, W - 32
@@ -344,7 +358,7 @@ def render_poster(data: dict) -> Image.Image:
 
     stat_items = []
     if run_speed is not None:
-        stat_items.append(("SPEED", f"{run_speed:,.0f}" if isinstance(run_speed, (int, float)) else str(run_speed)))
+        stat_items.append(("SPEED", fmt_number_compact(run_speed) if isinstance(run_speed, (int, float)) else str(run_speed)))
     if current_money is not None:
         stat_items.append(("CASH", fmt_currency(current_money)))
     if total_money_per_second is not None:
@@ -583,9 +597,16 @@ def render_poster(data: dict) -> Image.Image:
         paste_icon(canvas, icon, (right_x0 + 16, iy, right_x0 + 76, iy + 60))
         muts = pet.get("mutations") or []
         mut_tag = " + ".join(m.upper() for m in muts) if muts else None
+        is_egg_row = pet_key(pet) in egg_keys
+        tag_x0 = None
+        if mut_tag:
+            tw = draw.textlength(mut_tag, font=font(10, bold=True))
+            tag_x0 = right_x1 - tw - 28
         reserved_w = 0
         if mut_tag:
             reserved_w = draw.textlength(mut_tag, font=font(10, bold=True)) + 44
+        if is_egg_row:
+            reserved_w += 58
         name = pet.get("name", pet.get("category", "?"))
         name_font = font(17, bold=True)
         max_name_w = right_x1 - (right_x0 + 92) - reserved_w
@@ -595,10 +616,19 @@ def render_poster(data: dict) -> Image.Image:
         draw.text((right_x0 + 92, iy + 32), fmt_money(pet.get("rate", 0)), font=font(15, bold=True), fill=GREEN)
         if pet.get("weight"):
             draw.text((right_x0 + 92, iy + 54), fmt_weight(pet["weight"]), font=font(11), fill=DIM)
+        # Telur yang lolos ke pool "aktif" (rate-nya termasuk top 17) tetep
+        # ditandain TELUR di sini -- sama kayak badge di 3 kartu utama --
+        # biar ga keliatan kayak pet biasa yang udah keequip. Ditaro di
+        # slot yang sama kayak mutation tag (sebelah kiri-nya kalau
+        # dua-duanya ada).
+        if is_egg_row:
+            egg_badge_w = 50
+            egg_badge_x1 = (tag_x0 - 8) if mut_tag else (right_x1 - 12)
+            egg_badge_x0 = egg_badge_x1 - egg_badge_w
+            rounded_card(draw, (egg_badge_x0, iy + 14, egg_badge_x1, iy + 40), radius=10, fill=(255, 244, 214), outline=GOLD, width=1)
+            draw_text_centered(draw, ((egg_badge_x0 + egg_badge_x1) / 2, iy + 27), "TELUR", font(10, bold=True), GOLD)
         if mut_tag:
             color = mutation_tag_color(muts[0])
-            tw = draw.textlength(mut_tag, font=font(10, bold=True))
-            tag_x0 = right_x1 - tw - 28
             rounded_card(draw, (tag_x0, iy + 14, right_x1 - 12, iy + 40), radius=10, fill=(255, 255, 255), outline=color, width=1)
             draw_text_centered(draw, ((tag_x0 + right_x1 - 12) / 2, iy + 27), mut_tag, font(10, bold=True), color)
         if i < min(len(right_panel_pets), 8) - 1:
@@ -1456,6 +1486,19 @@ function fmtNum(v) {
   if (v === null || v === undefined) return "-";
   return Number(v).toLocaleString("en-US");
 }
+// Buat angka gede yang BUKAN uang (Speed) -- disingkat K/M/B/T kayak
+// fmtMoney tapi ga ada "$"/"/ s". Beda sama fmtNum (dipake buat PETS/
+// STOLEN count yang emang harus utuh, bukan disingkat).
+function fmtCompactNum(v) {
+  if (v === null || v === undefined) return "-";
+  v = Number(v);
+  const abs = Math.abs(v);
+  if (abs >= 1e12) return (v/1e12).toFixed(1) + "T+";
+  if (abs >= 1e9) return (v/1e9).toFixed(1) + "B+";
+  if (abs >= 1e6) return (v/1e6).toFixed(1) + "M+";
+  if (abs >= 1e3) return (v/1e3).toFixed(1) + "K+";
+  return v.toLocaleString("en-US");
+}
 function fmtRate(v) {
   if (v === null || v === undefined) return "-";
   return fmtMoney(v) + "/s";
@@ -1543,7 +1586,7 @@ function renderGrid() {
         <span class="status">${a.online ? "Active" : "Offline"}</span>
       </div>
       <div class="stats">
-        <div class="stat speed"><div class="label">SPEED</div><div class="value">${fmtNum(a.speed)}</div></div>
+        <div class="stat speed"><div class="label">SPEED</div><div class="value">${fmtCompactNum(a.speed)}</div></div>
         <div class="stat money"><div class="label">CASH</div><div class="value">${fmtMoney(a.money)}</div></div>
         <div class="stat"><div class="label">INCOME POTENSI AKTIF</div><div class="value">${fmtRate(a.incomePotensiAktif)}</div></div>
         <div class="stat"><div class="label">INCOME AKTIF</div><div class="value">${fmtRate(a.incomeAktif)}</div></div>
@@ -1584,7 +1627,7 @@ async function refresh() {
   document.getElementById("summary").innerHTML = `
     <div class="sumcard"><div class="label">ACTIVE ACCOUNTS</div><div class="value">${accounts.length}</div></div>
     <div class="sumcard"><div class="label">TOTAL MONEY</div><div class="value">${fmtMoney(totalMoney)}</div></div>
-    <div class="sumcard"><div class="label">TOTAL SPEED</div><div class="value">${fmtNum(totalSpeed)}</div></div>
+    <div class="sumcard"><div class="label">TOTAL SPEED</div><div class="value">${fmtCompactNum(totalSpeed)}</div></div>
     <div class="sumcard"><div class="label">TOTAL PETS</div><div class="value">${fmtNum(totalPets)}</div></div>
     <div class="sumcard"><div class="label">TOTAL EGGS STOLEN</div><div class="value">${fmtNum(totalStolen)}</div></div>
   `;
