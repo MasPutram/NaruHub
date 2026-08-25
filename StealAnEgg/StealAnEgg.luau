@@ -2365,9 +2365,14 @@ do
 		Default = "Putra Ramadhan",
 		Finished = true,
 	})
+	-- Default TRUE -- jalur webhook langsung butuh field "Webhook URL" diisi
+	-- manual per-device, gampang kelewat & bikin generate sukses (HTTP 200)
+	-- tapi ga pernah ngirim apa-apa ke Discord. Jalur bot (draft + tombol
+	-- Edit Poster) ga butuh setup tambahan apa-apa, jadi ini yang aman
+	-- buat default.
 	local discordPriceFlowToggle = section:AddToggle("StealAnEgg_DiscordPriceFlow", {
 		Title = "Isi Harga di Discord (tombol + form)",
-		Default = false,
+		Default = true,
 	})
 
 	local statusPara = section:AddParagraph({
@@ -2517,6 +2522,17 @@ do
 	end
 
 	section:AddButton({ Title = "Generate & Kirim ke Discord", Callback = generateAndSend })
+
+	-- Auto-generate SEKALI aja pas script pertama kali jalan -- ga perlu
+	-- klik tombol manual lagi tiap kali exe. Delay dikit biar data game
+	-- (pet/egg/kandang) udah sempet ke-load duluan sebelum di-scan.
+	task.spawn(function()
+		task.wait(5)
+		local ok, err = pcall(generateAndSend)
+		if not ok then
+			statusPara:SetContent("Auto-generate awal gagal: " .. tostring(err))
+		end
+	end)
 
 	------------------------------------------------------------
 	-- Monitor Lokal (Dashboard) -- lapor stat ringan berkala ke

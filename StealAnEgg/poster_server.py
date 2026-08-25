@@ -1931,6 +1931,14 @@ class Handler(BaseHTTPRequestHandler):
                     "error": "Belum ada data lengkap buat akun ini. Pastikan Auto Report ke Dashboard nyala & udah lapor minimal sekali.",
                 })
                 return
+            # SENGAJA paksa price kosong di sini -- tombol "Generate Poster"
+            # di dashboard harus SELALU lewat jalur bot (draft + Edit
+            # Poster), ga peduli toggle "Isi Harga di Discord" nyala/mati
+            # atau field Webhook URL diisi/kosong di device yang lapor.
+            # full_data itu snapshot /monitor apa adanya (bisa bawa price
+            # non-empty kalau toggle di device itu off) -- copy dulu biar
+            # ga ngubah data asli yang kesimpen di ACCOUNTS.
+            full_data = {**full_data, "price": ""}
             status, body = generate_and_deliver(full_data)
             self._send_json(status, body)
         except Exception as e:  # noqa: BLE001
