@@ -2570,13 +2570,9 @@ do
 			local runSpeed, moneyPerSecond, kandangLevel, treadmillLevel, currentMoney = collectAccountStats()
 
 			-- Sama persis label & rumus yang dipajang di poster (Speed, Uang
-			-- Sekarang, Income Potensi Aktif, Income Aktif, Income Egg
-			-- Backpack, Income Egg Sedang Tumbuh, Kandang/Treadmill Level) --
-			-- biar dashboard nunjukkin info yang sama, bukan versi beda.
-			local incomeAktif = 0
-			for _, p in ipairs(activePets) do
-				incomeAktif += (p.rate or 0)
-			end
+			-- Sekarang, Income Potensi Aktif, Income Aktif, Total Pet >= 1B/s,
+			-- Kandang/Treadmill Level) -- biar dashboard nunjukkin info yang
+			-- sama, bukan versi beda.
 			local incomeEggBackpack = 0
 			for _, e in ipairs(backpackEggs) do
 				incomeEggBackpack += (e.rate or 0)
@@ -2585,7 +2581,39 @@ do
 			for _, e in ipairs(growingEggs) do
 				incomeEggSedangTumbuh += (e.rate or 0)
 			end
-			local incomePotensiAktif = (moneyPerSecond or incomeAktif) + incomeEggBackpack + incomeEggSedangTumbuh
+
+			-- "Aktif" = 17 pet RATE TERTINGGI dari SEMUA pet yang dimiliki
+			-- (aktif + isi tas), TERLEPAS lagi keequip apa ngga -- 17 = max
+			-- slot equip pet di game ini. Dipakai buat Income Aktif DAN
+			-- Total Pet >= 1B/s (pool yang sama).
+			local MAX_EQUIP_PETS = 17
+			local petPool = {}
+			for _, p in ipairs(activePets) do
+				table.insert(petPool, p)
+			end
+			for _, p in ipairs(allPets) do
+				table.insert(petPool, p)
+			end
+			table.sort(petPool, function(a, b)
+				return (a.rate or 0) > (b.rate or 0)
+			end)
+			local incomeAktif = 0
+			for i = 1, math.min(MAX_EQUIP_PETS, #petPool) do
+				incomeAktif += (petPool[i].rate or 0)
+			end
+
+			local HIGH_VALUE_THRESHOLD = 1000000000
+			local highValuePetTotal = 0
+			for _, p in ipairs(petPool) do
+				if (p.rate or 0) >= HIGH_VALUE_THRESHOLD then
+					highValuePetTotal += p.rate
+				end
+			end
+
+			-- Income Potensi Aktif = moneyPerSecond APA ADANYA (rate real dari
+			-- game, udah termasuk speed boost dkk) + potensi income telur --
+			-- TIDAK DIUBAH, ini beda konsep dari Income Aktif di atas.
+			local incomePotensiAktif = (moneyPerSecond or 0) + incomeEggBackpack + incomeEggSedangTumbuh
 
 			-- Top 3 pet by rate, gabungan pet aktif + isi tas -- buat kartu
 			-- "TOP PETS" di dashboard.
@@ -2651,6 +2679,7 @@ do
 				incomePotensiAktif = incomePotensiAktif,
 				incomeEggBackpack = incomeEggBackpack,
 				incomeEggSedangTumbuh = incomeEggSedangTumbuh,
+				highValuePetTotal = highValuePetTotal,
 				kandangLevel = kandangLevel,
 				treadmillLevel = treadmillLevel,
 				petsCount = #allPets + #activePets,
