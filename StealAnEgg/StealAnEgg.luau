@@ -2400,21 +2400,35 @@ do
 		return "Rp " .. (n < 0 and "-" or "") .. reversed
 	end
 
-	-- Price Acc auto-hitung dari (income pet aktif + potensi total telur
-	-- netas -- baik yang lagi tumbuh di kandang maupun yang masih di tas):
-	-- tiap 1B/s gabungan dihargai sebesar StealAnEgg_HargaPerB (default Rp
-	-- 5.000). Field harga manual (priceInput) tetap menang kalau diisi --
-	-- ini cuma fallback.
-	local function computeAutoPrice(activePets, growingEggs, backpackEggs)
-		local totalRate = 0
+	-- Price Acc auto-hitung dari Income Aktif -- 17 rate TERTINGGI dari
+	-- SEMUA yang dimiliki (pet aktif + isi tas + telur lagi tumbuh + telur
+	-- di tas), TERLEPAS lagi keequip/ditaro apa ngga (17 = max slot equip
+	-- pet di game ini). Sama persis pool yang dipakai buat stat "Income
+	-- Aktif" di dashboard/poster -- biar harga konsisten sama yang
+	-- dipajang. Tiap 1B/s dihargai sebesar StealAnEgg_HargaPerB (default
+	-- Rp 5.000). Field harga manual (priceInput) tetap menang kalau diisi
+	-- -- ini cuma fallback.
+	local function computeAutoPrice(activePets, allPets, growingEggs, backpackEggs)
+		local MAX_EQUIP_PETS = 17
+		local pool = {}
 		for _, p in ipairs(activePets) do
-			totalRate += (p.rate or 0)
+			table.insert(pool, p)
+		end
+		for _, p in ipairs(allPets) do
+			table.insert(pool, p)
 		end
 		for _, e in ipairs(growingEggs) do
-			totalRate += (e.rate or 0)
+			table.insert(pool, e)
 		end
 		for _, e in ipairs(backpackEggs) do
-			totalRate += (e.rate or 0)
+			table.insert(pool, e)
+		end
+		table.sort(pool, function(a, b)
+			return (a.rate or 0) > (b.rate or 0)
+		end)
+		local totalRate = 0
+		for i = 1, math.min(MAX_EQUIP_PETS, #pool) do
+			totalRate += (pool[i].rate or 0)
 		end
 		if totalRate <= 0 then
 			return ""
@@ -2438,7 +2452,7 @@ do
 			activeLimit = AssetCmds.RequestEquipLimit()
 		end)
 		local runSpeed, moneyPerSecond, kandangLevel, treadmillLevel, currentMoney = collectAccountStats()
-		local autoPrice = computeAutoPrice(activePets, growingEggs, backpackEggs)
+		local autoPrice = computeAutoPrice(activePets, allPets, growingEggs, backpackEggs)
 		-- Toggle nyala = jangan kirim harga sama sekali, biar poster_server
 		-- pakai alur bot (post draft + tombol "Isi Harga" di Discord) alih-
 		-- alih langsung post lewat webhook. autoPrice tetap dikirim sebagai
@@ -2649,7 +2663,7 @@ do
 			pcall(function()
 				activeLimit = AssetCmds.RequestEquipLimit()
 			end)
-			local autoPrice = computeAutoPrice(activePets, growingEggs, backpackEggs)
+			local autoPrice = computeAutoPrice(activePets, allPets, growingEggs, backpackEggs)
 			local useDiscordPriceFlow = discordPriceFlowToggle.Value == true
 
 			-- Snapshot lengkap sama persis kayak payload generateAndSend() --
