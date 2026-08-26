@@ -179,6 +179,21 @@ def compute_income_potensi_pet_aktif(data: dict) -> int:
     return sum(p.get("rate", 0) for p in pool[:MAX_EQUIP_PETS])
 
 
+HIGH_VALUE_THRESHOLD = 1_000_000_000
+
+
+def compute_high_value_pet_total(data: dict) -> int:
+    """"Total Pet >= 1B/s" -- total gabungan pet+telur (aktif + isi tas +
+    lagi tumbuh + di tas) yang rate-nya MASING-MASING udah >= 1B/s. SAMA
+    PERSIS logic-nya kayak render_poster()."""
+    active_pets = data.get("activePets") or []
+    all_pets = data.get("allPets") or []
+    growing_eggs = data.get("growingEggs") or []
+    backpack_eggs = data.get("backpackEggs") or []
+    pool = active_pets + all_pets + growing_eggs + backpack_eggs
+    return sum(p.get("rate", 0) for p in pool if p.get("rate", 0) >= HIGH_VALUE_THRESHOLD)
+
+
 def fmt_duration(seconds: float) -> str:
     seconds = max(0, int(seconds))
     h, rem = divmod(seconds, 3600)
@@ -367,8 +382,7 @@ def render_poster(data: dict) -> Image.Image:
     # Total gabungan pet yang masing-masing rate-nya >= 1B/s -- ganti slot
     # Income Egg Backpack/Sedang Tumbuh, biar yang dipajang itu kekuatan
     # dari pet-pet gacor-nya, bukan telur.
-    HIGH_VALUE_THRESHOLD = 1_000_000_000
-    high_value_pet_total = sum(p.get("rate", 0) for p in pet_pool_sorted if p.get("rate", 0) >= HIGH_VALUE_THRESHOLD)
+    high_value_pet_total = compute_high_value_pet_total(data)
 
     stat_items = []
     if run_speed is not None:
@@ -898,14 +912,21 @@ if BOT_ENABLED:
                 max_length=40,
             )
             self.rate_input = discord.ui.TextInput(
-                label="Atau: Rate per 1B/s (ribuan)",
+                label="Atau: Rate Income Aktif /1B/s (ribuan)",
                 placeholder="cth: 5 (= Rp 5.000 per 1B/s Income Potensi Pet Aktif)",
+                required=False,
+                max_length=20,
+            )
+            self.rate_highvalue_input = discord.ui.TextInput(
+                label="+ Rate Pet >= 1B/s /1B/s (ribuan)",
+                placeholder="cth: 3 (= Rp 3.000 per 1B/s Total Pet >= 1B/s)",
                 required=False,
                 max_length=20,
             )
             self.add_item(self.title_input)
             self.add_item(self.price_input)
             self.add_item(self.rate_input)
+            self.add_item(self.rate_highvalue_input)
 
         async def on_submit(self, interaction: discord.Interaction):
             # Render + upload gambar gampang lebih dari 3 detik (limit Discord
@@ -926,22 +947,25 @@ if BOT_ENABLED:
 
             raw_price = (self.price_input.value or "").strip()
             raw_rate = (self.rate_input.value or "").strip()
+            raw_rate_highvalue = (self.rate_highvalue_input.value or "").strip()
             price_changed = False
             price_text = base_data.get("price", "")
-            if raw_rate:
-                # Sama persis formula "Harga per 1B/s" di GUI script: rate x
-                # Income Potensi Pet Aktif (17 rate tertinggi dari gabungan
-                # pet aktif + isi tas + telur, keequip/ditaro apa ngga),
-                # rate dalam ribuan.
+            if raw_rate or raw_rate_highvalue:
+                # Harga = (rate Income Aktif x Income Potensi Pet Aktif)
+                # + (rate Pet >=1B/s x Total Pet >= 1B/s) -- dua field
+                # BOLEH diisi salah satu doang (yang kosong dianggap 0),
+                # rate dalam ribuan kayak field lain.
                 try:
-                    rate_per_b = float(raw_rate.replace(",", ".")) * 1000
+                    rate_per_b = float(raw_rate.replace(",", ".")) * 1000 if raw_rate else 0.0
+                    rate_hv_per_b = float(raw_rate_highvalue.replace(",", ".")) * 1000 if raw_rate_highvalue else 0.0
                 except ValueError:
                     await interaction.followup.send(
-                        f"Rate '{raw_rate}' ga valid, harus angka. Coba lagi.", ephemeral=True,
+                        f"Rate '{raw_rate or raw_rate_highvalue}' ga valid, harus angka. Coba lagi.", ephemeral=True,
                     )
                     return
                 income_b = compute_income_potensi_pet_aktif(base_data) / 1e9
-                price_value = int(round(income_b * rate_per_b))
+                highvalue_b = compute_high_value_pet_total(base_data) / 1e9
+                price_value = int(round(income_b * rate_per_b + highvalue_b * rate_hv_per_b))
                 price_text = "Rp " + f"{price_value:,}".replace(",", ".")
                 price_changed = True
             elif raw_price:
