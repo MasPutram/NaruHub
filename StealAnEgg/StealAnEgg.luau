@@ -3055,8 +3055,9 @@ do
 			return false
 		end
 
-		-- Get AssetMovementBatch
-		local activeAssets = workspace.__OBJECTS.Build:FindFirstChild("MainMap") and workspace.__OBJECTS.Build.MainMap:FindFirstChild("ActiveAssetsController")
+		-- Get AssetMovementBatch from PlayerScripts
+		local playerScripts = LocalPlayer:WaitForChild("PlayerScripts")
+		local activeAssets = playerScripts:FindFirstChild("Game"):FindFirstChild("Plots"):FindFirstChild("ActiveAssetsController")
 		local assetBatch = activeAssets and activeAssets:FindFirstChild("AssetMovementBatch")
 		if not assetBatch then
 			print("[StealAnEgg] moveTo: AssetMovementBatch not found")
