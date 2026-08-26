@@ -3299,14 +3299,6 @@ do
 
 		task.wait(0.2)
 		
-		local hum = getHumanoid()
-		if hum then
-			print("[StealAnEgg] KILLING CHARACTER before carry - current health=" .. tostring(hum.Health))
-			hum.Health = 0
-			task.wait(0.1)
-			print("[StealAnEgg] Character dead after kill - health=" .. tostring(hum.Health))
-		end
-		
 		if not waitUntilNotTrapped(function() return autoStealRunning end) then
 			return
 		end
