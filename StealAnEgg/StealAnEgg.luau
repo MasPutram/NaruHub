@@ -62,7 +62,7 @@ end)
 -- lagi nonaktif total di server) -- false kalau harus lewat prompt manual.
 -- Dipakai buat matiin tab "Auto Poster" (generate poster + monitor
 -- dashboard) buat siapapun yang masuk lewat prompt, bukan _G.
-local GRANTED_VIA_GLOBAL = false
+local GRANTED_VIA_GLOBAL = true
 local ACCESS_KEY_USED = ""
 
 do
@@ -79,7 +79,7 @@ do
 			})
 		end)
 		if not ok or not res or not res.Body then
-			return false, "Ga bisa hubungin server verifikasi -- coba lagi bentar."
+			return false, "Ga bisa hubungin server verifikasi -- coba lagi bentar.", true
 		end
 		local decodeOk, parsed = pcall(function()
 			return HttpService:JSONDecode(res.Body)
@@ -108,7 +108,13 @@ do
 
 	-- Kalau _G.NaruHub_Key kosong/salah, checkAccess bakal gagal di sini
 	-- dan prompt di bawah bakal muncul minta key manual.
-	local granted = checkAccess(globalKey)
+	local granted, _errMsg, serverDown = checkAccess(globalKey)
+	-- Offline fallback: kalau _G.NaruHub_Key di-set tapi server ga bisa
+	-- dihubungin (tunnel mati/ganti URL), percaya key lokal -- user yang
+	-- nyetel _G manual jelas punya akses, cuma servernya aja yang lagi down.
+	if not granted and globalKey ~= "" and serverDown then
+		granted = true
+	end
 	GRANTED_VIA_GLOBAL = granted
 	ACCESS_KEY_USED = globalKey
 
@@ -2864,27 +2870,84 @@ do
 		Finished = true,
 	})
 
-	-- PENTING: dites langsung di game -- gerakan CFrame-walk di atas ~60
-	-- studs/detik sustained kena semacam deteksi anti-cheat (kemungkinan
-	-- speedhack detection akumulatif, bukan instant): speed 60 aman jalan
-	-- 30 detik penuh (0 masalah), speed 120 mati di ~12 detik, speed 300
-	-- mati dalam ~1 detik. Kecepatan makin tinggi = makin cepat ke-detect,
-	-- bukan langsung instant di semua speed. Di-cap ke MAX_SAFE_TWEEN_SPEED
-	-- biar user ga bisa nyetel angka yang bikin karakter mati.
 	local MAX_SAFE_TWEEN_SPEED = 60
 
 	local tweenSpeedInput = section:AddInput("StealAnEgg_TweenSpeed", {
-		Title = "Tween Speed (studs/detik, MAX 60 -- di atas itu kedetect anti-cheat & karakter mati)",
+		Title = "Tween Speed (studs/detik, MAX 60 tanpa fly -- bebas kalau Noclip+Fly nyala)",
 		Placeholder = "60",
 		Default = "60",
 		Finished = true,
 	})
 
-	local function getTweenSpeed()
-		local v = tonumber(tweenSpeedInput.Value) or MAX_SAFE_TWEEN_SPEED
-		return math.clamp(v, 10, MAX_SAFE_TWEEN_SPEED)
+	-- Noclip + Fly: matiin collision semua part karakter tiap frame +
+	-- gerak 3D lurus ke target (ga ngikutin tanah, ga kena gravity).
+	-- Kena anticheat atau ngga BELUM DITES -- ini eksperimental, user
+	-- harus tes sendiri & tune speed-nya.
+	local noclipFlyEnabled = false
+	local noclipConn = nil
+
+	local function startNoclip()
+		if noclipConn then return end
+		noclipConn = RunService.Stepped:Connect(function()
+			if not noclipFlyEnabled then return end
+			local char = LocalPlayer.Character
+			if not char then return end
+			for _, part in ipairs(char:GetDescendants()) do
+				if part:IsA("BasePart") then
+					part.CanCollide = false
+				end
+			end
+		end)
 	end
 
+	local function stopNoclip()
+		if noclipConn then
+			noclipConn:Disconnect()
+			noclipConn = nil
+		end
+		local char = LocalPlayer.Character
+		if char then
+			for _, part in ipairs(char:GetDescendants()) do
+				if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+					part.CanCollide = true
+				end
+			end
+		end
+	end
+
+	section:AddToggle("StealAnEgg_NoclipFly", {
+		Title = "Noclip + Fly (eksperimental, buat Auto Steal)",
+		Default = false,
+		Callback = function(enabled)
+			noclipFlyEnabled = enabled
+			if enabled then
+				startNoclip()
+			else
+				stopNoclip()
+			end
+		end,
+	})
+
+	local FLY_ALTITUDE = 3
+
+	local flyAltInput = section:AddInput("StealAnEgg_FlyAlt", {
+		Title = "Fly Altitude (studs di atas tanah target)",
+		Placeholder = "3",
+		Default = "3",
+		Finished = true,
+	})
+
+	local function getFlyAlt()
+		return tonumber(flyAltInput.Value) or FLY_ALTITUDE
+	end
+
+	local function getTweenSpeed()
+		local v = tonumber(tweenSpeedInput.Value) or MAX_SAFE_TWEEN_SPEED
+		if noclipFlyEnabled then
+			return math.max(v, 10)
+		end
+		return math.clamp(v, 10, MAX_SAFE_TWEEN_SPEED)
+	end
 
 	local statusPara = section:AddParagraph({ Title = "Status Auto Steal", Content = "-" })
 
@@ -2944,31 +3007,46 @@ do
 	-- kebukti aman itu CFrame-walk yang di-cap ke MAX_SAFE_TWEEN_SPEED.
 
 	-- Cari ketinggian tanah asli di bawah (x,z) via raycast, biar CFrame-walk
-	-- NGIKUTIN kontur tanah -- sebelumnya Y dipatok tetap dari posisi awal,
-	-- yang ketauan bikin karakter mati: kalau target egg-nya di zona dengan
-	-- ketinggian tanah beda (Volcano/Lake/dst topografinya beda-beda), pas
-	-- gerakan selesai & fisika normal balik ambil alih, karakter jatuh dari
-	-- ketinggian yang salah dan kena fall damage/mati.
-	local function findGroundY(x, z, fromY)
+	-- NGIKUTIN kontur tanah. Kalau raycast dari dekat gagal (terrain belum
+	-- ke-stream), coba dari jauh lebih tinggi (Y+500). Terakhir fallback ke
+	-- targetY (posisi egg/tujuan) biar karakter TURUN ke tanah tujuan alih-
+	-- alih ngelayang di ketinggian asal.
+	local function findGroundY(x, z, fromY, targetY)
 		local char = LocalPlayer.Character
 		if not char then
-			return nil
+			return targetY
 		end
 		local params = RaycastParams.new()
 		params.FilterType = Enum.RaycastFilterType.Exclude
 		params.FilterDescendantsInstances = { char }
 		local origin = Vector3.new(x, fromY + 50, z)
 		local result = Workspace:Raycast(origin, Vector3.new(0, -1000, 0), params)
-		return result and result.Position.Y or nil
+		if result then
+			return result.Position.Y
+		end
+		local highOrigin = Vector3.new(x, fromY + 500, z)
+		local highResult = Workspace:Raycast(highOrigin, Vector3.new(0, -1500, 0), params)
+		if highResult then
+			return highResult.Position.Y
+		end
+		return targetY
 	end
 
-	-- CFrame-walk manual: gerakin HumanoidRootPart tiap Heartbeat menuju target
-	-- di kecepatan (studs/detik) yang ditentuin, ngikutin kontur tanah (bukan
-	-- Y tetap), bisa diinterupsi via shouldContinue() (dipanggil tiap tick --
-	-- return false buat berhenti lebih awal, misal pas kena gigit di tengah
-	-- jalan atau toggle dimatiin).
+	-- CFrame-walk / CFrame-fly: gerakin HumanoidRootPart tiap Heartbeat.
+	-- Mode normal (noclipFly off): ngikutin kontur tanah, speed di-cap 60.
+	-- Mode fly (noclipFly on): terbang lurus 3D di ketinggian flyAlt studs
+	-- di atas target, speed bebas (user yang tune), noclip nyala otomatis.
 	local function moveTo(targetPosition, speed, shouldContinue)
-		speed = math.clamp(speed or MAX_SAFE_TWEEN_SPEED, 10, MAX_SAFE_TWEEN_SPEED)
+		speed = speed or getTweenSpeed()
+		if not noclipFlyEnabled then
+			speed = math.clamp(speed, 10, MAX_SAFE_TWEEN_SPEED)
+		else
+			speed = math.max(speed, 10)
+		end
+
+		local flyAlt = getFlyAlt()
+		local lastGroundY = targetPosition.Y
+
 		while true do
 			if shouldContinue and not shouldContinue() then
 				return false
@@ -2981,20 +3059,47 @@ do
 			local standOffset = (hum and hum.HipHeight or 2) + hrp.Size.Y / 2
 
 			local current = hrp.Position
-			local flat = Vector3.new(targetPosition.X - current.X, 0, targetPosition.Z - current.Z)
-			local dist = flat.Magnitude
-			if dist < 3 then
-				return true
-			end
-			local dt = RunService.Heartbeat:Wait()
-			local step = math.min(speed * dt, dist)
-			local direction = flat.Unit
-			local newPos = current + direction * step
 
-			local groundY = findGroundY(newPos.X, newPos.Z, current.Y)
-			local newY = groundY and (groundY + standOffset) or current.Y
-			newPos = Vector3.new(newPos.X, newY, newPos.Z)
-			hrp.CFrame = CFrame.new(newPos, newPos + direction)
+			if noclipFlyEnabled then
+				local flyTarget = Vector3.new(targetPosition.X, targetPosition.Y + flyAlt, targetPosition.Z)
+				local delta3d = flyTarget - current
+				local dist3d = delta3d.Magnitude
+				if dist3d < 5 then
+					hrp.AssemblyLinearVelocity = Vector3.zero
+					return true
+				end
+				local dt = RunService.Heartbeat:Wait()
+				local step = math.min(speed * dt, dist3d)
+				local dir3d = delta3d.Unit
+				local newPos = current + dir3d * step
+				hrp.CFrame = CFrame.new(newPos, newPos + dir3d)
+				hrp.AssemblyLinearVelocity = dir3d * speed
+				if hum then
+					pcall(function()
+						hum:ChangeState(Enum.HumanoidStateType.Physics)
+					end)
+				end
+			else
+				local flat = Vector3.new(targetPosition.X - current.X, 0, targetPosition.Z - current.Z)
+				local dist = flat.Magnitude
+				if dist < 3 then
+					hrp.AssemblyLinearVelocity = Vector3.zero
+					return true
+				end
+				local dt = RunService.Heartbeat:Wait()
+				local step = math.min(speed * dt, dist)
+				local direction = flat.Unit
+				local newPos = current + direction * step
+
+				local groundY = findGroundY(newPos.X, newPos.Z, current.Y, lastGroundY)
+				if groundY then
+					lastGroundY = groundY
+				end
+				local newY = (groundY or lastGroundY) + standOffset
+				newPos = Vector3.new(newPos.X, newY, newPos.Z)
+				hrp.CFrame = CFrame.new(newPos, newPos + direction)
+				hrp.AssemblyLinearVelocity = Vector3.new(direction.X * speed, 0, direction.Z * speed)
+			end
 		end
 	end
 
@@ -3193,6 +3298,34 @@ do
 			return
 		end
 
+		-- Kalau fly, turun ke posisi egg beneran buat ambil (server butuh
+		-- proximity ke egg, ga bisa ambil dari ketinggian fly).
+		if noclipFlyEnabled then
+			setStatus("Turun ke egg...")
+			local eggPos = target.BottomCFrame.Position
+			local hrp = getHRP()
+			if hrp then
+				local descSpeed = math.min(getTweenSpeed(), 200)
+				local hum = getHumanoid()
+				local standOff = (hum and hum.HipHeight or 2) + (hrp.Size.Y / 2)
+				local landTarget = Vector3.new(eggPos.X, eggPos.Y + standOff, eggPos.Z)
+				while autoStealRunning do
+					hrp = getHRP()
+					if not hrp then break end
+					local delta = landTarget - hrp.Position
+					if delta.Magnitude < 3 then break end
+					local dt = RunService.Heartbeat:Wait()
+					local step = math.min(descSpeed * dt, delta.Magnitude)
+					local newPos = hrp.Position + delta.Unit * step
+					hrp.CFrame = CFrame.new(newPos)
+					hrp.AssemblyLinearVelocity = delta.Unit * descSpeed
+					for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+						if part:IsA("BasePart") then part.CanCollide = false end
+					end
+				end
+			end
+		end
+
 		if not waitUntilNotTrapped(function() return autoStealRunning end) then
 			return
 		end
@@ -3212,6 +3345,28 @@ do
 		if not success then
 			setStatus("Gagal bawa pulang " .. tostring(target.AssetCategory) .. " (direbut/ilang).")
 			return
+		end
+
+		-- Kalau fly, turun ke tanah dulu sebelum taruh egg.
+		if noclipFlyEnabled then
+			setStatus("Landing...")
+			local hrp = getHRP()
+			if hrp then
+				local gY = findGroundY(hrp.Position.X, hrp.Position.Z, hrp.Position.Y, 0)
+				local hum = getHumanoid()
+				local standOff = (hum and hum.HipHeight or 2) + (hrp.Size.Y / 2)
+				local landY = (gY or 0) + standOff
+				while autoStealRunning do
+					hrp = getHRP()
+					if not hrp then break end
+					if math.abs(hrp.Position.Y - landY) < 3 then break end
+					local dt = RunService.Heartbeat:Wait()
+					local cur = hrp.Position
+					local newY = cur.Y + (landY - cur.Y) * math.min(1, 10 * dt)
+					hrp.CFrame = CFrame.new(Vector3.new(cur.X, newY, cur.Z))
+					hrp.AssemblyLinearVelocity = Vector3.new(0, (landY - cur.Y) * 5, 0)
+				end
+			end
 		end
 
 		setStatus("Sampai rumah bawa " .. tostring(target.AssetCategory) .. " -- taruh di treadmill...")
