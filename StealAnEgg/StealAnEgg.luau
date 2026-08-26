@@ -3207,17 +3207,30 @@ do
 	-- Tunggu tembok kebuka penuh SAMBIL parkir di titik yang udah di-set.
 	-- Begitu kebuka langsung tinggal tancap ke egg-nya.
 	local function waitForWallOpen()
-		setStatus("Teleport ke zona aman...")
-		local wallCenterPos = SeparationLine.Position
-		local safePos = wallCenterPos + Vector3.new(0, 0, 10)
+		setStatus("Walk ke safe zone...")
 		
-		local hrp = getHRP()
-		if hrp then
-			hrp:SetAttribute("KillPartIgnore", true)
-			hrp.CFrame = CFrame.new(safePos + Vector3.new(0, 5, 0))
-			print("[StealAnEgg] Teleported to safe zone at:", safePos)
-			task.wait(0.3)
-			hrp:SetAttribute("KillPartIgnore", false)
+		if not stagingPos then
+			stagingPos = SeparationLine.Position + Vector3.new(0, 0, 10)
+		end
+		
+		local hum = getHumanoid()
+		if hum then
+			print("[StealAnEgg] Walking to staging pos:", stagingPos)
+			hum:MoveTo(stagingPos)
+			
+			local timeout = 0
+			while timeout < 200 do
+				if not autoStealRunning then return false end
+				
+				local hrp = getHRP()
+				if hrp and (hrp.Position - stagingPos).Magnitude < 5 then
+					print("[StealAnEgg] Reached staging position")
+					break
+				end
+				
+				task.wait(0.1)
+				timeout += 1
+			end
 		end
 		
 		local lastReported = nil
@@ -3228,7 +3241,7 @@ do
 			end)
 			if lastReported ~= closed then
 				lastReported = closed
-				setStatus(closed and "Parkir di zona aman, nunggu tembok..." or "Tembok FULL OPEN! Ambil egg...")
+				setStatus(closed and "Parkir di safe zone, nunggu tembok..." or "Tembok FULL OPEN! Ambil egg...")
 			end
 			if not closed then
 				task.wait(0.2)
