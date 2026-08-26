@@ -3046,11 +3046,13 @@ do
 
 		local hrp = getHRP()
 		if not hrp then
+			print("[StealAnEgg] moveTo: No HRP found")
 			return false
 		end
 		
 		local hum = getHumanoid()
 		if hum then
+			print("[StealAnEgg] moveTo: Anchoring HRP, current health=" .. tostring(hum.Health))
 			pcall(function()
 				hrp.Anchored = true
 			end)
@@ -3071,7 +3073,13 @@ do
 			
 			hrp = getHRP()
 			if not hrp then
+				print("[StealAnEgg] moveTo: Lost HRP during tween")
 				return false
+			end
+			
+			hum = getHumanoid()
+			if hum and hum.Health <= 0 then
+				print("[StealAnEgg] moveTo: Character DIED during tween! Health=" .. tostring(hum.Health))
 			end
 			
 			local current = hrp.Position
@@ -3084,6 +3092,7 @@ do
 						hrp.AssemblyLinearVelocity = Vector3.zero
 					end)
 				end
+				print("[StealAnEgg] moveTo: Reached target, health=" .. tostring(hum and hum.Health or "no hum"))
 				return true
 			end
 			
@@ -3292,8 +3301,10 @@ do
 		
 		local hum = getHumanoid()
 		if hum then
+			print("[StealAnEgg] KILLING CHARACTER before carry - current health=" .. tostring(hum.Health))
 			hum.Health = 0
 			task.wait(0.1)
+			print("[StealAnEgg] Character dead after kill - health=" .. tostring(hum.Health))
 		end
 		
 		if not waitUntilNotTrapped(function() return autoStealRunning end) then
