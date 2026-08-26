@@ -157,6 +157,28 @@ def fmt_number_compact(v: float) -> str:
     return f"{v:,.0f}"
 
 
+MAX_EQUIP_PETS = 17
+
+
+def compute_income_potensi_pet_aktif(data: dict) -> int:
+    """"Income Potensi Pet Aktif" -- 17 rate TERTINGGI dari gabungan pet
+    aktif + isi tas + telur (lagi tumbuh + di tas), TERLEPAS lagi
+    keequip/ditaro apa ngga. SAMA PERSIS logic-nya kayak render_poster()
+    & computeAutoPrice() di StealAnEgg.luau -- dipakai bareng di sini
+    biar rate harga & katalog Discord konsisten sama yang dipajang di
+    poster/dashboard, bukan rumus lama (activePets literal + semua telur
+    uncapped)."""
+    active_pets = data.get("activePets") or []
+    all_pets = data.get("allPets") or []
+    growing_eggs = data.get("growingEggs") or []
+    backpack_eggs = data.get("backpackEggs") or []
+    pool = sorted(
+        active_pets + all_pets + growing_eggs + backpack_eggs,
+        key=lambda p: p.get("rate", 0), reverse=True,
+    )
+    return sum(p.get("rate", 0) for p in pool[:MAX_EQUIP_PETS])
+
+
 def fmt_duration(seconds: float) -> str:
     seconds = max(0, int(seconds))
     h, rem = divmod(seconds, 3600)
@@ -263,7 +285,8 @@ def render_poster(data: dict) -> Image.Image:
     # bersaing -- BUKAN cuma yang secara harfiah lagi keequip sekarang.
     # Jadi kartu di panel "ACTIVE" bisa nampilin telur/pet isi tas yang
     # belum di-equip juga, asal dia termasuk top 17 rate tertinggi.
-    MAX_EQUIP_PETS = 17
+    # (MAX_EQUIP_PETS didefinisiin sekali di atas, dipakai bareng sama
+    # compute_income_potensi_pet_aktif().)
     pet_pool_sorted = sorted(
         active_pets + all_pets + growing_eggs + backpack_eggs,
         key=lambda p: p.get("rate", 0), reverse=True,
@@ -876,7 +899,7 @@ if BOT_ENABLED:
             )
             self.rate_input = discord.ui.TextInput(
                 label="Atau: Rate per 1B/s (ribuan)",
-                placeholder="cth: 5 (= Rp 5.000 per 1B/s income aktif+potensi)",
+                placeholder="cth: 5 (= Rp 5.000 per 1B/s Income Potensi Pet Aktif)",
                 required=False,
                 max_length=20,
             )
@@ -907,7 +930,9 @@ if BOT_ENABLED:
             price_text = base_data.get("price", "")
             if raw_rate:
                 # Sama persis formula "Harga per 1B/s" di GUI script: rate x
-                # (income aktif + potensi telur netas), rate dalam ribuan.
+                # Income Potensi Pet Aktif (17 rate tertinggi dari gabungan
+                # pet aktif + isi tas + telur, keequip/ditaro apa ngga),
+                # rate dalam ribuan.
                 try:
                     rate_per_b = float(raw_rate.replace(",", ".")) * 1000
                 except ValueError:
@@ -915,10 +940,7 @@ if BOT_ENABLED:
                         f"Rate '{raw_rate}' ga valid, harus angka. Coba lagi.", ephemeral=True,
                     )
                     return
-                active_total = sum(p.get("rate", 0) for p in (base_data.get("activePets") or []))
-                egg_total = sum(e.get("rate", 0) for e in (base_data.get("growingEggs") or []))
-                egg_total += sum(e.get("rate", 0) for e in (base_data.get("backpackEggs") or []))
-                income_b = (active_total + egg_total) / 1e9
+                income_b = compute_income_potensi_pet_aktif(base_data) / 1e9
                 price_value = int(round(income_b * rate_per_b))
                 price_text = "Rp " + f"{price_value:,}".replace(",", ".")
                 price_changed = True
@@ -1056,13 +1078,11 @@ if BOT_ENABLED:
             return
 
         name = data.get("sourceAccount") or "?"
-        # Total income aktif + potensi telur (backpack + lagi tumbuh) --
-        # bukan leaderstat Money/s mentah, yang bisa kebaca 0 kalau lagi ga
-        # ada pet ke-equip padahal potensi telurnya gede.
-        active_total = sum(p.get("rate", 0) for p in (data.get("activePets") or []))
-        egg_total = sum(e.get("rate", 0) for e in (data.get("growingEggs") or []))
-        egg_total += sum(e.get("rate", 0) for e in (data.get("backpackEggs") or []))
-        income = fmt_money(active_total + egg_total)
+        # Income Potensi Pet Aktif (17 rate tertinggi dari gabungan pet
+        # aktif + isi tas + telur) -- bukan leaderstat Money/s mentah, yang
+        # bisa kebaca 0 kalau lagi ga ada pet ke-equip padahal ada pet/telur
+        # gacor lain yang belum di-equip/ditaro.
+        income = fmt_money(compute_income_potensi_pet_aktif(data))
         speed = data.get("runSpeed")
         speed_text = f"{speed:,.0f}" if isinstance(speed, (int, float)) else str(speed or "-")
         price_value = parse_price_idr(price_text)
