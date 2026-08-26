@@ -3049,11 +3049,14 @@ do
 			return false
 		end
 
-		print("[StealAnEgg] moveTo: Using Humanoid:MoveTo() to", targetPosition)
-		hum:MoveTo(targetPosition)
+		hrp:SetAttribute("KillPartIgnore", true)
+		print("[StealAnEgg] moveTo: Set KillPartIgnore=true, moving to", targetPosition)
+
+		local lastGroundY = findGroundY(targetPosition.X, targetPosition.Z, targetPosition.Y, targetPosition.Y)
 
 		while true do
 			if shouldContinue and not shouldContinue() then
+				hrp:SetAttribute("KillPartIgnore", false)
 				print("[StealAnEgg] moveTo: Cancelled")
 				return false
 			end
@@ -3065,17 +3068,41 @@ do
 
 			hum = getHumanoid()
 			if hum and hum.Health <= 0 then
+				hrp:SetAttribute("KillPartIgnore", false)
 				print("[StealAnEgg] moveTo: Character died, health=" .. tostring(hum.Health))
 				return false
 			end
 
-			local dist = (hrp.Position - targetPosition).Magnitude
-			if dist < 5 then
-				print("[StealAnEgg] moveTo: Reached target, dist=" .. tostring(math.floor(dist)))
+			local current = hrp.Position
+			local flat = Vector3.new(targetPosition.X - current.X, 0, targetPosition.Z - current.Z)
+			local dist = flat.Magnitude
+			if dist < 3 then
+				hrp:SetAttribute("KillPartIgnore", false)
+				print("[StealAnEgg] moveTo: Reached target, health=" .. tostring(hum.Health))
 				return true
 			end
 
-			task.wait(0.2)
+			speed = speed or getTweenSpeed()
+			if not noclipFlyEnabled then
+				speed = math.clamp(speed, 10, MAX_SAFE_TWEEN_SPEED)
+			else
+				speed = math.max(speed, 10)
+			end
+
+			local dt = RunService.Heartbeat:Wait()
+			local step = math.min(speed * dt, dist)
+			local direction = flat.Unit
+			local newPos = current + direction * step
+
+			local groundY = findGroundY(newPos.X, newPos.Z, current.Y, lastGroundY)
+			if groundY then
+				lastGroundY = groundY
+			end
+			local standOffset = (hum and hum.HipHeight or 2) + hrp.Size.Y / 2
+			local newY = (groundY or lastGroundY) + standOffset
+			newPos = Vector3.new(newPos.X, newY, newPos.Z)
+			hrp.CFrame = CFrame.new(newPos, newPos + direction)
+			hrp.AssemblyLinearVelocity = Vector3.new(direction.X * speed, 0, direction.Z * speed)
 		end
 	end
 
