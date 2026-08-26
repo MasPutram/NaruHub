@@ -3044,54 +3044,30 @@ do
 			speed = math.max(speed, 10)
 		end
 
-		local hrp = getHRP()
-		if not hrp then
-			print("[StealAnEgg] moveTo: No HRP found")
-			return false
-		end
-		
-		local hum = getHumanoid()
-		if hum then
-			print("[StealAnEgg] moveTo: Anchoring HRP, current health=" .. tostring(hum.Health))
-			pcall(function()
-				hrp.Anchored = true
-			end)
-		end
-
 		local lastGroundY = findGroundY(targetPosition.X, targetPosition.Z, targetPosition.Y, targetPosition.Y)
-		local startPos = hrp.Position
 
 		while true do
 			if shouldContinue and not shouldContinue() then
-				if hum then
-					pcall(function()
-						hrp.Anchored = false
-					end)
-				end
 				return false
 			end
 			
-			hrp = getHRP()
+			local hrp = getHRP()
 			if not hrp then
 				print("[StealAnEgg] moveTo: Lost HRP during tween")
 				return false
 			end
 			
-			hum = getHumanoid()
+			local hum = getHumanoid()
 			if hum and hum.Health <= 0 then
 				print("[StealAnEgg] moveTo: Character DIED during tween! Health=" .. tostring(hum.Health))
+				return false
 			end
 			
 			local current = hrp.Position
 			local flat = Vector3.new(targetPosition.X - current.X, 0, targetPosition.Z - current.Z)
 			local dist = flat.Magnitude
 			if dist < 3 then
-				if hum then
-					pcall(function()
-						hrp.Anchored = false
-						hrp.AssemblyLinearVelocity = Vector3.zero
-					end)
-				end
+				hrp.AssemblyLinearVelocity = Vector3.zero
 				print("[StealAnEgg] moveTo: Reached target, health=" .. tostring(hum and hum.Health or "no hum"))
 				return true
 			end
@@ -3109,6 +3085,7 @@ do
 			local newY = (groundY or lastGroundY) + standOffset
 			newPos = Vector3.new(newPos.X, newY, newPos.Z)
 			hrp.CFrame = CFrame.new(newPos, newPos + direction)
+			hrp.AssemblyLinearVelocity = Vector3.new(direction.X * speed, 0, direction.Z * speed)
 		end
 	end
 
