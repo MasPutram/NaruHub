@@ -3193,11 +3193,12 @@ do
 
 	task.spawn(function()
 		task.wait(1)
-		local plotData = PlotCmds.GetPlotData()
-		if plotData and plotData.CenterPoint then
-			stagingPos = plotData.CenterPoint.Position
-			print("[StealAnEgg] Staging position auto-set to Plot CenterPoint:", stagingPos)
-			setStatus("Titik parkir di-set ke Plot 4 CenterPoint")
+		local bases = workspace:FindFirstChild("__OBJECTS") and workspace.__OBJECTS:FindFirstChild("Build") and workspace.__OBJECTS.Build:FindFirstChild("MainMap") and workspace.__OBJECTS.Build.MainMap:FindFirstChild("Bases")
+		local basePart = bases and bases:FindFirstChild("Part")
+		if basePart and basePart:IsA("BasePart") then
+			stagingPos = basePart.Position
+			print("[StealAnEgg] Staging position auto-set to Bases.Part:", stagingPos)
+			setStatus("Titik parkir di-set ke Bases.Part")
 		else
 			captureStagingPos()
 		end
