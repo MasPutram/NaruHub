@@ -3187,8 +3187,14 @@ do
 		if hrp then
 			stagingPos = hrp.Position
 			setStatus("Titik parkir di-set ke posisi sekarang: " .. tostring(stagingPos))
+			print("[StealAnEgg] Staging position set to:", stagingPos)
 		end
 	end
+
+	task.spawn(function()
+		task.wait(1)
+		captureStagingPos()
+	end)
 
 	-- Tunggu tembok kebuka penuh SAMBIL parkir di titik yang udah di-set.
 	-- Begitu kebuka langsung tinggal tancap ke egg-nya.
