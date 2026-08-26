@@ -3037,55 +3037,45 @@ do
 	-- Mode fly (noclipFly on): terbang lurus 3D di ketinggian flyAlt studs
 	-- di atas target, speed bebas (user yang tune), noclip nyala otomatis.
 	local function moveTo(targetPosition, speed, shouldContinue)
-		speed = speed or getTweenSpeed()
-		if not noclipFlyEnabled then
-			speed = math.clamp(speed, 10, MAX_SAFE_TWEEN_SPEED)
-		else
-			speed = math.max(speed, 10)
+		local hum = getHumanoid()
+		if not hum then
+			print("[StealAnEgg] moveTo: No humanoid")
+			return false
 		end
 
-		local lastGroundY = findGroundY(targetPosition.X, targetPosition.Z, targetPosition.Y, targetPosition.Y)
+		local hrp = getHRP()
+		if not hrp then
+			print("[StealAnEgg] moveTo: No HRP")
+			return false
+		end
+
+		print("[StealAnEgg] moveTo: Using Humanoid:MoveTo() to", targetPosition)
+		hum:MoveTo(targetPosition)
 
 		while true do
 			if shouldContinue and not shouldContinue() then
+				print("[StealAnEgg] moveTo: Cancelled")
 				return false
 			end
-			
-			local hrp = getHRP()
+
+			hrp = getHRP()
 			if not hrp then
-				print("[StealAnEgg] moveTo: Lost HRP during tween")
 				return false
 			end
-			
-			local hum = getHumanoid()
+
+			hum = getHumanoid()
 			if hum and hum.Health <= 0 then
-				print("[StealAnEgg] moveTo: Character DIED during tween! Health=" .. tostring(hum.Health))
+				print("[StealAnEgg] moveTo: Character died, health=" .. tostring(hum.Health))
 				return false
 			end
-			
-			local current = hrp.Position
-			local flat = Vector3.new(targetPosition.X - current.X, 0, targetPosition.Z - current.Z)
-			local dist = flat.Magnitude
-			if dist < 3 then
-				hrp.AssemblyLinearVelocity = Vector3.zero
-				print("[StealAnEgg] moveTo: Reached target, health=" .. tostring(hum and hum.Health or "no hum"))
+
+			local dist = (hrp.Position - targetPosition).Magnitude
+			if dist < 5 then
+				print("[StealAnEgg] moveTo: Reached target, dist=" .. tostring(math.floor(dist)))
 				return true
 			end
-			
-			local dt = RunService.Heartbeat:Wait()
-			local step = math.min(speed * dt, dist)
-			local direction = flat.Unit
-			local newPos = current + direction * step
 
-			local groundY = findGroundY(newPos.X, newPos.Z, current.Y, lastGroundY)
-			if groundY then
-				lastGroundY = groundY
-			end
-			local standOffset = (hum and hum.HipHeight or 2) + hrp.Size.Y / 2
-			local newY = (groundY or lastGroundY) + standOffset
-			newPos = Vector3.new(newPos.X, newY, newPos.Z)
-			hrp.CFrame = CFrame.new(newPos, newPos + direction)
-			hrp.AssemblyLinearVelocity = Vector3.new(direction.X * speed, 0, direction.Z * speed)
+			task.wait(0.2)
 		end
 	end
 
