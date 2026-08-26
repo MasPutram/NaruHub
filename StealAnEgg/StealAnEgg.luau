@@ -3258,21 +3258,11 @@ do
 			return
 		end
 
-		setStatus("Teleport ke egg: " .. tostring(target.AssetCategory))
-		local hrp = getHRP()
-		if not hrp then
+		setStatus("Tween ke egg: " .. tostring(target.AssetCategory))
+		if not moveTo(target.BottomCFrame.Position, getTweenSpeed(), function()
+			return autoStealRunning
+		end) then
 			return
-		end
-		
-		hrp.CFrame = CFrame.new(target.BottomCFrame.Position + Vector3.new(0, 3, 0))
-		task.wait(0.1)
-		
-		local hum = getHumanoid()
-		if hum then
-			pcall(function()
-				hum.Jump = true
-			end)
-			task.wait(0.1)
 		end
 
 		task.wait(0.2)
