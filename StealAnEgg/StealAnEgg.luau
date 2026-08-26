@@ -3229,7 +3229,7 @@ do
 		while autoStealRunning do
 			ticks += 1
 			if ticks > 600 then
-				return false -- safety timeout (~1 menit) biar ga infinite loop
+				return false
 			end
 
 			if not (isCarrying and carryingUid == uid) then
@@ -3241,7 +3241,7 @@ do
 					rec = EggCmds.GetAreaEggRecord(uid)
 				end)
 				if rec == nil then
-					return true -- uid udah ga ada -- paling besar kemungkinan udah diklaim
+					return true
 				elseif rec.State == "Dropped" then
 					setStatus("Kena gigit/trap! Ambil lagi telurnya...")
 					if moveTo(rec.BottomCFrame.Position, getTweenSpeed(), function()
@@ -3251,18 +3251,39 @@ do
 						EggCmds.RequestCarryAreaEgg(uid, nil)
 					end
 				else
-					return false -- direbut orang lain / state lain yang ga bisa dikejar lagi
+					return false
 				end
 			end
 
 			if isCarrying and carryingUid == uid then
 				local hrp = getHRP()
-				if hrp and (Vector3.new(hrp.Position.X, 0, hrp.Position.Z) - Vector3.new(staging.X, 0, staging.Z)).Magnitude < 4 then
-					return true
+				if hrp then
+					local distToStaging = (Vector3.new(hrp.Position.X, 0, hrp.Position.Z) - Vector3.new(staging.X, 0, staging.Z)).Magnitude
+					if distToStaging < 4 then
+						return true
+					end
+					
+					local hum = getHumanoid()
+					if hum and hum.Health > 0 then
+						hum.Health = 0
+						task.wait(0.2)
+					end
+					
+					setStatus("Fast tween balik ke home...")
+					local targetPos = staging
+					while (hrp.Position - targetPos).Magnitude > 5 do
+						if not autoStealRunning or not (isCarrying and carryingUid == uid) then
+							return false
+						end
+						hrp = getHRP()
+						if not hrp then break end
+						
+						local delta = targetPos - hrp.Position
+						local step = math.min(150 * RunService.Heartbeat:Wait(), delta.Magnitude)
+						hrp.CFrame = CFrame.new(hrp.Position + delta.Unit * step)
+						task.wait(0.01)
+					end
 				end
-				moveTo(staging, getTweenSpeed(), function()
-					return autoStealRunning and isCarrying and carryingUid == uid
-				end)
 			end
 			task.wait(0.1)
 		end
