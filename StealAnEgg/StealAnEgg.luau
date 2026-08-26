@@ -3182,6 +3182,17 @@ do
 	-- Steal dinyalain, atau manual lewat tombol "Set Titik Parkir" di bawah.
 	local stagingPos = nil
 
+	task.spawn(function()
+		task.wait(1)
+		local bases = workspace:FindFirstChild("__OBJECTS") and workspace.__OBJECTS:FindFirstChild("Build") and workspace.__OBJECTS.Build:FindFirstChild("MainMap") and workspace.__OBJECTS.Build.MainMap:FindFirstChild("Bases")
+		local basePart = bases and bases:FindFirstChild("Part")
+		if basePart and basePart:IsA("BasePart") then
+			stagingPos = basePart.Position
+			print("[StealAnEgg] Staging position auto-set to center plot:", stagingPos)
+			setStatus("Titik parkir di-set ke tengah plot")
+		end
+	end)
+
 	local function captureStagingPos()
 		local hrp = getHRP()
 		if hrp then
@@ -3191,48 +3202,22 @@ do
 		end
 	end
 
-	task.spawn(function()
-		task.wait(1)
-		local bases = workspace:FindFirstChild("__OBJECTS") and workspace.__OBJECTS:FindFirstChild("Build") and workspace.__OBJECTS.Build:FindFirstChild("MainMap") and workspace.__OBJECTS.Build.MainMap:FindFirstChild("Bases")
-		local basePart = bases and bases:FindFirstChild("Part")
-		if basePart and basePart:IsA("BasePart") then
-			stagingPos = basePart.Position
-			print("[StealAnEgg] Staging position auto-set to Bases.Part:", stagingPos)
-			setStatus("Titik parkir di-set ke Bases.Part")
-		else
-			captureStagingPos()
-		end
-	end)
-
 	-- Tunggu tembok kebuka penuh SAMBIL parkir di titik yang udah di-set.
 	-- Begitu kebuka langsung tinggal tancap ke egg-nya.
 	local function waitForWallOpen()
-		setStatus("Walk ke safe zone...")
-		
 		if not stagingPos then
-			stagingPos = SeparationLine.Position + Vector3.new(0, 0, 10)
+			setStatus("Titik tengah plot belum siap.")
+			return false
 		end
-		
-		local hum = getHumanoid()
-		if hum then
-			print("[StealAnEgg] Walking to staging pos:", stagingPos)
-			hum:MoveTo(stagingPos)
-			
-			local timeout = 0
-			while timeout < 200 do
-				if not autoStealRunning then return false end
-				
-				local hrp = getHRP()
-				if hrp and (hrp.Position - stagingPos).Magnitude < 5 then
-					print("[StealAnEgg] Reached staging position")
-					break
-				end
-				
-				task.wait(0.1)
-				timeout += 1
-			end
+		setStatus("Tween ke tengah plot...")
+		print("[StealAnEgg] Moving to center plot:", stagingPos)
+		if not moveTo(stagingPos, getTweenSpeed(), function()
+			return autoStealRunning
+		end) then
+			return false
 		end
-		
+		print("[StealAnEgg] Arrived at center plot:", stagingPos)
+
 		local lastReported = nil
 		while autoStealRunning do
 			local closed = true
@@ -3241,7 +3226,7 @@ do
 			end)
 			if lastReported ~= closed then
 				lastReported = closed
-				setStatus(closed and "Parkir di safe zone, nunggu tembok..." or "Tembok FULL OPEN! Ambil egg...")
+				setStatus(closed and "Parkir di tengah plot, nunggu tembok..." or "Tembok FULL OPEN! Ambil egg...")
 			end
 			if not closed then
 				task.wait(0.2)
@@ -3294,25 +3279,11 @@ do
 						return true
 					end
 					
-					local hum = getHumanoid()
-					if hum and hum.Health > 0 then
-						hum.Health = 0
-						task.wait(0.2)
-					end
-					
-					setStatus("Fast tween balik ke home...")
-					local targetPos = staging
-					while (hrp.Position - targetPos).Magnitude > 5 do
-						if not autoStealRunning or not (isCarrying and carryingUid == uid) then
-							return false
-						end
-						hrp = getHRP()
-						if not hrp then break end
-						
-						local delta = targetPos - hrp.Position
-						local step = math.min(150 * RunService.Heartbeat:Wait(), delta.Magnitude)
-						hrp.CFrame = CFrame.new(hrp.Position + delta.Unit * step)
-						task.wait(0.01)
+					setStatus("Tween balik ke tengah plot...")
+					if not moveTo(staging, getTweenSpeed(), function()
+						return autoStealRunning and isCarrying and carryingUid == uid
+					end) then
+						return false
 					end
 				end
 			end
@@ -3336,32 +3307,12 @@ do
 			return
 		end
 
-		local hum = getHumanoid()
-		if hum then
-			print("[StealAnEgg] Killing character BEFORE tween")
-			hum.Health = 0
-			task.wait(0.3)
-		end
-
 		setStatus("Tween ke egg: " .. tostring(target.AssetCategory))
-		local hrp = getHRP()
-		if hrp then
-			local targetPos = target.BottomCFrame.Position
-			local dist = (hrp.Position - targetPos).Magnitude
-			print("[StealAnEgg] Dead tween from " .. tostring(math.floor(dist)) .. "m to egg")
-			
-			while (hrp.Position - targetPos).Magnitude > 3 do
-				if not autoStealRunning then
-					return
-				end
-				hrp = getHRP()
-				if not hrp then break end
-				
-				local delta = targetPos - hrp.Position
-				local step = math.min(100 * RunService.Heartbeat:Wait(), delta.Magnitude)
-				hrp.CFrame = CFrame.new(hrp.Position + delta.Unit * step)
-				task.wait(0.01)
-			end
+		print("[StealAnEgg] Tween to egg from center plot:", target.AssetCategory, target.BottomCFrame.Position)
+		if not moveTo(target.BottomCFrame.Position, getTweenSpeed(), function()
+			return autoStealRunning
+		end) then
+			return
 		end
 
 		task.wait(0.2)
@@ -3444,7 +3395,6 @@ do
 			autoStealRunning = enabled
 			if enabled then
 				task.spawn(function()
-					pcall(captureStagingPos)
 					while autoStealRunning do
 						local ok, err = pcall(autoStealCycle)
 						if not ok then
