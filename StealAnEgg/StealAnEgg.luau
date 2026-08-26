@@ -3037,70 +3037,42 @@ do
 	-- Mode fly (noclipFly on): terbang lurus 3D di ketinggian flyAlt studs
 	-- di atas target, speed bebas (user yang tune), noclip nyala otomatis.
 	local function moveTo(targetPosition, speed, shouldContinue)
-		speed = speed or getTweenSpeed()
-		if not noclipFlyEnabled then
-			speed = math.clamp(speed, 10, MAX_SAFE_TWEEN_SPEED)
-		else
-			speed = math.max(speed, 10)
+		local hum = getHumanoid()
+		if not hum then
+			print("[StealAnEgg] moveTo: No humanoid found")
+			return false
 		end
 
-		local flyAlt = getFlyAlt()
-		local lastGroundY = targetPosition.Y
+		local hrp = getHRP()
+		if not hrp then
+			print("[StealAnEgg] moveTo: No HRP found")
+			return false
+		end
 
-		while true do
+		local dist = (hrp.Position - targetPosition).Magnitude
+		print("[StealAnEgg] moveTo: Starting, distance=" .. tostring(math.floor(dist)))
+		
+		while dist > 5 do
 			if shouldContinue and not shouldContinue() then
+				print("[StealAnEgg] moveTo: Cancelled by shouldContinue")
 				return false
 			end
-			local hrp = getHRP()
+			
+			hrp = getHRP()
 			if not hrp then
+				print("[StealAnEgg] moveTo: Lost HRP during move")
 				return false
 			end
-			local hum = getHumanoid()
-			local standOffset = (hum and hum.HipHeight or 2) + hrp.Size.Y / 2
-
-			local current = hrp.Position
-
-			if noclipFlyEnabled then
-				local flyTarget = Vector3.new(targetPosition.X, targetPosition.Y + flyAlt, targetPosition.Z)
-				local delta3d = flyTarget - current
-				local dist3d = delta3d.Magnitude
-				if dist3d < 5 then
-					hrp.AssemblyLinearVelocity = Vector3.zero
-					return true
-				end
-				local dt = RunService.Heartbeat:Wait()
-				local step = math.min(speed * dt, dist3d)
-				local dir3d = delta3d.Unit
-				local newPos = current + dir3d * step
-				hrp.CFrame = CFrame.new(newPos, newPos + dir3d)
-				hrp.AssemblyLinearVelocity = dir3d * speed
-				if hum then
-					pcall(function()
-						hum:ChangeState(Enum.HumanoidStateType.Physics)
-					end)
-				end
-			else
-				local flat = Vector3.new(targetPosition.X - current.X, 0, targetPosition.Z - current.Z)
-				local dist = flat.Magnitude
-				if dist < 3 then
-					hrp.AssemblyLinearVelocity = Vector3.zero
-					return true
-				end
-				local dt = RunService.Heartbeat:Wait()
-				local step = math.min(speed * dt, dist)
-				local direction = flat.Unit
-				local newPos = current + direction * step
-
-				local groundY = findGroundY(newPos.X, newPos.Z, current.Y, lastGroundY)
-				if groundY then
-					lastGroundY = groundY
-				end
-				local newY = (groundY or lastGroundY) + standOffset
-				newPos = Vector3.new(newPos.X, newY, newPos.Z)
-				hrp.CFrame = CFrame.new(newPos, newPos + direction)
-				hrp.AssemblyLinearVelocity = Vector3.new(direction.X * speed, 0, direction.Z * speed)
-			end
+			
+			hum:MoveTo(targetPosition)
+			task.wait(0.15)
+			
+			dist = (hrp.Position - targetPosition).Magnitude
 		end
+		
+		print("[StealAnEgg] moveTo: Reached target, distance=" .. tostring(math.floor(dist)))
+		hum:MoveTo(targetPosition)
+		return true
 	end
 
 	local autoStealRunning = false
@@ -3336,9 +3308,11 @@ do
 		end
 		local ok, err = EggCmds.RequestCarryAreaEgg(target.Uid, slotKey)
 		if not ok then
+			print("[StealAnEgg] Carry request FAILED - Error:", err, "| Target:", target.AssetCategory, "| UID:", target.Uid)
 			setStatus("Gagal curi " .. tostring(target.AssetCategory) .. ": " .. tostring(err))
 			return
 		end
+		print("[StealAnEgg] Carry request SUCCESS - Target:", target.AssetCategory, "| UID:", target.Uid)
 
 		setStatus("Berhasil ambil " .. tostring(target.AssetCategory) .. ", balik ke rumah...")
 		local success = carryEggHome(target.Uid)
