@@ -3084,6 +3084,7 @@ do
 
 		while true do
 			if shouldContinue and not shouldContinue() then
+				assetBatch:Remove(char)
 				hrp:SetAttribute("KillPartIgnore", false)
 				print("[StealAnEgg] moveTo: Cancelled")
 				return false
@@ -3106,36 +3107,29 @@ do
 			assetBatch:SetTarget(char, CFrame.new(targetPosition))
 			assetBatch:SetGroundingEnabled(char, true)
 
-			local current = hrp.Position
-			local flat = Vector3.new(targetPosition.X - current.X, 0, targetPosition.Z - current.Z)
-			local dist = flat.Magnitude
+			hrp = getHRP()
+			if not hrp then
+				assetBatch:Remove(char)
+				return false
+			end
+
+			hum = getHumanoid()
+			if hum and hum.Health <= 0 then
+				assetBatch:Remove(char)
+				hrp:SetAttribute("KillPartIgnore", false)
+				print("[StealAnEgg] moveTo: Character died, health=" .. tostring(hum.Health))
+				return false
+			end
+
+			local dist = (hrp.Position - targetPosition).Magnitude
 			if dist < 3 then
+				assetBatch:Remove(char)
 				hrp:SetAttribute("KillPartIgnore", false)
 				print("[StealAnEgg] moveTo: Reached target, health=" .. tostring(hum.Health))
 				return true
 			end
 
-			speed = speed or getTweenSpeed()
-			if not noclipFlyEnabled then
-				speed = math.clamp(speed, 10, MAX_SAFE_TWEEN_SPEED)
-			else
-				speed = math.max(speed, 10)
-			end
-
-			local dt = RunService.Heartbeat:Wait()
-			local step = math.min(speed * dt, dist)
-			local direction = flat.Unit
-			local newPos = current + direction * step
-
-			local groundY = findGroundY(newPos.X, newPos.Z, current.Y, lastGroundY)
-			if groundY then
-				lastGroundY = groundY
-			end
-			local standOffset = (hum and hum.HipHeight or 2) + hrp.Size.Y / 2
-			local newY = (groundY or lastGroundY) + standOffset
-			newPos = Vector3.new(newPos.X, newY, newPos.Z)
-			hrp.CFrame = CFrame.new(newPos, newPos + direction)
-			hrp.AssemblyLinearVelocity = Vector3.new(direction.X * speed, 0, direction.Z * speed)
+			task.wait(0.05)
 		end
 	end
 
