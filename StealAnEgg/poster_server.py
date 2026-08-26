@@ -391,8 +391,8 @@ def render_poster(data: dict) -> Image.Image:
         stat_items.append(("CASH", fmt_currency(current_money)))
     stat_items.append(("INCOME POTENSI PET AKTIF", fmt_money(potential_active_rate)))
     stat_items.append(("TOTAL PET >= 1B/S", fmt_money(high_value_pet_total)))
-    if kandang_level is not None:
-        stat_items.append(("KANDANG LEVEL", f"Lv. {kandang_level}"))
+    total_egg_count = len(growing_eggs) + len(backpack_eggs)
+    stat_items.append(("TOTAL EGG", f"{total_egg_count} eggs"))
     if treadmill_level is not None:
         stat_items.append(("TREADMILL LEVEL", f"Lv. {treadmill_level}"))
 
