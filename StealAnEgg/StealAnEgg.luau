@@ -3193,13 +3193,16 @@ do
 	-- Tunggu tembok kebuka penuh SAMBIL parkir di titik yang udah di-set.
 	-- Begitu kebuka langsung tinggal tancap ke egg-nya.
 	local function waitForWallOpen()
-		setStatus("Tween ke titik tengah tembok...")
+		setStatus("Teleport ke titik tengah tembok (safe zone)...")
 		local wallCenterPos = SeparationLine.Position
 		
-		if not moveTo(wallCenterPos, getTweenSpeed(), function()
-			return autoStealRunning
-		end) then
-			return false
+		local hrp = getHRP()
+		if hrp then
+			hrp:SetAttribute("KillPartIgnore", true)
+			hrp.CFrame = CFrame.new(wallCenterPos + Vector3.new(0, 5, 0))
+			print("[StealAnEgg] Teleported to wall center, KillPartIgnore=true")
+			task.wait(0.3)
+			hrp:SetAttribute("KillPartIgnore", false)
 		end
 		
 		local lastReported = nil
