@@ -1463,11 +1463,48 @@ local Window = Fluent:CreateWindow({
 	AutoStartMinimized = true,
 })
 
-local Tab = Window:AddTab({ Title = "Scanner" })
--- Tab-nya sendiri baru dibikin kalau GRANTED_VIA_GLOBAL (lihat blok
--- "Auto Generate Poster" di bawah) -- kalau ga, biar ga ada tab kosong
--- "Auto Poster" yang keliatan buat user yang masuk lewat prompt manual.
-local PosterTab
+------------------------------------------------------------
+-- Module Loader -- tiap tab dipecah ke file sendiri biar rapi.
+-- Coba readfile() dulu (buat dev lokal via executor workspace),
+-- fallback ke game:HttpGet() dari GitHub (buat loadstring publik).
+------------------------------------------------------------
+local GITHUB_BASE = "https://raw.githubusercontent.com/MasPutram/NaruHub/main/StealAnEgg/"
+local CACHE_BUST = tostring(os.clock())
+
+local function loadModule(name)
+	local path = "StealAnEgg/" .. name .. ".luau"
+	local ok, content = pcall(readfile, path)
+	if ok and content and content ~= "" then
+		return loadstring(content)()
+	end
+	return loadstring(game:HttpGet(GITHUB_BASE .. name .. ".luau?t=" .. CACHE_BUST))()
+end
+
+local ctx = {
+	Fluent = Fluent,
+	Window = Window,
+	ReplicatedStorage = ReplicatedStorage,
+	Players = Players,
+	Workspace = Workspace,
+	LocalPlayer = LocalPlayer,
+	EggCmds = EggCmds,
+	EggItemUtil = EggItemUtil,
+	formatSeconds = formatSeconds,
+	mutationLabel = mutationLabel,
+	getGrowthInfo = getGrowthInfo,
+	SERVER_BASE_URL = SERVER_BASE_URL,
+	DEVICE_ID = DEVICE_ID,
+	ACCESS_KEY_USED = ACCESS_KEY_USED,
+}
+
+loadModule("Scanner")(ctx)
+if GRANTED_VIA_GLOBAL then
+	loadModule("Poster")(ctx)
+end
+loadModule("Farming")(ctx)
+loadModule("Misc")(ctx)
+
+Window:SelectTab(1)
 
 ------------------------------------------------------------
 -- 1. Scan Isi Tas
@@ -3055,16 +3092,7 @@ do
 			return false
 		end
 
-		-- Get AssetMovementBatch from PlayerScripts
-		local playerScripts = LocalPlayer:WaitForChild("PlayerScripts")
-		local activeAssets = playerScripts:FindFirstChild("Game"):FindFirstChild("Plots"):FindFirstChild("ActiveAssetsController")
-		local assetBatch = activeAssets and activeAssets:FindFirstChild("AssetMovementBatch")
-		if not assetBatch then
-			print("[StealAnEgg] moveTo: AssetMovementBatch not found")
-			return false
-		end
-
-		-- Register character ke batch
+		-- Get parts untuk BulkMoveTo
 		local parts = {}
 		for _, p in ipairs(char:GetDescendants()) do
 			if p:IsA("BasePart") and p ~= hrp then
@@ -3073,18 +3101,13 @@ do
 		end
 		table.insert(parts, hrp)
 
-		local plotData = PlotCmds.GetPlotData()
-		local assetArea = plotData and plotData.PetArea or workspace.__OBJECTS.Areas.Ground
-		assetBatch:Add(char, parts, hrp.CFrame, 2, assetArea, true)
-
 		hrp:SetAttribute("KillPartIgnore", true)
-		print("[StealAnEgg] moveTo: Registered to AssetMovementBatch, moving to", targetPosition)
+		print("[StealAnEgg] moveTo: Moving to", targetPosition)
 
 		local lastGroundY = findGroundY(targetPosition.X, targetPosition.Z, targetPosition.Y, targetPosition.Y)
 
 		while true do
 			if shouldContinue and not shouldContinue() then
-				assetBatch:Remove(char)
 				hrp:SetAttribute("KillPartIgnore", false)
 				print("[StealAnEgg] moveTo: Cancelled")
 				return false
@@ -3097,25 +3120,6 @@ do
 
 			hum = getHumanoid()
 			if hum and hum.Health <= 0 then
-				assetBatch:Remove(char)
-				hrp:SetAttribute("KillPartIgnore", false)
-				print("[StealAnEgg] moveTo: Character died, health=" .. tostring(hum.Health))
-				return false
-			end
-
-			-- Update target position via batch
-			assetBatch:SetTarget(char, CFrame.new(targetPosition))
-			assetBatch:SetGroundingEnabled(char, true)
-
-			hrp = getHRP()
-			if not hrp then
-				assetBatch:Remove(char)
-				return false
-			end
-
-			hum = getHumanoid()
-			if hum and hum.Health <= 0 then
-				assetBatch:Remove(char)
 				hrp:SetAttribute("KillPartIgnore", false)
 				print("[StealAnEgg] moveTo: Character died, health=" .. tostring(hum.Health))
 				return false
@@ -3123,13 +3127,43 @@ do
 
 			local dist = (hrp.Position - targetPosition).Magnitude
 			if dist < 3 then
-				assetBatch:Remove(char)
 				hrp:SetAttribute("KillPartIgnore", false)
 				print("[StealAnEgg] moveTo: Reached target, health=" .. tostring(hum.Health))
 				return true
 			end
 
-			task.wait(0.05)
+			speed = speed or getTweenSpeed()
+			if not noclipFlyEnabled then
+				speed = math.clamp(speed, 10, MAX_SAFE_TWEEN_SPEED)
+			else
+				speed = math.max(speed, 10)
+			end
+
+			local dt = RunService.Heartbeat:Wait()
+			local flat = Vector3.new(targetPosition.X - hrp.Position.X, 0, targetPosition.Z - hrp.Position.Z)
+			local step = math.min(speed * dt, flat.Magnitude)
+			local direction = flat.Unit
+			local newPos = hrp.Position + direction * step
+
+			local groundY = findGroundY(newPos.X, newPos.Z, hrp.Position.Y, lastGroundY)
+			if groundY then
+				lastGroundY = groundY
+			end
+			local standOffset = (hum and hum.HipHeight or 2) + hrp.Size.Y / 2
+			local newY = (groundY or lastGroundY) + standOffset
+			newPos = Vector3.new(newPos.X, newY, newPos.Z)
+
+			local cf = CFrame.new(newPos, newPos + direction)
+			table.clear(parts)
+			table.insert(parts, hrp)
+			for _, p in ipairs(char:GetDescendants()) do
+				if p:IsA("BasePart") and p ~= hrp then
+					table.insert(parts, p)
+				end
+			end
+
+			workspace:BulkMoveTo(parts, {cf}, Enum.BulkMoveMode.FireCFrameChanged)
+			task.wait(0.01)
 		end
 	end
 
