@@ -3257,11 +3257,32 @@ do
 			return
 		end
 
+		local hum = getHumanoid()
+		if hum then
+			print("[StealAnEgg] Killing character BEFORE tween")
+			hum.Health = 0
+			task.wait(0.3)
+		end
+
 		setStatus("Tween ke egg: " .. tostring(target.AssetCategory))
-		if not moveTo(target.BottomCFrame.Position, getTweenSpeed(), function()
-			return autoStealRunning
-		end) then
-			return
+		local hrp = getHRP()
+		if hrp then
+			local targetPos = target.BottomCFrame.Position
+			local dist = (hrp.Position - targetPos).Magnitude
+			print("[StealAnEgg] Dead tween from " .. tostring(math.floor(dist)) .. "m to egg")
+			
+			while (hrp.Position - targetPos).Magnitude > 3 do
+				if not autoStealRunning then
+					return
+				end
+				hrp = getHRP()
+				if not hrp then break end
+				
+				local delta = targetPos - hrp.Position
+				local step = math.min(100 * RunService.Heartbeat:Wait(), delta.Magnitude)
+				hrp.CFrame = CFrame.new(hrp.Position + delta.Unit * step)
+				task.wait(0.01)
+			end
 		end
 
 		task.wait(0.2)
