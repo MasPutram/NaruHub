@@ -3044,8 +3044,7 @@ do
 			speed = math.max(speed, 10)
 		end
 
-		local flyAlt = getFlyAlt()
-		local lastGroundY = targetPosition.Y
+		local lastGroundY = findGroundY(targetPosition.X, targetPosition.Z, targetPosition.Y, targetPosition.Y)
 
 		while true do
 			if shouldContinue and not shouldContinue() then
@@ -3059,47 +3058,25 @@ do
 			local standOffset = (hum and hum.HipHeight or 2) + hrp.Size.Y / 2
 
 			local current = hrp.Position
-
-			if noclipFlyEnabled then
-				local flyTarget = Vector3.new(targetPosition.X, targetPosition.Y + flyAlt, targetPosition.Z)
-				local delta3d = flyTarget - current
-				local dist3d = delta3d.Magnitude
-				if dist3d < 5 then
-					hrp.AssemblyLinearVelocity = Vector3.zero
-					return true
-				end
-				local dt = RunService.Heartbeat:Wait()
-				local step = math.min(speed * dt, dist3d)
-				local dir3d = delta3d.Unit
-				local newPos = current + dir3d * step
-				hrp.CFrame = CFrame.new(newPos, newPos + dir3d)
-				hrp.AssemblyLinearVelocity = dir3d * speed
-				if hum then
-					pcall(function()
-						hum:ChangeState(Enum.HumanoidStateType.Physics)
-					end)
-				end
-			else
-				local flat = Vector3.new(targetPosition.X - current.X, 0, targetPosition.Z - current.Z)
-				local dist = flat.Magnitude
-				if dist < 3 then
-					hrp.AssemblyLinearVelocity = Vector3.zero
-					return true
-				end
-				local dt = RunService.Heartbeat:Wait()
-				local step = math.min(speed * dt, dist)
-				local direction = flat.Unit
-				local newPos = current + direction * step
-
-				local groundY = findGroundY(newPos.X, newPos.Z, current.Y, lastGroundY)
-				if groundY then
-					lastGroundY = groundY
-				end
-				local newY = (groundY or lastGroundY) + standOffset
-				newPos = Vector3.new(newPos.X, newY, newPos.Z)
-				hrp.CFrame = CFrame.new(newPos, newPos + direction)
-				hrp.AssemblyLinearVelocity = Vector3.new(direction.X * speed, 0, direction.Z * speed)
+			local flat = Vector3.new(targetPosition.X - current.X, 0, targetPosition.Z - current.Z)
+			local dist = flat.Magnitude
+			if dist < 3 then
+				hrp.AssemblyLinearVelocity = Vector3.zero
+				return true
 			end
+			local dt = RunService.Heartbeat:Wait()
+			local step = math.min(speed * dt, dist)
+			local direction = flat.Unit
+			local newPos = current + direction * step
+
+			local groundY = findGroundY(newPos.X, newPos.Z, current.Y, lastGroundY)
+			if groundY then
+				lastGroundY = groundY
+			end
+			local newY = (groundY or lastGroundY) + standOffset
+			newPos = Vector3.new(newPos.X, newY, newPos.Z)
+			hrp.CFrame = CFrame.new(newPos, newPos + direction)
+			hrp.AssemblyLinearVelocity = Vector3.new(direction.X * speed, 0, direction.Z * speed)
 		end
 	end
 
@@ -3190,17 +3167,15 @@ do
 	-- Tunggu tembok kebuka penuh SAMBIL parkir di titik yang udah di-set.
 	-- Begitu kebuka langsung tinggal tancap ke egg-nya.
 	local function waitForWallOpen()
-		if not stagingPos then
-			captureStagingPos()
-		end
-		if not stagingPos then
-			return false
-		end
-		setStatus("Parkir di titik tengah tembok...")
+		setStatus("Teleport ke titik tengah tembok...")
 		local wallCenterPos = SeparationLine.Position
-		moveTo(wallCenterPos, getTweenSpeed(), function()
-			return autoStealRunning
-		end)
+		
+		local hrp = getHRP()
+		if hrp then
+			hrp.CFrame = CFrame.new(wallCenterPos + Vector3.new(0, 5, 0))
+			task.wait(0.2)
+		end
+		
 		local lastReported = nil
 		while autoStealRunning do
 			local closed = true
@@ -3209,7 +3184,7 @@ do
 			end)
 			if lastReported ~= closed then
 				lastReported = closed
-				setStatus(closed and "Nunggu tembok kebuka..." or "Tembok FULL OPEN! Ambil egg...")
+				setStatus(closed and "Parkir di tengah, nunggu tembok..." or "Tembok FULL OPEN! Ambil egg...")
 			end
 			if not closed then
 				task.wait(0.2)
