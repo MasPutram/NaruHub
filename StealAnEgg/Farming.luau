@@ -490,6 +490,7 @@ return function(ctx)
 		end
 		local ok, err = EggCmds.RequestCarryAreaEgg(target.Uid, slotKey)
 		if not ok then
+			print("[StealAnEgg] Carry request failed - Error:", err, "| Target:", target.AssetCategory, "| UID:", target.Uid)
 			setStatus("Gagal curi " .. tostring(target.AssetCategory) .. ": " .. tostring(err))
 			return
 		end
