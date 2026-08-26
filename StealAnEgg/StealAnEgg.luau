@@ -3196,8 +3196,9 @@ do
 		if not stagingPos then
 			return false
 		end
-		setStatus("Parkir di titik tunggu...")
-		moveTo(stagingPos, getTweenSpeed(), function()
+		setStatus("Parkir di titik tengah tembok...")
+		local wallCenterPos = SeparationLine.Position
+		moveTo(wallCenterPos, getTweenSpeed(), function()
 			return autoStealRunning
 		end)
 		local lastReported = nil
@@ -3208,10 +3209,10 @@ do
 			end)
 			if lastReported ~= closed then
 				lastReported = closed
-				setStatus(closed and "Nunggu tembok kebuka..." or "Tembok kebuka! Jalan...")
+				setStatus(closed and "Nunggu tembok kebuka..." or "Tembok FULL OPEN! Ambil egg...")
 			end
 			if not closed then
-				task.wait(0.4) -- kasih waktu animasi Collapse (~0.35s) beneran kelar
+				task.wait(0.2)
 				return true
 			end
 			task.wait(0.2)
@@ -3274,6 +3275,7 @@ do
 		if not waitForWallOpen() then
 			return
 		end
+		
 		local target = pickBestTarget()
 		if not target then
 			setStatus("Ga ada egg yang cocok filter saat ini.")
@@ -3281,35 +3283,25 @@ do
 			return
 		end
 
-		-- Lepas dari treadmill dulu (kalau lagi di atasnya) biar gerakan steal
-		-- ga tabrakan sama physics treadmill -- jump sebentar buat detach.
+		setStatus("Teleport ke egg: " .. tostring(target.AssetCategory))
+		local hrp = getHRP()
+		if not hrp then
+			return
+		end
+		
+		hrp.CFrame = CFrame.new(target.BottomCFrame.Position + Vector3.new(0, 3, 0))
+		task.wait(0.1)
+		
 		local hum = getHumanoid()
 		if hum then
 			pcall(function()
 				hum.Jump = true
 			end)
-			task.wait(0.15)
+			task.wait(0.1)
 		end
 
-		setStatus("Menuju egg: " .. tostring(target.AssetCategory))
-		if not moveTo(target.BottomCFrame.Position, getTweenSpeed(), function()
-			return autoStealRunning
-		end) then
-			return
-		end
-
-		task.wait(0.3)
+		task.wait(0.2)
 		
-		local hrp = getHRP()
-		if hrp then
-			local distToEgg = (hrp.Position - target.BottomCFrame.Position).Magnitude
-			print("[StealAnEgg] Distance to egg before carry:", distToEgg)
-			if distToEgg > 10 then
-				setStatus("Terlalu jauh dari egg (" .. tostring(math.floor(distToEgg)) .. "m), abort")
-				return
-			end
-		end
-
 		if not waitUntilNotTrapped(function() return autoStealRunning end) then
 			return
 		end
