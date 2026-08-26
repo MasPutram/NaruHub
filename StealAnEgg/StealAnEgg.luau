@@ -3044,26 +3044,49 @@ do
 			speed = math.max(speed, 10)
 		end
 
+		local hrp = getHRP()
+		if not hrp then
+			return false
+		end
+		
+		local hum = getHumanoid()
+		if hum then
+			pcall(function()
+				hrp.Anchored = true
+			end)
+		end
+
 		local lastGroundY = findGroundY(targetPosition.X, targetPosition.Z, targetPosition.Y, targetPosition.Y)
+		local startPos = hrp.Position
 
 		while true do
 			if shouldContinue and not shouldContinue() then
+				if hum then
+					pcall(function()
+						hrp.Anchored = false
+					end)
+				end
 				return false
 			end
-			local hrp = getHRP()
+			
+			hrp = getHRP()
 			if not hrp then
 				return false
 			end
-			local hum = getHumanoid()
-			local standOffset = (hum and hum.HipHeight or 2) + hrp.Size.Y / 2
-
+			
 			local current = hrp.Position
 			local flat = Vector3.new(targetPosition.X - current.X, 0, targetPosition.Z - current.Z)
 			local dist = flat.Magnitude
 			if dist < 3 then
-				hrp.AssemblyLinearVelocity = Vector3.zero
+				if hum then
+					pcall(function()
+						hrp.Anchored = false
+						hrp.AssemblyLinearVelocity = Vector3.zero
+					end)
+				end
 				return true
 			end
+			
 			local dt = RunService.Heartbeat:Wait()
 			local step = math.min(speed * dt, dist)
 			local direction = flat.Unit
@@ -3073,10 +3096,10 @@ do
 			if groundY then
 				lastGroundY = groundY
 			end
+			local standOffset = (hum and hum.HipHeight or 2) + hrp.Size.Y / 2
 			local newY = (groundY or lastGroundY) + standOffset
 			newPos = Vector3.new(newPos.X, newY, newPos.Z)
 			hrp.CFrame = CFrame.new(newPos, newPos + direction)
-			hrp.AssemblyLinearVelocity = Vector3.new(direction.X * speed, 0, direction.Z * speed)
 		end
 	end
 
