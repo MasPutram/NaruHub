@@ -3037,42 +3037,70 @@ do
 	-- Mode fly (noclipFly on): terbang lurus 3D di ketinggian flyAlt studs
 	-- di atas target, speed bebas (user yang tune), noclip nyala otomatis.
 	local function moveTo(targetPosition, speed, shouldContinue)
-		local hum = getHumanoid()
-		if not hum then
-			print("[StealAnEgg] moveTo: No humanoid found")
-			return false
+		speed = speed or getTweenSpeed()
+		if not noclipFlyEnabled then
+			speed = math.clamp(speed, 10, MAX_SAFE_TWEEN_SPEED)
+		else
+			speed = math.max(speed, 10)
 		end
 
-		local hrp = getHRP()
-		if not hrp then
-			print("[StealAnEgg] moveTo: No HRP found")
-			return false
-		end
+		local flyAlt = getFlyAlt()
+		local lastGroundY = targetPosition.Y
 
-		local dist = (hrp.Position - targetPosition).Magnitude
-		print("[StealAnEgg] moveTo: Starting, distance=" .. tostring(math.floor(dist)))
-		
-		while dist > 5 do
+		while true do
 			if shouldContinue and not shouldContinue() then
-				print("[StealAnEgg] moveTo: Cancelled by shouldContinue")
 				return false
 			end
-			
-			hrp = getHRP()
+			local hrp = getHRP()
 			if not hrp then
-				print("[StealAnEgg] moveTo: Lost HRP during move")
 				return false
 			end
-			
-			hum:MoveTo(targetPosition)
-			task.wait(0.15)
-			
-			dist = (hrp.Position - targetPosition).Magnitude
+			local hum = getHumanoid()
+			local standOffset = (hum and hum.HipHeight or 2) + hrp.Size.Y / 2
+
+			local current = hrp.Position
+
+			if noclipFlyEnabled then
+				local flyTarget = Vector3.new(targetPosition.X, targetPosition.Y + flyAlt, targetPosition.Z)
+				local delta3d = flyTarget - current
+				local dist3d = delta3d.Magnitude
+				if dist3d < 5 then
+					hrp.AssemblyLinearVelocity = Vector3.zero
+					return true
+				end
+				local dt = RunService.Heartbeat:Wait()
+				local step = math.min(speed * dt, dist3d)
+				local dir3d = delta3d.Unit
+				local newPos = current + dir3d * step
+				hrp.CFrame = CFrame.new(newPos, newPos + dir3d)
+				hrp.AssemblyLinearVelocity = dir3d * speed
+				if hum then
+					pcall(function()
+						hum:ChangeState(Enum.HumanoidStateType.Physics)
+					end)
+				end
+			else
+				local flat = Vector3.new(targetPosition.X - current.X, 0, targetPosition.Z - current.Z)
+				local dist = flat.Magnitude
+				if dist < 3 then
+					hrp.AssemblyLinearVelocity = Vector3.zero
+					return true
+				end
+				local dt = RunService.Heartbeat:Wait()
+				local step = math.min(speed * dt, dist)
+				local direction = flat.Unit
+				local newPos = current + direction * step
+
+				local groundY = findGroundY(newPos.X, newPos.Z, current.Y, lastGroundY)
+				if groundY then
+					lastGroundY = groundY
+				end
+				local newY = (groundY or lastGroundY) + standOffset
+				newPos = Vector3.new(newPos.X, newY, newPos.Z)
+				hrp.CFrame = CFrame.new(newPos, newPos + direction)
+				hrp.AssemblyLinearVelocity = Vector3.new(direction.X * speed, 0, direction.Z * speed)
+			end
 		end
-		
-		print("[StealAnEgg] moveTo: Reached target, distance=" .. tostring(math.floor(dist)))
-		hum:MoveTo(targetPosition)
-		return true
 	end
 
 	local autoStealRunning = false
@@ -3270,31 +3298,15 @@ do
 			return
 		end
 
-		-- Kalau fly, turun ke posisi egg beneran buat ambil (server butuh
-		-- proximity ke egg, ga bisa ambil dari ketinggian fly).
-		if noclipFlyEnabled then
-			setStatus("Turun ke egg...")
-			local eggPos = target.BottomCFrame.Position
-			local hrp = getHRP()
-			if hrp then
-				local descSpeed = math.min(getTweenSpeed(), 200)
-				local hum = getHumanoid()
-				local standOff = (hum and hum.HipHeight or 2) + (hrp.Size.Y / 2)
-				local landTarget = Vector3.new(eggPos.X, eggPos.Y + standOff, eggPos.Z)
-				while autoStealRunning do
-					hrp = getHRP()
-					if not hrp then break end
-					local delta = landTarget - hrp.Position
-					if delta.Magnitude < 3 then break end
-					local dt = RunService.Heartbeat:Wait()
-					local step = math.min(descSpeed * dt, delta.Magnitude)
-					local newPos = hrp.Position + delta.Unit * step
-					hrp.CFrame = CFrame.new(newPos)
-					hrp.AssemblyLinearVelocity = delta.Unit * descSpeed
-					for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
-						if part:IsA("BasePart") then part.CanCollide = false end
-					end
-				end
+		task.wait(0.3)
+		
+		local hrp = getHRP()
+		if hrp then
+			local distToEgg = (hrp.Position - target.BottomCFrame.Position).Magnitude
+			print("[StealAnEgg] Distance to egg before carry:", distToEgg)
+			if distToEgg > 10 then
+				setStatus("Terlalu jauh dari egg (" .. tostring(math.floor(distToEgg)) .. "m), abort")
+				return
 			end
 		end
 
