@@ -3376,6 +3376,15 @@ do
 		Callback = captureStagingPos,
 	})
 
+	local returnToTreadmillEnabled = false
+	section:AddToggle("StealAnEgg_ReturnToTreadmill", {
+		Title = "Return to Treadmill after Steal",
+		Default = false,
+		Callback = function(enabled)
+			returnToTreadmillEnabled = enabled
+		end,
+	})
+
 	section:AddToggle("StealAnEgg_AutoSteal", {
 		Title = "Auto Steal (loop utama)",
 		Default = false,
@@ -3388,6 +3397,15 @@ do
 						local ok, err = pcall(autoStealCycle)
 						if not ok then
 							setStatus("Error: " .. tostring(err))
+						end
+						if returnToTreadmillEnabled and ok then
+							setStatus("Return to treadmill...")
+							local plotData = PlotCmds.GetPlotData()
+							if plotData and plotData.CenterPoint then
+								moveTo(plotData.CenterPoint.Position, getTweenSpeed(), function()
+									return autoStealRunning
+								end)
+							end
 						end
 						task.wait(0.5)
 					end
