@@ -3193,7 +3193,14 @@ do
 
 	task.spawn(function()
 		task.wait(1)
-		captureStagingPos()
+		local plotData = PlotCmds.GetPlotData()
+		if plotData and plotData.CenterPoint then
+			stagingPos = plotData.CenterPoint.Position
+			print("[StealAnEgg] Staging position auto-set to Plot CenterPoint:", stagingPos)
+			setStatus("Titik parkir di-set ke Plot 4 CenterPoint")
+		else
+			captureStagingPos()
+		end
 	end)
 
 	-- Tunggu tembok kebuka penuh SAMBIL parkir di titik yang udah di-set.
