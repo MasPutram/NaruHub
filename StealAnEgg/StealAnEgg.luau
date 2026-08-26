@@ -3049,8 +3049,35 @@ do
 			return false
 		end
 
+		local char = LocalPlayer.Character
+		if not char then
+			print("[StealAnEgg] moveTo: No character")
+			return false
+		end
+
+		-- Get AssetMovementBatch
+		local activeAssets = workspace.__OBJECTS.Build:FindFirstChild("MainMap") and workspace.__OBJECTS.Build.MainMap:FindFirstChild("ActiveAssetsController")
+		local assetBatch = activeAssets and activeAssets:FindFirstChild("AssetMovementBatch")
+		if not assetBatch then
+			print("[StealAnEgg] moveTo: AssetMovementBatch not found")
+			return false
+		end
+
+		-- Register character ke batch
+		local parts = {}
+		for _, p in ipairs(char:GetDescendants()) do
+			if p:IsA("BasePart") and p ~= hrp then
+				table.insert(parts, p)
+			end
+		end
+		table.insert(parts, hrp)
+
+		local plotData = PlotCmds.GetPlotData()
+		local assetArea = plotData and plotData.PetArea or workspace.__OBJECTS.Areas.Ground
+		assetBatch:Add(char, parts, hrp.CFrame, 2, assetArea, true)
+
 		hrp:SetAttribute("KillPartIgnore", true)
-		print("[StealAnEgg] moveTo: Set KillPartIgnore=true, moving to", targetPosition)
+		print("[StealAnEgg] moveTo: Registered to AssetMovementBatch, moving to", targetPosition)
 
 		local lastGroundY = findGroundY(targetPosition.X, targetPosition.Z, targetPosition.Y, targetPosition.Y)
 
@@ -3068,10 +3095,15 @@ do
 
 			hum = getHumanoid()
 			if hum and hum.Health <= 0 then
+				assetBatch:Remove(char)
 				hrp:SetAttribute("KillPartIgnore", false)
 				print("[StealAnEgg] moveTo: Character died, health=" .. tostring(hum.Health))
 				return false
 			end
+
+			-- Update target position via batch
+			assetBatch:SetTarget(char, CFrame.new(targetPosition))
+			assetBatch:SetGroundingEnabled(char, true)
 
 			local current = hrp.Position
 			local flat = Vector3.new(targetPosition.X - current.X, 0, targetPosition.Z - current.Z)
