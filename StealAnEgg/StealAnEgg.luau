@@ -3290,6 +3290,12 @@ do
 
 		task.wait(0.2)
 		
+		local hum = getHumanoid()
+		if hum then
+			hum.Health = 0
+			task.wait(0.1)
+		end
+		
 		if not waitUntilNotTrapped(function() return autoStealRunning end) then
 			return
 		end
