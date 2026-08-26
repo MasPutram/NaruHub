@@ -241,17 +241,22 @@ return function(ctx)
 	local function moveTo(targetPosition, speed, shouldContinue)
 		local hum = getHumanoid()
 		if not hum then
+			print("[StealAnEgg] moveTo: No humanoid found")
 			return false
 		end
 
 		local dist = (hum.RootPart.Position - targetPosition).Magnitude
+		print("[StealAnEgg] moveTo: Starting, distance=" .. tostring(dist))
+		
 		while dist > 5 do
 			if shouldContinue and not shouldContinue() then
+				print("[StealAnEgg] moveTo: Cancelled by shouldContinue")
 				return false
 			end
 			
 			local hrp = getHRP()
 			if not hrp then
+				print("[StealAnEgg] moveTo: Lost HRP during move")
 				return false
 			end
 			
@@ -261,6 +266,7 @@ return function(ctx)
 			dist = (hrp.Position - targetPosition).Magnitude
 		end
 		
+		print("[StealAnEgg] moveTo: Reached target, distance=" .. tostring(dist))
 		hum:MoveTo(targetPosition)
 		return true
 	end
