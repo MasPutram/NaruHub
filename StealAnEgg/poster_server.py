@@ -19,6 +19,7 @@ Run: python poster_server.py
 """
 
 import asyncio
+import concurrent.futures
 import io
 import json
 import os
@@ -2211,6 +2212,27 @@ class Handler(BaseHTTPRequestHandler):
         print("[poster_server]", fmt % args)
 
 
+class BoundedThreadingHTTPServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer spawns a brand new OS thread per request with no
+    cap -- over a long-running session (this server gets hit by /monitor
+    every ~15s from 20+ accounts, for hours) that's thousands of threads,
+    and it eventually dies with a bare `MemoryError` on thread creation,
+    silently refusing new connections while the process itself stays
+    "alive" (seen repeatedly in production). Route requests through a
+    fixed-size thread pool instead -- caps concurrent handling, excess
+    requests just queue briefly instead of spawning unboundedly."""
+    daemon_threads = True
+
+    def __init__(self, *args, max_workers: int = 32, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._pool = concurrent.futures.ThreadPoolExecutor(
+            max_workers=max_workers, thread_name_prefix="poster-http",
+        )
+
+    def process_request(self, request, client_address):
+        self._pool.submit(self.process_request_thread, request, client_address)
+
+
 def get_lan_ip() -> str:
     import socket
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -2230,7 +2252,7 @@ def main():
 
     # 0.0.0.0 biar bisa diakses dari device lain (HP dll) di WiFi yang sama,
     # ga cuma dari PC ini sendiri (127.0.0.1).
-    server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    server = BoundedThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     print(f"poster_server listening on http://0.0.0.0:{PORT}")
     if os.environ.get("PORT"):
         # PORT di-set dari luar -> lagi jalan di hosting (Render dst), bukan

@@ -49,7 +49,7 @@ end
 -- (fail-closed) -- sengaja, biar key-check ga bisa dilewatin cuma dengan
 -- mastiin server-nya lagi down.
 ------------------------------------------------------------
-local SERVER_BASE_URL = "https://sheet-compatibility-premises-leasing.trycloudflare.com"
+local SERVER_BASE_URL = "https://meyer-biol-sys-mixing.trycloudflare.com"
 
 local DEVICE_ID = "unknown"
 pcall(function()
