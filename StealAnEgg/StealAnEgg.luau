@@ -3215,7 +3215,7 @@ do
 		if hrp then
 			hrp:SetAttribute("KillPartIgnore", true)
 			hrp.CFrame = CFrame.new(safePos + Vector3.new(0, 5, 0))
-			print("[StealAnEgg] Teleported to safe zone, KillPartIgnore=true")
+			print("[StealAnEgg] Teleported to safe zone at:", safePos)
 			task.wait(0.3)
 			hrp:SetAttribute("KillPartIgnore", false)
 		end
