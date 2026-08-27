@@ -255,18 +255,30 @@ local section = StatusTab:AddSection("Info Akun", { NoCollapse = true })
 local userPara = section:AddParagraph({
 	Title = "Username",
 	Content = LocalPlayer.Name,
+	TitleSize = 18,
+	ContentSize = 22,
+	Center = true,
 })
 local statusPara = section:AddParagraph({
 	Title = "Status",
 	Content = "Idle",
+	TitleSize = 18,
+	ContentSize = 22,
+	Center = true,
 })
 local monitorPara = section:AddParagraph({
 	Title = "Monitoring",
 	Content = "Starting...",
+	TitleSize = 16,
+	ContentSize = 16,
+	Center = true,
 })
 section:AddParagraph({
 	Title = "By",
 	Content = "Putra Ramadhan",
+	TitleSize = 14,
+	ContentSize = 14,
+	Center = true,
 })
 
 Window:SelectTab(1)

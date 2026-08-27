@@ -600,26 +600,29 @@ return (function()
 					end
 
 					function Section:AddParagraph(pcfg)
+						local titleSize = pcfg.TitleSize or 13
+						local contentSize = pcfg.ContentSize or 13
+						local align = pcfg.Center and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left
 						local r = row(0)
 						r.AutomaticSize = Enum.AutomaticSize.Y
 						uiNew("TextLabel", {
 							BackgroundTransparency = 1,
-							Size = UDim2.new(1, 0, 0, 18),
+							Size = UDim2.new(1, 0, 0, titleSize + 6),
 							Font = UI_FONT_BOLD,
-							TextSize = 13,
-							TextXAlignment = Enum.TextXAlignment.Left,
+							TextSize = titleSize,
+							TextXAlignment = align,
 							TextColor3 = UI_COL_TEXT,
 							Text = pcfg.Title or "",
 						}, r)
 						local contentLbl = uiNew("TextLabel", {
 							BackgroundTransparency = 1,
-							Position = UDim2.new(0, 0, 0, 18),
-							Size = UDim2.new(1, 0, 0, 16),
+							Position = UDim2.new(0, 0, 0, titleSize + 6),
+							Size = UDim2.new(1, 0, 0, contentSize + 4),
 							AutomaticSize = Enum.AutomaticSize.Y,
 							Font = UI_FONT,
-							TextSize = 13,
+							TextSize = contentSize,
 							TextWrapped = true,
-							TextXAlignment = Enum.TextXAlignment.Left,
+							TextXAlignment = align,
 							TextYAlignment = Enum.TextYAlignment.Top,
 							TextColor3 = UI_COL_DIM,
 							Text = pcfg.Content or "",
