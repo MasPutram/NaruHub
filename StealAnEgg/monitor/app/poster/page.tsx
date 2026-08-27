@@ -99,6 +99,51 @@ function petKey(p: Pet): string {
   return `${p.category}|${(p.mutations || []).slice().sort().join("+")}|${p.rate}`;
 }
 
+function computeIncomePotensiPetAktif(detail: AccountDetail | null): number {
+  if (!detail) return 0;
+  const pool = [
+    ...(detail.activePets || []),
+    ...(detail.allPets || []),
+    ...(detail.growingEggs || []),
+    ...(detail.backpackEggs || []),
+  ].sort((a, b) => (b.rate || 0) - (a.rate || 0));
+  let total = 0;
+  for (let i = 0; i < Math.min(MAX_EQUIP, pool.length); i++) {
+    total += pool[i].rate || 0;
+  }
+  return total;
+}
+
+function computeHighValuePetTotal(detail: AccountDetail | null): number {
+  if (!detail) return 0;
+  const pool = [
+    ...(detail.activePets || []),
+    ...(detail.allPets || []),
+    ...(detail.growingEggs || []),
+    ...(detail.backpackEggs || []),
+  ];
+  return pool.reduce((sum, p) => sum + ((p.rate || 0) >= HIGH_VALUE_THRESHOLD ? (p.rate || 0) : 0), 0);
+}
+
+function formatRupiah(n: number): string {
+  const s = Math.abs(Math.round(n)).toString();
+  const reversed = s.split("").reverse().join("");
+  const dotted = reversed.replace(/(\d{3})(?=\d)/g, "$1.");
+  return "Rp " + (n < 0 ? "-" : "") + dotted.split("").reverse().join("");
+}
+
+function computeAutoPrice(detail: AccountDetail | null, ratePerBStr: string, rateHvPerBStr: string): string {
+  if (!detail) return "";
+  const ratePerB = (parseFloat(ratePerBStr) || 0) * 1000;
+  const rateHvPerB = (parseFloat(rateHvPerBStr) || 0) * 1000;
+  if (ratePerB === 0 && rateHvPerB === 0) return "";
+  const incomeB = computeIncomePotensiPetAktif(detail) / 1e9;
+  const highvalueB = computeHighValuePetTotal(detail) / 1e9;
+  const priceValue = Math.round(incomeB * ratePerB + highvalueB * rateHvPerB);
+  if (priceValue <= 0) return "";
+  return formatRupiah(priceValue);
+}
+
 /** Mirrors Python's account_initials(): "BlekokGong20" -> "BG20" (uppercase
  * letters in the name + trailing digits). */
 function accountInitials(name: string | null | undefined): string {
@@ -207,10 +252,12 @@ function PosterPage() {
   const [detail, setDetail] = useState<AccountDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [price, setPrice] = useState("");
+  const [ratePerB, setRatePerB] = useState("5");
+  const [rateHvPerB, setRateHvPerB] = useState("3");
   const [title, setTitle] = useState("Jual Akun GACOR");
   const [badge, setBadge] = useState("");
-  const [owner, setOwner] = useState("");
-  const [checklist, setChecklist] = useState("");
+  const [owner, setOwner] = useState("Putra Ramadhan");
+  const [checklist, setChecklist] = useState("Data Polos, No Topi, No Sum");
   const [downloading, setDownloading] = useState(false);
   const posterRef = useRef<HTMLDivElement>(null);
 
@@ -341,10 +388,12 @@ function PosterPage() {
   const poolSorted = [...uniquePool].sort((a, b) => (b.rate || 0) - (a.rate || 0));
   const topPicks = poolSorted.slice(0, 3);
 
+  const topPickKeys = new Set(topPicks.map(petKey));
   const mutatedCandidates = poolSorted.filter(
-    (p) => p.mutations && p.mutations.length > 0 && (p.rate || 0) > MUTATED_FEATURED_THRESHOLD
+    (p) => p.mutations && p.mutations.length > 0 && (p.rate || 0) > MUTATED_FEATURED_THRESHOLD && !topPickKeys.has(petKey(p))
   );
-  const featured = mutatedCandidates[0] || poolSorted[0] || null;
+  const featuredFallback = poolSorted.find((p) => !topPickKeys.has(petKey(p))) || null;
+  const featured = mutatedCandidates[0] || featuredFallback;
 
   const featuredKeys = new Set(topPicks.map(petKey));
   if (featured) featuredKeys.add(petKey(featured));
@@ -627,8 +676,12 @@ function PosterPage() {
         <input value={title} onChange={(e) => setTitle(e.target.value)} />
         <label>Badge:</label>
         <input value={badge} onChange={(e) => setBadge(e.target.value)} placeholder="contoh: TERMURAH" />
-        <label>Harga:</label>
-        <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="contoh: Rp 150.000" />
+        <label>Harga (langsung):</label>
+        <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="kosongin = auto" style={{ width: 120 }} />
+        <label>Rate Income/1B (rb):</label>
+        <input value={ratePerB} onChange={(e) => setRatePerB(e.target.value)} placeholder="5" style={{ width: 50 }} />
+        <label>Rate Pet≥1B/1B (rb):</label>
+        <input value={rateHvPerB} onChange={(e) => setRateHvPerB(e.target.value)} placeholder="3" style={{ width: 50 }} />
         <label>Owner:</label>
         <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="nama Facebook" />
         <label>Checklist:</label>
@@ -826,10 +879,10 @@ function PosterPage() {
 
             <div className="price-box">
               <div className="price-label">PRICE ACC</div>
-              {price ? (
-                <div className="price-value">{price}</div>
+              {(price || computeAutoPrice(detail, ratePerB, rateHvPerB)) ? (
+                <div className="price-value">{price || computeAutoPrice(detail, ratePerB, rateHvPerB)}</div>
               ) : (
-                <div className="price-empty">Isi harga di controls atas</div>
+                <div className="price-empty">Isi harga atau rate di controls atas</div>
               )}
             </div>
 
