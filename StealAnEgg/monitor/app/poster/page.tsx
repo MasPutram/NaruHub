@@ -19,6 +19,7 @@ interface Pet {
   weight?: number;
   ready?: boolean;
   remainingSeconds?: number;
+  rarity?: string;
 }
 
 interface AccountSummary {
@@ -89,6 +90,69 @@ function fmtWeight(w: number | undefined): string {
 
 function petKey(p: Pet): string {
   return `${p.category}|${p.name || ""}|${(p.mutations || []).join("+")}|${p.rate}`;
+}
+
+let iconIndex: Record<string, string> | null = null;
+let iconIndexPromise: Promise<Record<string, string>> | null = null;
+
+function loadIconIndex(): Promise<Record<string, string>> {
+  if (iconIndex) return Promise.resolve(iconIndex);
+  if (!iconIndexPromise) {
+    iconIndexPromise = fetch("/icons/index.json")
+      .then((r) => r.json())
+      .then((data) => { iconIndex = data; return data; })
+      .catch(() => { iconIndex = {}; return {}; });
+  }
+  return iconIndexPromise;
+}
+
+function petIconUrl(p: Pet, index: Record<string, string>): string | null {
+  const cat = p.category;
+  if (p.rarity && cat) {
+    return `/icons/normal/${encodeURIComponent(cat)} [${encodeURIComponent(p.rarity)}].png`;
+  }
+  const filename = index[cat];
+  if (filename) {
+    return `/icons/normal/${encodeURIComponent(filename)}`;
+  }
+  return null;
+}
+
+function PetIcon({ pet, size = 48 }: { pet: Pet; size?: number }) {
+  const [index, setIndex] = useState<Record<string, string>>({});
+  useEffect(() => { loadIconIndex().then(setIndex); }, []);
+
+  const src = petIconUrl(pet, index);
+  if (!src) {
+    return (
+      <div
+        style={{
+          width: size, height: size, background: "#f1f5f9", borderRadius: 10,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: size * 0.4, color: "#94a3b8",
+        }}
+      >
+        🐾
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={pet.category}
+      width={size}
+      height={size}
+      style={{ borderRadius: 10, objectFit: "contain", background: "#f1f5f9" }}
+      onError={(e) => {
+        const el = e.currentTarget;
+        el.style.display = "none";
+        const placeholder = document.createElement("div");
+        placeholder.style.cssText = `width:${size}px;height:${size}px;background:#f1f5f9;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:${size * 0.4}px;color:#94a3b8`;
+        placeholder.textContent = "🐾";
+        el.parentElement?.insertBefore(placeholder, el);
+      }}
+    />
+  );
 }
 
 function mutColor(mut: string): string {
@@ -434,6 +498,7 @@ function PosterPage() {
                 {top3.map((p, i) => (
                   <div key={i} className="pick-card">
                     {eggKeys.has(petKey(p)) && <span className="egg-badge">TELUR</span>}
+                    <PetIcon pet={p} size={64} />
                     <div className="pname">{p.name || p.category}</div>
                     <div className="prate">{fmtRate(p.rate)}</div>
                     {p.mutations && p.mutations.length > 0 && (
@@ -448,19 +513,22 @@ function PosterPage() {
             )}
 
             {featured && (
-              <div className="featured-box">
+              <div className="featured-box" style={{ display: "flex", alignItems: "center", gap: 16 }}>
                 <div className="featured-ribbon">PALING GACOR!</div>
                 {eggKeys.has(petKey(featured)) && (
                   <span className="egg-badge" style={{ position: "absolute", top: -14, left: 180 }}>TELUR</span>
                 )}
-                {featured.mutations && featured.mutations.length > 0 && (
-                  <div className="featured-mut" style={{ color: mutColor(featured.mutations[0]), marginTop: 20 }}>
-                    {featured.mutations.map((m) => m.toUpperCase()).join(" + ")}
-                  </div>
-                )}
-                <div className="featured-name">{(featured.name || featured.category).toUpperCase()}</div>
-                <div className="featured-rate">{fmtRate(featured.rate)}</div>
-                {featured.weight ? <div style={{ fontSize: 14, color: "#64748b" }}>{fmtWeight(featured.weight)}</div> : null}
+                <PetIcon pet={featured} size={80} />
+                <div>
+                  {featured.mutations && featured.mutations.length > 0 && (
+                    <div className="featured-mut" style={{ color: mutColor(featured.mutations[0]) }}>
+                      {featured.mutations.map((m) => m.toUpperCase()).join(" + ")}
+                    </div>
+                  )}
+                  <div className="featured-name">{(featured.name || featured.category).toUpperCase()}</div>
+                  <div className="featured-rate">{fmtRate(featured.rate)}</div>
+                  {featured.weight ? <div style={{ fontSize: 14, color: "#64748b" }}>{fmtWeight(featured.weight)}</div> : null}
+                </div>
               </div>
             )}
 
@@ -476,10 +544,13 @@ function PosterPage() {
                       </div>
                       <div className="mut-grid">
                         {sorted.map((p, i) => (
-                          <div key={i} className="mut-cell">
-                            <div className="mrate">{fmtRate(p.rate)}</div>
-                            <div className="mname">{p.name || p.category}</div>
-                            {p.weight ? <div style={{ fontSize: 10, color: "#64748b" }}>{fmtWeight(p.weight)}</div> : null}
+                          <div key={i} className="mut-cell" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <PetIcon pet={p} size={32} />
+                            <div>
+                              <div className="mrate">{fmtRate(p.rate)}</div>
+                              <div className="mname">{p.name || p.category}</div>
+                              {p.weight ? <div style={{ fontSize: 10, color: "#64748b" }}>{fmtWeight(p.weight)}</div> : null}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -545,7 +616,7 @@ function PosterPage() {
               <div className="pet-list">
                 {rightPanelPets.slice(0, 8).map((p, i) => (
                   <div key={i} className="pet-row">
-                    <div className="pet-icon-placeholder">🐾</div>
+                    <PetIcon pet={p} size={48} />
                     <div className="pet-info">
                       <div className="piname">{p.name || p.category}</div>
                       <div className="pirate">{fmtRate(p.rate)}</div>

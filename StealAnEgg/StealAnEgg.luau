@@ -2057,9 +2057,18 @@ if GRANTED_VIA_GLOBAL then
 	local MutationsModule = require(ReplicatedStorage.Shared.Modules.Mutations)
 	local EggState = require(ReplicatedStorage.Client.EggState)
 	local EggRecords = require(ReplicatedStorage.Shared.Util.EggRecords)
+	local Assets = require(ReplicatedStorage.Data.Assets)
 	local HttpService = game:GetService("HttpService")
 
 	local POSTER_SERVER_URL = SERVER_BASE_URL .. "/generate"
+
+	local function getRarity(category)
+		local cfg = Assets.Directory[category]
+		if cfg and cfg.Rarity and cfg.Rarity.DisplayName then
+			return cfg.Rarity.DisplayName
+		end
+		return nil
+	end
 
 	local function mutationNamesFromString(str)
 		if not str or str == "" then
@@ -2116,6 +2125,7 @@ if GRANTED_VIA_GLOBAL then
 					mutations = mutations,
 					rate = rate,
 					weight = weight,
+					rarity = getRarity(category),
 				})
 			end
 		end
@@ -2139,6 +2149,7 @@ if GRANTED_VIA_GLOBAL then
 					mutations = item.Mutations or {},
 					rate = rec.MoneyPerSecond or 0,
 					weight = weight,
+					rarity = getRarity(item.Category),
 				})
 			end
 		end
@@ -2206,6 +2217,7 @@ if GRANTED_VIA_GLOBAL then
 					ready = ready,
 					weight = weight,
 					rate = rate,
+					rarity = getRarity(rec.AssetCategory),
 				})
 			end
 		end
@@ -2242,6 +2254,7 @@ if GRANTED_VIA_GLOBAL then
 					mutations = rec.Mutations or {},
 					weight = weight,
 					rate = rate,
+					rarity = getRarity(rec.AssetCategory),
 				})
 			end
 		end
@@ -2557,6 +2570,7 @@ if GRANTED_VIA_GLOBAL then
 					category = p.category,
 					mutations = p.mutations or {},
 					rate = p.rate or 0,
+					rarity = p.rarity,
 				})
 			end
 
