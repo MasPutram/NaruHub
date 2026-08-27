@@ -198,7 +198,7 @@ end
 ------------------------------------------------------------
 -- NaruUI (loaded from GitHub)
 ------------------------------------------------------------
-local _naruSrc = game:HttpGet("https://raw.githubusercontent.com/MasPutram/NaruHub/main/StealAnEgg/NaruUI.luau")
+local _naruSrc = game:HttpGet("https://raw.githubusercontent.com/MasPutram/NaruHub/main/StealAnEgg/NaruUI.luau?v=" .. tostring(tick()))
 local _naruFn, _naruErr = loadstring(_naruSrc)
 if not _naruFn then
 	error("NaruUI loadstring failed: " .. tostring(_naruErr))
