@@ -245,12 +245,12 @@ local Window = Fluent:CreateWindow({
 	Title = "NaruHub | Monitoring Steal An Egg",
 	Badge = "PREMIUM",
 	TabWidth = 0,
-	Size = UDim2.fromOffset(380, 280),
+	Size = UDim2.fromOffset(580, 380),
 	AutoStartMinimized = true,
 })
 
 local StatusTab = Window:AddTab({ Title = "" })
-local section = StatusTab:AddSection("Info Akun")
+local section = StatusTab:AddSection("Info Akun", { NoCollapse = true })
 
 local userPara = section:AddParagraph({
 	Title = "Username",
