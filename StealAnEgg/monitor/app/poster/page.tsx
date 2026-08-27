@@ -222,9 +222,20 @@ function PosterPage() {
         fetch("/api/account-detail?account=" + encodeURIComponent(accountName)),
       ]);
       const accData = await accRes.json();
-      const found = (accData.accounts || []).find(
+      let found = (accData.accounts || []).find(
         (a: AccountSummary) => a.sourceAccount === accountName
       );
+
+      if (!found) {
+        try {
+          const catRes = await fetch("/api/catalog-accounts");
+          const catData = await catRes.json();
+          found = (catData.accounts || []).find(
+            (a: AccountSummary) => a.sourceAccount === accountName
+          );
+        } catch {}
+      }
+
       if (found) setSummary(found);
 
       const detData = await detRes.json();
