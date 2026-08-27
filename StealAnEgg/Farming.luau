@@ -78,7 +78,7 @@ return function(ctx)
 	local MAX_SAFE_TWEEN_SPEED = 60
 
 	local tweenSpeedInput = section:AddInput("StealAnEgg_TweenSpeed", {
-		Title = "Tween Speed",
+		Title = "Tween Speed (studs/detik, MAX 60 tanpa fly -- bebas kalau Noclip+Fly nyala)",
 		Placeholder = "60",
 		Default = "60",
 		Finished = true,
@@ -239,36 +239,72 @@ return function(ctx)
 	end
 
 	local function moveTo(targetPosition, speed, shouldContinue)
-		local hum = getHumanoid()
-		if not hum then
-			print("[StealAnEgg] moveTo: No humanoid found")
-			return false
+		speed = speed or getTweenSpeed()
+		if not noclipFlyEnabled then
+			speed = math.clamp(speed, 10, MAX_SAFE_TWEEN_SPEED)
+		else
+			speed = math.max(speed, 10)
 		end
 
-		local dist = (hum.RootPart.Position - targetPosition).Magnitude
-		print("[StealAnEgg] moveTo: Starting, distance=" .. tostring(dist))
-		
-		while dist > 5 do
+		local flyAlt = getFlyAlt()
+		local lastGroundY = targetPosition.Y
+		local frozen = false
+
+		while true do
 			if shouldContinue and not shouldContinue() then
-				print("[StealAnEgg] moveTo: Cancelled by shouldContinue")
+				if frozen then unfreezeCharacter() end
 				return false
 			end
-			
 			local hrp = getHRP()
 			if not hrp then
-				print("[StealAnEgg] moveTo: Lost HRP during move")
+				if frozen then unfreezeCharacter() end
 				return false
 			end
-			
-			hum:MoveTo(targetPosition)
-			task.wait(0.1)
-			
-			dist = (hrp.Position - targetPosition).Magnitude
+			local hum = getHumanoid()
+			local standOffset = (hum and hum.HipHeight or 2) + hrp.Size.Y / 2
+
+			local current = hrp.Position
+
+			if noclipFlyEnabled then
+				if not frozen then
+					freezeCharacter()
+					frozen = true
+				end
+
+				local flyTarget = Vector3.new(targetPosition.X, targetPosition.Y + flyAlt, targetPosition.Z)
+				local delta3d = flyTarget - current
+				local dist3d = delta3d.Magnitude
+				if dist3d < 5 then
+					unfreezeCharacter()
+					return true
+				end
+				local dt = RunService.Heartbeat:Wait()
+				local step = math.min(speed * dt, dist3d)
+				local dir3d = delta3d.Unit
+				local newPos = current + dir3d * step
+				hrp.CFrame = CFrame.new(newPos, newPos + dir3d)
+			else
+				local flat = Vector3.new(targetPosition.X - current.X, 0, targetPosition.Z - current.Z)
+				local dist = flat.Magnitude
+				if dist < 3 then
+					hrp.AssemblyLinearVelocity = Vector3.zero
+					return true
+				end
+				local dt = RunService.Heartbeat:Wait()
+				local step = math.min(speed * dt, dist)
+				local direction = flat.Unit
+				local newPos = current + direction * step
+
+				local groundY = findGroundY(newPos.X, newPos.Z, current.Y, lastGroundY)
+				if groundY then
+					lastGroundY = groundY
+				end
+				local newY = (groundY or lastGroundY) + standOffset
+				newPos = Vector3.new(newPos.X, newY, newPos.Z)
+				hrp.CFrame = CFrame.new(newPos, newPos + direction)
+				hrp.AssemblyLinearVelocity = Vector3.new(direction.X * speed, 0, direction.Z * speed)
+			end
 		end
-		
-		print("[StealAnEgg] moveTo: Reached target, distance=" .. tostring(dist))
-		hum:MoveTo(targetPosition)
-		return true
 	end
 
 	local autoStealRunning = false
@@ -496,7 +532,6 @@ return function(ctx)
 		end
 		local ok, err = EggCmds.RequestCarryAreaEgg(target.Uid, slotKey)
 		if not ok then
-			print("[StealAnEgg] Carry request failed - Error:", err, "| Target:", target.AssetCategory, "| UID:", target.Uid)
 			setStatus("Gagal curi " .. tostring(target.AssetCategory) .. ": " .. tostring(err))
 			return
 		end

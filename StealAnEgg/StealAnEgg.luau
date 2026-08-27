@@ -1463,673 +1463,587 @@ local Window = Fluent:CreateWindow({
 	AutoStartMinimized = true,
 })
 
-------------------------------------------------------------
--- Module Loader -- tiap tab dipecah ke file sendiri biar rapi.
--- Coba readfile() dulu (buat dev lokal via executor workspace),
--- fallback ke game:HttpGet() dari GitHub (buat loadstring publik).
-------------------------------------------------------------
-local GITHUB_BASE = "https://raw.githubusercontent.com/MasPutram/NaruHub/main/StealAnEgg/"
-local CACHE_BUST = tostring(os.clock())
+	local Tab = Window:AddTab({ Title = "Scanner" })
 
-local function loadModule(name)
-	local path = "StealAnEgg/" .. name .. ".luau"
-	local ok, content = pcall(readfile, path)
-	if ok and content and content ~= "" then
-		return loadstring(content)()
-	end
-	return loadstring(game:HttpGet(GITHUB_BASE .. name .. ".luau?t=" .. CACHE_BUST))()
-end
+	------------------------------------------------------------
+	-- 1. Scan Isi Tas
+	------------------------------------------------------------
+	do
+		local section = Tab:AddSection("Scan Isi Tas")
+		local bagPara = section:AddParagraph({
+			Title = "Ringkasan Tas",
+			Content = "Klik \"Scan Tas Sekarang\" buat mulai.",
+		})
 
-local ctx = {
-	Fluent = Fluent,
-	Window = Window,
-	ReplicatedStorage = ReplicatedStorage,
-	Players = Players,
-	Workspace = Workspace,
-	LocalPlayer = LocalPlayer,
-	EggCmds = EggCmds,
-	EggItemUtil = EggItemUtil,
-	formatSeconds = formatSeconds,
-	mutationLabel = mutationLabel,
-	getGrowthInfo = getGrowthInfo,
-	SERVER_BASE_URL = SERVER_BASE_URL,
-	DEVICE_ID = DEVICE_ID,
-	ACCESS_KEY_USED = ACCESS_KEY_USED,
-}
-
-loadModule("Scanner")(ctx)
-if GRANTED_VIA_GLOBAL then
-	loadModule("Poster")(ctx)
-end
-loadModule("Farming")(ctx)
-loadModule("Misc")(ctx)
-
-Window:SelectTab(1)
-
-------------------------------------------------------------
--- 1. Scan Isi Tas
-------------------------------------------------------------
-do
-	local section = Tab:AddSection("Scan Isi Tas")
-	local bagPara = section:AddParagraph({
-		Title = "Ringkasan Tas",
-		Content = "Klik \"Scan Tas Sekarang\" buat mulai.",
-	})
-
-	local function scanBag()
-		local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-		if not backpack then
-			bagPara:SetContent("Backpack tidak ditemukan.")
-			return
-		end
-
-		local groups = {}
-		local order = {}
-		local total = 0
-
-		for _, tool in ipairs(backpack:GetChildren()) do
-			total += 1
-			local itemType = tool:GetAttribute("ItemType")
-			local category = tool:GetAttribute("Category") or tool:GetAttribute("GearName") or tool.Name
-			local mutation = tool:GetAttribute("Mutations")
-			local label = category
-			if mutation and mutation ~= "" then
-				label = label .. " [" .. mutation .. "]"
+		local function scanBag()
+			local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+			if not backpack then
+				bagPara:SetContent("Backpack tidak ditemukan.")
+				return
 			end
-			if itemType then
-				label = label .. " (" .. itemType .. ")"
+
+			local groups = {}
+			local order = {}
+			local total = 0
+
+			for _, tool in ipairs(backpack:GetChildren()) do
+				total += 1
+				local itemType = tool:GetAttribute("ItemType")
+				local category = tool:GetAttribute("Category") or tool:GetAttribute("GearName") or tool.Name
+				local mutation = tool:GetAttribute("Mutations")
+				local label = category
+				if mutation and mutation ~= "" then
+					label = label .. " [" .. mutation .. "]"
+				end
+				if itemType then
+					label = label .. " (" .. itemType .. ")"
+				end
+				if not groups[label] then
+					groups[label] = 0
+					table.insert(order, label)
+				end
+				groups[label] += 1
 			end
-			if not groups[label] then
-				groups[label] = 0
-				table.insert(order, label)
+
+			table.sort(order)
+			local lines = {}
+			for _, label in ipairs(order) do
+				table.insert(lines, string.format("%dx %s", groups[label], label))
 			end
-			groups[label] += 1
+
+			bagPara:SetContent(string.format(
+				"Total item: %d\n%s",
+				total,
+				#lines > 0 and table.concat(lines, "\n") or "(kosong)"
+			))
 		end
 
-		table.sort(order)
-		local lines = {}
-		for _, label in ipairs(order) do
-			table.insert(lines, string.format("%dx %s", groups[label], label))
+		section:AddButton({ Title = "Scan Tas Sekarang", Callback = scanBag })
+
+		local AssetGenerationUtil = require(ReplicatedStorage.Library.Util.AssetGenerationUtil)
+		local AssetCmds = require(ReplicatedStorage.Library.Client.AssetCmds)
+		local MutationsModule = require(ReplicatedStorage.Library.Modules.Mutations)
+
+		local function mutationNamesFromString(str)
+			if not str or str == "" then
+				return {}
+			end
+			local ok, arr = pcall(function()
+				return MutationsModule.ExtractMutationsFromString(str)
+			end)
+			if not ok or type(arr) ~= "table" then
+				return {}
+			end
+			local names = {}
+			for _, m in ipairs(arr) do
+				if type(m) == "table" and m.Name then
+					table.insert(names, m.Name)
+				end
+			end
+			return names
 		end
 
-		bagPara:SetContent(string.format(
-			"Total item: %d\n%s",
-			total,
-			#lines > 0 and table.concat(lines, "\n") or "(kosong)"
-		))
-	end
+		local function autoEquipEmptySlots()
+			local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+			if not backpack then
+				return
+			end
+			local limit = 0
+			pcall(function()
+				limit = AssetCmds.RequestEquipLimit()
+			end)
+			if limit <= 0 then
+				return
+			end
 
-	section:AddButton({ Title = "Scan Tas Sekarang", Callback = scanBag })
+			local activeRecords = AssetCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+			local activeCount = 0
+			for _ in pairs(activeRecords) do
+				activeCount += 1
+			end
+			if activeCount >= limit then
+				return
+			end
 
-	-- Auto Equip & Auto Un-equip -- 2 toggle independen (bukan 1 "equip
-	-- terbaik" yang otomatis nge-swap). Equip cuma ngisi slot aktif yang
-	-- masih kosong; Un-equip cuma ngelepas pet aktif yang $/s-nya paling
-	-- kecil. Nyalain keduanya bareng efeknya jadi "upgrade otomatis": Un-equip
-	-- ngosongin slot punya pet lemah, Equip langsung isi lagi pakai yang lebih
-	-- bagus dari tas di tick berikutnya.
-	local AssetGenerationUtil = require(ReplicatedStorage.Library.Util.AssetGenerationUtil)
-	local AssetCmds = require(ReplicatedStorage.Library.Client.AssetCmds)
-	local MutationsModule = require(ReplicatedStorage.Library.Modules.Mutations)
+			local candidates = {}
+			for _, tool in ipairs(backpack:GetChildren()) do
+				if tool:GetAttribute("ItemType") == "Asset" then
+					local uid = tool:GetAttribute("UID")
+					if uid and not activeRecords[uid] then
+						local category = tool:GetAttribute("Category")
+						local scale = tool:GetAttribute("Scale") or 1
+						local mutations = mutationNamesFromString(tool:GetAttribute("Mutations"))
+						local rate = 0
+						pcall(function()
+							rate = AssetGenerationUtil.GetBaseRateMutationOnly({
+								Category = category,
+								Scale = scale,
+								Mutations = mutations,
+							})
+						end)
+						table.insert(candidates, { uid = uid, rate = rate })
+					end
+				end
+			end
+			table.sort(candidates, function(a, b)
+				return a.rate > b.rate
+			end)
 
-	local function mutationNamesFromString(str)
-		if not str or str == "" then
-			return {}
-		end
-		local ok, arr = pcall(function()
-			return MutationsModule.ExtractMutationsFromString(str)
-		end)
-		if not ok or type(arr) ~= "table" then
-			return {}
-		end
-		local names = {}
-		for _, m in ipairs(arr) do
-			if type(m) == "table" and m.Name then
-				table.insert(names, m.Name)
+			local ci = 1
+			while activeCount < limit and ci <= #candidates do
+				if AssetCmds.RequestEquipAsset(candidates[ci].uid) then
+					activeCount += 1
+				end
+				ci += 1
 			end
 		end
-		return names
-	end
 
-	local function autoEquipEmptySlots()
-		local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-		if not backpack then
-			return
-		end
-		local limit = 0
-		pcall(function()
-			limit = AssetCmds.RequestEquipLimit()
-		end)
-		if limit <= 0 then
-			return
-		end
-
-		local activeRecords = AssetCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
-		local activeCount = 0
-		for _ in pairs(activeRecords) do
-			activeCount += 1
-		end
-		if activeCount >= limit then
-			return
-		end
-
-		local candidates = {}
-		for _, tool in ipairs(backpack:GetChildren()) do
-			if tool:GetAttribute("ItemType") == "Asset" then
-				local uid = tool:GetAttribute("UID")
-				if uid and not activeRecords[uid] then
-					local category = tool:GetAttribute("Category")
-					local scale = tool:GetAttribute("Scale") or 1
-					local mutations = mutationNamesFromString(tool:GetAttribute("Mutations"))
-					local rate = 0
-					pcall(function()
-						rate = AssetGenerationUtil.GetBaseRateMutationOnly({
-							Category = category,
-							Scale = scale,
-							Mutations = mutations,
-						})
-					end)
-					table.insert(candidates, { uid = uid, rate = rate })
+		local function autoUnequipAll()
+			local activeRecords = AssetCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+			local uids = {}
+			for uid in pairs(activeRecords) do
+				table.insert(uids, uid)
+			end
+			for i, uid in ipairs(uids) do
+				AssetCmds.RequestUnequipAsset(uid)
+				if i < #uids then
+					task.wait(0.2)
 				end
 			end
 		end
-		table.sort(candidates, function(a, b)
-			return a.rate > b.rate
-		end)
 
-		local ci = 1
-		while activeCount < limit and ci <= #candidates do
-			if AssetCmds.RequestEquipAsset(candidates[ci].uid) then
-				activeCount += 1
+		local autoEquipRunning = false
+		section:AddToggle("StealAnEgg_AutoEquip", {
+			Title = "Auto Equip",
+			Default = false,
+			Callback = function(enabled)
+				autoEquipRunning = enabled
+				if enabled then
+					task.spawn(function()
+						while autoEquipRunning and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+							pcall(autoEquipEmptySlots)
+							task.wait(5)
+						end
+					end)
+				end
+			end,
+		})
+
+		local autoUnequipRunning = false
+		section:AddToggle("StealAnEgg_AutoUnequip", {
+			Title = "Auto Un-equip All",
+			Default = false,
+			Callback = function(enabled)
+				autoUnequipRunning = enabled
+				if enabled then
+					task.spawn(function()
+						while autoUnequipRunning and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+							pcall(autoUnequipAll)
+							task.wait(2)
+						end
+					end)
+				end
+			end,
+		})
+
+		section:AddParagraph({
+			Title = "Catatan",
+			Content = "Auto Equip ngisi slot kosong tiap 5 detik. Auto Un-equip All lepas semua pet aktif tiap 2 detik.",
+		})
+
+		local function formatMoney(v)
+			v = v or 0
+			local abs = math.abs(v)
+			if abs >= 1e12 then
+				return string.format("$%.1fT/s", v / 1e12)
+			elseif abs >= 1e9 then
+				return string.format("$%.1fB/s", v / 1e9)
+			elseif abs >= 1e6 then
+				return string.format("$%.1fM/s", v / 1e6)
+			elseif abs >= 1e3 then
+				return string.format("$%.1fK/s", v / 1e3)
 			end
-			ci += 1
+			return string.format("$%d/s", v)
 		end
-	end
 
-	local function autoUnequipAll()
-		local activeRecords = AssetCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
-		local uids = {}
-		for uid in pairs(activeRecords) do
-			table.insert(uids, uid)
-		end
-		-- Firing semua RequestUnequipAsset dalam 1 frame bikin karakter
-		-- gonta-ganti pegang pet/tongkat (tabrakan animasi equip). Kasih
-		-- jeda kecil antar unequip biar rapi.
-		for i, uid in ipairs(uids) do
-			AssetCmds.RequestUnequipAsset(uid)
-			if i < #uids then
-				task.wait(0.2)
+		local incomePara = section:AddParagraph({
+			Title = "Total Income Pet Aktif",
+			Content = "Klik \"Cek Income Aktif\" atau nyalain Auto Equip/Un-equip buat mulai.",
+		})
+
+		local function refreshActiveIncome()
+			local activeRecords = AssetCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+			local total, count = 0, 0
+			for _, rec in pairs(activeRecords) do
+				total += rec.MoneyPerSecond or 0
+				count += 1
 			end
-		end
-	end
-
-	local autoEquipRunning = false
-	section:AddToggle("StealAnEgg_AutoEquip", {
-		Title = "Auto Equip",
-		Default = false,
-		Callback = function(enabled)
-			autoEquipRunning = enabled
-			if enabled then
-				task.spawn(function()
-					while autoEquipRunning and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-						pcall(autoEquipEmptySlots)
-						task.wait(5)
-					end
-				end)
-			end
-		end,
-	})
-
-	local autoUnequipRunning = false
-	section:AddToggle("StealAnEgg_AutoUnequip", {
-		Title = "Auto Un-equip All",
-		Default = false,
-		Callback = function(enabled)
-			autoUnequipRunning = enabled
-			if enabled then
-				task.spawn(function()
-					while autoUnequipRunning and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-						pcall(autoUnequipAll)
-						task.wait(2)
-					end
-				end)
-			end
-		end,
-	})
-
-	section:AddParagraph({
-		Title = "Catatan",
-		Content = "Auto Equip ngisi slot kosong tiap 5 detik. Auto Un-equip All lepas semua pet aktif tiap 2 detik.",
-	})
-
-	-- Total $/s dari pet aktif -- ditampilin langsung di GUI (bukan cuma di
-	-- poster), biar kelihatan realtime abis di-equip.
-	local function formatMoney(v)
-		v = v or 0
-		local abs = math.abs(v)
-		if abs >= 1e12 then
-			return string.format("$%.1fT/s", v / 1e12)
-		elseif abs >= 1e9 then
-			return string.format("$%.1fB/s", v / 1e9)
-		elseif abs >= 1e6 then
-			return string.format("$%.1fM/s", v / 1e6)
-		elseif abs >= 1e3 then
-			return string.format("$%.1fK/s", v / 1e3)
-		end
-		return string.format("$%d/s", v)
-	end
-
-	local incomePara = section:AddParagraph({
-		Title = "Total Income Pet Aktif",
-		Content = "Klik \"Cek Income Aktif\" atau nyalain Auto Equip/Un-equip buat mulai.",
-	})
-
-	local function refreshActiveIncome()
-		local activeRecords = AssetCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
-		local total, count = 0, 0
-		for _, rec in pairs(activeRecords) do
-			total += rec.MoneyPerSecond or 0
-			count += 1
-		end
-		local limit = 0
-		pcall(function()
-			limit = AssetCmds.RequestEquipLimit()
-		end)
-		incomePara:SetContent(string.format(
-			"%d/%d Active -- Total: %s",
-			count, limit, formatMoney(total)
-		))
-	end
-
-	section:AddButton({ Title = "Cek Income Pet Aktif Sekarang", Callback = refreshActiveIncome })
-end
-
-------------------------------------------------------------
--- 2 & 3. Monitor Telur di Kandang + Prediksi Hatch Berikutnya
-------------------------------------------------------------
-do
-	local section = Tab:AddSection("Monitor Telur & Kandang")
-	local monitorPara = section:AddParagraph({
-		Title = "Telur di Kandang",
-		Content = "Klik \"Scan Kandang Sekarang\" atau aktifkan Auto Monitor.",
-	})
-	local forecastPara = section:AddParagraph({
-		Title = "Prediksi Hatch Berikutnya",
-		Content = "-",
-	})
-
-	local function refreshEggs()
-		pcall(function()
-			EggCmds.RequestRuntimeSnapshot()
-		end)
-
-		local records = EggCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
-		local growing = {}
-
-		for uid, rec in pairs(records) do
-			if rec.Placement ~= nil then
-				local remaining, ready = getGrowthInfo(rec)
-				table.insert(growing, {
-					uid = uid,
-					species = rec.AssetCategory or "?",
-					mutation = mutationLabel(rec.Mutations),
-					remaining = remaining,
-					ready = ready,
-				})
-			end
-		end
-
-		table.sort(growing, function(a, b)
-			return a.remaining < b.remaining
-		end)
-
-		if #growing == 0 then
-			monitorPara:SetContent("Tidak ada telur yang sedang ditaruh di kandang.")
-			forecastPara:SetContent("-")
-			return
-		end
-
-		local lines = {}
-		for _, g in ipairs(growing) do
-			local status = g.ready and "SIAP MENETAS!" or formatSeconds(g.remaining)
-			local speciesLabel = g.mutation and (g.species .. " [" .. g.mutation .. "]") or g.species
-			table.insert(lines, string.format("%s -- %s", speciesLabel, status))
-		end
-		monitorPara:SetContent(table.concat(lines, "\n"))
-
-		local soonest = growing[1]
-		local soonestLabel = soonest.mutation and (soonest.species .. " [" .. soonest.mutation .. "]") or soonest.species
-		if soonest.ready then
-			forecastPara:SetContent(soonestLabel .. " sudah SIAP dihatch sekarang!")
-		else
-			forecastPara:SetContent(soonestLabel .. " dalam " .. formatSeconds(soonest.remaining))
-		end
-	end
-
-	section:AddButton({ Title = "Scan Kandang Sekarang", Callback = refreshEggs })
-
-	local autoRunning = false
-	section:AddToggle("StealAnEgg_AutoMonitor", {
-		Title = "Auto Monitor (tiap 3 detik)",
-		Default = false,
-		Callback = function(enabled)
-			autoRunning = enabled
-			if enabled then
-				task.spawn(function()
-					while autoRunning and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-						pcall(refreshEggs)
-						task.wait(3)
-					end
-				end)
-			end
-		end,
-	})
-
-	section:AddParagraph({
-		Title = "Catatan",
-		Content = "Spesies & mutasi telur sudah ditentukan server sejak ditaruh -- cuma "
-			.. "disembunyikan visualnya sampai animasi hatch selesai. Panel di atas "
-			.. "membaca data itu langsung, jadi kelihatan sebelum telurnya benar-benar menetas.",
-	})
-end
-
-------------------------------------------------------------
--- 3.5. Auto Upgrade Kandang & Treadmill (sampai level target, ga upgrade
--- terus-terusan)
-------------------------------------------------------------
-do
-	local BaseUpgradeClient = require(ReplicatedStorage.Library.Client.BaseUpgradeClient)
-	local TreadmillClient = require(LocalPlayer.PlayerScripts.GUI.TreadmillUpgrade.Client)
-	local SaveModule = require(ReplicatedStorage.Library.Client.Save)
-
-	local section = Tab:AddSection("Auto Upgrade Kandang & Treadmill")
-
-	local kandangTargetInput = section:AddInput("StealAnEgg_KandangTarget", {
-		Title = "Target Level Kandang",
-		Placeholder = "cth: 15",
-		Default = "",
-		Finished = true,
-	})
-	local treadmillTargetInput = section:AddInput("StealAnEgg_TreadmillTarget", {
-		Title = "Target Level Treadmill",
-		Placeholder = "cth: 12",
-		Default = "",
-		Finished = true,
-	})
-
-	local function parseTarget(input)
-		local n = tonumber(input.Value)
-		if n and n > 0 then
-			return math.floor(n)
-		end
-		return math.huge -- kosong = ga dibatasin, upgrade sampai MAX beneran
-	end
-
-	local upgradeStatusPara = section:AddParagraph({
-		Title = "Status Upgrade",
-		Content = "-",
-	})
-
-	local function tryUpgradeKandang()
-		local stats = SaveModule.Get(LocalPlayer)
-		local target = parseTarget(kandangTargetInput)
-		if stats.BaseUpgradeLevel >= target then
-			return "Kandang: udah di target (Lv." .. stats.BaseUpgradeLevel .. ")"
-		end
-		local nextLevel, config = BaseUpgradeClient.GetNextConfig(stats)
-		if not nextLevel or not config then
-			return "Kandang: udah MAX level (Lv." .. stats.BaseUpgradeLevel .. ")"
-		end
-		if nextLevel > target then
-			return "Kandang: nyampe target di Lv." .. stats.BaseUpgradeLevel
-		end
-		if not BaseUpgradeClient.CanAffordNext(stats) then
-			return "Kandang: uang kurang buat Lv." .. nextLevel .. " (butuh $" .. tostring(config.Cost) .. ")"
-		end
-		BaseUpgradeClient.RequestCashUpgrade()
-		return "Kandang: upgrade ke Lv." .. nextLevel .. " diminta"
-	end
-
-	local function tryUpgradeTreadmill()
-		local stats = SaveModule.Get(LocalPlayer)
-		local target = parseTarget(treadmillTargetInput)
-		if stats.TreadmillUpgradeLevel >= target then
-			return "Treadmill: udah di target (Lv." .. stats.TreadmillUpgradeLevel .. ")"
-		end
-		local nextLevel, config = TreadmillClient.GetNextConfig(stats)
-		if not nextLevel or not config then
-			return "Treadmill: udah MAX level (Lv." .. stats.TreadmillUpgradeLevel .. ")"
-		end
-		if nextLevel > target then
-			return "Treadmill: nyampe target di Lv." .. stats.TreadmillUpgradeLevel
-		end
-		if not TreadmillClient.CanAffordNext(stats) then
-			return "Treadmill: uang kurang buat Lv." .. nextLevel .. " (butuh $" .. tostring(config.Price) .. ")"
-		end
-		TreadmillClient.RequestCashUpgrade()
-		return "Treadmill: upgrade ke Lv." .. nextLevel .. " diminta"
-	end
-
-	local autoUpgradeRunning = false
-	section:AddToggle("StealAnEgg_AutoUpgrade", {
-		Title = "Auto Upgrade",
-		Default = false,
-		Callback = function(enabled)
-			autoUpgradeRunning = enabled
-			if enabled then
-				task.spawn(function()
-					while autoUpgradeRunning and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-						local kOk, kMsg = pcall(tryUpgradeKandang)
-						local tOk, tMsg = pcall(tryUpgradeTreadmill)
-						upgradeStatusPara:SetContent(
-							(kOk and kMsg or ("Kandang: error - " .. tostring(kMsg)))
-								.. "\n"
-								.. (tOk and tMsg or ("Treadmill: error - " .. tostring(tMsg)))
-						)
-						task.wait(5)
-					end
-				end)
-			end
-		end,
-	})
-
-	section:AddParagraph({
-		Title = "Catatan",
-		Content = "Cek tiap 5 detik. Target dibaca dari input di atas tiap kali cek (ganti kapan aja, ga perlu "
-			.. "matiin toggle dulu). Kosongin field = upgrade terus sampai level MAX beneran. "
-			.. "Loop otomatis berhenti minta upgrade begitu level sekarang udah >= target atau "
-			.. "udah MAX, tapi toggle-nya sendiri tetap nyala (buat terus mantau kalau kamu naikin target).",
-	})
-end
-
-------------------------------------------------------------
--- 3b. Deteksi Hasil Fuse -- baca hasil LANGSUNG dari signal server
--- (Constants.SIGNALS_MAP.Client.FuseMachine.FUSE_STARTED), bukan nebak
--- dari animasi reveal-nya. Server udah nentuin & ngirim hasilnya (Category,
--- Scale, Mutations) SEBELUM animasi kelar, jadi kita bisa tau persis dapet
--- apa -- kecil atau gede -- begitu itu ditentukan, bukan cuma keliatan dari
--- ukuran modelnya doang di layar. Ini BUKAN prediksi sebelum nge-fuse (hasil
--- fuse itu roll acak asli di server, ga bisa ditebak sebelum aksinya
--- dilakuin) -- ini cuma bikin hasilnya jelas & instan begitu udah kejadian.
-do
-	local section = Tab:AddSection("Deteksi Hasil Fuse")
-
-	local fusePara = section:AddParagraph({
-		Title = "Hasil Fuse Terakhir",
-		Content = "Belum ada -- otomatis muncul begitu kamu fuse pet.",
-	})
-
-	local Constants = require(ReplicatedStorage.Library.Globals.Constants)
-	local GameSignal = require(ReplicatedStorage.Library.Signal)
-	local AssetGenerationUtil = require(ReplicatedStorage.Library.Util.AssetGenerationUtil)
-	local AssetItemUtil = require(ReplicatedStorage.Library.Util.AssetItemUtil)
-
-	local function formatRate(v)
-		v = v or 0
-		local abs = math.abs(v)
-		if abs >= 1e12 then
-			return string.format("$%.2fT/s", v / 1e12)
-		elseif abs >= 1e9 then
-			return string.format("$%.2fB/s", v / 1e9)
-		elseif abs >= 1e6 then
-			return string.format("$%.2fM/s", v / 1e6)
-		elseif abs >= 1e3 then
-			return string.format("$%.2fK/s", v / 1e3)
-		end
-		return string.format("$%d/s", v)
-	end
-
-	local function formatFuseResult(result)
-		local rate = 0
-		pcall(function()
-			rate = AssetGenerationUtil.GetBaseRateMutationOnly({
-				Category = result.AssetCategory,
-				Scale = result.AssetScale,
-				Mutations = result.Mutations or {},
-			})
-		end)
-		local weight = 0
-		pcall(function()
-			weight = AssetItemUtil.GetVisualWeightKg({
-				Category = result.AssetCategory,
-				Scale = result.AssetScale,
-				Mutations = result.Mutations or {},
-			})
-		end)
-		local mutText = (result.Mutations and #result.Mutations > 0) and table.concat(result.Mutations, ", ") or "Tidak ada"
-		return string.format(
-			"%s\nBerat: %.2f Kg\nRate: %s\nMutasi: %s\nJam: %s",
-			result.AssetCategory or "?",
-			weight,
-			formatRate(rate),
-			mutText,
-			os.date("%H:%M:%S")
-		)
-	end
-
-	local ok, err = pcall(function()
-		GameSignal.Fired(Constants.SIGNALS_MAP.Client.FuseMachine.FUSE_STARTED):Connect(function(result)
-			local formatOk, content = pcall(formatFuseResult, result)
-			fusePara:SetContent(formatOk and content or ("Fuse kedeteksi tapi gagal diformat: " .. tostring(content)))
-		end)
-	end)
-	if not ok then
-		fusePara:SetContent("Gagal pasang detector: " .. tostring(err))
-	end
-
-	-- Kalkulator Peluang Fuse -- dibongkar dari kode game sendiri
-	-- (ReplicatedStorage.Library.Util.WeightedScaleRollUtil + EggItemUtil).
-	-- Ini bukan tabel rahasia, semuanya kebaca dari client:
-	--   - 11 tier ukuran (SCALE_TIER_TABLE) dengan base weight masing2 --
-	--     tier "normal" (~1x scale) base weight-nya 2000, JAUH di atas
-	--     gabungan semua tier lain (~510) -- makanya default-nya emang
-	--     condong ke hasil kecil.
-	--   - "Makin gede pet, makin gede peluang" itu beneran ada rumusnya
-	--     (exponent 0.6, skala logaritmik) -- tapi efeknya sub-linear,
-	--     jadi butuh rata2 scale yang GEDE BANGET buat beneran nggeser
-	--     peluang ke tier atas. Pet yang cuma "lumayan" tetap mayoritas
-	--     jatuh ke tier kecil/sedang.
-	--   - Di luar itu ada bonus "double atau nggak": abis scale-nya
-	--     keroll, ada peluang 1% dia di-dobel lagi (berulang, tiap step
-	--     peluangnya independen 1%), selama hasilnya belum lewat cap 150.
-	--     Ini yang jelasin hasil "jackpot" yang kadang jauh di luar nalar.
-	local SCALE_TIER_TABLE = {
-		{ min = 0.1, max = 0.2, weight = 5 },
-		{ min = 0.3, max = 0.45, weight = 18 },
-		{ min = 0.85, max = 1.05, weight = 2000 },
-		{ min = 1.45, max = 1.55, weight = 250 },
-		{ min = 1.9, max = 2.1, weight = 125 },
-		{ min = 2.85, max = 3.15, weight = 62.5 },
-		{ min = 3.8, max = 4.2, weight = 31.25 },
-		{ min = 5.8, max = 6.2, weight = 15.625 },
-		{ min = 9.5, max = 12.5, weight = 3 },
-		{ min = 12, max = 17, weight = 0.05 },
-		{ min = 20, max = 35, weight = 0.0001 },
-	}
-	local DOUBLE_BONUS_CHANCE = 0.01 -- 1% per step, berulang, dibatasi cap 150
-	local DOUBLE_BONUS_CAP = 150
-
-	local function tierWeightMultiplier(avgScale, tierMin, tierMax)
-		local tierMid = (tierMin + tierMax) / 2
-		local logAvg = math.log(avgScale) / math.log(2)
-		local logMid = math.log(tierMid) / math.log(2)
-		return math.exp(logAvg * logMid * 0.6)
-	end
-
-	local function computeFuseOdds(scales)
-		local avgScale = (scales[1] + scales[2] + scales[3]) / 3
-		local total = 0
-		local adjusted = {}
-		for _, tier in ipairs(SCALE_TIER_TABLE) do
-			local mult = tierWeightMultiplier(avgScale, tier.min, tier.max)
-			local w = tier.weight * mult
-			table.insert(adjusted, { min = tier.min, max = tier.max, weight = w })
-			total += w
-		end
-		return adjusted, total, avgScale
-	end
-
-	local fuseOddsPara = section:AddParagraph({
-		Title = "Peluang Fuse (dari 3 pet di slot sekarang)",
-		Content = "Klik \"Hitung Peluang Sekarang\" -- taruh dulu 3 pet di mesin fuse.",
-	})
-
-	local function hitungPeluangFuse()
-		local SaveModule = require(ReplicatedStorage.Library.Client.Save)
-		local ok2, stats = pcall(SaveModule.Get)
-		if not ok2 or not stats or not stats.Inventory then
-			fuseOddsPara:SetContent("Gagal baca data akun.")
-			return
-		end
-
-		local scales, category = {}, nil
-		for _, item in pairs(stats.Inventory) do
-			if item.InFuse == true then
-				table.insert(scales, item.Scale)
-				category = category or item.Category
-			end
-		end
-
-		if #scales ~= 3 then
-			fuseOddsPara:SetContent(string.format(
-				"Baru %d/3 slot keisi -- taruh dulu 3 pet kategori sama di mesin fuse.",
-				#scales
+			local limit = 0
+			pcall(function()
+				limit = AssetCmds.RequestEquipLimit()
+			end)
+			incomePara:SetContent(string.format(
+				"%d/%d Active -- Total: %s",
+				count, limit, formatMoney(total)
 			))
-			return
 		end
 
-		local adjusted, total, avgScale = computeFuseOdds(scales)
-		local lines = {}
-		for _, tier in ipairs(adjusted) do
-			local pct = (tier.weight / total) * 100
-			table.insert(lines, string.format("%.2f-%.2fx: %s", tier.min, tier.max,
-				pct < 0.01 and string.format("%.4f%%", pct) or string.format("%.2f%%", pct)))
-		end
-
-		fuseOddsPara:SetContent(string.format(
-			"%s | Rata2 scale input: %.2f\n%s\n+ Bonus: tiap hasil ada ~1%% peluang di-dobel lagi (berulang, dibatasi scale 150) -- di luar tabel di atas.",
-			category or "?",
-			avgScale,
-			table.concat(lines, "\n")
-		))
+		section:AddButton({ Title = "Cek Income Pet Aktif Sekarang", Callback = refreshActiveIncome })
 	end
 
-	section:AddButton({ Title = "Hitung Peluang Sekarang", Callback = hitungPeluangFuse })
-end
+	------------------------------------------------------------
+	-- 2 & 3. Monitor Telur di Kandang + Prediksi Hatch Berikutnya
+	------------------------------------------------------------
+	do
+		local section = Tab:AddSection("Monitor Telur & Kandang")
+		local monitorPara = section:AddParagraph({
+			Title = "Telur di Kandang",
+			Content = "Klik \"Scan Kandang Sekarang\" atau aktifkan Auto Monitor.",
+		})
+		local forecastPara = section:AddParagraph({
+			Title = "Prediksi Hatch Berikutnya",
+			Content = "-",
+		})
 
-------------------------------------------------------------
--- 4. Auto Generate Poster "Jual Akun" -> kirim ke Discord webhook
-------------------------------------------------------------
--- Render gambar (font/gradient/composit) ga bisa dilakuin di Luau, jadi bagian
--- itu dilempar ke local render server (poster_server.py, jalan di
--- 127.0.0.1:8765) lewat request() bawaan executor. Script cuma ngumpulin data
--- akun (isi tas + pet aktif + $/s tiap item) dan kirim sebagai JSON.
---
--- Tab ini SENGAJA cuma kebentuk kalau masuk lewat _G.NaruHub_Key
--- (GRANTED_VIA_GLOBAL) -- siapapun yang masuk lewat prompt manual ga
--- dapet fitur generate poster / monitor dashboard sama sekali.
+		local function refreshEggs()
+			pcall(function()
+				EggCmds.RequestRuntimeSnapshot()
+			end)
+
+			local records = EggCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+			local growing = {}
+
+			for uid, rec in pairs(records) do
+				if rec.Placement ~= nil then
+					local remaining, ready = getGrowthInfo(rec)
+					table.insert(growing, {
+						uid = uid,
+						species = rec.AssetCategory or "?",
+						mutation = mutationLabel(rec.Mutations),
+						remaining = remaining,
+						ready = ready,
+					})
+				end
+			end
+
+			table.sort(growing, function(a, b)
+				return a.remaining < b.remaining
+			end)
+
+			if #growing == 0 then
+				monitorPara:SetContent("Tidak ada telur yang sedang ditaruh di kandang.")
+				forecastPara:SetContent("-")
+				return
+			end
+
+			local lines = {}
+			for _, g in ipairs(growing) do
+				local status = g.ready and "SIAP MENETAS!" or formatSeconds(g.remaining)
+				local speciesLabel = g.mutation and (g.species .. " [" .. g.mutation .. "]") or g.species
+				table.insert(lines, string.format("%s -- %s", speciesLabel, status))
+			end
+			monitorPara:SetContent(table.concat(lines, "\n"))
+
+			local soonest = growing[1]
+			local soonestLabel = soonest.mutation and (soonest.species .. " [" .. soonest.mutation .. "]") or soonest.species
+			if soonest.ready then
+				forecastPara:SetContent(soonestLabel .. " sudah SIAP dihatch sekarang!")
+			else
+				forecastPara:SetContent(soonestLabel .. " dalam " .. formatSeconds(soonest.remaining))
+			end
+		end
+
+		section:AddButton({ Title = "Scan Kandang Sekarang", Callback = refreshEggs })
+
+		local autoRunning = false
+		section:AddToggle("StealAnEgg_AutoMonitor", {
+			Title = "Auto Monitor (tiap 3 detik)",
+			Default = false,
+			Callback = function(enabled)
+				autoRunning = enabled
+				if enabled then
+					task.spawn(function()
+						while autoRunning and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+							pcall(refreshEggs)
+							task.wait(3)
+						end
+					end)
+				end
+			end,
+		})
+
+		section:AddParagraph({
+			Title = "Catatan",
+			Content = "Spesies & mutasi telur sudah ditentukan server sejak ditaruh -- cuma "
+				.. "disembunyikan visualnya sampai animasi hatch selesai. Panel di atas "
+				.. "membaca data itu langsung, jadi kelihatan sebelum telurnya benar-benar menetas.",
+		})
+	end
+
+	------------------------------------------------------------
+	-- 3.5. Auto Upgrade Kandang & Treadmill
+	------------------------------------------------------------
+	do
+		local BaseUpgradeClient = require(ReplicatedStorage.Library.Client.BaseUpgradeClient)
+		local TreadmillClient = require(LocalPlayer.PlayerScripts.GUI.TreadmillUpgrade.Client)
+		local SaveModule = require(ReplicatedStorage.Library.Client.Save)
+
+		local section = Tab:AddSection("Auto Upgrade Kandang & Treadmill")
+
+		local kandangTargetInput = section:AddInput("StealAnEgg_KandangTarget", {
+			Title = "Target Level Kandang",
+			Placeholder = "cth: 15",
+			Default = "",
+			Finished = true,
+		})
+		local treadmillTargetInput = section:AddInput("StealAnEgg_TreadmillTarget", {
+			Title = "Target Level Treadmill",
+			Placeholder = "cth: 12",
+			Default = "",
+			Finished = true,
+		})
+
+		local function parseTarget(input)
+			local n = tonumber(input.Value)
+			if n and n > 0 then
+				return math.floor(n)
+			end
+			return math.huge
+		end
+
+		local upgradeStatusPara = section:AddParagraph({
+			Title = "Status Upgrade",
+			Content = "-",
+		})
+
+		local function tryUpgradeKandang()
+			local stats = SaveModule.Get(LocalPlayer)
+			local target = parseTarget(kandangTargetInput)
+			if stats.BaseUpgradeLevel >= target then
+				return "Kandang: udah di target (Lv." .. stats.BaseUpgradeLevel .. ")"
+			end
+			local nextLevel, config = BaseUpgradeClient.GetNextConfig(stats)
+			if not nextLevel or not config then
+				return "Kandang: udah MAX level (Lv." .. stats.BaseUpgradeLevel .. ")"
+			end
+			if nextLevel > target then
+				return "Kandang: nyampe target di Lv." .. stats.BaseUpgradeLevel
+			end
+			if not BaseUpgradeClient.CanAffordNext(stats) then
+				return "Kandang: uang kurang buat Lv." .. nextLevel .. " (butuh $" .. tostring(config.Cost) .. ")"
+			end
+			BaseUpgradeClient.RequestCashUpgrade()
+			return "Kandang: upgrade ke Lv." .. nextLevel .. " diminta"
+		end
+
+		local function tryUpgradeTreadmill()
+			local stats = SaveModule.Get(LocalPlayer)
+			local target = parseTarget(treadmillTargetInput)
+			if stats.TreadmillUpgradeLevel >= target then
+				return "Treadmill: udah di target (Lv." .. stats.TreadmillUpgradeLevel .. ")"
+			end
+			local nextLevel, config = TreadmillClient.GetNextConfig(stats)
+			if not nextLevel or not config then
+				return "Treadmill: udah MAX level (Lv." .. stats.TreadmillUpgradeLevel .. ")"
+			end
+			if nextLevel > target then
+				return "Treadmill: nyampe target di Lv." .. stats.TreadmillUpgradeLevel
+			end
+			if not TreadmillClient.CanAffordNext(stats) then
+				return "Treadmill: uang kurang buat Lv." .. nextLevel .. " (butuh $" .. tostring(config.Price) .. ")"
+			end
+			TreadmillClient.RequestCashUpgrade()
+			return "Treadmill: upgrade ke Lv." .. nextLevel .. " diminta"
+		end
+
+		local autoUpgradeRunning = false
+		section:AddToggle("StealAnEgg_AutoUpgrade", {
+			Title = "Auto Upgrade",
+			Default = false,
+			Callback = function(enabled)
+				autoUpgradeRunning = enabled
+				if enabled then
+					task.spawn(function()
+						while autoUpgradeRunning and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+							local kOk, kMsg = pcall(tryUpgradeKandang)
+							local tOk, tMsg = pcall(tryUpgradeTreadmill)
+							upgradeStatusPara:SetContent(
+								(kOk and kMsg or ("Kandang: error - " .. tostring(kMsg)))
+									.. "\n"
+									.. (tOk and tMsg or ("Treadmill: error - " .. tostring(tMsg)))
+							)
+							task.wait(5)
+						end
+					end)
+				end
+			end,
+		})
+
+		section:AddParagraph({
+			Title = "Catatan",
+			Content = "Cek tiap 5 detik. Target dibaca dari input di atas tiap kali cek (ganti kapan aja, ga perlu "
+				.. "matiin toggle dulu). Kosongin field = upgrade terus sampai level MAX beneran. "
+				.. "Loop otomatis berhenti minta upgrade begitu level sekarang udah >= target atau "
+				.. "udah MAX, tapi toggle-nya sendiri tetap nyala (buat terus mantau kalau kamu naikin target).",
+		})
+	end
+
+	------------------------------------------------------------
+	-- 3b. Deteksi Hasil Fuse
+	------------------------------------------------------------
+	do
+		local section = Tab:AddSection("Deteksi Hasil Fuse")
+
+		local fusePara = section:AddParagraph({
+			Title = "Hasil Fuse Terakhir",
+			Content = "Belum ada -- otomatis muncul begitu kamu fuse pet.",
+		})
+
+		local Constants = require(ReplicatedStorage.Library.Globals.Constants)
+		local GameSignal = require(ReplicatedStorage.Library.Signal)
+		local AssetGenerationUtil = require(ReplicatedStorage.Library.Util.AssetGenerationUtil)
+		local AssetItemUtil = require(ReplicatedStorage.Library.Util.AssetItemUtil)
+
+		local function formatRate(v)
+			v = v or 0
+			local abs = math.abs(v)
+			if abs >= 1e12 then
+				return string.format("$%.2fT/s", v / 1e12)
+			elseif abs >= 1e9 then
+				return string.format("$%.2fB/s", v / 1e9)
+			elseif abs >= 1e6 then
+				return string.format("$%.2fM/s", v / 1e6)
+			elseif abs >= 1e3 then
+				return string.format("$%.2fK/s", v / 1e3)
+			end
+			return string.format("$%d/s", v)
+		end
+
+		local function formatFuseResult(result)
+			local rate = 0
+			pcall(function()
+				rate = AssetGenerationUtil.GetBaseRateMutationOnly({
+					Category = result.AssetCategory,
+					Scale = result.AssetScale,
+					Mutations = result.Mutations or {},
+				})
+			end)
+			local weight = 0
+			pcall(function()
+				weight = AssetItemUtil.GetVisualWeightKg({
+					Category = result.AssetCategory,
+					Scale = result.AssetScale,
+					Mutations = result.Mutations or {},
+				})
+			end)
+			local mutText = (result.Mutations and #result.Mutations > 0) and table.concat(result.Mutations, ", ") or "Tidak ada"
+			return string.format(
+				"%s\nBerat: %.2f Kg\nRate: %s\nMutasi: %s\nJam: %s",
+				result.AssetCategory or "?",
+				weight,
+				formatRate(rate),
+				mutText,
+				os.date("%H:%M:%S")
+			)
+		end
+
+		local ok, err = pcall(function()
+			GameSignal.Fired(Constants.SIGNALS_MAP.Client.FuseMachine.FUSE_STARTED):Connect(function(result)
+				local formatOk, content = pcall(formatFuseResult, result)
+				fusePara:SetContent(formatOk and content or ("Fuse kedeteksi tapi gagal diformat: " .. tostring(content)))
+			end)
+		end)
+		if not ok then
+			fusePara:SetContent("Gagal pasang detector: " .. tostring(err))
+		end
+
+		local SCALE_TIER_TABLE = {
+			{ min = 0.1, max = 0.2, weight = 5 },
+			{ min = 0.3, max = 0.45, weight = 18 },
+			{ min = 0.85, max = 1.05, weight = 2000 },
+			{ min = 1.45, max = 1.55, weight = 250 },
+			{ min = 1.9, max = 2.1, weight = 125 },
+			{ min = 2.85, max = 3.15, weight = 62.5 },
+			{ min = 3.8, max = 4.2, weight = 31.25 },
+			{ min = 5.8, max = 6.2, weight = 15.625 },
+			{ min = 9.5, max = 12.5, weight = 3 },
+			{ min = 12, max = 17, weight = 0.05 },
+			{ min = 20, max = 35, weight = 0.0001 },
+		}
+		local DOUBLE_BONUS_CHANCE = 0.01
+		local DOUBLE_BONUS_CAP = 150
+
+		local function tierWeightMultiplier(avgScale, tierMin, tierMax)
+			local tierMid = (tierMin + tierMax) / 2
+			local logAvg = math.log(avgScale) / math.log(2)
+			local logMid = math.log(tierMid) / math.log(2)
+			return math.exp(logAvg * logMid * 0.6)
+		end
+
+		local function computeFuseOdds(scales)
+			local avgScale = (scales[1] + scales[2] + scales[3]) / 3
+			local total = 0
+			local adjusted = {}
+			for _, tier in ipairs(SCALE_TIER_TABLE) do
+				local mult = tierWeightMultiplier(avgScale, tier.min, tier.max)
+				local w = tier.weight * mult
+				table.insert(adjusted, { min = tier.min, max = tier.max, weight = w })
+				total += w
+			end
+			return adjusted, total, avgScale
+		end
+
+		local fuseOddsPara = section:AddParagraph({
+			Title = "Peluang Fuse (dari 3 pet di slot sekarang)",
+			Content = "Klik \"Hitung Peluang Sekarang\" -- taruh dulu 3 pet di mesin fuse.",
+		})
+
+		local function hitungPeluangFuse()
+			local SaveModule = require(ReplicatedStorage.Library.Client.Save)
+			local ok2, stats = pcall(SaveModule.Get)
+			if not ok2 or not stats or not stats.Inventory then
+				fuseOddsPara:SetContent("Gagal baca data akun.")
+				return
+			end
+
+			local scales, category = {}, nil
+			for _, item in pairs(stats.Inventory) do
+				if item.InFuse == true then
+					table.insert(scales, item.Scale)
+					category = category or item.Category
+				end
+			end
+
+			if #scales ~= 3 then
+				fuseOddsPara:SetContent(string.format(
+					"Baru %d/3 slot keisi -- taruh dulu 3 pet kategori sama di mesin fuse.",
+					#scales
+				))
+				return
+			end
+
+			local adjusted, total, avgScale = computeFuseOdds(scales)
+			local lines = {}
+			for _, tier in ipairs(adjusted) do
+				local pct = (tier.weight / total) * 100
+				table.insert(lines, string.format("%.2f-%.2fx: %s", tier.min, tier.max,
+					pct < 0.01 and string.format("%.4f%%", pct) or string.format("%.2f%%", pct)))
+			end
+
+			fuseOddsPara:SetContent(string.format(
+				"%s | Rata2 scale input: %.2f\n%s\n+ Bonus: tiap hasil ada ~1%% peluang di-dobel lagi (berulang, dibatasi scale 150) -- di luar tabel di atas.",
+				category or "?",
+				avgScale,
+				table.concat(lines, "\n")
+			))
+		end
+
+		section:AddButton({ Title = "Hitung Peluang Sekarang", Callback = hitungPeluangFuse })
+	end
+
 if GRANTED_VIA_GLOBAL then
-PosterTab = Window:AddTab({ Title = "Auto Poster" })
-do
+	local PosterTab = Window:AddTab({ Title = "Auto Poster" })
+
 	local AssetGenerationUtil = require(ReplicatedStorage.Library.Util.AssetGenerationUtil)
 	local AssetItemUtil = require(ReplicatedStorage.Library.Util.AssetItemUtil)
 	local AssetCmds = require(ReplicatedStorage.Library.Client.AssetCmds)
@@ -2138,8 +2052,6 @@ do
 	local EggItemUtil = require(ReplicatedStorage.Library.Util.EggItemUtil)
 	local HttpService = game:GetService("HttpService")
 
-	-- SERVER_BASE_URL & DEVICE_ID (gethwid()) udah dihitung sekali di Key
-	-- Gate paling atas script -- dipakai ulang di sini, ga usah hitung lagi.
 	local POSTER_SERVER_URL = SERVER_BASE_URL .. "/generate"
 
 	local function mutationNamesFromString(str)
@@ -2180,9 +2092,6 @@ do
 						Mutations = mutations,
 					})
 				end)
-				-- Weight attribute mentah != berat yang ditampilin game (itu cuma
-				-- basis lama, ga dipakai lagi). Berat asli = ModelWeight * Scale^3,
-				-- sama kayak yang dipanggil AssetHoverDataDisplay/BackpackController.
 				local weight = 0
 				pcall(function()
 					weight = AssetItemUtil.GetVisualWeightKg({
@@ -2232,12 +2141,6 @@ do
 		return pets
 	end
 
-	-- Tool pet yang lagi "aktif" ternyata TETEP masih ada di Backpack
-	-- (game ini ga mindahin Tool keluar Backpack pas diaktifin, beda sama
-	-- Humanoid:EquipTool biasa) -- jadi collectBackpackPets() bisa ngambil
-	-- pet yang sama kayak collectActivePets(), bikin dobel di "Pet Aktif"
-	-- DAN "Isi Tas (Semua Pet)" sekaligus. Buang yang uid-nya udah ada di
-	-- activePets biar ga dobel.
 	local function excludeActiveFromBackpack(backpackPets, activePets)
 		local activeUids = {}
 		for _, p in ipairs(activePets) do
@@ -2254,9 +2157,6 @@ do
 		return result
 	end
 
-	-- Telur yang lagi tumbuh di kandang -- spesies & mutasi udah di-roll
-	-- server sejak ditaruh (EggItemUtil sama persis kayak yang dipakai di
-	-- "Monitor Telur & Kandang"), cuma disembunyikan visualnya sampai hatch.
 	local function collectGrowingEggs()
 		pcall(function()
 			EggCmds.RequestRuntimeSnapshot()
@@ -2311,11 +2211,6 @@ do
 		return eggs
 	end
 
-	-- v2: telur yang MASIH DI TAS, belum ditaruh di kandang (dipetik/curi
-	-- tapi sengaja ga di-place biar script auto-nya ga tabrakan sama
-	-- fitur lain). Spesies & mutasi udah ke-roll server dari sejak
-	-- di-dapet, jadi tinggal baca lewat record yang sama, bedanya cuma
-	-- filter Placement == nil (bukan ~= nil kayak yang lagi tumbuh).
 	local function collectBackpackEggs()
 		pcall(function()
 			EggCmds.RequestRuntimeSnapshot()
@@ -2377,7 +2272,7 @@ do
 			if stats then
 				kandangLevel = stats.BaseUpgradeLevel
 				treadmillLevel = stats.TreadmillUpgradeLevel
-				currentMoney = stats.Money -- saldo uang SEKARANG (bukan $/s), beda dari leaderstats "Money/s"
+				currentMoney = stats.Money
 			end
 		end)
 
@@ -2430,11 +2325,6 @@ do
 		Default = "Putra Ramadhan",
 		Finished = true,
 	})
-	-- Default TRUE -- jalur webhook langsung butuh field "Webhook URL" diisi
-	-- manual per-device, gampang kelewat & bikin generate sukses (HTTP 200)
-	-- tapi ga pernah ngirim apa-apa ke Discord. Jalur bot (draft + tombol
-	-- Edit Poster) ga butuh setup tambahan apa-apa, jadi ini yang aman
-	-- buat default.
 	local discordPriceFlowToggle = section:AddToggle("StealAnEgg_DiscordPriceFlow", {
 		Title = "Isi Harga di Discord (tombol + form)",
 		Default = true,
@@ -2456,7 +2346,6 @@ do
 		return out
 	end
 
-	-- "Rp 1.234.567" -- titik tiap 3 digit, gaya Rupiah.
 	local function formatRupiah(n)
 		n = math.floor(n + 0.5)
 		local s = tostring(math.abs(n))
@@ -2465,14 +2354,6 @@ do
 		return "Rp " .. (n < 0 and "-" or "") .. reversed
 	end
 
-	-- Price Acc auto-hitung dari Income Aktif -- 17 rate TERTINGGI dari
-	-- SEMUA yang dimiliki (pet aktif + isi tas + telur lagi tumbuh + telur
-	-- di tas), TERLEPAS lagi keequip/ditaro apa ngga (17 = max slot equip
-	-- pet di game ini). Sama persis pool yang dipakai buat stat "Income
-	-- Aktif" di dashboard/poster -- biar harga konsisten sama yang
-	-- dipajang. Tiap 1B/s dihargai sebesar StealAnEgg_HargaPerB (default
-	-- Rp 5.000). Field harga manual (priceInput) tetap menang kalau diisi
-	-- -- ini cuma fallback.
 	local function computeAutoPrice(activePets, allPets, growingEggs, backpackEggs)
 		local MAX_EQUIP_PETS = 17
 		local pool = {}
@@ -2498,8 +2379,6 @@ do
 		if totalRate <= 0 then
 			return ""
 		end
-		-- Input dalam satuan ribuan biar user ga usah ngetik nol -- "5" = Rp
-		-- 5.000, "0.5" = Rp 500.
 		local ratePerB = (tonumber(hargaPerBInput.Value) or 5) * 1000
 		local incomeB = totalRate / 1e9
 		return formatRupiah(incomeB * ratePerB)
@@ -2518,10 +2397,6 @@ do
 		end)
 		local runSpeed, moneyPerSecond, kandangLevel, treadmillLevel, currentMoney = collectAccountStats()
 		local autoPrice = computeAutoPrice(activePets, allPets, growingEggs, backpackEggs)
-		-- Toggle nyala = jangan kirim harga sama sekali, biar poster_server
-		-- pakai alur bot (post draft + tombol "Isi Harga" di Discord) alih-
-		-- alih langsung post lewat webhook. autoPrice tetap dikirim sebagai
-		-- suggestedPrice biar udah keisi default di form Discord-nya.
 		local useDiscordPriceFlow = discordPriceFlowToggle.Value == true
 
 		local payload = {
@@ -2547,8 +2422,6 @@ do
 
 		local body = HttpService:JSONEncode(payload)
 		local serverUrl = posterServerInput.Value ~= "" and posterServerInput.Value or POSTER_SERVER_URL
-		-- User cuma paste domain tunnel-nya doang (tanpa /generate) tiap kali
-		-- URL ganti -- normalize di sini biar ngga 404 gara-gara lupa path.
 		serverUrl = serverUrl:gsub("/+$", "")
 		if not serverUrl:match("/generate$") then
 			serverUrl = serverUrl .. "/generate"
@@ -2556,10 +2429,6 @@ do
 
 		statusPara:SetContent("Render poster + kirim ke Discord...")
 
-		-- request() ga punya opsi timeout sendiri, jadi kalau koneksi HP<->PC
-		-- ke-drop diam-diam (client isolation WiFi, firewall, dst) tombol ini
-		-- bisa "ngestuck" tanpa pesan apa-apa. Race manual pakai task.delay
-		-- biar user tetap dapet status jelas walau request aslinya belum balik.
 		local settled = false
 		task.spawn(function()
 			local ok, res = pcall(function()
@@ -2588,9 +2457,6 @@ do
 				statusPara:SetContent(("Gagal (HTTP %s): %s"):format(tostring(res.StatusCode), tostring(res.Body or "")))
 			end
 		end)
-		-- 60 detik, bukan 10 -- hosting gratis (Render dst) suka "tidur" kalau
-		-- lama ga dipakai, request pertama abis idle bisa 30-60 detik buat
-		-- bangun lagi. 10 detik ketat banget, bikin false-positive "timeout".
 		task.delay(60, function()
 			if settled then
 				return
@@ -2603,11 +2469,7 @@ do
 	section:AddButton({ Title = "Generate & Kirim ke Discord", Callback = generateAndSend })
 
 	------------------------------------------------------------
-	-- Monitor Lokal (Dashboard) -- lapor stat ringan berkala ke
-	-- poster_server.py biar bisa dipantau semua akun sekaligus dari satu
-	-- dashboard HTML lokal (http://<PC>:8765/dashboard), kayak alt-account
-	-- tracker. Beda dari "Jual Akun": ini otomatis & berkala, bukan sekali
-	-- generate manual.
+	-- Monitor Lokal (Dashboard)
 	------------------------------------------------------------
 	local monitorSection = PosterTab:AddSection("Monitor Lokal (Dashboard)")
 
@@ -2637,10 +2499,6 @@ do
 			local backpackEggs = collectBackpackEggs()
 			local runSpeed, moneyPerSecond, kandangLevel, treadmillLevel, currentMoney = collectAccountStats()
 
-			-- Sama persis label & rumus yang dipajang di poster (Speed, Uang
-			-- Sekarang, Income Potensi Aktif, Income Aktif, Total Pet >= 1B/s,
-			-- Kandang/Treadmill Level) -- biar dashboard nunjukkin info yang
-			-- sama, bukan versi beda.
 			local incomeEggBackpack = 0
 			for _, e in ipairs(backpackEggs) do
 				incomeEggBackpack += (e.rate or 0)
@@ -2650,11 +2508,6 @@ do
 				incomeEggSedangTumbuh += (e.rate or 0)
 			end
 
-			-- "Aktif" = 17 RATE TERTINGGI dari SEMUA yang dimiliki -- pet
-			-- (aktif + isi tas) DAN telur (lagi tumbuh + di tas), TERLEPAS
-			-- lagi keequip/ditaro apa ngga -- 17 = max slot equip pet di
-			-- game ini. Dipakai buat Income Aktif DAN Total Pet >= 1B/s
-			-- (pool yang sama).
 			local MAX_EQUIP_PETS = 17
 			local petPool = {}
 			for _, p in ipairs(activePets) do
@@ -2685,8 +2538,6 @@ do
 				end
 			end
 
-			-- Top 3 pet by rate, gabungan pet aktif + isi tas -- buat kartu
-			-- "TOP PETS" di dashboard.
 			local pool = {}
 			for _, p in ipairs(activePets) do
 				table.insert(pool, p)
@@ -2715,10 +2566,6 @@ do
 			local autoPrice = computeAutoPrice(activePets, allPets, growingEggs, backpackEggs)
 			local useDiscordPriceFlow = discordPriceFlowToggle.Value == true
 
-			-- Snapshot lengkap sama persis kayak payload generateAndSend() --
-			-- disimpen server-side per akun biar tombol "Generate Poster" di
-			-- dashboard bisa mancing ulang generate tanpa perlu game ngirim
-			-- apa-apa lagi.
 			local fullData = {
 				title = titleInput.Value ~= "" and titleInput.Value or "Jual Akun GACOR",
 				badge = badgeInput.Value,
@@ -2758,11 +2605,6 @@ do
 			}
 
 			local body = HttpService:JSONEncode(payload)
-			-- Kalau field ini dikosongin, pakai domain yang sama dengan Poster
-			-- Server URL (yang lebih sering di-set user, termasuk buat akun di
-			-- cloud phone / device yang beda jaringan dari PC) -- ganti path
-			-- "/generate" jadi "/monitor". Fallback ke localhost cuma buat PC
-			-- yang jalanin poster_server.py sendiri.
 			local url = monitorUrlInput.Value
 			if url == "" then
 				local base = posterServerInput.Value ~= "" and posterServerInput.Value or POSTER_SERVER_URL
@@ -2787,10 +2629,6 @@ do
 		end
 	end
 
-	-- Default NYALA -- begitu script di-exe, akun langsung kedeteksi otomatis
-	-- di dashboard tanpa perlu klak-klik toggle dulu. (AddToggle otomatis
-	-- fire Callback(true) sendiri kalau Default=true & belum ada config
-	-- tersimpan; kalau user pernah matiin & tersimpan false, itu dihormati.)
 	local monitorRunning = false
 	monitorSection:AddToggle("StealAnEgg_MonitorReport", {
 		Title = "Auto Report ke Dashboard (tiap 15 detik)",
@@ -2810,30 +2648,7 @@ do
 
 	monitorSection:AddButton({ Title = "Lapor Sekarang", Callback = reportToMonitor })
 end
-end
 
-------------------------------------------------------------
--- 5. Auto Steal Egg -- curi telur di Area Eggs (mekanisme "tembok malam")
-------------------------------------------------------------
--- Dibongkar dari kode game sendiri (ReplicatedStorage.Library.Client.EggCmds,
--- .AreaEggResetWall, .Util.AreaEggSlotIdentity, .Util.GuardAreaLookupUtil):
---   - Server nentuin & ngirim SEMUA area egg lewat EggCmds.GetAreaEggSnapshot()
---     (tiap record udah bawa BottomCFrame -- posisi dunia -- jadi ga perlu resolve
---     manual dari Nest/AreaId).
---   - Aksi curinya sendiri 1 remote: EggCmds.RequestCarryAreaEgg(uid, slotKey).
---     slotKey cuma perlu buat uid "FirstAreaEgg_..." (AreaEggSlotIdentity).
---   - "Tembok malam" itu AreaEggResetWall -- collapse (ga collide, area kebuka)
---     vs reveal (naik lagi, collide, area ketutup). IsClosed()==true berarti
---     lagi naik/nutup.
---   - Kena gigit pet penjaga = DropReasons.GuardHit -> record state jadi
---     "Dropped" (ke-uid yang sama), bukan hilang -- tinggal samperin posisi
---     barunya & RequestCarryAreaEgg lagi (uid sama, slotKey nil).
--- CATATAN: ini v1 -- gerakan pakai CFrame-walk manual (bukan physics
--- Humanoid) biar bisa disetel kecepatannya & diinterupsi kapan aja (buat
--- ngejar egg yang jatuh kena gigit). Belum divalidasi penuh terhadap semua
--- kondisi tepi game (banyak guard sekaligus, banyak area aktif, dll) --
--- perlu dites & di-tuning langsung di game.
-do
 	local FarmTab = Window:AddTab({ Title = "Farming" })
 
 	local RunService = game:GetService("RunService")
@@ -2856,10 +2671,6 @@ do
 	end
 	table.sort(allCategories)
 
-	-- GuardAreas.AreaId itu zona bertema (Volcano, Jungle, Cosmic, dst) --
-	-- BUKAN per-player -- semuanya dibalik dari 1 wall/corridor bareng
-	-- (SeparationLine), jadi milih area di sini cuma nyaring TARGET egg-nya,
-	-- ga ngubah titik parkir nunggu tembok buka.
 	local allAreaIds = {}
 	for _, child in ipairs(GuardAreas:GetChildren()) do
 		table.insert(allAreaIds, child.Name)
@@ -2907,93 +2718,43 @@ do
 		Finished = true,
 	})
 
-	local MAX_SAFE_TWEEN_SPEED = 60
-
 	local tweenSpeedInput = section:AddInput("StealAnEgg_TweenSpeed", {
-		Title = "Tween Speed (studs/detik, MAX 60 tanpa fly -- bebas kalau Noclip+Fly nyala)",
-		Placeholder = "60",
-		Default = "60",
+		Title = "Tween Speed Max (studs/detik, di-cap otomatis ke WalkSpeed * Factor)",
+		Placeholder = "300",
+		Default = "300",
 		Finished = true,
 	})
 
-	-- Noclip + Fly: matiin collision semua part karakter tiap frame +
-	-- gerak 3D lurus ke target (ga ngikutin tanah, ga kena gravity).
-	-- Kena anticheat atau ngga BELUM DITES -- ini eksperimental, user
-	-- harus tes sendiri & tune speed-nya.
-	local noclipFlyEnabled = false
-	local noclipConn = nil
+	local SPEED_SAFETY_FACTOR = 1.0
 
-	local function startNoclip()
-		if noclipConn then return end
-		noclipConn = RunService.Stepped:Connect(function()
-			if not noclipFlyEnabled then return end
-			local char = LocalPlayer.Character
-			if not char then return end
-			for _, part in ipairs(char:GetDescendants()) do
-				if part:IsA("BasePart") then
-					part.CanCollide = false
-				end
-			end
-		end)
-	end
+	local speedFactorInput = section:AddInput("StealAnEgg_SpeedFactor", {
+		Title = "Speed Factor (kalikan WalkSpeed; 1.0 = aman, 1.3 = agresif)",
+		Placeholder = "1.0",
+		Default = "1.0",
+		Finished = true,
+	})
 
-	local function stopNoclip()
-		if noclipConn then
-			noclipConn:Disconnect()
-			noclipConn = nil
-		end
-		local char = LocalPlayer.Character
-		if char then
-			for _, part in ipairs(char:GetDescendants()) do
-				if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-					part.CanCollide = true
-				end
-			end
-		end
-	end
+	local autoReturnTreadmill = true
 
-	section:AddToggle("StealAnEgg_NoclipFly", {
-		Title = "Noclip + Fly (eksperimental, buat Auto Steal)",
-		Default = false,
+	section:AddToggle("StealAnEgg_AutoReturnTreadmill", {
+		Title = "Auto Return to Treadmill (balik + naik treadmill setelah steal)",
+		Default = true,
 		Callback = function(enabled)
-			noclipFlyEnabled = enabled
-			if enabled then
-				startNoclip()
-			else
-				stopNoclip()
-			end
+			autoReturnTreadmill = enabled
 		end,
 	})
 
-	local FLY_ALTITUDE = 3
-
-	local flyAltInput = section:AddInput("StealAnEgg_FlyAlt", {
-		Title = "Fly Altitude (studs di atas tanah target)",
-		Placeholder = "3",
-		Default = "3",
-		Finished = true,
-	})
-
-	local function getFlyAlt()
-		return tonumber(flyAltInput.Value) or FLY_ALTITUDE
+	local function getSpeedFactor()
+		local v = tonumber(speedFactorInput.Value) or SPEED_SAFETY_FACTOR
+		return math.clamp(v, 0.5, 3.0)
 	end
 
 	local function getTweenSpeed()
-		local v = tonumber(tweenSpeedInput.Value) or MAX_SAFE_TWEEN_SPEED
-		if noclipFlyEnabled then
-			return math.max(v, 10)
-		end
-		return math.clamp(v, 10, MAX_SAFE_TWEEN_SPEED)
+		return math.max(tonumber(tweenSpeedInput.Value) or 300, 10)
 	end
 
 	local statusPara = section:AddParagraph({ Title = "Status Auto Steal", Content = "-" })
 
-	-- pcall-wrapped SENGAJA -- kalau toggle "Auto Steal" ke-restore otomatis
-	-- dari config tersimpan (task.defer di internal NaruUI), SetContent yang
-	-- dipanggil dari thread restore itu bisa throw ("lacking capability
-	-- Plugin") di beberapa executor. Kalau setStatus sendiri yang crash,
-	-- seluruh Callback toggle berhenti SEBELUM sempat task.spawn loop
-	-- utamanya -- toggle keliatan ON tapi loop-nya ga pernah beneran mulai.
 	local function setStatus(msg)
 		pcall(function()
 			statusPara:SetContent(tostring(msg))
@@ -3010,11 +2771,6 @@ do
 		return char and char:FindFirstChildOfClass("Humanoid")
 	end
 
-	-- Kena trap (dipasang pemain lain) nyetel attribute "IsTrapped" di
-	-- karakter (dipakai game sendiri buat lock backpack & prompt sementara
-	-- -- Tools.TrappedBackpackController). Selama masih trapped, gerakan &
-	-- steal server kemungkinan ditolak, jadi kita cuma nunggu lepas dulu
-	-- alih-alih maksa terus nabrak penolakan.
 	local function isTrapped()
 		local char = LocalPlayer.Character
 		return char and char:GetAttribute("IsTrapped") == true
@@ -3035,19 +2791,6 @@ do
 		return true
 	end
 
-	-- "Auto Boost Speed" (fitur lama yang paksa set hum.WalkSpeed manual)
-	-- DIHAPUS -- dites langsung di game dan kebukti: nyetel Humanoid.WalkSpeed
-	-- manual (bukan lewat upgrade/item resmi) bikin KARAKTER MATI INSTAN.
-	-- Server plainly own & validasi WalkSpeed; override client-side ke-detect
-	-- selevel sama kayak CFrame-teleport ketauan. Jangan diaktifin lagi
-	-- dengan cara ini -- kalau butuh lebih cepat, satu-satunya jalur yang
-	-- kebukti aman itu CFrame-walk yang di-cap ke MAX_SAFE_TWEEN_SPEED.
-
-	-- Cari ketinggian tanah asli di bawah (x,z) via raycast, biar CFrame-walk
-	-- NGIKUTIN kontur tanah. Kalau raycast dari dekat gagal (terrain belum
-	-- ke-stream), coba dari jauh lebih tinggi (Y+500). Terakhir fallback ke
-	-- targetY (posisi egg/tujuan) biar karakter TURUN ke tanah tujuan alih-
-	-- alih ngelayang di ketinggian asal.
 	local function findGroundY(x, z, fromY, targetY)
 		local char = LocalPlayer.Character
 		if not char then
@@ -3069,101 +2812,85 @@ do
 		return targetY
 	end
 
-	-- CFrame-walk / CFrame-fly: gerakin HumanoidRootPart tiap Heartbeat.
-	-- Mode normal (noclipFly off): ngikutin kontur tanah, speed di-cap 60.
-	-- Mode fly (noclipFly on): terbang lurus 3D di ketinggian flyAlt studs
-	-- di atas target, speed bebas (user yang tune), noclip nyala otomatis.
-	local function moveTo(targetPosition, speed, shouldContinue)
-		local hum = getHumanoid()
-		if not hum then
-			print("[StealAnEgg] moveTo: No humanoid")
-			return false
-		end
+	local function getTreadmillRoot()
+		local ok, slot = pcall(function()
+			return PlotCmds.GetMySlot()
+		end)
+		if not ok or not slot then return nil end
+		local rendersFolder = Workspace:FindFirstChild("__ClientTreadmillRenders")
+		if not rendersFolder then return nil end
+		local render = rendersFolder:FindFirstChild("TreadmillRender_" .. tostring(slot))
+		if not render then return nil end
+		return render:FindFirstChild("Root")
+	end
 
+	local function boardTreadmill()
+		local root = getTreadmillRoot()
+		if not root then return false end
 		local hrp = getHRP()
-		if not hrp then
-			print("[StealAnEgg] moveTo: No HRP")
-			return false
+		if not hrp then return false end
+		hrp.CFrame = root.CFrame
+		return true
+	end
+
+	local function dismountTreadmill()
+		local hum = getHumanoid()
+		if hum then
+			pcall(function()
+				if hum.Sit then
+					hum.Sit = false
+				end
+				hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+			end)
+			task.wait(0.2)
 		end
+	end
 
-		local char = LocalPlayer.Character
-		if not char then
-			print("[StealAnEgg] moveTo: No character")
-			return false
-		end
-
-		-- Get parts untuk BulkMoveTo
-		local parts = {}
-		for _, p in ipairs(char:GetDescendants()) do
-			if p:IsA("BasePart") and p ~= hrp then
-				table.insert(parts, p)
-			end
-		end
-		table.insert(parts, hrp)
-
-		hrp:SetAttribute("KillPartIgnore", true)
-		print("[StealAnEgg] moveTo: Moving to", targetPosition)
-
-		local lastGroundY = findGroundY(targetPosition.X, targetPosition.Z, targetPosition.Y, targetPosition.Y)
+	local function moveTo(targetPosition, speed, shouldContinue)
+		local inputSpeed = speed or getTweenSpeed()
+		local lastGroundY = targetPosition.Y
 
 		while true do
 			if shouldContinue and not shouldContinue() then
-				hrp:SetAttribute("KillPartIgnore", false)
-				print("[StealAnEgg] moveTo: Cancelled")
 				return false
 			end
-
-			hrp = getHRP()
+			local hrp = getHRP()
 			if not hrp then
 				return false
 			end
+			local hum = getHumanoid()
+			local standOffset = (hum and hum.HipHeight or 2) + hrp.Size.Y / 2
+			local ws = hum and hum.WalkSpeed or 16
+			local adaptiveSpeed = math.min(inputSpeed, ws * getSpeedFactor())
+			adaptiveSpeed = math.max(adaptiveSpeed, 10)
 
-			hum = getHumanoid()
-			if hum and hum.Health <= 0 then
-				hrp:SetAttribute("KillPartIgnore", false)
-				print("[StealAnEgg] moveTo: Character died, health=" .. tostring(hum.Health))
-				return false
-			end
-
-			local dist = (hrp.Position - targetPosition).Magnitude
+			local current = hrp.Position
+			local flat = Vector3.new(targetPosition.X - current.X, 0, targetPosition.Z - current.Z)
+			local dist = flat.Magnitude
 			if dist < 3 then
-				hrp:SetAttribute("KillPartIgnore", false)
-				print("[StealAnEgg] moveTo: Reached target, health=" .. tostring(hum.Health))
+				hrp.AssemblyLinearVelocity = Vector3.zero
 				return true
 			end
 
-			speed = speed or getTweenSpeed()
-			if not noclipFlyEnabled then
-				speed = math.clamp(speed, 10, MAX_SAFE_TWEEN_SPEED)
-			else
-				speed = math.max(speed, 10)
-			end
-
 			local dt = RunService.Heartbeat:Wait()
-			local flat = Vector3.new(targetPosition.X - hrp.Position.X, 0, targetPosition.Z - hrp.Position.Z)
-			local step = math.min(speed * dt, flat.Magnitude)
+			local step = math.min(adaptiveSpeed * dt, dist)
 			local direction = flat.Unit
-			local newPos = hrp.Position + direction * step
+			local newPos = current + direction * step
 
-			local groundY = findGroundY(newPos.X, newPos.Z, hrp.Position.Y, lastGroundY)
+			local groundY = findGroundY(newPos.X, newPos.Z, current.Y, lastGroundY)
 			if groundY then
 				lastGroundY = groundY
 			end
-			local standOffset = (hum and hum.HipHeight or 2) + hrp.Size.Y / 2
 			local newY = (groundY or lastGroundY) + standOffset
 			newPos = Vector3.new(newPos.X, newY, newPos.Z)
+			hrp.CFrame = CFrame.new(newPos, newPos + direction)
+			hrp.AssemblyLinearVelocity = Vector3.new(direction.X * adaptiveSpeed, 0, direction.Z * adaptiveSpeed)
 
-			local cf = CFrame.new(newPos, newPos + direction)
-			table.clear(parts)
-			table.insert(parts, hrp)
-			for _, p in ipairs(char:GetDescendants()) do
-				if p:IsA("BasePart") and p ~= hrp then
-					table.insert(parts, p)
-				end
+			if hum then
+				pcall(function()
+					hum:ChangeState(Enum.HumanoidStateType.Running)
+				end)
 			end
-
-			workspace:BulkMoveTo(parts, {cf}, Enum.BulkMoveMode.FireCFrameChanged)
-			task.wait(0.01)
 		end
 	end
 
@@ -3213,10 +2940,6 @@ do
 		return true
 	end
 
-	-- GetAreaEggSnapshot() ngebalikin SEMUA area egg dari SEMUA zona (Volcano,
-	-- Jungle, dst) sekaligus -- tanpa filter Area, "pilih rate tertinggi" bisa
-	-- nyeret karakter ke zona yang beda jauh dari yang lagi didatengin. Filter
-	-- Area (selectedAreas) di matchesFilter yang jadi kendali utamanya.
 	local function pickBestTarget()
 		local ok, snapshot = pcall(function()
 			return EggCmds.GetAreaEggSnapshot()
@@ -3236,70 +2959,37 @@ do
 		return best
 	end
 
-	-- Titik parkir nunggu tembok kebuka -- SENGAJA BUKAN dihitung dari
-	-- geometri SeparationLine (part-nya lebar 393 studs, titik tengahnya
-	-- kebetulan jatuh di tengah "Zona Aman", bukan di mulut jalur beneran).
-	-- Dipakein dari posisi player sendiri: capture otomatis pas toggle Auto
-	-- Steal dinyalain, atau manual lewat tombol "Set Titik Parkir" di bawah.
 	local stagingPos = nil
 
-	task.spawn(function()
-		task.wait(1)
-		local bases = workspace:FindFirstChild("__OBJECTS") and workspace.__OBJECTS:FindFirstChild("Build") and workspace.__OBJECTS.Build:FindFirstChild("MainMap") and workspace.__OBJECTS.Build.MainMap:FindFirstChild("Bases")
-		local basePart = bases and bases:FindFirstChild("Part")
-		if basePart and basePart:IsA("BasePart") then
-			stagingPos = basePart.Position
-			print("[StealAnEgg] Staging position auto-set to center plot:", stagingPos)
-			setStatus("Titik parkir di-set ke tengah plot")
+	local function autoDetectStagingPos()
+		local plots = Workspace:FindFirstChild("Plots")
+		if not plots then return nil end
+		local sum, count = Vector3.zero, 0
+		for _, plot in ipairs(plots:GetChildren()) do
+			local primary = plot:FindFirstChild("TreadmillBottom") or plot.PrimaryPart
+			if primary then
+				sum = sum + primary.Position
+				count = count + 1
+			end
 		end
-	end)
+		if count == 0 then return nil end
+		return sum / count
+	end
 
 	local function captureStagingPos()
 		local hrp = getHRP()
 		if hrp then
 			stagingPos = hrp.Position
 			setStatus("Titik parkir di-set ke posisi sekarang: " .. tostring(stagingPos))
-			print("[StealAnEgg] Staging position set to:", stagingPos)
+		else
+			local auto = autoDetectStagingPos()
+			if auto then
+				stagingPos = auto
+				setStatus("Titik parkir auto-detect ke tengah plot: " .. tostring(stagingPos))
+			end
 		end
 	end
 
-	-- Tunggu tembok kebuka penuh SAMBIL parkir di titik yang udah di-set.
-	-- Begitu kebuka langsung tinggal tancap ke egg-nya.
-	local function waitForWallOpen()
-		if not stagingPos then
-			setStatus("Titik tengah plot belum siap.")
-			return false
-		end
-		setStatus("Tween ke tengah plot...")
-		print("[StealAnEgg] Moving to center plot:", stagingPos)
-		if not moveTo(stagingPos, getTweenSpeed(), function()
-			return autoStealRunning
-		end) then
-			return false
-		end
-		print("[StealAnEgg] Arrived at center plot:", stagingPos)
-
-		local lastReported = nil
-		while autoStealRunning do
-			local closed = true
-			pcall(function()
-				closed = AreaEggResetWall.IsClosed()
-			end)
-			if lastReported ~= closed then
-				lastReported = closed
-				setStatus(closed and "Parkir di tengah plot, nunggu tembok..." or "Tembok FULL OPEN! Ambil egg...")
-			end
-			if not closed then
-				task.wait(0.2)
-				return true
-			end
-			task.wait(0.2)
-		end
-		return false
-	end
-
-	-- Bawa telur curian balik nyebrang -- kalau di tengah jalan kena gigit
-	-- (dijatohin), otomatis kejar posisi barunya & ambil ulang (uid sama).
 	local function carryEggHome(uid)
 		local staging = stagingPos or SeparationLine.Position
 		local ticks = 0
@@ -3334,19 +3024,12 @@ do
 
 			if isCarrying and carryingUid == uid then
 				local hrp = getHRP()
-				if hrp then
-					local distToStaging = (Vector3.new(hrp.Position.X, 0, hrp.Position.Z) - Vector3.new(staging.X, 0, staging.Z)).Magnitude
-					if distToStaging < 4 then
-						return true
-					end
-					
-					setStatus("Tween balik ke tengah plot...")
-					if not moveTo(staging, getTweenSpeed(), function()
-						return autoStealRunning and isCarrying and carryingUid == uid
-					end) then
-						return false
-					end
+				if hrp and (Vector3.new(hrp.Position.X, 0, hrp.Position.Z) - Vector3.new(staging.X, 0, staging.Z)).Magnitude < 4 then
+					return true
 				end
+				moveTo(staging, getTweenSpeed(), function()
+					return autoStealRunning and isCarrying and carryingUid == uid
+				end)
 			end
 			task.wait(0.1)
 		end
@@ -3357,28 +3040,48 @@ do
 		if not waitUntilNotTrapped(function() return autoStealRunning end) then
 			return
 		end
-		if not waitForWallOpen() then
-			return
-		end
-		
+
 		local target = pickBestTarget()
 		if not target then
-			setStatus("Ga ada egg yang cocok filter saat ini.")
+			setStatus("Nunggu egg yang cocok filter (di treadmill)...")
 			task.wait(1)
 			return
 		end
 
-		setStatus("Tween ke egg: " .. tostring(target.AssetCategory))
-		print("[StealAnEgg] Tween to egg from center plot:", target.AssetCategory, target.BottomCFrame.Position)
-		if not moveTo(target.BottomCFrame.Position, getTweenSpeed(), function()
-			return autoStealRunning
-		end) then
+		local wallClosed = true
+		pcall(function()
+			wallClosed = AreaEggResetWall.IsClosed()
+		end)
+		if wallClosed then
+			setStatus("Ada target tapi tembok masih nutup, nunggu...")
+			task.wait(0.3)
 			return
 		end
 
-		task.wait(0.2)
-		
+		setStatus("Target: " .. tostring(target.AssetCategory) .. " -- turun dari treadmill...")
+		dismountTreadmill()
+		task.wait(0.3)
+
+		if stagingPos then
+			setStatus("Jalan ke titik parkir...")
+			if not moveTo(stagingPos, getTweenSpeed(), function()
+				return autoStealRunning
+			end) then
+				if autoReturnTreadmill then boardTreadmill() end
+				return
+			end
+		end
+
+		setStatus("Menuju egg: " .. tostring(target.AssetCategory))
+		if not moveTo(target.BottomCFrame.Position, getTweenSpeed(), function()
+			return autoStealRunning
+		end) then
+			if autoReturnTreadmill then boardTreadmill() end
+			return
+		end
+
 		if not waitUntilNotTrapped(function() return autoStealRunning end) then
+			if autoReturnTreadmill then boardTreadmill() end
 			return
 		end
 
@@ -3388,42 +3091,20 @@ do
 		end
 		local ok, err = EggCmds.RequestCarryAreaEgg(target.Uid, slotKey)
 		if not ok then
-			print("[StealAnEgg] Carry request FAILED - Error:", err, "| Target:", target.AssetCategory, "| UID:", target.Uid)
 			setStatus("Gagal curi " .. tostring(target.AssetCategory) .. ": " .. tostring(err))
+			if autoReturnTreadmill then boardTreadmill() end
 			return
 		end
-		print("[StealAnEgg] Carry request SUCCESS - Target:", target.AssetCategory, "| UID:", target.Uid)
 
 		setStatus("Berhasil ambil " .. tostring(target.AssetCategory) .. ", balik ke rumah...")
 		local success = carryEggHome(target.Uid)
 		if not success then
 			setStatus("Gagal bawa pulang " .. tostring(target.AssetCategory) .. " (direbut/ilang).")
+			if autoReturnTreadmill then boardTreadmill() end
 			return
 		end
 
-		-- Kalau fly, turun ke tanah dulu sebelum taruh egg.
-		if noclipFlyEnabled then
-			setStatus("Landing...")
-			local hrp = getHRP()
-			if hrp then
-				local gY = findGroundY(hrp.Position.X, hrp.Position.Z, hrp.Position.Y, 0)
-				local hum = getHumanoid()
-				local standOff = (hum and hum.HipHeight or 2) + (hrp.Size.Y / 2)
-				local landY = (gY or 0) + standOff
-				while autoStealRunning do
-					hrp = getHRP()
-					if not hrp then break end
-					if math.abs(hrp.Position.Y - landY) < 3 then break end
-					local dt = RunService.Heartbeat:Wait()
-					local cur = hrp.Position
-					local newY = cur.Y + (landY - cur.Y) * math.min(1, 10 * dt)
-					hrp.CFrame = CFrame.new(Vector3.new(cur.X, newY, cur.Z))
-					hrp.AssemblyLinearVelocity = Vector3.new(0, (landY - cur.Y) * 5, 0)
-				end
-			end
-		end
-
-		setStatus("Sampai rumah bawa " .. tostring(target.AssetCategory) .. " -- taruh di treadmill...")
+		setStatus("Sampai rumah -- taruh " .. tostring(target.AssetCategory) .. " di treadmill...")
 		pcall(function()
 			local plotData = PlotCmds.GetPlotData()
 			if plotData and plotData.CenterPoint then
@@ -3433,20 +3114,16 @@ do
 					or ("Diklaim tapi gagal ditaruh: " .. tostring(placeErr)))
 			end
 		end)
+
+		if autoReturnTreadmill then
+			setStatus("Naik treadmill lagi...")
+			boardTreadmill()
+		end
 	end
 
 	section:AddButton({
 		Title = "Set Titik Parkir (pakai posisi sekarang)",
 		Callback = captureStagingPos,
-	})
-
-	local returnToTreadmillEnabled = false
-	section:AddToggle("StealAnEgg_ReturnToTreadmill", {
-		Title = "Return to Treadmill after Steal",
-		Default = false,
-		Callback = function(enabled)
-			returnToTreadmillEnabled = enabled
-		end,
 	})
 
 	section:AddToggle("StealAnEgg_AutoSteal", {
@@ -3456,19 +3133,19 @@ do
 			autoStealRunning = enabled
 			if enabled then
 				task.spawn(function()
+					if not stagingPos then
+						local auto = autoDetectStagingPos()
+						if auto then
+							stagingPos = auto
+							setStatus("Titik parkir auto-detect ke tengah plot: " .. tostring(stagingPos))
+						else
+							pcall(captureStagingPos)
+						end
+					end
 					while autoStealRunning do
 						local ok, err = pcall(autoStealCycle)
 						if not ok then
 							setStatus("Error: " .. tostring(err))
-						end
-						if returnToTreadmillEnabled and ok then
-							setStatus("Return to treadmill...")
-							local plotData = PlotCmds.GetPlotData()
-							if plotData and plotData.CenterPoint then
-								moveTo(plotData.CenterPoint.Position, getTweenSpeed(), function()
-									return autoStealRunning
-								end)
-							end
 						end
 						task.wait(0.5)
 					end
@@ -3479,23 +3156,8 @@ do
 	})
 
 	------------------------------------------------------------
-	-- Auto Place Egg -- taro telur yang masih di tas (belum di-place) ke
-	-- kandang sendiri, otomatis, buat telur yang rate-nya di bawah
-	-- threshold ($/s). Pakai remote yang sama persis kayak tombol "Place
-	-- Egg" (R2) di game aslinya: EggCmds.RequestPlaceEgg(uid, LocalCFrame)
-	-- via ReplicatedStorage.Library.Client.EggCmds -- LocalCFrame dihitung
-	-- dari titik acak di atas PetArea sendiri (PlotCmds.GetPlotData().PetArea),
-	-- dikonversi ke object space CenterPoint, PERSIS rumus yang dipakai
-	-- EggPlacementController pas kamu klik manual (bedanya cuma titiknya
-	-- acak, bukan hasil raycast mouse).
-	--
-	-- PENTING (sudah dites langsung di game): server nolak placement kalau
-	-- karakter ga cukup deket ("Get closer to your area to place an egg!")
-	-- -- ~50 studs dari PetArea GAGAL, ~10 studs BERHASIL. Makanya sebelum
-	-- naro, karakter jalan dulu ke PetArea pakai moveTo() yang sama kayak
-	-- Auto Steal (speed di-cap MAX_SAFE_TWEEN_SPEED, bukan teleport instan
-	-- -- teleport sekali gerak gede kemungkinan malah lebih gampang
-	-- kedetect daripada CFrame-walk bertahap yang udah divalidasi aman).
+	-- Auto Place Egg
+	------------------------------------------------------------
 	do
 		local section = FarmTab:AddSection("Auto Place Egg")
 
@@ -3508,9 +3170,6 @@ do
 
 		local placeStatusPara = section:AddParagraph({ Title = "Status Auto Place Egg", Content = "-" })
 
-		-- pcall-wrapped SENGAJA -- toggle yang ke-restore otomatis dari config
-		-- tersimpan bisa manggil SetContent dari thread yang "lacking capability
-		-- Plugin" (pola yang sama kayak Auto Steal/Auto Buy Trail).
 		local function setPlaceStatus(msg)
 			pcall(function()
 				placeStatusPara:SetContent(tostring(msg))
@@ -3550,12 +3209,6 @@ do
 			return candidates
 		end
 
-		-- Titik taro dipilih di sekitar POSISI KARAKTER SEKARANG (bukan
-		-- random di seluruh PetArea) -- dites langsung: server nolak
-		-- ("Get closer to your area to place an egg!") kalau titik
-		-- taronya jauh dari karakter walau karakter sendiri udah deket
-		-- CenterPoint PetArea. Radius kecil dari HRP jauh lebih konsisten
-		-- lolos cek proximity server daripada random di seluruh area.
 		local function tryPlaceAt(uid, petArea, centerPoint)
 			local size = petArea.Size
 			local halfX, halfZ = size.X / 2 * 0.9, size.Z / 2 * 0.9
@@ -3568,12 +3221,6 @@ do
 				if not hrp then
 					return false, lastErr
 				end
-				-- Radius jitter dari HRP dinaikin bertahap tiap gagal --
-				-- attempt awal nyoba deket banget (spot kosong di sekitar
-				-- kaki), attempt belakangan nyebar lebih jauh buat ngindarin
-				-- "Egg is too close to another egg!" begitu area sekitar HRP
-				-- udah penuh (dites langsung: 8 studs tetap ke-block kalau
-				-- banyak telur numpuk di 1 titik).
 				local radius = 6 + attempt * 2
 				local localHRP = petArea.CFrame:PointToObjectSpace(hrp.Position)
 				local x = math.clamp(localHRP.X + (math.random() * 2 - 1) * radius, -halfX, halfX)
@@ -3606,11 +3253,6 @@ do
 				return
 			end
 
-			-- Fitur lain (mis. Auto Treadmill) bisa narik karakter balik ke
-			-- posisi lain KAPAN AJA di tengah-tengah naro banyak telur --
-			-- dites langsung: sekali cek jarak di awal doang ga cukup,
-			-- karakter kedapetan udah balik ~50 studs lagi pas mau naro
-			-- telur ke-2/ke-3. Makanya jaraknya dicek ULANG per telur.
 			local function ensureNearPetArea()
 				local hrp = getHRP()
 				if not hrp then
@@ -3681,558 +3323,503 @@ do
 				.. "placement-nya gagal terus (dites langsung: kejadian).",
 		})
 	end
-end
 
-------------------------------------------------------------
--- 6. Misc -- Auto Treadmill
-------------------------------------------------------------
--- Karakter yang lagi aktif jalan di treadmill posisinya PERSIS nempel di
--- Workspace.__ClientTreadmillRenders.TreadmillRender_<slot>.Root (dicek
--- langsung: jarak 0 studs). Render itu dibangun otomatis sama
--- TreadmillStaticController pas plot sendiri kerender -- jadi "naik
--- treadmill" cuma butuh char nyampe titik itu SEKALI, ga perlu tombol
--- apa-apa. Abis itu treadmill-nya sendiri yang jalanin karakternya terus.
-local MiscTab = Window:AddTab({ Title = "Misc" })
+	local MiscTab = Window:AddTab({ Title = "Misc" })
 
-do
-	local section = MiscTab:AddSection("Auto Treadmill")
+	------------------------------------------------------------
+	-- Auto Treadmill
+	------------------------------------------------------------
+	do
+		local section = MiscTab:AddSection("Auto Treadmill")
 
-	local statusPara = section:AddParagraph({
-		Title = "Status",
-		Content = "-",
-	})
+		local statusPara = section:AddParagraph({
+			Title = "Status",
+			Content = "-",
+		})
 
-	local function setStatus(msg)
-		pcall(function()
-			statusPara:SetContent(tostring(msg))
-		end)
-	end
-
-	local PlotCmds = require(ReplicatedStorage.Library.Client.PlotCmds)
-
-	local function boardTreadmillOnce()
-		local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
-		local hrp = char:WaitForChild("HumanoidRootPart", 10)
-		if not hrp then
-			setStatus("Gagal: HumanoidRootPart ga ketemu.")
-			return false
-		end
-
-		local ok, slot = pcall(function()
-			return PlotCmds.GetMySlot()
-		end)
-		if not ok or not slot then
-			setStatus("Gagal: plot sendiri belum kebaca.")
-			return false
-		end
-
-		local renderName = "TreadmillRender_" .. tostring(slot)
-		local rendersFolder = Workspace:WaitForChild("__ClientTreadmillRenders", 10)
-		if not rendersFolder then
-			setStatus("Gagal: render treadmill belum muncul (folder ga ada).")
-			return false
-		end
-
-		local render = rendersFolder:FindFirstChild(renderName)
-		local waited = 0
-		while not render and waited < 15 do
-			task.wait(0.5)
-			waited += 0.5
-			render = rendersFolder:FindFirstChild(renderName)
-		end
-		if not render then
-			setStatus("Gagal: " .. renderName .. " ga muncul dalam 15 detik.")
-			return false
-		end
-
-		local root = render:WaitForChild("Root", 5)
-		if not root then
-			setStatus("Gagal: Root treadmill ga ketemu.")
-			return false
-		end
-
-		hrp.CFrame = root.CFrame
-		setStatus("Berhasil naik treadmill (slot " .. tostring(slot) .. ").")
-		return true
-	end
-
-	-- Kepake sekali doang -- toggle ini bukan loop, cuma pemicu. Nyala
-	-- (baik dipencet manual maupun ke-restore otomatis dari config
-	-- tersimpan pas load) = eksekusi boardTreadmillOnce() SEKALI, abis itu
-	-- flag ini bikin toggle-nya ga ngapa-ngapain lagi walau dipencet ulang.
-	local hasBoarded = false
-	section:AddToggle("StealAnEgg_AutoTreadmill", {
-		Title = "Auto Treadmill (naik sekali di awal)",
-		Default = true,
-		Callback = function(enabled)
-			if not enabled or hasBoarded then
-				return
-			end
-			hasBoarded = true
-			task.spawn(function()
-				if not LocalPlayer.Character then
-					LocalPlayer.CharacterAdded:Wait()
-				end
-				task.wait(1) -- kasih waktu plot & render awal kebentuk
-				boardTreadmillOnce()
+		local function setStatus(msg)
+			pcall(function()
+				statusPara:SetContent(tostring(msg))
 			end)
-		end,
-	})
-end
-
-------------------------------------------------------------
--- 7. Misc -- Performance Booster
-------------------------------------------------------------
--- Semua efek di sini murni visual/client-side rendering, ga nyentuh
--- Humanoid/WalkSpeed/CFrame karakter atau state apapun yang direplikasi
--- ke server -- jadi ga ada resiko kena anticheat kayak kasus speed dulu.
---
--- Hide All Pet -> target-nya Workspace.ClientRenderedAssets (folder pet
--- yang lagi kerender, punya sendiri maupun punya pemain lain, isinya Model
--- bernama "<assetId>_<uid>"). Ini folder BEDA TOTAL sama
--- Workspace.__ClientTreadmillRenders (dipake Auto Treadmill), jadi ga ada
--- konflik. Hide-nya pake LocalTransparencyModifier (cuma override render
--- lokal, bukan ubah property Transparency asli) supaya ga nyentuh apapun
--- yang mungkin dibaca game logic, dan langsung reversible pas dimatiin.
-do
-	local PlotCmds = require(ReplicatedStorage.Library.Client.PlotCmds)
-	local section = MiscTab:AddSection("Performance Booster")
-
-	local statusPara = section:AddParagraph({
-		Title = "Status",
-		Content = "-",
-	})
-
-	local function setStatus(msg)
-		pcall(function()
-			statusPara:SetContent(tostring(msg))
-		end)
-	end
-
-	----------------------------------------------------------
-	-- Hide All Pet
-	----------------------------------------------------------
-	-- Catatan penting: BillboardGui "Data" (nametag/rate di atas pet) itu
-	-- di-ENABLE ULANG SENDIRI sama sistem culling game tiap ada pet yang
-	-- deket/kelihatan kamera (dibuktikan: set false, tunggu 1 detik, balik
-	-- true lagi). LocalTransparencyModifier di BasePart-nya sendiri AMAN
-	-- (ga direset). Makanya buat teks bener-bener ilang, tiap entry di-hook
-	-- GetPropertyChangedSignal("Enabled") dan dipaksa balik false selama
-	-- toggle nyala -- bukan cuma di-set sekali.
-	local hidePetsEnabled = false
-	local petAddedConn = nil
-	local petEnabledConns = {}
-
-	local function hidePetEntry(entry)
-		pcall(function()
-			for _, desc in ipairs(entry:GetDescendants()) do
-				if desc:IsA("BasePart") then
-					desc.LocalTransparencyModifier = 1
-				elseif desc:IsA("Decal") or desc:IsA("Texture") then
-					desc.Transparency = 1
-				end
-			end
-			local data = entry:FindFirstChild("Data")
-			if data and data:IsA("BillboardGui") then
-				data.Enabled = false
-				if not petEnabledConns[data] then
-					petEnabledConns[data] = data:GetPropertyChangedSignal("Enabled"):Connect(function()
-						if hidePetsEnabled and data.Enabled then
-							data.Enabled = false
-						end
-					end)
-				end
-			end
-		end)
-	end
-
-	local function showPetEntry(entry)
-		pcall(function()
-			for _, desc in ipairs(entry:GetDescendants()) do
-				if desc:IsA("BasePart") then
-					desc.LocalTransparencyModifier = 0
-				elseif desc:IsA("Decal") or desc:IsA("Texture") then
-					desc.Transparency = 0
-				end
-			end
-			local data = entry:FindFirstChild("Data")
-			if data and data:IsA("BillboardGui") then
-				if petEnabledConns[data] then
-					petEnabledConns[data]:Disconnect()
-					petEnabledConns[data] = nil
-				end
-				data.Enabled = true
-			end
-		end)
-	end
-
-	section:AddToggle("StealAnEgg_HideAllPet", {
-		Title = "Hide All Pet (kurangin lag render)",
-		Default = false,
-		Callback = function(enabled)
-			hidePetsEnabled = enabled
-			local folder = Workspace:FindFirstChild("ClientRenderedAssets")
-			if not folder then
-				setStatus("Hide All Pet: folder ClientRenderedAssets ga ketemu.")
-				return
-			end
-
-			if enabled then
-				for _, entry in ipairs(folder:GetChildren()) do
-					hidePetEntry(entry)
-				end
-				if not petAddedConn then
-					petAddedConn = folder.ChildAdded:Connect(function(entry)
-						if hidePetsEnabled then
-							task.defer(hidePetEntry, entry)
-						end
-					end)
-				end
-				setStatus("Semua pet + nametag-nya disembunyiin.")
-			else
-				if petAddedConn then
-					petAddedConn:Disconnect()
-					petAddedConn = nil
-				end
-				for _, entry in ipairs(folder:GetChildren()) do
-					showPetEntry(entry)
-				end
-				setStatus("Pet dimunculin lagi.")
-			end
-		end,
-	})
-
-	----------------------------------------------------------
-	-- Hide Other Treadmill
-	----------------------------------------------------------
-	-- Treadmill visual per-plot ada di Workspace.Plots.<slot>.TreadmillUpgrade
-	-- / TreadmillBottom -- folder ini BEDA sama Workspace.__ClientTreadmillRenders
-	-- yang dipake Auto Treadmill buat deteksi posisi. Jadi sembunyiin punya
-	-- plot orang lain di sini ga bakal ganggu Auto Treadmill kita sama sekali.
-	-- Punya slot sendiri sengaja TETEP KELIATAN (ga di-hide).
-	-- Sama kayak nametag pet: LocalTransparencyModifier treadmill plot orang
-	-- lain juga kena reset sama sistem LOD/streaming jarak punya game pas
-	-- kamu deket-deket situ. Jadi tiap part di-hook juga biar tetep 1
-	-- selama toggle nyala.
-	local hideTreadmillsEnabled = false
-	local treadmillAddedConn = nil
-	local treadmillModConns = {}
-
-	local function partsOf(model)
-		local parts = {}
-		if model:IsA("BasePart") then
-			table.insert(parts, model)
 		end
-		for _, desc in ipairs(model:GetDescendants()) do
-			if desc:IsA("BasePart") then
-				table.insert(parts, desc)
-			end
-		end
-		return parts
-	end
 
-	local function hideTreadmillModel(model)
-		pcall(function()
-			for _, part in ipairs(partsOf(model)) do
-				part.LocalTransparencyModifier = 1
-				if not treadmillModConns[part] then
-					treadmillModConns[part] = part:GetPropertyChangedSignal("LocalTransparencyModifier"):Connect(function()
-						if hideTreadmillsEnabled and part.LocalTransparencyModifier ~= 1 then
-							part.LocalTransparencyModifier = 1
-						end
-					end)
-				end
-			end
-		end)
-	end
+		local PlotCmds = require(ReplicatedStorage.Library.Client.PlotCmds)
 
-	local function showTreadmillModel(model)
-		pcall(function()
-			for _, part in ipairs(partsOf(model)) do
-				if treadmillModConns[part] then
-					treadmillModConns[part]:Disconnect()
-					treadmillModConns[part] = nil
-				end
-				part.LocalTransparencyModifier = 0
-			end
-		end)
-	end
-
-	local function forEachOtherPlotTreadmill(mySlot, fn)
-		local plots = Workspace:FindFirstChild("Plots")
-		if not plots then
-			return
-		end
-		for _, plot in ipairs(plots:GetChildren()) do
-			if plot.Name ~= tostring(mySlot) then
-				local upgrade = plot:FindFirstChild("TreadmillUpgrade")
-				local bottom = plot:FindFirstChild("TreadmillBottom")
-				if upgrade then
-					fn(upgrade)
-				end
-				if bottom then
-					fn(bottom)
-				end
-			end
-		end
-	end
-
-	section:AddToggle("StealAnEgg_HideOtherTreadmill", {
-		Title = "Hide Other Treadmill (punya sendiri tetep keliatan)",
-		Default = false,
-		Callback = function(enabled)
-			hideTreadmillsEnabled = enabled
-			local plots = Workspace:FindFirstChild("Plots")
-			if not plots then
-				setStatus("Hide Other Treadmill: folder Plots ga ketemu.")
-				return
+		local function boardTreadmillOnce()
+			local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+			local hrp = char:WaitForChild("HumanoidRootPart", 10)
+			if not hrp then
+				setStatus("Gagal: HumanoidRootPart ga ketemu.")
+				return false
 			end
 
-			local ok, mySlot = pcall(function()
+			local ok, slot = pcall(function()
 				return PlotCmds.GetMySlot()
 			end)
-			if not ok or not mySlot then
-				setStatus("Hide Other Treadmill: plot sendiri belum kebaca.")
-				return
+			if not ok or not slot then
+				setStatus("Gagal: plot sendiri belum kebaca.")
+				return false
 			end
 
-			if enabled then
-				forEachOtherPlotTreadmill(mySlot, hideTreadmillModel)
-				if not treadmillAddedConn then
-					treadmillAddedConn = plots.DescendantAdded:Connect(function(desc)
-						if not hideTreadmillsEnabled then
-							return
-						end
-						if desc.Name ~= "TreadmillUpgrade" and desc.Name ~= "TreadmillBottom" then
-							return
-						end
-						local plot = desc.Parent
-						if plot and plot.Name ~= tostring(mySlot) then
-							task.defer(hideTreadmillModel, desc)
-						end
-					end)
-				end
-				setStatus("Treadmill orang lain disembunyiin (punya sendiri tetep keliatan).")
-			else
-				if treadmillAddedConn then
-					treadmillAddedConn:Disconnect()
-					treadmillAddedConn = nil
-				end
-				forEachOtherPlotTreadmill(mySlot, showTreadmillModel)
-				setStatus("Treadmill orang lain dimunculin lagi.")
+			local renderName = "TreadmillRender_" .. tostring(slot)
+			local rendersFolder = Workspace:WaitForChild("__ClientTreadmillRenders", 10)
+			if not rendersFolder then
+				setStatus("Gagal: render treadmill belum muncul (folder ga ada).")
+				return false
 			end
-		end,
-	})
 
-	----------------------------------------------------------
-	-- Soft Graphics
-	----------------------------------------------------------
-	-- Lighting PostEffect (ColorCorrection, SunRays, dll) juga kena reset
-	-- balik Enabled=true sama game (kemungkinan dipicu event/animasi
-	-- tertentu, kayak buka layar treadmill), sama kayak kasus nametag pet
-	-- & treadmill di atas. Makanya effect yang ada di-hook, dan effect BARU
-	-- yang nongol pas toggle nyala langsung dimatiin juga.
-	local softGraphicsEnabled = false
-	local originalTerrainSettings = nil
-	local lightingEffectConns = {}
-	local lightingChildAddedConn = nil
+			local render = rendersFolder:FindFirstChild(renderName)
+			local waited = 0
+			while not render and waited < 15 do
+				task.wait(0.5)
+				waited += 0.5
+				render = rendersFolder:FindFirstChild(renderName)
+			end
+			if not render then
+				setStatus("Gagal: " .. renderName .. " ga muncul dalam 15 detik.")
+				return false
+			end
 
-	local function suppressEffect(effect)
-		if not effect:IsA("PostEffect") then
-			return
+			local root = render:WaitForChild("Root", 5)
+			if not root then
+				setStatus("Gagal: Root treadmill ga ketemu.")
+				return false
+			end
+
+			hrp.CFrame = root.CFrame
+			setStatus("Berhasil naik treadmill (slot " .. tostring(slot) .. ").")
+			return true
 		end
-		effect.Enabled = false
-		if not lightingEffectConns[effect] then
-			lightingEffectConns[effect] = effect:GetPropertyChangedSignal("Enabled"):Connect(function()
-				if softGraphicsEnabled and effect.Enabled then
-					effect.Enabled = false
+
+		local hasBoarded = false
+		section:AddToggle("StealAnEgg_AutoTreadmill", {
+			Title = "Auto Treadmill (naik sekali di awal)",
+			Default = true,
+			Callback = function(enabled)
+				if not enabled or hasBoarded then
+					return
 				end
-			end)
-		end
-	end
-
-	local function releaseEffect(effect)
-		if lightingEffectConns[effect] then
-			lightingEffectConns[effect]:Disconnect()
-			lightingEffectConns[effect] = nil
-		end
-		if effect:IsA("PostEffect") then
-			effect.Enabled = true
-		end
-	end
-
-	section:AddToggle("StealAnEgg_SoftGraphics", {
-		Title = "Soft Graphics (grafik seminim mungkin)",
-		Default = false,
-		Callback = function(enabled)
-			softGraphicsEnabled = enabled
-
-			pcall(function()
-				local UserGameSettings = UserSettings():GetService("UserGameSettings")
-				UserGameSettings.SavedQualityLevel = enabled and Enum.SavedQualitySetting.QualityLevel1
-					or Enum.SavedQualitySetting.Automatic
-			end)
-
-			pcall(function()
-				local Lighting = game:GetService("Lighting")
-				if enabled then
-					for _, effect in ipairs(Lighting:GetChildren()) do
-						suppressEffect(effect)
+				hasBoarded = true
+				task.spawn(function()
+					if not LocalPlayer.Character then
+						LocalPlayer.CharacterAdded:Wait()
 					end
-					if not lightingChildAddedConn then
-						lightingChildAddedConn = Lighting.ChildAdded:Connect(function(child)
-							if softGraphicsEnabled then
-								task.defer(suppressEffect, child)
+					task.wait(1)
+					boardTreadmillOnce()
+				end)
+			end,
+		})
+	end
+
+	------------------------------------------------------------
+	-- Performance Booster
+	------------------------------------------------------------
+	do
+		local PlotCmds = require(ReplicatedStorage.Library.Client.PlotCmds)
+		local section = MiscTab:AddSection("Performance Booster")
+
+		local statusPara = section:AddParagraph({
+			Title = "Status",
+			Content = "-",
+		})
+
+		local function setStatus(msg)
+			pcall(function()
+				statusPara:SetContent(tostring(msg))
+			end)
+		end
+
+		-- Hide All Pet
+		local hidePetsEnabled = false
+		local petAddedConn = nil
+		local petEnabledConns = {}
+
+		local function hidePetEntry(entry)
+			pcall(function()
+				for _, desc in ipairs(entry:GetDescendants()) do
+					if desc:IsA("BasePart") then
+						desc.LocalTransparencyModifier = 1
+					elseif desc:IsA("Decal") or desc:IsA("Texture") then
+						desc.Transparency = 1
+					end
+				end
+				local data = entry:FindFirstChild("Data")
+				if data and data:IsA("BillboardGui") then
+					data.Enabled = false
+					if not petEnabledConns[data] then
+						petEnabledConns[data] = data:GetPropertyChangedSignal("Enabled"):Connect(function()
+							if hidePetsEnabled and data.Enabled then
+								data.Enabled = false
 							end
 						end)
 					end
-				else
-					if lightingChildAddedConn then
-						lightingChildAddedConn:Disconnect()
-						lightingChildAddedConn = nil
-					end
-					for _, effect in ipairs(Lighting:GetChildren()) do
-						releaseEffect(effect)
-					end
 				end
-				Lighting.GlobalShadows = not enabled
 			end)
+		end
 
+		local function showPetEntry(entry)
 			pcall(function()
-				local terrain = Workspace.Terrain
-				if enabled then
-					if not originalTerrainSettings then
-						originalTerrainSettings = {
-							Decoration = terrain.Decoration,
-							WaterWaveSize = terrain.WaterWaveSize,
-							WaterWaveSpeed = terrain.WaterWaveSpeed,
-							WaterReflectance = terrain.WaterReflectance,
-						}
+				for _, desc in ipairs(entry:GetDescendants()) do
+					if desc:IsA("BasePart") then
+						desc.LocalTransparencyModifier = 0
+					elseif desc:IsA("Decal") or desc:IsA("Texture") then
+						desc.Transparency = 0
 					end
-					terrain.Decoration = false
-					terrain.WaterWaveSize = 0
-					terrain.WaterWaveSpeed = 0
-					terrain.WaterReflectance = 0
-				elseif originalTerrainSettings then
-					terrain.Decoration = originalTerrainSettings.Decoration
-					terrain.WaterWaveSize = originalTerrainSettings.WaterWaveSize
-					terrain.WaterWaveSpeed = originalTerrainSettings.WaterWaveSpeed
-					terrain.WaterReflectance = originalTerrainSettings.WaterReflectance
+				end
+				local data = entry:FindFirstChild("Data")
+				if data and data:IsA("BillboardGui") then
+					if petEnabledConns[data] then
+						petEnabledConns[data]:Disconnect()
+						petEnabledConns[data] = nil
+					end
+					data.Enabled = true
 				end
 			end)
+		end
 
-			setStatus(enabled and "Soft Graphics nyala." or "Soft Graphics dimatiin.")
-		end,
-	})
-end
+		section:AddToggle("StealAnEgg_HideAllPet", {
+			Title = "Hide All Pet (kurangin lag render)",
+			Default = false,
+			Callback = function(enabled)
+				hidePetsEnabled = enabled
+				local folder = Workspace:FindFirstChild("ClientRenderedAssets")
+				if not folder then
+					setStatus("Hide All Pet: folder ClientRenderedAssets ga ketemu.")
+					return
+				end
 
-------------------------------------------------------------
--- 4b. Auto Buy Trail Shop -- beliin trail cash (bukan Robux) dari
--- ReplicatedStorage.Directory.Trails.Directory secara otomatis, mulai dari
--- yang termurah, tiap kali Money cukup. Pakai remote yang sama kayak tombol
--- "Buy" di TrailShop GUI aslinya (Constants.NETWORK_MAP.Trails.REQUEST_PURCHASE
--- via Network.Invoke) jadi server-side sepenuhnya sah, cuma diklik otomatis.
-do
-	local section = MiscTab:AddSection("Auto Buy Trail Shop")
+				if enabled then
+					for _, entry in ipairs(folder:GetChildren()) do
+						hidePetEntry(entry)
+					end
+					if not petAddedConn then
+						petAddedConn = folder.ChildAdded:Connect(function(entry)
+							if hidePetsEnabled then
+								task.defer(hidePetEntry, entry)
+							end
+						end)
+					end
+					setStatus("Semua pet + nametag-nya disembunyiin.")
+				else
+					if petAddedConn then
+						petAddedConn:Disconnect()
+						petAddedConn = nil
+					end
+					for _, entry in ipairs(folder:GetChildren()) do
+						showPetEntry(entry)
+					end
+					setStatus("Pet dimunculin lagi.")
+				end
+			end,
+		})
 
-	local trailStatusPara = section:AddParagraph({
-		Title = "Status Auto Buy Trail",
-		Content = "-",
-	})
+		-- Hide Other Treadmill
+		local hideTreadmillsEnabled = false
+		local treadmillAddedConn = nil
+		local treadmillModConns = {}
 
-	-- pcall-wrapped SENGAJA -- toggle yang ke-restore otomatis dari config
-	-- tersimpan bisa manggil SetContent dari thread yang "lacking capability
-	-- Plugin" (dites langsung: bikin whole loop mati kalau ga di-guard).
-	local function setTrailStatus(msg)
-		pcall(function()
-			trailStatusPara:SetContent(tostring(msg))
-		end)
-	end
+		local function partsOf(model)
+			local parts = {}
+			if model:IsA("BasePart") then
+				table.insert(parts, model)
+			end
+			for _, desc in ipairs(model:GetDescendants()) do
+				if desc:IsA("BasePart") then
+					table.insert(parts, desc)
+				end
+			end
+			return parts
+		end
 
-	local autoBuyTrailRunning = false
-	section:AddToggle("StealAnEgg_AutoBuyTrail", {
-		Title = "Auto Buy Trail Shop",
-		Default = false,
-		Callback = function(enabled)
-			autoBuyTrailRunning = enabled
-			if not enabled then
+		local function hideTreadmillModel(model)
+			pcall(function()
+				for _, part in ipairs(partsOf(model)) do
+					part.LocalTransparencyModifier = 1
+					if not treadmillModConns[part] then
+						treadmillModConns[part] = part:GetPropertyChangedSignal("LocalTransparencyModifier"):Connect(function()
+							if hideTreadmillsEnabled and part.LocalTransparencyModifier ~= 1 then
+								part.LocalTransparencyModifier = 1
+							end
+						end)
+					end
+				end
+			end)
+		end
+
+		local function showTreadmillModel(model)
+			pcall(function()
+				for _, part in ipairs(partsOf(model)) do
+					if treadmillModConns[part] then
+						treadmillModConns[part]:Disconnect()
+						treadmillModConns[part] = nil
+					end
+					part.LocalTransparencyModifier = 0
+				end
+			end)
+		end
+
+		local function forEachOtherPlotTreadmill(mySlot, fn)
+			local plots = Workspace:FindFirstChild("Plots")
+			if not plots then
 				return
 			end
-			task.spawn(function()
-				local Save = require(ReplicatedStorage.Library.Client.Save)
-				local Network = require(ReplicatedStorage.Library.Client.Network)
-				local Constants = require(ReplicatedStorage.Library.Globals.Constants)
-				local Trails = require(ReplicatedStorage.Directory.Trails)
-				local Simple = require(ReplicatedStorage.Library.Modules.FormatNumber.Simple)
-				local TrailsNet = Constants.NETWORK_MAP.Trails
-
-				if not Save.IsLocalDataLoaded() then
-					Save.LoadedStats:Wait()
-				end
-
-				local function fmtPrice(price)
-					return "$" .. Simple.FormatCompact(price, ".#")
-				end
-
-				local sortedKeys = {}
-				for key, cfg in pairs(Trails.Directory) do
-					if cfg.DisplayInShop and cfg.Price then
-						table.insert(sortedKeys, key)
+			for _, plot in ipairs(plots:GetChildren()) do
+				if plot.Name ~= tostring(mySlot) then
+					local upgrade = plot:FindFirstChild("TreadmillUpgrade")
+					local bottom = plot:FindFirstChild("TreadmillBottom")
+					if upgrade then
+						fn(upgrade)
+					end
+					if bottom then
+						fn(bottom)
 					end
 				end
-				table.sort(sortedKeys, function(a, b)
-					return Trails.Directory[a].Price < Trails.Directory[b].Price
+			end
+		end
+
+		section:AddToggle("StealAnEgg_HideOtherTreadmill", {
+			Title = "Hide Other Treadmill (punya sendiri tetep keliatan)",
+			Default = false,
+			Callback = function(enabled)
+				hideTreadmillsEnabled = enabled
+				local plots = Workspace:FindFirstChild("Plots")
+				if not plots then
+					setStatus("Hide Other Treadmill: folder Plots ga ketemu.")
+					return
+				end
+
+				local ok, mySlot = pcall(function()
+					return PlotCmds.GetMySlot()
+				end)
+				if not ok or not mySlot then
+					setStatus("Hide Other Treadmill: plot sendiri belum kebaca.")
+					return
+				end
+
+				if enabled then
+					forEachOtherPlotTreadmill(mySlot, hideTreadmillModel)
+					if not treadmillAddedConn then
+						treadmillAddedConn = plots.DescendantAdded:Connect(function(desc)
+							if not hideTreadmillsEnabled then
+								return
+							end
+							if desc.Name ~= "TreadmillUpgrade" and desc.Name ~= "TreadmillBottom" then
+								return
+							end
+							local plot = desc.Parent
+							if plot and plot.Name ~= tostring(mySlot) then
+								task.defer(hideTreadmillModel, desc)
+							end
+						end)
+					end
+					setStatus("Treadmill orang lain disembunyiin (punya sendiri tetep keliatan).")
+				else
+					if treadmillAddedConn then
+						treadmillAddedConn:Disconnect()
+						treadmillAddedConn = nil
+					end
+					forEachOtherPlotTreadmill(mySlot, showTreadmillModel)
+					setStatus("Treadmill orang lain dimunculin lagi.")
+				end
+			end,
+		})
+
+		-- Soft Graphics
+		local softGraphicsEnabled = false
+		local originalTerrainSettings = nil
+		local lightingEffectConns = {}
+		local lightingChildAddedConn = nil
+
+		local function suppressEffect(effect)
+			if not effect:IsA("PostEffect") then
+				return
+			end
+			effect.Enabled = false
+			if not lightingEffectConns[effect] then
+				lightingEffectConns[effect] = effect:GetPropertyChangedSignal("Enabled"):Connect(function()
+					if softGraphicsEnabled and effect.Enabled then
+						effect.Enabled = false
+					end
+				end)
+			end
+		end
+
+		local function releaseEffect(effect)
+			if lightingEffectConns[effect] then
+				lightingEffectConns[effect]:Disconnect()
+				lightingEffectConns[effect] = nil
+			end
+			if effect:IsA("PostEffect") then
+				effect.Enabled = true
+			end
+		end
+
+		section:AddToggle("StealAnEgg_SoftGraphics", {
+			Title = "Soft Graphics (grafik seminim mungkin)",
+			Default = false,
+			Callback = function(enabled)
+				softGraphicsEnabled = enabled
+
+				pcall(function()
+					local UserGameSettings = UserSettings():GetService("UserGameSettings")
+					UserGameSettings.SavedQualityLevel = enabled and Enum.SavedQualitySetting.QualityLevel1
+						or Enum.SavedQualitySetting.Automatic
 				end)
 
-				while autoBuyTrailRunning and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-					local data = Save.Get()
-					local boughtThisPass = false
-					for _, key in ipairs(sortedKeys) do
-						if not autoBuyTrailRunning then
-							break
+				pcall(function()
+					local Lighting = game:GetService("Lighting")
+					if enabled then
+						for _, effect in ipairs(Lighting:GetChildren()) do
+							suppressEffect(effect)
 						end
-						local cfg = Trails.Directory[key]
-						if not data.TrailInventory[key] and data.Money >= cfg.Price then
-							local invokeOk, purchaseOk, err = pcall(Network.Invoke, TrailsNet.REQUEST_PURCHASE, key)
-							if invokeOk and purchaseOk then
-								setTrailStatus("Beli " .. cfg.DisplayName .. " (" .. fmtPrice(cfg.Price) .. ")")
-								boughtThisPass = true
-								data = Save.Get() -- refresh Money & TrailInventory buat cek item berikutnya di pass yang sama
-							else
-								setTrailStatus(
-									"Gagal beli " .. cfg.DisplayName .. ": " .. tostring(invokeOk and err or purchaseOk)
-								)
-							end
-							task.wait(0.5)
+						if not lightingChildAddedConn then
+							lightingChildAddedConn = Lighting.ChildAdded:Connect(function(child)
+								if softGraphicsEnabled then
+									task.defer(suppressEffect, child)
+								end
+							end)
+						end
+					else
+						if lightingChildAddedConn then
+							lightingChildAddedConn:Disconnect()
+							lightingChildAddedConn = nil
+						end
+						for _, effect in ipairs(Lighting:GetChildren()) do
+							releaseEffect(effect)
 						end
 					end
-					if not boughtThisPass then
-						local nextKey
+					Lighting.GlobalShadows = not enabled
+				end)
+
+				pcall(function()
+					local terrain = Workspace.Terrain
+					if enabled then
+						if not originalTerrainSettings then
+							originalTerrainSettings = {
+								Decoration = terrain.Decoration,
+								WaterWaveSize = terrain.WaterWaveSize,
+								WaterWaveSpeed = terrain.WaterWaveSpeed,
+								WaterReflectance = terrain.WaterReflectance,
+							}
+						end
+						terrain.Decoration = false
+						terrain.WaterWaveSize = 0
+						terrain.WaterWaveSpeed = 0
+						terrain.WaterReflectance = 0
+					elseif originalTerrainSettings then
+						terrain.Decoration = originalTerrainSettings.Decoration
+						terrain.WaterWaveSize = originalTerrainSettings.WaterWaveSize
+						terrain.WaterWaveSpeed = originalTerrainSettings.WaterWaveSpeed
+						terrain.WaterReflectance = originalTerrainSettings.WaterReflectance
+					end
+				end)
+
+				setStatus(enabled and "Soft Graphics nyala." or "Soft Graphics dimatiin.")
+			end,
+		})
+	end
+
+	------------------------------------------------------------
+	-- Auto Buy Trail Shop
+	------------------------------------------------------------
+	do
+		local section = MiscTab:AddSection("Auto Buy Trail Shop")
+
+		local trailStatusPara = section:AddParagraph({
+			Title = "Status Auto Buy Trail",
+			Content = "-",
+		})
+
+		local function setTrailStatus(msg)
+			pcall(function()
+				trailStatusPara:SetContent(tostring(msg))
+			end)
+		end
+
+		local autoBuyTrailRunning = false
+		section:AddToggle("StealAnEgg_AutoBuyTrail", {
+			Title = "Auto Buy Trail Shop",
+			Default = false,
+			Callback = function(enabled)
+				autoBuyTrailRunning = enabled
+				if not enabled then
+					return
+				end
+				task.spawn(function()
+					local Save = require(ReplicatedStorage.Library.Client.Save)
+					local Network = require(ReplicatedStorage.Library.Client.Network)
+					local Constants = require(ReplicatedStorage.Library.Globals.Constants)
+					local Trails = require(ReplicatedStorage.Directory.Trails)
+					local Simple = require(ReplicatedStorage.Library.Modules.FormatNumber.Simple)
+					local TrailsNet = Constants.NETWORK_MAP.Trails
+
+					if not Save.IsLocalDataLoaded() then
+						Save.LoadedStats:Wait()
+					end
+
+					local function fmtPrice(price)
+						return "$" .. Simple.FormatCompact(price, ".#")
+					end
+
+					local sortedKeys = {}
+					for key, cfg in pairs(Trails.Directory) do
+						if cfg.DisplayInShop and cfg.Price then
+							table.insert(sortedKeys, key)
+						end
+					end
+					table.sort(sortedKeys, function(a, b)
+						return Trails.Directory[a].Price < Trails.Directory[b].Price
+					end)
+
+					while autoBuyTrailRunning and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+						local data = Save.Get()
+						local boughtThisPass = false
 						for _, key in ipairs(sortedKeys) do
-							if not data.TrailInventory[key] then
-								nextKey = key
+							if not autoBuyTrailRunning then
 								break
 							end
+							local cfg = Trails.Directory[key]
+							if not data.TrailInventory[key] and data.Money >= cfg.Price then
+								local invokeOk, purchaseOk, err = pcall(Network.Invoke, TrailsNet.REQUEST_PURCHASE, key)
+								if invokeOk and purchaseOk then
+									setTrailStatus("Beli " .. cfg.DisplayName .. " (" .. fmtPrice(cfg.Price) .. ")")
+									boughtThisPass = true
+									data = Save.Get()
+								else
+									setTrailStatus(
+										"Gagal beli " .. cfg.DisplayName .. ": " .. tostring(invokeOk and err or purchaseOk)
+									)
+								end
+								task.wait(0.5)
+							end
 						end
-						if nextKey then
-							local cfg = Trails.Directory[nextKey]
-							setTrailStatus("Nunggu uang buat " .. cfg.DisplayName .. " (" .. fmtPrice(cfg.Price) .. ")")
-						else
-							setTrailStatus("Semua trail di toko (cash) udah kebeli.")
+						if not boughtThisPass then
+							local nextKey
+							for _, key in ipairs(sortedKeys) do
+								if not data.TrailInventory[key] then
+									nextKey = key
+									break
+								end
+							end
+							if nextKey then
+								local cfg = Trails.Directory[nextKey]
+								setTrailStatus("Nunggu uang buat " .. cfg.DisplayName .. " (" .. fmtPrice(cfg.Price) .. ")")
+							else
+								setTrailStatus("Semua trail di toko (cash) udah kebeli.")
+							end
 						end
+						task.wait(3)
 					end
-					task.wait(3)
-				end
-			end)
-		end,
-	})
+				end)
+			end,
+		})
 
-	section:AddParagraph({
-		Title = "Catatan",
-		Content = "Otomatis beli trail dari TrailShop (harga cash, bukan yang Robux-only) mulai dari yang "
-			.. "termurah, tiap kali Money cukup. Dicek tiap 3 detik, ga otomatis equip -- equip manual sendiri "
-			.. "dari TrailShop kalau mau ganti-ganti trail yang udah kebeli.",
-	})
-end
+		section:AddParagraph({
+			Title = "Catatan",
+			Content = "Otomatis beli trail dari TrailShop (harga cash, bukan yang Robux-only) mulai dari yang "
+				.. "termurah, tiap kali Money cukup. Dicek tiap 3 detik, ga otomatis equip -- equip manual sendiri "
+				.. "dari TrailShop kalau mau ganti-ganti trail yang udah kebeli.",
+		})
+	end
 
 Window:SelectTab(1)
