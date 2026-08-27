@@ -9,12 +9,12 @@ return function(ctx)
 	local FarmTab = Window:AddTab({ Title = "Farming" })
 
 	local RunService = game:GetService("RunService")
-	local Assets = require(ReplicatedStorage.Directory.Assets)
-	local EggCmds = require(ReplicatedStorage.Library.Client.EggCmds)
-	local AreaEggSlotIdentity = require(ReplicatedStorage.Library.Util.AreaEggSlotIdentity)
-	local AreaEggResetWall = require(ReplicatedStorage.Library.Client.AreaEggResetWall)
-	local PlotCmds = require(ReplicatedStorage.Library.Client.PlotCmds)
-	local AssetGenerationUtil = require(ReplicatedStorage.Library.Util.AssetGenerationUtil)
+	local Assets = require(ReplicatedStorage.Data.Assets)
+	local EggState = require(ReplicatedStorage.Client.EggState)
+	local AreaEggSlotIdentity = require(ReplicatedStorage.Shared.Util.AreaEggSlotIdentity)
+	local AreaEggResetWall = require(ReplicatedStorage.Client.AreaEggResetWall)
+	local PlotState = require(ReplicatedStorage.Client.PlotState)
+	local AssetEarnings = require(ReplicatedStorage.Shared.Util.AssetEarnings)
 
 	local __OBJECTS = Workspace:WaitForChild("__OBJECTS")
 	local Areas = __OBJECTS:WaitForChild("Areas")
@@ -310,14 +310,14 @@ return function(ctx)
 	local autoStealRunning = false
 	local isCarrying, carryingUid = false, nil
 
-	EggCmds.AreaEggCarryStateChanged:Connect(function(state)
+	EggState.CarryChanged:Connect(function(state)
 		isCarrying = state.IsCarrying
 		carryingUid = state.IsCarrying and state.Uid or nil
 	end)
 
 	local function computeRate(record)
 		local ok, rate = pcall(function()
-			return AssetGenerationUtil.GetBaseRateMutationOnly({
+			return AssetEarnings.RatePerSecond({
 				Category = record.AssetCategory,
 				Scale = record.AssetScale,
 				Mutations = record.Mutations or {},
@@ -355,7 +355,7 @@ return function(ctx)
 
 	local function pickBestTarget()
 		local ok, snapshot = pcall(function()
-			return EggCmds.GetAreaEggSnapshot()
+			return EggState.SyncFieldEggs()
 		end)
 		if not ok or not snapshot then
 			return nil
@@ -427,7 +427,7 @@ return function(ctx)
 				end
 				local rec
 				pcall(function()
-					rec = EggCmds.GetAreaEggRecord(uid)
+					rec = EggState.FetchEggRecord(uid)
 				end)
 				if rec == nil then
 					return true
@@ -437,7 +437,7 @@ return function(ctx)
 						return autoStealRunning
 					end) then
 						waitUntilNotTrapped(function() return autoStealRunning end)
-						EggCmds.RequestCarryAreaEgg(uid, nil)
+						EggState.CarryFieldEgg(uid, nil)
 					end
 				else
 					return false
@@ -530,7 +530,7 @@ return function(ctx)
 		if AreaEggSlotIdentity.IsFirstAreaUid(target.Uid) then
 			slotKey = AreaEggSlotIdentity.BuildSlotKey(target.AreaId, target.NestId)
 		end
-		local ok, err = EggCmds.RequestCarryAreaEgg(target.Uid, slotKey)
+		local ok, err = EggState.CarryFieldEgg(target.Uid, slotKey)
 		if not ok then
 			setStatus("Gagal curi " .. tostring(target.AssetCategory) .. ": " .. tostring(err))
 			return
@@ -568,10 +568,10 @@ return function(ctx)
 
 		setStatus("Sampai rumah bawa " .. tostring(target.AssetCategory) .. " -- taruh di treadmill...")
 		pcall(function()
-			local plotData = PlotCmds.GetPlotData()
+			local plotData = PlotState.ResolvePlot()
 			if plotData and plotData.CenterPoint then
 				local localCFrame = plotData.CenterPoint.CFrame:ToObjectSpace(CFrame.new(plotData.CenterPoint.Position))
-				local placeOk, placeErr = EggCmds.RequestPlaceEgg(target.Uid, localCFrame)
+				local placeOk, placeErr = EggState.PlantEgg(target.Uid, localCFrame)
 				setStatus(placeOk and ("Egg " .. tostring(target.AssetCategory) .. " ditaruh di treadmill.")
 					or ("Diklaim tapi gagal ditaruh: " .. tostring(placeErr)))
 			end
@@ -638,11 +638,18 @@ return function(ctx)
 
 		local autoPlaceEggRunning = false
 
+		local function getMyOwnedEggs()
+			local ownedData = EggState.SyncOwnedEggs()
+			for _, entry in ipairs(ownedData) do
+				if entry.OwnerUserId == LocalPlayer.UserId then
+					return entry.Records
+				end
+			end
+			return {}
+		end
+
 		local function collectUnplacedBelowThreshold(threshold)
-			pcall(function()
-				EggCmds.RequestRuntimeSnapshot()
-			end)
-			local records = EggCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+			local records = getMyOwnedEggs()
 			local candidates = {}
 			for uid, rec in pairs(records) do
 				if rec.Placement == nil then
@@ -676,7 +683,7 @@ return function(ctx)
 				local z = math.clamp(localHRP.Z + (math.random() * 2 - 1) * radius, -halfZ, halfZ)
 				local worldPos = (petArea.CFrame * CFrame.new(x, size.Y / 2, z)).Position
 				local placeCFrame = centerPoint.CFrame:ToObjectSpace(CFrame.new(worldPos))
-				local ok, err = EggCmds.RequestPlaceEgg(uid, placeCFrame)
+				local ok, err = EggState.PlantEgg(uid, placeCFrame)
 				if ok then
 					return true
 				end
@@ -694,7 +701,7 @@ return function(ctx)
 				return
 			end
 
-			local plotData = PlotCmds.GetPlotData()
+			local plotData = PlotState.ResolvePlot()
 			local petArea = plotData and plotData.PetArea
 			local centerPoint = plotData and plotData.CenterPoint
 			if not petArea or not centerPoint then

@@ -1408,8 +1408,18 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
-local EggCmds = require(ReplicatedStorage.Library.Client.EggCmds)
-local EggItemUtil = require(ReplicatedStorage.Library.Util.EggItemUtil)
+local EggState = require(ReplicatedStorage.Client.EggState)
+local EggRecords = require(ReplicatedStorage.Shared.Util.EggRecords)
+
+local function getMyOwnedEggs()
+	local ownedData = EggState.SyncOwnedEggs()
+	for _, entry in ipairs(ownedData) do
+		if entry.OwnerUserId == LocalPlayer.UserId then
+			return entry.Records
+		end
+	end
+	return {}
+end
 
 local function formatSeconds(s)
 	s = math.max(0, math.floor(s + 0.5))
@@ -1436,14 +1446,12 @@ local function mutationLabel(mutations)
 	return table.concat(parts, ", ")
 end
 
--- Sisa waktu tumbuh + status ready untuk satu record telur, meniru persis
--- EggCmds.IsLocalEggReady (termasuk bonus night-growth credit).
 local function getGrowthInfo(rec)
 	local now = Workspace:GetServerTimeNow()
 	local speed = rec.GrowthSpeedMultiplier or 1
-	local nightCredit = EggItemUtil.GetCurrentNightGrowthCreditSeconds(rec, now, speed)
-	local remaining = EggItemUtil.GetRemainingGrowthSeconds(rec, now, speed, nightCredit, LocalPlayer)
-	local ready = EggItemUtil.IsGrowthReady(rec, now, speed, nightCredit, LocalPlayer)
+	local nightCredit = EggRecords.CurrentNightCredit(rec, now, speed)
+	local remaining = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer)
+	local ready = remaining <= 0
 	return remaining, ready
 end
 
@@ -1520,9 +1528,9 @@ local Window = Fluent:CreateWindow({
 
 		section:AddButton({ Title = "Scan Tas Sekarang", Callback = scanBag })
 
-		local AssetGenerationUtil = require(ReplicatedStorage.Library.Util.AssetGenerationUtil)
-		local AssetCmds = require(ReplicatedStorage.Library.Client.AssetCmds)
-		local MutationsModule = require(ReplicatedStorage.Library.Modules.Mutations)
+		local AssetEarnings = require(ReplicatedStorage.Shared.Util.AssetEarnings)
+		local AssetRoster = require(ReplicatedStorage.Client.AssetRoster)
+		local MutationsModule = require(ReplicatedStorage.Shared.Modules.Mutations)
 
 		local function mutationNamesFromString(str)
 			if not str or str == "" then
@@ -1550,13 +1558,13 @@ local Window = Fluent:CreateWindow({
 			end
 			local limit = 0
 			pcall(function()
-				limit = AssetCmds.RequestEquipLimit()
+				limit = AssetRoster.ReadWearLimit()
 			end)
 			if limit <= 0 then
 				return
 			end
 
-			local activeRecords = AssetCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+			local activeRecords = AssetRoster.ReadOwnerPen(LocalPlayer.UserId)
 			local activeCount = 0
 			for _ in pairs(activeRecords) do
 				activeCount += 1
@@ -1575,7 +1583,7 @@ local Window = Fluent:CreateWindow({
 						local mutations = mutationNamesFromString(tool:GetAttribute("Mutations"))
 						local rate = 0
 						pcall(function()
-							rate = AssetGenerationUtil.GetBaseRateMutationOnly({
+							rate = AssetEarnings.RatePerSecond({
 								Category = category,
 								Scale = scale,
 								Mutations = mutations,
@@ -1591,7 +1599,7 @@ local Window = Fluent:CreateWindow({
 
 			local ci = 1
 			while activeCount < limit and ci <= #candidates do
-				if AssetCmds.RequestEquipAsset(candidates[ci].uid) then
+				if AssetRoster.WearAsset(candidates[ci].uid) then
 					activeCount += 1
 				end
 				ci += 1
@@ -1599,13 +1607,13 @@ local Window = Fluent:CreateWindow({
 		end
 
 		local function autoUnequipAll()
-			local activeRecords = AssetCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+			local activeRecords = AssetRoster.ReadOwnerPen(LocalPlayer.UserId)
 			local uids = {}
 			for uid in pairs(activeRecords) do
 				table.insert(uids, uid)
 			end
 			for i, uid in ipairs(uids) do
-				AssetCmds.RequestUnequipAsset(uid)
+				AssetRoster.DoffAsset(uid)
 				if i < #uids then
 					task.wait(0.2)
 				end
@@ -1672,7 +1680,7 @@ local Window = Fluent:CreateWindow({
 		})
 
 		local function refreshActiveIncome()
-			local activeRecords = AssetCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+			local activeRecords = AssetRoster.ReadOwnerPen(LocalPlayer.UserId)
 			local total, count = 0, 0
 			for _, rec in pairs(activeRecords) do
 				total += rec.MoneyPerSecond or 0
@@ -1680,7 +1688,7 @@ local Window = Fluent:CreateWindow({
 			end
 			local limit = 0
 			pcall(function()
-				limit = AssetCmds.RequestEquipLimit()
+				limit = AssetRoster.ReadWearLimit()
 			end)
 			incomePara:SetContent(string.format(
 				"%d/%d Active -- Total: %s",
@@ -1706,11 +1714,7 @@ local Window = Fluent:CreateWindow({
 		})
 
 		local function refreshEggs()
-			pcall(function()
-				EggCmds.RequestRuntimeSnapshot()
-			end)
-
-			local records = EggCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+			local records = getMyOwnedEggs()
 			local growing = {}
 
 			for uid, rec in pairs(records) do
@@ -1784,9 +1788,9 @@ local Window = Fluent:CreateWindow({
 	-- 3.5. Auto Upgrade Kandang & Treadmill
 	------------------------------------------------------------
 	do
-		local BaseUpgradeClient = require(ReplicatedStorage.Library.Client.BaseUpgradeClient)
+		local BaseUpgrade = require(ReplicatedStorage.Client.BaseUpgrade)
 		local TreadmillClient = require(LocalPlayer.PlayerScripts.GUI.TreadmillUpgrade.Client)
-		local SaveModule = require(ReplicatedStorage.Library.Client.Save)
+		local SaveModule = require(ReplicatedStorage.Shared.Save)
 
 		local section = Tab:AddSection("Auto Upgrade Kandang & Treadmill")
 
@@ -1817,27 +1821,27 @@ local Window = Fluent:CreateWindow({
 		})
 
 		local function tryUpgradeKandang()
-			local stats = SaveModule.Get(LocalPlayer)
+			local stats = SaveModule.Get()
 			local target = parseTarget(kandangTargetInput)
 			if stats.BaseUpgradeLevel >= target then
 				return "Kandang: udah di target (Lv." .. stats.BaseUpgradeLevel .. ")"
 			end
-			local nextLevel, config = BaseUpgradeClient.GetNextConfig(stats)
+			local nextLevel, config = BaseUpgrade.ResolveNextTier(stats)
 			if not nextLevel or not config then
 				return "Kandang: udah MAX level (Lv." .. stats.BaseUpgradeLevel .. ")"
 			end
 			if nextLevel > target then
 				return "Kandang: nyampe target di Lv." .. stats.BaseUpgradeLevel
 			end
-			if not BaseUpgradeClient.CanAffordNext(stats) then
+			if not BaseUpgrade.IsNextTierAffordable(stats) then
 				return "Kandang: uang kurang buat Lv." .. nextLevel .. " (butuh $" .. tostring(config.Cost) .. ")"
 			end
-			BaseUpgradeClient.RequestCashUpgrade()
+			BaseUpgrade.PurchaseNextTier()
 			return "Kandang: upgrade ke Lv." .. nextLevel .. " diminta"
 		end
 
 		local function tryUpgradeTreadmill()
-			local stats = SaveModule.Get(LocalPlayer)
+			local stats = SaveModule.Get()
 			local target = parseTarget(treadmillTargetInput)
 			if stats.TreadmillUpgradeLevel >= target then
 				return "Treadmill: udah di target (Lv." .. stats.TreadmillUpgradeLevel .. ")"
@@ -1899,10 +1903,9 @@ local Window = Fluent:CreateWindow({
 			Content = "Belum ada -- otomatis muncul begitu kamu fuse pet.",
 		})
 
-		local Constants = require(ReplicatedStorage.Library.Globals.Constants)
-		local GameSignal = require(ReplicatedStorage.Library.Signal)
-		local AssetGenerationUtil = require(ReplicatedStorage.Library.Util.AssetGenerationUtil)
-		local AssetItemUtil = require(ReplicatedStorage.Library.Util.AssetItemUtil)
+		local FuseMachineSignals = require(ReplicatedStorage.Client.FuseMachineSignals)
+		local AssetEarnings = require(ReplicatedStorage.Shared.Util.AssetEarnings)
+		local AssetItems = require(ReplicatedStorage.Shared.Util.AssetItems)
 
 		local function formatRate(v)
 			v = v or 0
@@ -1922,7 +1925,7 @@ local Window = Fluent:CreateWindow({
 		local function formatFuseResult(result)
 			local rate = 0
 			pcall(function()
-				rate = AssetGenerationUtil.GetBaseRateMutationOnly({
+				rate = AssetEarnings.RatePerSecond({
 					Category = result.AssetCategory,
 					Scale = result.AssetScale,
 					Mutations = result.Mutations or {},
@@ -1930,7 +1933,7 @@ local Window = Fluent:CreateWindow({
 			end)
 			local weight = 0
 			pcall(function()
-				weight = AssetItemUtil.GetVisualWeightKg({
+				weight = AssetItems.WeightKg({
 					Category = result.AssetCategory,
 					Scale = result.AssetScale,
 					Mutations = result.Mutations or {},
@@ -1948,7 +1951,7 @@ local Window = Fluent:CreateWindow({
 		end
 
 		local ok, err = pcall(function()
-			GameSignal.Fired(Constants.SIGNALS_MAP.Client.FuseMachine.FUSE_STARTED):Connect(function(result)
+			FuseMachineSignals.FuseStarted:Connect(function(result)
 				local formatOk, content = pcall(formatFuseResult, result)
 				fusePara:SetContent(formatOk and content or ("Fuse kedeteksi tapi gagal diformat: " .. tostring(content)))
 			end)
@@ -1999,7 +2002,7 @@ local Window = Fluent:CreateWindow({
 		})
 
 		local function hitungPeluangFuse()
-			local SaveModule = require(ReplicatedStorage.Library.Client.Save)
+			local SaveModule = require(ReplicatedStorage.Shared.Save)
 			local ok2, stats = pcall(SaveModule.Get)
 			if not ok2 or not stats or not stats.Inventory then
 				fuseOddsPara:SetContent("Gagal baca data akun.")
@@ -2044,12 +2047,12 @@ local Window = Fluent:CreateWindow({
 if GRANTED_VIA_GLOBAL then
 	local PosterTab = Window:AddTab({ Title = "Auto Poster" })
 
-	local AssetGenerationUtil = require(ReplicatedStorage.Library.Util.AssetGenerationUtil)
-	local AssetItemUtil = require(ReplicatedStorage.Library.Util.AssetItemUtil)
-	local AssetCmds = require(ReplicatedStorage.Library.Client.AssetCmds)
-	local MutationsModule = require(ReplicatedStorage.Library.Modules.Mutations)
-	local EggCmds = require(ReplicatedStorage.Library.Client.EggCmds)
-	local EggItemUtil = require(ReplicatedStorage.Library.Util.EggItemUtil)
+	local AssetEarnings = require(ReplicatedStorage.Shared.Util.AssetEarnings)
+	local AssetItems = require(ReplicatedStorage.Shared.Util.AssetItems)
+	local AssetRoster = require(ReplicatedStorage.Client.AssetRoster)
+	local MutationsModule = require(ReplicatedStorage.Shared.Modules.Mutations)
+	local EggState = require(ReplicatedStorage.Client.EggState)
+	local EggRecords = require(ReplicatedStorage.Shared.Util.EggRecords)
 	local HttpService = game:GetService("HttpService")
 
 	local POSTER_SERVER_URL = SERVER_BASE_URL .. "/generate"
@@ -2086,7 +2089,7 @@ if GRANTED_VIA_GLOBAL then
 				local mutations = mutationNamesFromString(tool:GetAttribute("Mutations"))
 				local rate = 0
 				pcall(function()
-					rate = AssetGenerationUtil.GetBaseRateMutationOnly({
+					rate = AssetEarnings.RatePerSecond({
 						Category = category,
 						Scale = scale,
 						Mutations = mutations,
@@ -2094,7 +2097,7 @@ if GRANTED_VIA_GLOBAL then
 				end)
 				local weight = 0
 				pcall(function()
-					weight = AssetItemUtil.GetVisualWeightKg({
+					weight = AssetItems.WeightKg({
 						Category = category,
 						Scale = scale,
 						Mutations = mutations,
@@ -2117,13 +2120,13 @@ if GRANTED_VIA_GLOBAL then
 
 	local function collectActivePets()
 		local pets = {}
-		local records = AssetCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+		local records = AssetRoster.ReadOwnerPen(LocalPlayer.UserId)
 		for _, rec in pairs(records) do
 			local item = rec.ItemData
 			if item then
 				local weight = 0
 				pcall(function()
-					weight = AssetItemUtil.GetVisualWeightKg(item)
+					weight = AssetItems.WeightKg(item)
 				end)
 				table.insert(pets, {
 					uid = rec.UID,
@@ -2158,10 +2161,7 @@ if GRANTED_VIA_GLOBAL then
 	end
 
 	local function collectGrowingEggs()
-		pcall(function()
-			EggCmds.RequestRuntimeSnapshot()
-		end)
-		local records = EggCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+		local records = getMyOwnedEggs()
 		local now = Workspace:GetServerTimeNow()
 		local eggs = {}
 		for uid, rec in pairs(records) do
@@ -2169,18 +2169,18 @@ if GRANTED_VIA_GLOBAL then
 				local speed = rec.GrowthSpeedMultiplier or 1
 				local nightCredit = 0
 				pcall(function()
-					nightCredit = EggItemUtil.GetCurrentNightGrowthCreditSeconds(rec, now, speed)
+					nightCredit = EggRecords.CurrentNightCredit(rec, now, speed)
 				end)
 				local remaining, ready = 0, false
 				pcall(function()
-					remaining = EggItemUtil.GetRemainingGrowthSeconds(rec, now, speed, nightCredit, LocalPlayer)
+					remaining = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer)
 				end)
 				pcall(function()
-					ready = EggItemUtil.IsGrowthReady(rec, now, speed, nightCredit, LocalPlayer)
+					ready = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer) <= 0
 				end)
 				local weight = 0
 				pcall(function()
-					weight = AssetItemUtil.GetVisualWeightKg({
+					weight = AssetItems.WeightKg({
 						Category = rec.AssetCategory,
 						Scale = rec.AssetScale or 1,
 						Mutations = rec.Mutations or {},
@@ -2188,7 +2188,7 @@ if GRANTED_VIA_GLOBAL then
 				end)
 				local rate = 0
 				pcall(function()
-					rate = AssetGenerationUtil.GetBaseRateMutationOnly({
+					rate = AssetEarnings.RatePerSecond({
 						Category = rec.AssetCategory,
 						Scale = rec.AssetScale or 1,
 						Mutations = rec.Mutations or {},
@@ -2212,16 +2212,13 @@ if GRANTED_VIA_GLOBAL then
 	end
 
 	local function collectBackpackEggs()
-		pcall(function()
-			EggCmds.RequestRuntimeSnapshot()
-		end)
-		local records = EggCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+		local records = getMyOwnedEggs()
 		local eggs = {}
 		for uid, rec in pairs(records) do
 			if rec.Placement == nil then
 				local weight = 0
 				pcall(function()
-					weight = AssetItemUtil.GetVisualWeightKg({
+					weight = AssetItems.WeightKg({
 						Category = rec.AssetCategory,
 						Scale = rec.AssetScale or 1,
 						Mutations = rec.Mutations or {},
@@ -2229,7 +2226,7 @@ if GRANTED_VIA_GLOBAL then
 				end)
 				local rate = 0
 				pcall(function()
-					rate = AssetGenerationUtil.GetBaseRateMutationOnly({
+					rate = AssetEarnings.RatePerSecond({
 						Category = rec.AssetCategory,
 						Scale = rec.AssetScale or 1,
 						Mutations = rec.Mutations or {},
@@ -2250,7 +2247,7 @@ if GRANTED_VIA_GLOBAL then
 		return eggs
 	end
 
-	local SaveModule = require(ReplicatedStorage.Library.Client.Save)
+	local SaveModule = require(ReplicatedStorage.Shared.Save)
 
 	local function collectAccountStats()
 		local runSpeed, moneyPerSecond
@@ -2268,7 +2265,7 @@ if GRANTED_VIA_GLOBAL then
 
 		local kandangLevel, treadmillLevel, currentMoney
 		pcall(function()
-			local stats = SaveModule.Get(LocalPlayer)
+			local stats = SaveModule.Get()
 			if stats then
 				kandangLevel = stats.BaseUpgradeLevel
 				treadmillLevel = stats.TreadmillUpgradeLevel
@@ -2393,7 +2390,7 @@ if GRANTED_VIA_GLOBAL then
 		local backpackEggs = collectBackpackEggs()
 		local activeLimit = 0
 		pcall(function()
-			activeLimit = AssetCmds.RequestEquipLimit()
+			activeLimit = AssetRoster.ReadWearLimit()
 		end)
 		local runSpeed, moneyPerSecond, kandangLevel, treadmillLevel, currentMoney = collectAccountStats()
 		local autoPrice = computeAutoPrice(activePets, allPets, growingEggs, backpackEggs)
@@ -2561,7 +2558,7 @@ if GRANTED_VIA_GLOBAL then
 
 			local activeLimit = 0
 			pcall(function()
-				activeLimit = AssetCmds.RequestEquipLimit()
+				activeLimit = AssetRoster.ReadWearLimit()
 			end)
 			local autoPrice = computeAutoPrice(activePets, allPets, growingEggs, backpackEggs)
 			local useDiscordPriceFlow = discordPriceFlowToggle.Value == true
@@ -2652,12 +2649,12 @@ end
 	local FarmTab = Window:AddTab({ Title = "Farming" })
 
 	local RunService = game:GetService("RunService")
-	local Assets = require(ReplicatedStorage.Directory.Assets)
-	local EggCmds = require(ReplicatedStorage.Library.Client.EggCmds)
-	local AreaEggSlotIdentity = require(ReplicatedStorage.Library.Util.AreaEggSlotIdentity)
-	local AreaEggResetWall = require(ReplicatedStorage.Library.Client.AreaEggResetWall)
-	local PlotCmds = require(ReplicatedStorage.Library.Client.PlotCmds)
-	local AssetGenerationUtil = require(ReplicatedStorage.Library.Util.AssetGenerationUtil)
+	local Assets = require(ReplicatedStorage.Data.Assets)
+	local EggState = require(ReplicatedStorage.Client.EggState)
+	local AreaEggSlotIdentity = require(ReplicatedStorage.Shared.Util.AreaEggSlotIdentity)
+	local AreaEggResetWall = require(ReplicatedStorage.Client.AreaEggResetWall)
+	local PlotState = require(ReplicatedStorage.Client.PlotState)
+	local AssetEarnings = require(ReplicatedStorage.Shared.Util.AssetEarnings)
 
 	local __OBJECTS = Workspace:WaitForChild("__OBJECTS")
 	local Areas = __OBJECTS:WaitForChild("Areas")
@@ -2814,7 +2811,7 @@ end
 
 	local function getTreadmillRoot()
 		local ok, slot = pcall(function()
-			return PlotCmds.GetMySlot()
+			return PlotState.ResolveLocalSlot()
 		end)
 		if not ok or not slot then return nil end
 		local rendersFolder = Workspace:FindFirstChild("__ClientTreadmillRenders")
@@ -2897,14 +2894,14 @@ end
 	local autoStealRunning = false
 	local isCarrying, carryingUid = false, nil
 
-	EggCmds.AreaEggCarryStateChanged:Connect(function(state)
+	EggState.CarryChanged:Connect(function(state)
 		isCarrying = state.IsCarrying
 		carryingUid = state.IsCarrying and state.Uid or nil
 	end)
 
 	local function computeRate(record)
 		local ok, rate = pcall(function()
-			return AssetGenerationUtil.GetBaseRateMutationOnly({
+			return AssetEarnings.RatePerSecond({
 				Category = record.AssetCategory,
 				Scale = record.AssetScale,
 				Mutations = record.Mutations or {},
@@ -2942,7 +2939,7 @@ end
 
 	local function pickBestTarget()
 		local ok, snapshot = pcall(function()
-			return EggCmds.GetAreaEggSnapshot()
+			return EggState.SyncFieldEggs()
 		end)
 		if not ok or not snapshot then
 			return nil
@@ -3005,7 +3002,7 @@ end
 				end
 				local rec
 				pcall(function()
-					rec = EggCmds.GetAreaEggRecord(uid)
+					rec = EggState.FetchEggRecord(uid)
 				end)
 				if rec == nil then
 					return true
@@ -3015,7 +3012,7 @@ end
 						return autoStealRunning
 					end) then
 						waitUntilNotTrapped(function() return autoStealRunning end)
-						EggCmds.RequestCarryAreaEgg(uid, nil)
+						EggState.CarryFieldEgg(uid, nil)
 					end
 				else
 					return false
@@ -3089,7 +3086,7 @@ end
 		if AreaEggSlotIdentity.IsFirstAreaUid(target.Uid) then
 			slotKey = AreaEggSlotIdentity.BuildSlotKey(target.AreaId, target.NestId)
 		end
-		local ok, err = EggCmds.RequestCarryAreaEgg(target.Uid, slotKey)
+		local ok, err = EggState.CarryFieldEgg(target.Uid, slotKey)
 		if not ok then
 			setStatus("Gagal curi " .. tostring(target.AssetCategory) .. ": " .. tostring(err))
 			if autoReturnTreadmill then boardTreadmill() end
@@ -3106,10 +3103,10 @@ end
 
 		setStatus("Sampai rumah -- taruh " .. tostring(target.AssetCategory) .. " di treadmill...")
 		pcall(function()
-			local plotData = PlotCmds.GetPlotData()
+			local plotData = PlotState.ResolvePlot()
 			if plotData and plotData.CenterPoint then
 				local localCFrame = plotData.CenterPoint.CFrame:ToObjectSpace(CFrame.new(plotData.CenterPoint.Position))
-				local placeOk, placeErr = EggCmds.RequestPlaceEgg(target.Uid, localCFrame)
+				local placeOk, placeErr = EggState.PlantEgg(target.Uid, localCFrame)
 				setStatus(placeOk and ("Egg " .. tostring(target.AssetCategory) .. " ditaruh di treadmill.")
 					or ("Diklaim tapi gagal ditaruh: " .. tostring(placeErr)))
 			end
@@ -3190,10 +3187,7 @@ end
 		local autoPlaceEggRunning = false
 
 		local function collectUnplacedBelowThreshold(threshold)
-			pcall(function()
-				EggCmds.RequestRuntimeSnapshot()
-			end)
-			local records = EggCmds.GetOwnerRuntimeRecords(LocalPlayer.UserId)
+			local records = getMyOwnedEggs()
 			local candidates = {}
 			for uid, rec in pairs(records) do
 				if rec.Placement == nil then
@@ -3227,7 +3221,7 @@ end
 				local z = math.clamp(localHRP.Z + (math.random() * 2 - 1) * radius, -halfZ, halfZ)
 				local worldPos = (petArea.CFrame * CFrame.new(x, size.Y / 2, z)).Position
 				local placeCFrame = centerPoint.CFrame:ToObjectSpace(CFrame.new(worldPos))
-				local ok, err = EggCmds.RequestPlaceEgg(uid, placeCFrame)
+				local ok, err = EggState.PlantEgg(uid, placeCFrame)
 				if ok then
 					return true
 				end
@@ -3245,7 +3239,7 @@ end
 				return
 			end
 
-			local plotData = PlotCmds.GetPlotData()
+			local plotData = PlotState.ResolvePlot()
 			local petArea = plotData and plotData.PetArea
 			local centerPoint = plotData and plotData.CenterPoint
 			if not petArea or not centerPoint then
@@ -3343,7 +3337,7 @@ end
 			end)
 		end
 
-		local PlotCmds = require(ReplicatedStorage.Library.Client.PlotCmds)
+		local PlotCmds = require(ReplicatedStorage.Client.PlotState)
 
 		local function boardTreadmillOnce()
 			local char = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
@@ -3354,7 +3348,7 @@ end
 			end
 
 			local ok, slot = pcall(function()
-				return PlotCmds.GetMySlot()
+				return PlotState.ResolveLocalSlot()
 			end)
 			if not ok or not slot then
 				setStatus("Gagal: plot sendiri belum kebaca.")
@@ -3415,7 +3409,7 @@ end
 	-- Performance Booster
 	------------------------------------------------------------
 	do
-		local PlotCmds = require(ReplicatedStorage.Library.Client.PlotCmds)
+		local PlotCmds = require(ReplicatedStorage.Client.PlotState)
 		local section = MiscTab:AddSection("Performance Booster")
 
 		local statusPara = section:AddParagraph({
@@ -3589,7 +3583,7 @@ end
 				end
 
 				local ok, mySlot = pcall(function()
-					return PlotCmds.GetMySlot()
+					return PlotState.ResolveLocalSlot()
 				end)
 				if not ok or not mySlot then
 					setStatus("Hide Other Treadmill: plot sendiri belum kebaca.")
@@ -3746,16 +3740,12 @@ end
 					return
 				end
 				task.spawn(function()
-					local Save = require(ReplicatedStorage.Library.Client.Save)
-					local Network = require(ReplicatedStorage.Library.Client.Network)
-					local Constants = require(ReplicatedStorage.Library.Globals.Constants)
-					local Trails = require(ReplicatedStorage.Directory.Trails)
-					local Simple = require(ReplicatedStorage.Library.Modules.FormatNumber.Simple)
-					local TrailsNet = Constants.NETWORK_MAP.Trails
+					local Save = require(ReplicatedStorage.Shared.Save)
+					local Remotes = require(ReplicatedStorage.Shared.Remotes)
+					local Trails = require(ReplicatedStorage.Data.Trails)
+					local Simple = require(ReplicatedStorage.Packages.FormatNumber.Simple)
 
-					if not Save.IsLocalDataLoaded() then
-						Save.LoadedStats:Wait()
-					end
+					Save.ProfileReady:Wait()
 
 					local function fmtPrice(price)
 						return "$" .. Simple.FormatCompact(price, ".#")
@@ -3780,7 +3770,7 @@ end
 							end
 							local cfg = Trails.Directory[key]
 							if not data.TrailInventory[key] and data.Money >= cfg.Price then
-								local invokeOk, purchaseOk, err = pcall(Network.Invoke, TrailsNet.REQUEST_PURCHASE, key)
+								local invokeOk, purchaseOk, err = pcall(function() return Remotes.Trailwear.AskPurchase:InvokeServer(key) end)
 								if invokeOk and purchaseOk then
 									setTrailStatus("Beli " .. cfg.DisplayName .. " (" .. fmtPrice(cfg.Price) .. ")")
 									boughtThisPass = true
