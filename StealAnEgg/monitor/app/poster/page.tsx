@@ -298,7 +298,14 @@ function PosterPage() {
   const backpackEggs = detail?.backpackEggs || [];
   const activeLimit = detail?.activeLimit || MAX_EQUIP;
 
-  const allSorted = [...allPets].sort((a, b) => (b.rate || 0) - (a.rate || 0));
+  const allCombined = [...allPets, ...activePets, ...backpackEggs, ...growingEggs];
+  const allDeduped: Pet[] = [];
+  const allSeenUids = new Set<string>();
+  for (const p of allCombined) {
+    const k = petKey(p);
+    if (!allSeenUids.has(k)) { allSeenUids.add(k); allDeduped.push(p); }
+  }
+  const allSorted = allDeduped.sort((a, b) => (b.rate || 0) - (a.rate || 0));
   const growingEggsSorted = [...growingEggs].sort((a, b) => (b.rate || 0) - (a.rate || 0));
   const backpackEggsSorted = [...backpackEggs].sort((a, b) => (b.rate || 0) - (a.rate || 0));
   const eggKeys = new Set([...growingEggsSorted, ...backpackEggsSorted].map(petKey));
