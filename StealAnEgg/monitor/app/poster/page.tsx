@@ -389,7 +389,7 @@ function PosterPage() {
   const mutatedAbove1B = poolSorted.filter(
     (p) => p.mutations && p.mutations.length > 0 && (p.rate || 0) >= HIGH_VALUE_THRESHOLD
   );
-  let featured: Pet | null = mutatedAbove1B[0] || null;
+  let featured: Pet | null = mutatedAbove1B[0] || poolSorted[0] || null;
   const featuredKey = featured ? petKey(featured) : null;
 
   const topPicks: Pet[] = [];
@@ -397,10 +397,6 @@ function PosterPage() {
     if (featuredKey && petKey(p) === featuredKey) continue;
     topPicks.push(p);
     if (topPicks.length >= 3) break;
-  }
-
-  if (!featured && poolSorted.length > 3) {
-    featured = poolSorted.find((p) => !topPicks.some((t) => petKey(t) === petKey(p))) || null;
   }
 
   const featuredKeys = new Set(topPicks.map(petKey));
