@@ -318,8 +318,17 @@ export default function DashboardPage() {
         .detail-empty { color: var(--dim); font-size: 12px; }
       `}</style>
 
-      <div className="eyebrow">STEAL AN EGG</div>
-      <h1>Monitor — Akun & Pet</h1>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 4 }}>
+        <div>
+          <div className="eyebrow">STEAL AN EGG</div>
+          <h1>Monitor — Akun & Pet</h1>
+        </div>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
+          <a href="/catalog" style={{ color: "var(--accent2)", textDecoration: "none", fontSize: 13, fontWeight: 700, background: "#1c1c2b", border: "1px solid var(--card-border)", borderRadius: 8, padding: "6px 14px" }}>
+            Katalog Akun
+          </a>
+        </div>
+      </div>
 
       <div className="sortbar">
         <label>Urutkan:</label>
@@ -424,15 +433,14 @@ export default function DashboardPage() {
                   </div>
                 ))}
               </div>
-              <button
+              <a
                 className="genbtn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  generatePoster(a.sourceAccount);
-                }}
+                href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`}
+                onClick={(e) => e.stopPropagation()}
+                style={{ display: "block", textAlign: "center", textDecoration: "none" }}
               >
                 Generate Poster
-              </button>
+              </a>
               <button
                 className="restartbtn"
                 onClick={(e) => {
