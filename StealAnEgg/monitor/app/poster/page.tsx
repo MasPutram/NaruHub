@@ -49,7 +49,6 @@ interface AccountDetail {
 const MAX_EQUIP = 17;
 const HIGH_VALUE_THRESHOLD = 1_000_000_000;
 const NOTABLE_THRESHOLD = 300_000_000;
-const MUTATED_FEATURED_THRESHOLD = 500_000_000;
 
 function fmtMoney(v: number | null | undefined): string {
   if (v == null) return "-";
@@ -389,11 +388,11 @@ function PosterPage() {
   const topPicks = poolSorted.slice(0, 3);
 
   const topPickKeys = new Set(topPicks.map(petKey));
-  const mutatedCandidates = poolSorted.filter(
-    (p) => p.mutations && p.mutations.length > 0 && (p.rate || 0) > MUTATED_FEATURED_THRESHOLD && !topPickKeys.has(petKey(p))
+  const mutatedAbove1B = poolSorted.filter(
+    (p) => p.mutations && p.mutations.length > 0 && (p.rate || 0) >= HIGH_VALUE_THRESHOLD
   );
   const featuredFallback = poolSorted.find((p) => !topPickKeys.has(petKey(p))) || null;
-  const featured = mutatedCandidates[0] || featuredFallback;
+  const featured = mutatedAbove1B[0] || featuredFallback;
 
   const featuredKeys = new Set(topPicks.map(petKey));
   if (featured) featuredKeys.add(petKey(featured));
