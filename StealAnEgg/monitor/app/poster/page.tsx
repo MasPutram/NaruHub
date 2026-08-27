@@ -385,14 +385,23 @@ function PosterPage() {
     }
   }
   const poolSorted = [...uniquePool].sort((a, b) => (b.rate || 0) - (a.rate || 0));
-  const topPicks = poolSorted.slice(0, 3);
 
-  const topPickKeys = new Set(topPicks.map(petKey));
   const mutatedAbove1B = poolSorted.filter(
     (p) => p.mutations && p.mutations.length > 0 && (p.rate || 0) >= HIGH_VALUE_THRESHOLD
   );
-  const featuredFallback = poolSorted.find((p) => !topPickKeys.has(petKey(p))) || null;
-  const featured = mutatedAbove1B[0] || featuredFallback;
+  let featured: Pet | null = mutatedAbove1B[0] || null;
+  const featuredKey = featured ? petKey(featured) : null;
+
+  const topPicks: Pet[] = [];
+  for (const p of poolSorted) {
+    if (featuredKey && petKey(p) === featuredKey) continue;
+    topPicks.push(p);
+    if (topPicks.length >= 3) break;
+  }
+
+  if (!featured && poolSorted.length > 3) {
+    featured = poolSorted.find((p) => !topPicks.some((t) => petKey(t) === petKey(p))) || null;
+  }
 
   const featuredKeys = new Set(topPicks.map(petKey));
   if (featured) featuredKeys.add(petKey(featured));
