@@ -196,6 +196,16 @@ if not GRANTED_VIA_GLOBAL then
 end
 
 ------------------------------------------------------------
+-- NaruUI (loaded from GitHub)
+------------------------------------------------------------
+local _naruSrc = game:HttpGet("https://raw.githubusercontent.com/MasPutram/NaruHub/main/StealAnEgg/NaruUI.luau")
+local _naruFn, _naruErr = loadstring(_naruSrc)
+if not _naruFn then
+	error("NaruUI loadstring failed: " .. tostring(_naruErr))
+end
+local NaruUI = _naruFn()
+
+------------------------------------------------------------
 -- Game data access
 ------------------------------------------------------------
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -224,65 +234,45 @@ local function getMyOwnedEggs()
 end
 
 ------------------------------------------------------------
--- Simple status GUI (kotakan hitam)
+-- NaruUI Window (clean, status only -- no tabs visible)
 ------------------------------------------------------------
-local guiContainer
-pcall(function()
-	guiContainer = gethui and gethui()
-end)
-guiContainer = guiContainer or game:GetService("CoreGui")
+local Fluent = NaruUI.New({
+	BrandColor = Color3.fromRGB(255, 214, 10),
+	ConfigPrefix = "StealAnEgg",
+})
 
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "NaruHubMonitor"
-screenGui.ResetOnSpawn = false
-screenGui.DisplayOrder = 9998
-screenGui.IgnoreGuiInset = true
-screenGui.Parent = guiContainer
+local Window = Fluent:CreateWindow({
+	Title = "NaruHub | Monitoring Steal An Egg",
+	Badge = "PREMIUM",
+	TabWidth = 0,
+	Size = UDim2.fromOffset(380, 280),
+	AutoStartMinimized = true,
+})
 
-local box = Instance.new("Frame")
-box.Size = UDim2.new(0, 260, 0, 130)
-box.Position = UDim2.new(0, 12, 0.5, -65)
-box.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-box.BackgroundTransparency = 0.15
-box.BorderSizePixel = 0
-box.Parent = screenGui
-Instance.new("UICorner", box).CornerRadius = UDim.new(0, 10)
+local StatusTab = Window:AddTab({ Title = "" })
+local section = StatusTab:AddSection("Info Akun")
 
-local padding = Instance.new("UIPadding")
-padding.PaddingTop = UDim.new(0, 10)
-padding.PaddingLeft = UDim.new(0, 12)
-padding.PaddingRight = UDim.new(0, 12)
-padding.PaddingBottom = UDim.new(0, 10)
-padding.Parent = box
+local userPara = section:AddParagraph({
+	Title = "Username",
+	Content = LocalPlayer.Name,
+})
+local statusPara = section:AddParagraph({
+	Title = "Status",
+	Content = "Idle",
+})
+local monitorPara = section:AddParagraph({
+	Title = "Monitoring",
+	Content = "Starting...",
+})
+section:AddParagraph({
+	Title = "By",
+	Content = "Putra Ramadhan",
+})
 
-local layout = Instance.new("UIListLayout")
-layout.SortOrder = Enum.SortOrder.LayoutOrder
-layout.Padding = UDim.new(0, 4)
-layout.Parent = box
-
-local function makeLabel(text, order, size, color, font)
-	local lbl = Instance.new("TextLabel")
-	lbl.Text = text
-	lbl.Font = font or Enum.Font.GothamBold
-	lbl.TextSize = size or 13
-	lbl.TextColor3 = color or Color3.fromRGB(220, 220, 220)
-	lbl.BackgroundTransparency = 1
-	lbl.Size = UDim2.new(1, 0, 0, size and (size + 4) or 17)
-	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.LayoutOrder = order
-	lbl.Parent = box
-	return lbl
-end
-
-local titleLabel = makeLabel("NaruHub | Monitoring Steal An Egg", 0, 11, Color3.fromRGB(167, 139, 250))
-local userLabel = makeLabel("Username : " .. LocalPlayer.Name, 1, 13, Color3.fromRGB(255, 255, 255))
-local statusLabel = makeLabel("Status : Idle", 2, 13, Color3.fromRGB(255, 214, 10))
-local premiumLabel = makeLabel("PREMIUM", 3, 11, Color3.fromRGB(255, 214, 10))
-local monitorLabel = makeLabel("Monitoring Already", 4, 11, Color3.fromRGB(52, 211, 153))
-local byLabel = makeLabel("By Putra Ramadhan", 5, 10, Color3.fromRGB(139, 139, 163), Enum.Font.Gotham)
+Window:SelectTab(1)
 
 ------------------------------------------------------------
--- Detect player activity
+-- Detect player activity (Idle / Treadmil / Steal)
 ------------------------------------------------------------
 local function getPlayerStatus()
 	local character = LocalPlayer.Character
@@ -293,23 +283,39 @@ local function getPlayerStatus()
 	if not humanoid then
 		return "Idle"
 	end
+	local rootPart = character:FindFirstChild("HumanoidRootPart")
+	if not rootPart then
+		return "Idle"
+	end
 
-	local anim = character:FindFirstChild("Animate")
-	if anim then
-		for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
-			local animName = track.Name:lower()
-			if animName:find("treadmill") or animName:find("run") then
-				return "Treadmil"
-			end
-			if animName:find("steal") or animName:find("grab") or animName:find("snatch") then
-				return "Steal"
+	if humanoid.Sit then
+		return "Treadmil"
+	end
+
+	local treadmillFolder = Workspace:FindFirstChild("Treadmills")
+		or Workspace:FindFirstChild("Treadmill")
+	if treadmillFolder then
+		for _, desc in ipairs(treadmillFolder:GetDescendants()) do
+			if desc:IsA("BasePart") then
+				if (desc.Position - rootPart.Position).Magnitude < 12 then
+					return "Treadmil"
+				end
 			end
 		end
 	end
 
-	local moveDir = humanoid.MoveDirection
-	if moveDir.Magnitude > 0.1 then
-		return "Treadmil"
+	if not treadmillFolder then
+		for _, obj in ipairs(Workspace:GetDescendants()) do
+			if obj:IsA("BasePart") and obj.Name:lower():find("treadmill") then
+				if (obj.Position - rootPart.Position).Magnitude < 12 then
+					return "Treadmil"
+				end
+			end
+		end
+	end
+
+	if humanoid.MoveDirection.Magnitude > 0.1 then
+		return "Steal"
 	end
 
 	return "Idle"
@@ -736,16 +742,16 @@ end
 -- Auto-start monitoring loop
 ------------------------------------------------------------
 task.spawn(function()
-	while screenGui and screenGui.Parent do
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		local ok, err = reportToMonitor()
 		if ok then
-			monitorLabel.Text = "Monitoring OK -- " .. os.date("%H:%M:%S")
+			monitorPara:SetContent("OK -- " .. os.date("%H:%M:%S"))
 		else
-			monitorLabel.Text = "Gagal lapor: " .. tostring(err)
+			monitorPara:SetContent("Gagal: " .. tostring(err))
 		end
 
 		local st = getPlayerStatus()
-		statusLabel.Text = "Status : " .. st
+		statusPara:SetContent(st)
 
 		task.wait(15)
 	end
