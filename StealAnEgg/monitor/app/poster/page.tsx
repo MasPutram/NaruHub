@@ -209,6 +209,8 @@ function PosterPage() {
   const [price, setPrice] = useState("");
   const [title, setTitle] = useState("Jual Akun GACOR");
   const [badge, setBadge] = useState("");
+  const [owner, setOwner] = useState("");
+  const [checklist, setChecklist] = useState("");
   const [downloading, setDownloading] = useState(false);
   const posterRef = useRef<HTMLDivElement>(null);
 
@@ -568,6 +570,34 @@ function PosterPage() {
           position: absolute; bottom: 12px; right: 16px;
           font-size: 20px; font-weight: 800; color: #64748b;
         }
+
+        .watermark-layer {
+          position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          transform: rotate(-30deg); pointer-events: none; z-index: 10;
+          overflow: visible;
+        }
+        .watermark-text {
+          font-size: 120px; font-weight: 800; color: rgba(30, 41, 59, 0.06);
+          white-space: nowrap; line-height: 1.4; text-align: center;
+        }
+        .watermark-sub {
+          font-size: 40px; font-weight: 800; color: rgba(30, 41, 59, 0.045);
+          white-space: nowrap; text-align: center;
+        }
+
+        .detail-box {
+          background: #fff; border: 1px solid #cbd5e1; border-radius: 16px;
+          padding: 16px 20px; margin-bottom: 12px;
+        }
+        .detail-title { font-size: 16px; font-weight: 800; color: #1e293b; margin-bottom: 10px; }
+        .detail-item { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
+        .detail-check {
+          width: 18px; height: 18px; border-radius: 50%; border: 2px solid #16a34a;
+          display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .detail-check svg { width: 10px; height: 10px; }
+        .detail-label { font-size: 15px; color: #1e293b; }
       `}</style>
 
       <div className="controls">
@@ -580,6 +610,10 @@ function PosterPage() {
         <input value={badge} onChange={(e) => setBadge(e.target.value)} placeholder="contoh: TERMURAH" />
         <label>Harga:</label>
         <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="contoh: Rp 150.000" />
+        <label>Owner:</label>
+        <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="nama Facebook" />
+        <label>Checklist:</label>
+        <input value={checklist} onChange={(e) => setChecklist(e.target.value)} placeholder="Data Polos, No Topi, No Sum" style={{ width: 280 }} />
         <button className="dlbtn" onClick={downloadPoster} disabled={downloading}>
           {downloading ? "Downloading..." : "Download PNG"}
         </button>
@@ -779,7 +813,33 @@ function PosterPage() {
                 <div className="price-empty">Isi harga di controls atas</div>
               )}
             </div>
+
+            {checklist.trim() && (() => {
+              const items = checklist.split(",").map((s) => s.trim()).filter(Boolean);
+              return items.length > 0 ? (
+                <div className="detail-box">
+                  <div className="detail-title">DETAIL ACC</div>
+                  {items.map((item, i) => (
+                    <div key={i} className="detail-item">
+                      <div className="detail-check">
+                        <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M2 6L5 9L10 3" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </div>
+                      <span className="detail-label">{item}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null;
+            })()}
           </div>
+
+          {owner.trim() && (
+            <div className="watermark-layer">
+              <div className="watermark-text">{owner}</div>
+              <div className="watermark-sub">FACEBOOK</div>
+            </div>
+          )}
 
           {initials && <div className="account-tag">{initials}</div>}
         </div>
