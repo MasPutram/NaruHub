@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, detailKey } from "@/lib/redis";
+import { redis, detailKey, forSaleKey } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
 
@@ -10,14 +10,26 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const raw = await redis.get<string>(detailKey(account));
-    if (!raw) {
+    let raw = await redis.get<string>(detailKey(account));
+    let data: any = null;
+
+    if (raw) {
+      data = typeof raw === "string" ? JSON.parse(raw) : raw;
+    } else {
+      const fsRaw = await redis.get<string>(forSaleKey(account));
+      if (fsRaw) {
+        const fs = typeof fsRaw === "string" ? JSON.parse(fsRaw) : fsRaw;
+        data = fs.detail || null;
+      }
+    }
+
+    if (!data) {
       return NextResponse.json(
         { ok: false, error: "Belum ada data lengkap buat akun ini." },
         { status: 404 }
       );
     }
-    const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+
     return NextResponse.json({
       ok: true,
       sourceAccount: account,
