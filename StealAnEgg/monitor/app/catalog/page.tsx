@@ -106,9 +106,9 @@ export default function CatalogPage() {
 
   const fetchAccounts = useCallback(async () => {
     try {
-      const res = await fetch("/api/accounts");
+      const res = await fetch("/api/catalog-accounts");
       const data = await res.json();
-      setAccounts((data.accounts || []).filter((a: Account) => a.forSale));
+      setAccounts(data.accounts || []);
     } catch {}
   }, []);
 
