@@ -397,7 +397,7 @@ return function(ctx)
 		while autoStealRunning do
 			local closed = true
 			pcall(function()
-				closed = AreaEggResetWall.IsClosed()
+				closed = AreaEggResetWall.IsSealed()
 			end)
 			if lastReported ~= closed then
 				lastReported = closed

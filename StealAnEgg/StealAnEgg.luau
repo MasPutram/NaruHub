@@ -3047,7 +3047,7 @@ end
 
 		local wallClosed = true
 		pcall(function()
-			wallClosed = AreaEggResetWall.IsClosed()
+			wallClosed = AreaEggResetWall.IsSealed()
 		end)
 		if wallClosed then
 			setStatus("Ada target tapi tembok masih nutup, nunggu...")
