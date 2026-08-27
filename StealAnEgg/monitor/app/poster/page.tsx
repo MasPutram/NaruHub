@@ -47,6 +47,9 @@ interface AccountDetail {
 }
 
 const MAX_EQUIP = 17;
+const HIGH_VALUE_THRESHOLD = 1_000_000_000;
+const NOTABLE_THRESHOLD = 300_000_000;
+const MUTATED_FEATURED_THRESHOLD = 500_000_000;
 
 function fmtMoney(v: number | null | undefined): string {
   if (v == null) return "-";
@@ -59,7 +62,8 @@ function fmtMoney(v: number | null | undefined): string {
   return "$" + n.toFixed(0);
 }
 
-function fmtRate(v: number): string {
+function fmtRate(v: number | null | undefined): string {
+  if (v == null) return "-";
   return fmtMoney(v) + "/s";
 }
 
@@ -75,21 +79,39 @@ function fmtCompact(v: number | null | undefined): string {
 }
 
 function fmtDuration(seconds: number | undefined): string {
-  if (!seconds || seconds <= 0) return "Siap!";
+  if (!seconds || seconds <= 0) return "SIAP MENETAS!";
+  seconds = Math.max(0, Math.floor(seconds));
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h}j ${m}m`;
-  return `${m}m`;
+  const s = seconds % 60;
+  if (h) return `${h}h ${m}m`;
+  if (m) return `${m}m ${s}s`;
+  return `${s}s`;
 }
 
 function fmtWeight(w: number | undefined): string {
   if (!w) return "";
-  if (w >= 1000) return (w / 1000).toFixed(1) + " kg";
-  return w.toFixed(0) + " g";
+  if (w >= 1) return w.toLocaleString("en-US", { maximumFractionDigits: 0 }) + " Kg";
+  return w.toFixed(2) + " Kg";
 }
 
 function petKey(p: Pet): string {
-  return `${p.category}|${p.name || ""}|${(p.mutations || []).join("+")}|${p.rate}`;
+  return `${p.category}|${(p.mutations || []).slice().sort().join("+")}|${p.rate}`;
+}
+
+/** Mirrors Python's account_initials(): "BlekokGong20" -> "BG20" (uppercase
+ * letters in the name + trailing digits). */
+function accountInitials(name: string | null | undefined): string {
+  if (!name) return "";
+  const m = name.match(/(\d+)$/);
+  const digits = m ? m[1] : "";
+  const lettersPart = digits ? name.slice(0, name.length - digits.length) : name;
+  let caps = "";
+  for (const ch of lettersPart) {
+    if (ch !== ch.toLowerCase() && ch === ch.toUpperCase()) caps += ch;
+  }
+  if (!caps) caps = lettersPart.slice(0, 2).toUpperCase();
+  return caps + digits;
 }
 
 let iconIndex: Record<string, string> | null = null;
@@ -129,7 +151,7 @@ function PetIcon({ pet, size = 48 }: { pet: Pet; size?: number }) {
         style={{
           width: size, height: size, background: "#f1f5f9", borderRadius: 10,
           display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: size * 0.4, color: "#94a3b8",
+          fontSize: size * 0.4, color: "#94a3b8", flexShrink: 0,
         }}
       >
         🐾
@@ -142,12 +164,12 @@ function PetIcon({ pet, size = 48 }: { pet: Pet; size?: number }) {
       alt={pet.category}
       width={size}
       height={size}
-      style={{ borderRadius: 10, objectFit: "contain", background: "#f1f5f9" }}
+      style={{ borderRadius: 10, objectFit: "contain", background: "#f1f5f9", flexShrink: 0 }}
       onError={(e) => {
         const el = e.currentTarget;
         el.style.display = "none";
         const placeholder = document.createElement("div");
-        placeholder.style.cssText = `width:${size}px;height:${size}px;background:#f1f5f9;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:${size * 0.4}px;color:#94a3b8`;
+        placeholder.style.cssText = `width:${size}px;height:${size}px;background:#f1f5f9;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:${size * 0.4}px;color:#94a3b8;flex-shrink:0`;
         placeholder.textContent = "🐾";
         el.parentElement?.insertBefore(placeholder, el);
       }}
@@ -159,9 +181,23 @@ function mutColor(mut: string): string {
   const m = mut.toLowerCase();
   if (m.includes("rainbow")) return "#9333ea";
   if (m.includes("golden")) return "#ca8a04";
-  if (m.includes("diamond")) return "#2563eb";
-  if (m.includes("titanium")) return "#64748b";
-  return "#6366f1";
+  if (m.includes("silver")) return "#64748b";
+  return "#2563eb";
+}
+
+function groupByMutation(pets: Pet[]): [string, Pet[]][] {
+  const groups: Record<string, Pet[]> = {};
+  for (const p of pets) {
+    if (!p.mutations || p.mutations.length === 0) continue;
+    const key = p.mutations.map((m) => m.toUpperCase()).sort().join(" + ");
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(p);
+  }
+  return Object.entries(groups).sort((a, b) => {
+    const maxA = Math.max(0, ...a[1].map((p) => p.rate || 0));
+    const maxB = Math.max(0, ...b[1].map((p) => p.rate || 0));
+    return maxB - maxA;
+  });
 }
 
 function PosterPage() {
@@ -172,6 +208,7 @@ function PosterPage() {
   const [loading, setLoading] = useState(true);
   const [price, setPrice] = useState("");
   const [title, setTitle] = useState("Jual Akun GACOR");
+  const [badge, setBadge] = useState("");
   const [downloading, setDownloading] = useState(false);
   const posterRef = useRef<HTMLDivElement>(null);
 
@@ -258,35 +295,37 @@ function PosterPage() {
   const backpackEggs = detail?.backpackEggs || [];
   const activeLimit = detail?.activeLimit || MAX_EQUIP;
 
-  const allSorted = [...allPets].sort((a, b) => b.rate - a.rate);
-  const pool = [...activePets, ...allPets, ...growingEggs, ...backpackEggs].sort(
-    (a, b) => b.rate - a.rate
-  );
+  const allSorted = [...allPets].sort((a, b) => (b.rate || 0) - (a.rate || 0));
+  const growingEggsSorted = [...growingEggs].sort((a, b) => (b.rate || 0) - (a.rate || 0));
+  const backpackEggsSorted = [...backpackEggs].sort((a, b) => (b.rate || 0) - (a.rate || 0));
+  const eggKeys = new Set([...growingEggsSorted, ...backpackEggsSorted].map(petKey));
 
-  const seen = new Set<string>();
+  // "Aktif" -- 17 rate TERTINGGI dari gabungan pet aktif + isi tas + telur
+  // (lagi tumbuh + di tas), terlepas lagi keequip/ditaro apa ngga.
+  const petPoolSorted = [...activePets, ...allPets, ...growingEggs, ...backpackEggs].sort(
+    (a, b) => (b.rate || 0) - (a.rate || 0)
+  );
+  const activePetsSorted = petPoolSorted.slice(0, MAX_EQUIP);
+
+  // Kandidat 3 card utama + Paling Gacor.
+  const uniqueSeen = new Set<string>();
   const uniquePool: Pet[] = [];
-  for (const p of pool) {
+  for (const p of [...activePetsSorted, ...allSorted, ...growingEggsSorted, ...backpackEggsSorted]) {
     const k = petKey(p);
-    if (!seen.has(k)) {
-      seen.add(k);
+    if (!uniqueSeen.has(k)) {
+      uniqueSeen.add(k);
       uniquePool.push(p);
     }
   }
+  const poolSorted = [...uniquePool].sort((a, b) => (b.rate || 0) - (a.rate || 0));
+  const topPicks = poolSorted.slice(0, 3);
 
-  const activePetsSorted = pool.slice(0, MAX_EQUIP);
-  const top3 = uniquePool.slice(0, 3);
-  const potentialActiveRate = activePetsSorted.reduce((s, p) => s + (p.rate || 0), 0);
-  const highValueTotal = allSorted
-    .filter((p) => p.rate >= 1e9)
-    .reduce((s, p) => s + p.rate, 0);
-
-  const eggKeys = new Set([...growingEggs, ...backpackEggs].map(petKey));
-  const featuredKeys = new Set(top3.map(petKey));
-
-  const mutatedCandidates = uniquePool.filter(
-    (p) => p.mutations && p.mutations.length > 0 && p.rate > 500_000_000
+  const mutatedCandidates = poolSorted.filter(
+    (p) => p.mutations && p.mutations.length > 0 && (p.rate || 0) > MUTATED_FEATURED_THRESHOLD
   );
-  const featured = mutatedCandidates[0] || uniquePool[0] || null;
+  const featured = mutatedCandidates[0] || poolSorted[0] || null;
+
+  const featuredKeys = new Set(topPicks.map(petKey));
   if (featured) featuredKeys.add(petKey(featured));
 
   const rightPanelPets: Pet[] = [];
@@ -299,28 +338,64 @@ function PosterPage() {
     }
   }
   for (const p of allSorted) {
-    if (p.rate <= 300_000_000) continue;
+    if ((p.rate || 0) <= NOTABLE_THRESHOLD) continue;
     const k = petKey(p);
     if (!featuredKeys.has(k) && !rightSeen.has(k)) {
       rightSeen.add(k);
       rightPanelPets.push(p);
     }
   }
-  rightPanelPets.sort((a, b) => b.rate - a.rate);
+  rightPanelPets.sort((a, b) => (b.rate || 0) - (a.rate || 0));
+  const rightPanelShown = rightPanelPets.slice(0, 8);
+  const shownInActiveKeys = new Set(rightPanelShown.map(petKey));
 
   const mutGroups = groupByMutation(allSorted);
+  const groupsShown = mutGroups.slice(0, 6).map(([name, items]) => [
+    name,
+    [...items].sort((a, b) => (b.rate || 0) - (a.rate || 0)).slice(0, 6),
+  ] as [string, Pet[]]);
+  const groupShownKeys = new Set<string>();
+  for (const [, items] of groupsShown) {
+    for (const p of items) groupShownKeys.add(petKey(p));
+  }
+
+  // Telur yang udah kepromosi ke card utama / Paling Gacor / panel ACTIVE
+  // ga usah dobel muncul lagi di section "sedang tumbuh" / "di tas".
+  const growingEggsRemaining = growingEggsSorted.filter(
+    (e) => !featuredKeys.has(petKey(e)) && !shownInActiveKeys.has(petKey(e))
+  );
+  const backpackEggsRemaining = backpackEggsSorted.filter(
+    (e) => !featuredKeys.has(petKey(e)) && !shownInActiveKeys.has(petKey(e))
+  );
+
+  // Pet isi tas yang ga kepajang di mana pun -- ditampilin sebagai counter "+N".
+  const shownPetKeys = new Set<string>([
+    ...Array.from(featuredKeys),
+    ...Array.from(groupShownKeys),
+    ...Array.from(shownInActiveKeys),
+  ]);
+  const inactiveUnlisted = allSorted.filter((p) => !shownPetKeys.has(petKey(p)));
+  const inactiveTotalRate = inactiveUnlisted.reduce((s, p) => s + (p.rate || 0), 0);
+
+  const potentialActiveRate = activePetsSorted.reduce((s, p) => s + (p.rate || 0), 0);
+  const highValueTotal = [...allPets, ...activePets, ...growingEggs, ...backpackEggs]
+    .filter((p) => (p.rate || 0) >= HIGH_VALUE_THRESHOLD)
+    .reduce((s, p) => s + (p.rate || 0), 0);
+
   const totalEggs = growingEggs.length + backpackEggs.length;
 
   const statItems = [
     { label: "SPEED", value: fmtCompact(summary.speed) },
     { label: "CASH", value: fmtMoney(summary.money) },
     { label: "INCOME POTENSI PET AKTIF", value: fmtRate(potentialActiveRate) },
-    { label: "TOTAL PET >= 1B/S", value: fmtMoney(highValueTotal) },
+    { label: "TOTAL PET >= 1B/S", value: fmtRate(highValueTotal) },
     { label: "TOTAL EGG", value: `${totalEggs} eggs` },
     ...(summary.treadmillLevel != null
       ? [{ label: "TREADMILL LEVEL", value: `Lv. ${summary.treadmillLevel}` }]
       : []),
   ];
+
+  const initials = accountInitials(accountName);
 
   return (
     <>
@@ -356,6 +431,11 @@ function PosterPage() {
         .right { width: 392px; flex-shrink: 0; }
 
         .poster-title { font-size: 40px; font-weight: 800; color: #1e293b; margin-bottom: 12px; }
+        .badge-pill {
+          display: inline-block; background: #e2e8f0; border: 2px solid #2563eb;
+          border-radius: 20px; padding: 8px 20px; font-size: 15px; font-weight: 800;
+          color: #2563eb; margin-bottom: 16px;
+        }
         .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
         .stat-cell {
           background: #ecfdf5; border: 2px solid #16a34a; border-radius: 16px; padding: 10px 14px;
@@ -366,30 +446,47 @@ function PosterPage() {
         .top3 { display: flex; gap: 14px; margin-bottom: 18px; }
         .pick-card {
           flex: 1; background: #fff; border: 1px solid #cbd5e1; border-radius: 16px;
-          padding: 14px; text-align: center; min-height: 180px;
-          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          padding: 14px; text-align: center; min-height: 300px; position: relative;
+          display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
         }
-        .pick-card .pname { font-size: 16px; font-weight: 800; color: #1e293b; margin-bottom: 4px; word-break: break-word; }
+        .pick-egg-badge {
+          position: absolute; top: 10px; left: 10px;
+          background: #fff4d6; border: 1px solid #ca8a04; border-radius: 10px;
+          padding: 3px 10px; font-size: 11px; font-weight: 700; color: #ca8a04;
+        }
+        .pick-weight { font-size: 13px; color: #64748b; margin-bottom: 4px; height: 18px; }
+        .pick-icon-wrap {
+          width: 100%; height: 120px; display: flex; align-items: center; justify-content: center;
+          margin-bottom: 10px;
+        }
+        .pick-card .pname { font-size: 18px; font-weight: 800; color: #1e293b; margin-bottom: 6px; word-break: break-word; }
         .pick-card .prate { font-size: 16px; font-weight: 800; color: #16a34a; }
-        .pick-card .pmut { font-size: 10px; font-weight: 700; margin-top: 4px; }
+        .pick-card .pmut { font-size: 11px; font-weight: 700; margin-top: 6px; }
         .egg-badge {
           display: inline-block; background: #fff4d6; border: 1px solid #ca8a04;
           border-radius: 10px; padding: 2px 8px; font-size: 10px; font-weight: 700; color: #ca8a04;
-          margin-bottom: 4px;
         }
 
         .featured-box {
           background: #fff; border: 3px solid #ca8a04; border-radius: 16px;
-          padding: 16px 20px; margin-bottom: 18px; position: relative;
+          padding: 32px 20px 16px; margin-bottom: 18px; position: relative; min-height: 200px;
         }
         .featured-ribbon {
           position: absolute; top: -14px; left: -4px;
           background: #ca8a04; color: #fff; font-size: 12px; font-weight: 800;
-          padding: 6px 16px; border-radius: 10px;
+          padding: 6px 16px; border-radius: 10px; white-space: nowrap;
         }
-        .featured-name { font-size: 22px; font-weight: 800; color: #1e293b; margin-top: 16px; }
-        .featured-rate { font-size: 28px; font-weight: 800; color: #16a34a; margin-top: 4px; }
-        .featured-mut { font-size: 14px; font-weight: 700; margin-top: 2px; }
+        .featured-egg-badge { position: absolute; top: -12px; left: 182px; }
+        .featured-content { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+        .featured-text { min-width: 0; }
+        .featured-name { font-size: 24px; font-weight: 800; color: #1e293b; margin-top: 4px; }
+        .featured-rate { font-size: 30px; font-weight: 800; color: #16a34a; margin-top: 6px; }
+        .featured-mut { font-size: 15px; font-weight: 700; }
+        .featured-weight { font-size: 15px; color: #64748b; margin-top: 6px; }
+        .featured-icon-wrap {
+          flex-shrink: 0; width: 170px; height: 160px;
+          display: flex; align-items: center; justify-content: center;
+        }
 
         .section-header {
           background: #e2e8f0; border-radius: 20px; padding: 8px 0;
@@ -400,9 +497,11 @@ function PosterPage() {
         .mut-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
         .mut-cell {
           background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 8px;
+          display: flex; align-items: center; gap: 8px; min-height: 86px;
         }
         .mut-cell .mrate { font-size: 14px; font-weight: 800; color: #16a34a; }
         .mut-cell .mname { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mut-cell .mweight { font-size: 10px; color: #64748b; }
 
         .right-header {
           background: #fff; border: 1px solid #cbd5e1; border-radius: 16px;
@@ -423,11 +522,7 @@ function PosterPage() {
           border-bottom: 1px solid #e2e8f0;
         }
         .pet-row:last-child { border-bottom: none; }
-        .pet-icon-placeholder {
-          width: 48px; height: 48px; background: #f1f5f9; border-radius: 10px;
-          display: flex; align-items: center; justify-content: center;
-          font-size: 20px; color: #94a3b8;
-        }
+        .pet-info { min-width: 0; }
         .pet-info .piname { font-size: 15px; font-weight: 800; color: #1e293b; }
         .pet-info .pirate { font-size: 14px; font-weight: 700; color: #16a34a; }
         .pet-info .piweight { font-size: 11px; color: #64748b; }
@@ -435,6 +530,15 @@ function PosterPage() {
           border-radius: 10px; padding: 4px 10px; font-size: 10px; font-weight: 700;
           border: 1px solid; margin-left: auto; white-space: nowrap;
         }
+
+        .inventory-box {
+          background: #fff; border: 1px solid #cbd5e1; border-radius: 16px;
+          padding: 16px 20px; margin-bottom: 12px;
+        }
+        .inv-label { font-size: 14px; font-weight: 700; color: #64748b; margin-bottom: 10px; }
+        .inv-row { display: flex; align-items: baseline; gap: 10px; }
+        .inv-count { font-size: 30px; font-weight: 800; color: #1e293b; }
+        .inv-total { font-size: 13px; font-weight: 700; color: #16a34a; }
 
         .price-box {
           background: #fff; border: 1px solid #cbd5e1; border-radius: 16px;
@@ -453,6 +557,7 @@ function PosterPage() {
         .egg-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
         .egg-cell {
           background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 8px;
+          display: flex; align-items: center; gap: 8px; min-height: 86px;
         }
         .egg-cell .ename { font-size: 11px; font-weight: 700; color: #1e293b; }
         .egg-cell .erate { font-size: 13px; font-weight: 800; color: #16a34a; }
@@ -461,7 +566,7 @@ function PosterPage() {
 
         .account-tag {
           position: absolute; bottom: 12px; right: 16px;
-          font-size: 16px; font-weight: 800; color: #64748b;
+          font-size: 20px; font-weight: 800; color: #64748b;
         }
       `}</style>
 
@@ -471,6 +576,8 @@ function PosterPage() {
         <span style={{ width: 1, height: 20, background: "#262636" }} />
         <label>Judul:</label>
         <input value={title} onChange={(e) => setTitle(e.target.value)} />
+        <label>Badge:</label>
+        <input value={badge} onChange={(e) => setBadge(e.target.value)} placeholder="contoh: TERMURAH" />
         <label>Harga:</label>
         <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="contoh: Rp 150.000" />
         <button className="dlbtn" onClick={downloadPoster} disabled={downloading}>
@@ -483,6 +590,7 @@ function PosterPage() {
           {/* LEFT COLUMN */}
           <div className="left">
             <div className="poster-title">{title}</div>
+            {badge && <div className="badge-pill">{badge}</div>}
 
             <div className="stat-grid">
               {statItems.map((s, i) => (
@@ -493,63 +601,68 @@ function PosterPage() {
               ))}
             </div>
 
-            {top3.length > 0 && (
+            {topPicks.length > 0 && (
               <div className="top3">
-                {top3.map((p, i) => (
-                  <div key={i} className="pick-card">
-                    {eggKeys.has(petKey(p)) && <span className="egg-badge">TELUR</span>}
-                    <PetIcon pet={p} size={64} />
-                    <div className="pname">{p.name || p.category}</div>
-                    <div className="prate">{fmtRate(p.rate)}</div>
-                    {p.mutations && p.mutations.length > 0 && (
-                      <div className="pmut" style={{ color: mutColor(p.mutations[0]) }}>
-                        MUTASI: {p.mutations.map((m) => m.toUpperCase()).join(" + ")}
-                      </div>
-                    )}
-                    {p.weight ? <div style={{ fontSize: 11, color: "#64748b" }}>{fmtWeight(p.weight)}</div> : null}
-                  </div>
-                ))}
+                {topPicks.map((p, i) => {
+                  const isEgg = eggKeys.has(petKey(p));
+                  return (
+                    <div key={i} className="pick-card">
+                      {isEgg && <span className="pick-egg-badge">TELUR</span>}
+                      <div className="pick-weight">{p.weight ? fmtWeight(p.weight) : ""}</div>
+                      <div className="pick-icon-wrap"><PetIcon pet={p} size={120} /></div>
+                      <div className="pname">{p.name || p.category}</div>
+                      <div className="prate">{fmtRate(p.rate)}</div>
+                      {p.mutations && p.mutations.length > 0 && (
+                        <div className="pmut" style={{ color: mutColor(p.mutations[0]) }}>
+                          MUTASI: {p.mutations.map((m) => m.toUpperCase()).join(" + ")}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
             {featured && (
-              <div className="featured-box" style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <div className="featured-box">
                 <div className="featured-ribbon">PALING GACOR!</div>
                 {eggKeys.has(petKey(featured)) && (
-                  <span className="egg-badge" style={{ position: "absolute", top: -14, left: 180 }}>TELUR</span>
+                  <span className="egg-badge featured-egg-badge">TELUR</span>
                 )}
-                <PetIcon pet={featured} size={80} />
-                <div>
-                  {featured.mutations && featured.mutations.length > 0 && (
-                    <div className="featured-mut" style={{ color: mutColor(featured.mutations[0]) }}>
-                      {featured.mutations.map((m) => m.toUpperCase()).join(" + ")}
-                    </div>
-                  )}
-                  <div className="featured-name">{(featured.name || featured.category).toUpperCase()}</div>
-                  <div className="featured-rate">{fmtRate(featured.rate)}</div>
-                  {featured.weight ? <div style={{ fontSize: 14, color: "#64748b" }}>{fmtWeight(featured.weight)}</div> : null}
+                <div className="featured-content">
+                  <div className="featured-text">
+                    {featured.mutations && featured.mutations.length > 0 && (
+                      <div className="featured-mut" style={{ color: mutColor(featured.mutations[0]) }}>
+                        {featured.mutations.map((m) => m.toUpperCase()).join(" + ")}
+                      </div>
+                    )}
+                    <div className="featured-name">{(featured.name || featured.category).toUpperCase()}</div>
+                    <div className="featured-rate">{fmtRate(featured.rate)}</div>
+                    {featured.weight ? <div className="featured-weight">{fmtWeight(featured.weight)}</div> : null}
+                  </div>
+                  <div className="featured-icon-wrap"><PetIcon pet={featured} size={160} /></div>
                 </div>
               </div>
             )}
 
-            {mutGroups.length > 0 && (
+            {groupsShown.length > 0 && (
               <>
                 <div className="section-header">DIKELOMPOKKAN PER MUTASI</div>
-                {mutGroups.slice(0, 6).map(([groupName, items]) => {
-                  const sorted = [...items].sort((a, b) => b.rate - a.rate).slice(0, 6);
+                {groupsShown.map(([groupName, items]) => {
+                  const originalCount = mutGroups.find(([n]) => n === groupName)?.[1].length ?? items.length;
                   return (
                     <div key={groupName}>
                       <div className="mut-group-label" style={{ color: mutColor(groupName.split(" + ")[0]) }}>
-                        {groupName} ({items.length})
+                        {groupName} ({originalCount})
                       </div>
                       <div className="mut-grid">
-                        {sorted.map((p, i) => (
-                          <div key={i} className="mut-cell" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <PetIcon pet={p} size={32} />
-                            <div>
+                        {items.map((p, i) => (
+                          <div key={i} className="mut-cell">
+                            <PetIcon pet={p} size={70} />
+                            <div style={{ minWidth: 0, overflow: "hidden" }}>
                               <div className="mrate">{fmtRate(p.rate)}</div>
                               <div className="mname">{p.name || p.category}</div>
-                              {p.weight ? <div style={{ fontSize: 10, color: "#64748b" }}>{fmtWeight(p.weight)}</div> : null}
+                              {p.weight ? <div className="mweight">{fmtWeight(p.weight)}</div> : null}
                             </div>
                           </div>
                         ))}
@@ -560,43 +673,49 @@ function PosterPage() {
               </>
             )}
 
-            {growingEggs.length > 0 && (
+            {growingEggsRemaining.length > 0 && (
               <div className="egg-section">
                 <div className="section-header">TELUR YANG SEDANG TUMBUH</div>
                 <div className="egg-grid">
-                  {growingEggs.slice(0, 9).map((e, i) => (
+                  {growingEggsRemaining.slice(0, 9).map((e, i) => (
                     <div key={i} className="egg-cell">
-                      <div className="ename">
-                        {e.mutations && e.mutations.length > 0
-                          ? e.mutations.map((m) => m.toUpperCase()).join(" + ") + " " + e.category
-                          : e.category}
+                      <PetIcon pet={e} size={70} />
+                      <div style={{ minWidth: 0, overflow: "hidden" }}>
+                        <div className="ename">
+                          {e.mutations && e.mutations.length > 0
+                            ? e.mutations.map((m) => m.toUpperCase()).join(" + ") + " " + e.category
+                            : e.category}
+                        </div>
+                        {e.ready ? (
+                          <div className="erate">SIAP MENETAS!</div>
+                        ) : (
+                          <div className="etime">{fmtDuration(e.remainingSeconds)}</div>
+                        )}
+                        {e.rate ? <div className="erate">{fmtRate(e.rate)}</div> : null}
+                        {e.weight ? <div className="eweight">{fmtWeight(e.weight)}</div> : null}
                       </div>
-                      {e.ready ? (
-                        <div className="erate">SIAP MENETAS!</div>
-                      ) : (
-                        <div className="etime">{fmtDuration(e.remainingSeconds)}</div>
-                      )}
-                      {e.rate ? <div className="erate">{fmtRate(e.rate)}</div> : null}
-                      {e.weight ? <div className="eweight">{fmtWeight(e.weight)}</div> : null}
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {backpackEggs.length > 0 && (
+            {backpackEggsRemaining.length > 0 && (
               <div className="egg-section">
                 <div className="section-header">TELUR DI TAS (BELUM DITARUH)</div>
                 <div className="egg-grid">
-                  {backpackEggs.slice(0, 9).map((e, i) => (
+                  {backpackEggsRemaining.slice(0, 9).map((e, i) => (
                     <div key={i} className="egg-cell">
-                      <div className="ename">
-                        {e.mutations && e.mutations.length > 0
-                          ? e.mutations.map((m) => m.toUpperCase()).join(" + ") + " " + e.category
-                          : e.category}
+                      <PetIcon pet={e} size={70} />
+                      <div style={{ minWidth: 0, overflow: "hidden" }}>
+                        <div className="ename">
+                          {e.mutations && e.mutations.length > 0
+                            ? e.mutations.map((m) => m.toUpperCase()).join(" + ") + " " + e.category
+                            : e.category}
+                        </div>
+                        {e.rate ? <div className="erate">{fmtRate(e.rate)}</div> : null}
+                        {e.weight ? <div className="eweight">{fmtWeight(e.weight)}</div> : null}
                       </div>
-                      {e.rate ? <div className="erate">{fmtRate(e.rate)}</div> : null}
-                      {e.weight ? <div className="eweight">{fmtWeight(e.weight)}</div> : null}
                     </div>
                   ))}
                 </div>
@@ -608,13 +727,13 @@ function PosterPage() {
           <div className="right">
             <div className="right-header">
               <div style={{ width: 18, height: 18, background: "#1e293b", borderRadius: "50%" }} />
-              <div className="count">{Math.min(rightPanelPets.length, 8)}/{activeLimit} ACTIVE</div>
+              <div className="count">{activePetsSorted.length}/{activeLimit} ACTIVE</div>
               <div className="equip-badge">EQUIP BEST</div>
             </div>
 
-            {rightPanelPets.length > 0 ? (
+            {rightPanelShown.length > 0 ? (
               <div className="pet-list">
-                {rightPanelPets.slice(0, 8).map((p, i) => (
+                {rightPanelShown.map((p, i) => (
                   <div key={i} className="pet-row">
                     <PetIcon pet={p} size={48} />
                     <div className="pet-info">
@@ -640,6 +759,18 @@ function PosterPage() {
               </div>
             )}
 
+            {inactiveUnlisted.length > 0 && (
+              <div className="inventory-box">
+                <div className="inv-label">PET INVENTORY (TIDAK AKTIF)</div>
+                <div className="inv-row">
+                  <span className="inv-count">+{inactiveUnlisted.length}</span>
+                  {inactiveTotalRate > 0 && (
+                    <span className="inv-total">total {fmtRate(inactiveTotalRate)}</span>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="price-box">
               <div className="price-label">PRICE ACC</div>
               {price ? (
@@ -650,24 +781,9 @@ function PosterPage() {
             </div>
           </div>
 
-          <div className="account-tag">{accountName}</div>
+          {initials && <div className="account-tag">{initials}</div>}
         </div>
       </div>
     </>
   );
-}
-
-function groupByMutation(pets: Pet[]): [string, Pet[]][] {
-  const groups: Record<string, Pet[]> = {};
-  for (const p of pets) {
-    if (!p.mutations || p.mutations.length === 0) continue;
-    const key = p.mutations.map((m) => m.charAt(0).toUpperCase() + m.slice(1)).join(" + ");
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(p);
-  }
-  return Object.entries(groups).sort((a, b) => {
-    const maxA = Math.max(...a[1].map((p) => p.rate || 0));
-    const maxB = Math.max(...b[1].map((p) => p.rate || 0));
-    return maxB - maxA;
-  });
 }
