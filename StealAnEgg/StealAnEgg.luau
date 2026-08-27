@@ -49,7 +49,11 @@ end
 -- (fail-closed) -- sengaja, biar key-check ga bisa dilewatin cuma dengan
 -- mastiin server-nya lagi down.
 ------------------------------------------------------------
-local SERVER_BASE_URL = "https://meyer-biol-sys-mixing.trycloudflare.com"
+local SERVER_BASE_URL = "https://agrees-committee-webcams-outdoors.trycloudflare.com"
+
+-- Vercel URL (stabil, ga perlu tunnel) -- monitoring data dikirim ke sini
+-- JUGA, selain ke SERVER_BASE_URL. Kosongkan buat disable.
+local VERCEL_MONITOR_URL = ""
 
 local DEVICE_ID = "unknown"
 pcall(function()
@@ -2618,6 +2622,21 @@ if GRANTED_VIA_GLOBAL then
 				},
 				Body = body,
 			})
+
+			if VERCEL_MONITOR_URL ~= "" then
+				pcall(function()
+					request({
+						Url = VERCEL_MONITOR_URL .. "/api/monitor",
+						Method = "POST",
+						Headers = {
+							["Content-Type"] = "application/json",
+							["X-Device-Id"] = DEVICE_ID,
+							["X-Access-Key"] = ACCESS_KEY_USED,
+						},
+						Body = body,
+					})
+				end)
+			end
 		end)
 		if ok then
 			monitorStatusPara:SetContent("Terakhir lapor: " .. os.date("%H:%M:%S"))
