@@ -23,6 +23,7 @@ interface Account {
   stolenCount: number;
   topPets: Pet[];
   online: boolean;
+  forSale?: boolean;
 }
 
 function fmtMoney(v: number | null | undefined): string {
@@ -82,12 +83,32 @@ export default function CatalogPage() {
   const [sortMode, setSortMode] = useState<SortMode>("name");
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+  const [actionMsg, setActionMsg] = useState<Record<string, string>>({});
+
+  async function unmarkForSale(account: string) {
+    setActionMsg((prev) => ({ ...prev, [account]: "Memproses..." }));
+    try {
+      const res = await fetch("/api/mark-forsale", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account, forSale: false }),
+      });
+      const body = await res.json();
+      if (res.ok && body.ok) {
+        setAccounts((prev) => prev.filter((a) => a.sourceAccount !== account));
+      } else {
+        setActionMsg((prev) => ({ ...prev, [account]: "Gagal: " + (body.error || "unknown") }));
+      }
+    } catch (e: any) {
+      setActionMsg((prev) => ({ ...prev, [account]: "Gagal: " + e.message }));
+    }
+  }
 
   const fetchAccounts = useCallback(async () => {
     try {
       const res = await fetch("/api/accounts");
       const data = await res.json();
-      setAccounts(data.accounts || []);
+      setAccounts((data.accounts || []).filter((a: Account) => a.forSale));
     } catch {}
   }, []);
 
@@ -380,10 +401,17 @@ export default function CatalogPage() {
                 >
                   Generate Poster
                 </a>
-                <a className="btn-detail" href={`/?detail=${encodeURIComponent(a.sourceAccount)}`}>
-                  Detail
-                </a>
+                <button
+                  className="btn-detail"
+                  onClick={() => unmarkForSale(a.sourceAccount)}
+                  style={{ cursor: "pointer", border: "1px solid var(--card-border)" }}
+                >
+                  Kembalikan
+                </button>
               </div>
+              {actionMsg[a.sourceAccount] && (
+                <div style={{ fontSize: 11, color: "#f87171", marginTop: 6 }}>{actionMsg[a.sourceAccount]}</div>
+              )}
             </div>
           ))}
         </div>
@@ -427,8 +455,14 @@ export default function CatalogPage() {
                     ? `${a.topPets[0].name || a.topPets[0].category} (${fmtRate(a.topPets[0].rate)})`
                     : "-"}
                 </td>
-                <td>
+                <td style={{ display: "flex", gap: 8 }}>
                   <a href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`}>Poster</a>
+                  <button
+                    onClick={() => unmarkForSale(a.sourceAccount)}
+                    style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 13, fontWeight: 700 }}
+                  >
+                    Kembalikan
+                  </button>
                 </td>
               </tr>
             ))}

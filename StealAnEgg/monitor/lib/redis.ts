@@ -15,3 +15,7 @@ export function accountKey(name: string) {
 export function detailKey(name: string) {
   return `detail:${name}`;
 }
+
+export function forSaleKey(name: string) {
+  return `forsale:${name}`;
+}

@@ -23,6 +23,7 @@ interface Account {
   stolenCount: number;
   topPets: Pet[];
   online: boolean;
+  forSale?: boolean;
 }
 
 interface AccountDetail {
@@ -99,8 +100,8 @@ export default function DashboardPage() {
     try {
       const res = await fetch("/api/accounts");
       const data = await res.json();
-      const online = (data.accounts || []).filter((a: Account) => a.online);
-      setAccounts(online);
+      const active = (data.accounts || []).filter((a: Account) => a.online && !a.forSale);
+      setAccounts(active);
     } catch {}
   }, []);
 
@@ -201,17 +202,18 @@ export default function DashboardPage() {
     }
   }
 
-  async function queueCommand(account: string, action: string) {
-    setGenMsg(account, "Mengirim...", "var(--dim)");
+  async function markForSale(account: string) {
+    setGenMsg(account, "Memindahkan ke katalog...", "var(--dim)");
     try {
-      const res = await fetch("/api/queue-command", {
+      const res = await fetch("/api/mark-forsale", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ account, action }),
+        body: JSON.stringify({ account, forSale: true }),
       });
       const body = await res.json();
       if (res.ok && body.ok) {
-        setGenMsg(account, "Restart terkirim. Nunggu agent ambil perintahnya.", "var(--green)");
+        setAccounts((prev) => prev.filter((a) => a.sourceAccount !== account));
+        setGenMsg(account, "Akun dipindah ke Katalog.", "var(--green)");
       } else {
         setGenMsg(account, "Gagal: " + (body.error || "unknown"), "#f87171");
       }
@@ -445,10 +447,10 @@ export default function DashboardPage() {
                 className="restartbtn"
                 onClick={(e) => {
                   e.stopPropagation();
-                  queueCommand(a.sourceAccount, "restart_script");
+                  markForSale(a.sourceAccount);
                 }}
               >
-                Restart Script
+                Siap Jual
               </button>
               <div className="genmsg" style={{ color: genMsgs.current[a.sourceAccount]?.color || "var(--dim)" }}>
                 {genMsgs.current[a.sourceAccount]?.text || ""}

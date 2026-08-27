@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { redis, ONLINE_TIMEOUT_S } from "@/lib/redis";
+import { redis, ONLINE_TIMEOUT_S, forSaleKey } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
 
@@ -22,15 +22,19 @@ export async function GET() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const values: any[] = await redis.mget(...keys);
     const now = Date.now() / 1000;
+    const accountNames = keys.map((k) => k.replace(/^account:/, ""));
+    const fsKeys = accountNames.map(forSaleKey);
+    const fsValues: (string | null)[] = fsKeys.length > 0 ? await redis.mget(...fsKeys) : [];
+
     const rows = keys.map((key, i) => {
       const raw = values[i];
       if (!raw) return null;
       const acc = typeof raw === "string" ? JSON.parse(raw) : raw;
-      const name = key.replace(/^account:/, "");
       return {
         ...acc,
-        sourceAccount: name,
+        sourceAccount: accountNames[i],
         online: (now - (acc.lastSeen || 0)) <= ONLINE_TIMEOUT_S,
+        forSale: !!fsValues[i],
       };
     }).filter(Boolean);
 
