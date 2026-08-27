@@ -1,3 +1,5 @@
+'use client'
+
 import { useEffect, useState } from 'react'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8765'
@@ -33,7 +35,7 @@ export default function Monitor() {
   return (
     <div className="container">
       <header className="header">
-        <h1>🐾 StealAnEgg Monitor</h1>
+        <h1>StealAnEgg Monitor</h1>
         <p>Track your egg farming accounts in real-time</p>
       </header>
 
@@ -55,7 +57,9 @@ export default function Monitor() {
       <div className="accounts">
         <div className="accounts-header">
           <h2>Active Accounts</h2>
-          <span className="status-active">{stats.online} online</span>
+          <span className={stats.online > 0 ? 'status-active' : 'status-inactive'}>
+            {stats.online} online
+          </span>
         </div>
         
         {accounts.length === 0 ? (
@@ -70,7 +74,7 @@ export default function Monitor() {
                   {acc.name || 'Unknown'}
                   {acc.activeEgg && (
                     <div style={{ fontSize: 12, color: '#718096' }}>
-                      🥚 {acc.activeEgg}
+                      {acc.activeEgg}
                     </div>
                   )}
                 </div>
