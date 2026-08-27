@@ -1,4 +1,4 @@
-﻿--!nocheck
+--!nocheck
 -- NaruUI -- Self-contained UI library for Roblox executors
 -- Loaded via loadstring() from the main script
 

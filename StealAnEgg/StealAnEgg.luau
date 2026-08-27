@@ -1,4 +1,4 @@
-﻿--!nocheck
+--!nocheck
 -- StealAnEgg -- Monitoring & Poster Generator (lightweight)
 -- Game: "Steal An Egg" (placeId 107778070777162, universeId 10563114921)
 --
