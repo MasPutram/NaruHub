@@ -256,7 +256,8 @@ function PosterPage() {
         useCORS: true,
       });
       const link = document.createElement("a");
-      link.download = `poster-${accountName}.png`;
+      const digits = accountName.match(/(\d+)$/)?.[1] || "";
+      link.download = `Blekok-${digits}.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
     } catch (e) {
