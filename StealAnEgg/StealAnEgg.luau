@@ -53,7 +53,7 @@ local SERVER_BASE_URL = "https://agrees-committee-webcams-outdoors.trycloudflare
 
 -- Vercel URL (stabil, ga perlu tunnel) -- monitoring data dikirim ke sini
 -- JUGA, selain ke SERVER_BASE_URL. Kosongkan buat disable.
-local VERCEL_MONITOR_URL = ""
+local VERCEL_MONITOR_URL = "https://steal-egg-monitor.vercel.app"
 
 local DEVICE_ID = "unknown"
 pcall(function()
