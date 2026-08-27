@@ -49,11 +49,11 @@ end
 -- (fail-closed) -- sengaja, biar key-check ga bisa dilewatin cuma dengan
 -- mastiin server-nya lagi down.
 ------------------------------------------------------------
-local SERVER_BASE_URL = "https://agrees-committee-webcams-outdoors.trycloudflare.com"
+-- URL utama (Vercel, permanent -- ga perlu tunnel/update)
+local SERVER_BASE_URL = "https://steal-egg-monitor.vercel.app"
 
--- Vercel URL (stabil, ga perlu tunnel) -- monitoring data dikirim ke sini
--- JUGA, selain ke SERVER_BASE_URL. Kosongkan buat disable.
-local VERCEL_MONITOR_URL = "https://steal-egg-monitor.vercel.app"
+-- Backward compat alias
+local VERCEL_MONITOR_URL = SERVER_BASE_URL
 
 local DEVICE_ID = "unknown"
 pcall(function()
@@ -2481,8 +2481,8 @@ if GRANTED_VIA_GLOBAL then
 	})
 
 	local monitorUrlInput = monitorSection:AddInput("StealAnEgg_MonitorUrl", {
-		Title = "Monitor Server URL (kosongin = pakai domain Poster Server di atas)",
-		Placeholder = "http://127.0.0.1:8765/monitor",
+		Title = "Monitor Server URL (kosongin = otomatis ke Vercel)",
+		Placeholder = SERVER_BASE_URL .. "/api/monitor",
 		Default = "",
 		Finished = true,
 	})
@@ -2608,9 +2608,7 @@ if GRANTED_VIA_GLOBAL then
 			local body = HttpService:JSONEncode(payload)
 			local url = monitorUrlInput.Value
 			if url == "" then
-				local base = posterServerInput.Value ~= "" and posterServerInput.Value or POSTER_SERVER_URL
-				base = base:gsub("/+$", ""):gsub("/generate$", "")
-				url = base ~= "" and (base .. "/monitor") or "http://127.0.0.1:8765/monitor"
+				url = SERVER_BASE_URL .. "/api/monitor"
 			end
 			request({
 				Url = url,
@@ -2622,21 +2620,6 @@ if GRANTED_VIA_GLOBAL then
 				},
 				Body = body,
 			})
-
-			if VERCEL_MONITOR_URL ~= "" then
-				pcall(function()
-					request({
-						Url = VERCEL_MONITOR_URL .. "/api/monitor",
-						Method = "POST",
-						Headers = {
-							["Content-Type"] = "application/json",
-							["X-Device-Id"] = DEVICE_ID,
-							["X-Access-Key"] = ACCESS_KEY_USED,
-						},
-						Body = body,
-					})
-				end)
-			end
 		end)
 		if ok then
 			monitorStatusPara:SetContent("Terakhir lapor: " .. os.date("%H:%M:%S"))
