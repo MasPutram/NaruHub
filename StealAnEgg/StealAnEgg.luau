@@ -759,14 +759,15 @@ end)
 -- Auto-start monitoring loop
 ------------------------------------------------------------
 task.spawn(function()
+	local count = 0
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		count += 1
 		local ok, err = reportToMonitor()
 		if ok then
-			monitorPara:SetContent("OK -- " .. os.date("%H:%M:%S"))
+			monitorPara:SetContent("OK #" .. count)
 		else
-			monitorPara:SetContent("Gagal: " .. tostring(err))
+			monitorPara:SetContent("Gagal #" .. count)
 		end
-
 		task.wait(15)
 	end
 end)
