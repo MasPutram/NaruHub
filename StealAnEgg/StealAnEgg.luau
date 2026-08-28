@@ -404,13 +404,11 @@ local function collectGrowingEggs()
 			pcall(function()
 				nightCredit = EggRecords.CurrentNightCredit(rec, now, speed)
 			end)
-			local remaining, ready = 0, false
+			local remaining = 0
 			pcall(function()
 				remaining = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer)
 			end)
-			pcall(function()
-				ready = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer) <= 0
-			end)
+			local ready = remaining <= 0
 			local weight = 0
 			pcall(function()
 				weight = AssetItems.WeightKg({
@@ -532,35 +530,18 @@ local function formatRupiah(n)
 end
 
 local HARGA_PER_B = 5
+local DEFAULT_CHECKLIST = splitComma("Data Polos, No Topi, No Sum")
+local MAX_EQUIP_PETS = 17
 
-local function computeAutoPrice(activePets, allPets, growingEggs, backpackEggs)
-	local MAX_EQUIP_PETS = 17
-	local pool = {}
-	for _, p in ipairs(activePets) do
-		table.insert(pool, p)
-	end
-	for _, p in ipairs(allPets) do
-		table.insert(pool, p)
-	end
-	for _, e in ipairs(growingEggs) do
-		table.insert(pool, e)
-	end
-	for _, e in ipairs(backpackEggs) do
-		table.insert(pool, e)
-	end
-	table.sort(pool, function(a, b)
-		return (a.rate or 0) > (b.rate or 0)
-	end)
+local function computeAutoPrice(petPool)
 	local totalRate = 0
-	for i = 1, math.min(MAX_EQUIP_PETS, #pool) do
-		totalRate += (pool[i].rate or 0)
+	for i = 1, math.min(MAX_EQUIP_PETS, #petPool) do
+		totalRate += (petPool[i].rate or 0)
 	end
 	if totalRate <= 0 then
 		return ""
 	end
-	local ratePerB = HARGA_PER_B * 1000
-	local incomeB = totalRate / 1e9
-	return formatRupiah(incomeB * ratePerB)
+	return formatRupiah((totalRate / 1e9) * HARGA_PER_B * 1000)
 end
 
 ------------------------------------------------------------
@@ -583,49 +564,26 @@ local function reportToMonitor()
 			incomeEggSedangTumbuh += (e.rate or 0)
 		end
 
-		local MAX_EQUIP_PETS = 17
 		local petPool = {}
-		for _, p in ipairs(activePets) do
-			table.insert(petPool, p)
-		end
-		for _, p in ipairs(allPets) do
-			table.insert(petPool, p)
-		end
-		for _, e in ipairs(growingEggs) do
-			table.insert(petPool, e)
-		end
-		for _, e in ipairs(backpackEggs) do
-			table.insert(petPool, e)
-		end
-		table.sort(petPool, function(a, b)
-			return (a.rate or 0) > (b.rate or 0)
-		end)
+		for _, p in ipairs(activePets) do table.insert(petPool, p) end
+		for _, p in ipairs(allPets) do table.insert(petPool, p) end
+		for _, e in ipairs(growingEggs) do table.insert(petPool, e) end
+		for _, e in ipairs(backpackEggs) do table.insert(petPool, e) end
+		table.sort(petPool, function(a, b) return (a.rate or 0) > (b.rate or 0) end)
+
 		local incomeAktif = 0
 		for i = 1, math.min(MAX_EQUIP_PETS, #petPool) do
 			incomeAktif += (petPool[i].rate or 0)
 		end
 
-		local HIGH_VALUE_THRESHOLD = 1000000000
 		local highValuePetTotal = 0
 		for _, p in ipairs(petPool) do
-			if (p.rate or 0) >= HIGH_VALUE_THRESHOLD then
-				highValuePetTotal += p.rate
-			end
+			if (p.rate or 0) >= 1e9 then highValuePetTotal += p.rate end
 		end
 
-		local pool = {}
-		for _, p in ipairs(activePets) do
-			table.insert(pool, p)
-		end
-		for _, p in ipairs(allPets) do
-			table.insert(pool, p)
-		end
-		table.sort(pool, function(a, b)
-			return (a.rate or 0) > (b.rate or 0)
-		end)
 		local topPets = {}
-		for i = 1, math.min(3, #pool) do
-			local p = pool[i]
+		for i = 1, math.min(3, #petPool) do
+			local p = petPool[i]
 			table.insert(topPets, {
 				name = p.name or p.category,
 				category = p.category,
@@ -636,15 +594,13 @@ local function reportToMonitor()
 		end
 
 		local activeLimit = 0
-		pcall(function()
-			activeLimit = AssetRoster.ReadWearLimit()
-		end)
-		local autoPrice = computeAutoPrice(activePets, allPets, growingEggs, backpackEggs)
+		pcall(function() activeLimit = AssetRoster.ReadWearLimit() end)
+		local autoPrice = computeAutoPrice(petPool)
 
 		local fullData = {
 			title = "Jual Akun GACOR",
 			badge = "AKUN DATPOL",
-			checklist = splitComma("Data Polos, No Topi, No Sum"),
+			checklist = DEFAULT_CHECKLIST,
 			price = "",
 			suggestedPrice = autoPrice,
 			webhookUrl = "",
