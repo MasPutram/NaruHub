@@ -23,6 +23,8 @@ interface Account {
   stolenCount: number;
   topPets: Pet[];
   online: boolean;
+  firstSeen?: number;
+  lastSeen?: number;
   forSale?: boolean;
 }
 
@@ -32,6 +34,15 @@ interface AccountDetail {
   allPets: Pet[];
   growingEggs: Pet[];
   backpackEggs: Pet[];
+}
+
+function fmtUptime(firstSeen?: number): string {
+  if (!firstSeen) return "";
+  const s = Math.max(0, Math.floor(Date.now() / 1000 - firstSeen));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }
 
 function fmtMoney(v: number | null | undefined): string {
@@ -391,7 +402,7 @@ export default function DashboardPage() {
                 <span className={`dot ${a.online ? "online" : ""}`} />
                 <span className="name">{a.sourceAccount}</span>
                 <span className="devicetag">{deviceLabel(a.sourceAccount) || ""}</span>
-                <span className="status">{a.online ? "Active" : "Offline"}</span>
+                <span className="status">{a.online ? fmtUptime(a.firstSeen) || "Active" : "Offline"}</span>
               </div>
               <div className="stats">
                 <div className="stat speed">

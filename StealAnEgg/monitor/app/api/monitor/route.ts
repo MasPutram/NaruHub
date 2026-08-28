@@ -16,6 +16,17 @@ export async function POST(req: NextRequest) {
     const data = await req.json();
     const name = data.sourceAccount || "?";
 
+    const now = Date.now() / 1000;
+
+    let firstSeen = now;
+    const existing = await redis.get<string>(accountKey(name));
+    if (existing) {
+      try {
+        const prev = typeof existing === "string" ? JSON.parse(existing) : existing;
+        if (prev.firstSeen) firstSeen = prev.firstSeen;
+      } catch {}
+    }
+
     const summary = {
       money: data.money ?? null,
       speed: data.speed ?? null,
@@ -29,7 +40,8 @@ export async function POST(req: NextRequest) {
       petsCount: data.petsCount ?? 0,
       stolenCount: data.stolenCount ?? 0,
       topPets: data.topPets || [],
-      lastSeen: Date.now() / 1000,
+      firstSeen,
+      lastSeen: now,
       deviceId: req.headers.get("x-device-id") || "unknown",
     };
 
