@@ -259,13 +259,6 @@ local userPara = section:AddParagraph({
 	ContentSize = 22,
 	Center = true,
 })
-local statusPara = section:AddParagraph({
-	Title = "Status",
-	Content = "Idle",
-	TitleSize = 18,
-	ContentSize = 22,
-	Center = true,
-})
 local monitorPara = section:AddParagraph({
 	Title = "Monitoring",
 	Content = "Starting...",
@@ -283,55 +276,6 @@ section:AddParagraph({
 
 Window:SelectTab(1)
 
-------------------------------------------------------------
--- Detect player activity (Idle / Treadmil / Steal)
-------------------------------------------------------------
-local function getPlayerStatus()
-	local character = LocalPlayer.Character
-	if not character then
-		return "Idle"
-	end
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if not humanoid then
-		return "Idle"
-	end
-	local rootPart = character:FindFirstChild("HumanoidRootPart")
-	if not rootPart then
-		return "Idle"
-	end
-
-	if humanoid.Sit then
-		return "Treadmil"
-	end
-
-	local treadmillFolder = Workspace:FindFirstChild("Treadmills")
-		or Workspace:FindFirstChild("Treadmill")
-	if treadmillFolder then
-		for _, desc in ipairs(treadmillFolder:GetDescendants()) do
-			if desc:IsA("BasePart") then
-				if (desc.Position - rootPart.Position).Magnitude < 12 then
-					return "Treadmil"
-				end
-			end
-		end
-	end
-
-	if not treadmillFolder then
-		for _, obj in ipairs(Workspace:GetDescendants()) do
-			if obj:IsA("BasePart") and obj.Name:lower():find("treadmill") then
-				if (obj.Position - rootPart.Position).Magnitude < 12 then
-					return "Treadmil"
-				end
-			end
-		end
-	end
-
-	if humanoid.MoveDirection.Magnitude > 0.1 then
-		return "Steal"
-	end
-
-	return "Idle"
-end
 
 ------------------------------------------------------------
 -- Data collection functions
@@ -751,6 +695,67 @@ local function reportToMonitor()
 end
 
 ------------------------------------------------------------
+-- Auto Upgrade Kandang & Treadmill (no UI, runs forever)
+------------------------------------------------------------
+task.spawn(function()
+	local BaseUpgrade = require(ReplicatedStorage.Client.BaseUpgrade)
+	local TreadmillClient = require(LocalPlayer.PlayerScripts.GUI.TreadmillUpgrade.Client)
+
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		pcall(function()
+			local stats = SaveModule.Get()
+			local nextLevel, config = BaseUpgrade.ResolveNextTier(stats)
+			if nextLevel and config and BaseUpgrade.IsNextTierAffordable(stats) then
+				BaseUpgrade.PurchaseNextTier()
+			end
+		end)
+		pcall(function()
+			local stats = SaveModule.Get()
+			local nextLevel, config = TreadmillClient.GetNextConfig(stats)
+			if nextLevel and config and TreadmillClient.CanAffordNext(stats) then
+				TreadmillClient.RequestCashUpgrade()
+			end
+		end)
+		task.wait(5)
+	end
+end)
+
+------------------------------------------------------------
+-- Auto Buy Trail Shop (no UI, runs forever)
+------------------------------------------------------------
+task.spawn(function()
+	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+	local Trails = require(ReplicatedStorage.Data.Trails)
+
+	local sortedKeys = {}
+	for key, cfg in pairs(Trails.Directory) do
+		if cfg.DisplayInShop and cfg.Price then
+			table.insert(sortedKeys, key)
+		end
+	end
+	table.sort(sortedKeys, function(a, b)
+		return Trails.Directory[a].Price < Trails.Directory[b].Price
+	end)
+
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		pcall(function()
+			local data = SaveModule.Get()
+			for _, key in ipairs(sortedKeys) do
+				local cfg = Trails.Directory[key]
+				if not data.TrailInventory[key] and data.Money >= cfg.Price then
+					pcall(function()
+						Remotes.Trailwear.AskPurchase:InvokeServer(key)
+					end)
+					task.wait(0.5)
+					data = SaveModule.Get()
+				end
+			end
+		end)
+		task.wait(3)
+	end
+end)
+
+------------------------------------------------------------
 -- Auto-start monitoring loop
 ------------------------------------------------------------
 task.spawn(function()
@@ -761,9 +766,6 @@ task.spawn(function()
 		else
 			monitorPara:SetContent("Gagal: " .. tostring(err))
 		end
-
-		local st = getPlayerStatus()
-		statusPara:SetContent(st)
 
 		task.wait(15)
 	end
