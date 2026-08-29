@@ -528,7 +528,10 @@ function PosterPage() {
           background: #fff4d6; border: 1px solid #ca8a04; border-radius: 10px;
           padding: 3px 10px; font-size: 11px; font-weight: 700; color: #ca8a04;
         }
-        .pick-weight { font-size: 13px; color: #64748b; margin-bottom: 4px; height: 18px; }
+        .pick-weight {
+          position: absolute; top: 10px; right: 10px;
+          font-size: 13px; color: #64748b;
+        }
         .pick-icon-wrap {
           width: 100%; height: 120px; display: flex; align-items: center; justify-content: center;
           margin-bottom: 10px;
