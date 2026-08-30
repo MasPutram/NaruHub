@@ -31,8 +31,34 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local SERVER_BASE_URL = "https://steal-egg-monitor.vercel.app"
-local VERCEL_MONITOR_URL = SERVER_BASE_URL
+local SERVER_BASE_URL = "https://naruhub.my.id"
+local function redactKey(value)
+	value = tostring(value or "")
+	if value == "" then
+		return ""
+	end
+	if #value <= 6 then
+		return string.rep("*", #value)
+	end
+	return value:sub(1, 3) .. "***" .. value:sub(-2)
+end
+
+local function logRequest(tag, url, method, statusCode, responseBody, err, extra)
+	print(string.format("[NaruHub][%s] %s %s -> status=%s", tag, method or "?", url or "?", tostring(statusCode or "nil")))
+	if responseBody ~= nil then
+		local bodyText = tostring(responseBody)
+		if #bodyText > 500 then
+			bodyText = bodyText:sub(1, 500) .. "...<truncated>"
+		end
+		print(string.format("[NaruHub][%s] body=%s", tag, bodyText))
+	end
+	if err ~= nil then
+		print(string.format("[NaruHub][%s] error=%s", tag, tostring(err)))
+	end
+	if extra ~= nil then
+		print(string.format("[NaruHub][%s] meta=%s", tag, tostring(extra)))
+	end
+end
 
 local DEVICE_ID = "unknown"
 pcall(function()
@@ -49,15 +75,21 @@ do
 
 	local function checkAccess(key)
 		local body = HttpService:JSONEncode({ key = key or "" })
+		local reqUrl = SERVER_BASE_URL .. "/api/check-access"
 		local ok, res = pcall(function()
 			return request({
-				Url = SERVER_BASE_URL .. "/api/check-access",
+				Url = reqUrl,
 				Method = "POST",
 				Headers = { ["Content-Type"] = "application/json" },
 				Body = body,
 			})
 		end)
-		if not ok or not res or not res.Body then
+		if not ok or not res then
+			logRequest("check-access", reqUrl, "POST", nil, nil, res, "request_failed")
+			return false, "Ga bisa hubungin server verifikasi -- coba lagi bentar.", true
+		end
+		logRequest("check-access", reqUrl, "POST", res.StatusCode, res.Body, nil, "key=" .. redactKey(key))
+		if not res.Body then
 			return false, "Ga bisa hubungin server verifikasi -- coba lagi bentar.", true
 		end
 		local decodeOk, parsed = pcall(function()
@@ -198,7 +230,8 @@ end
 ------------------------------------------------------------
 -- NaruUI (loaded from GitHub)
 ------------------------------------------------------------
-local _naruSrc = game:HttpGet("https://raw.githubusercontent.com/MasPutram/NaruHub/main/StealAnEgg/NaruUI.luau?v=" .. tostring(tick()))
+local httpGet = game.HttpGet or HttpGet
+local _naruSrc = httpGet(game, "https://raw.githubusercontent.com/MasPutram/NaruHub/main/StealAnEgg/NaruUI.luau?v=" .. tostring(tick()))
 local _naruFn, _naruErr = loadstring(_naruSrc)
 if not _naruFn then
 	error("NaruUI loadstring failed: " .. tostring(_naruErr))
@@ -636,16 +669,24 @@ local function reportToMonitor()
 		}
 
 		local body = HttpService:JSONEncode(payload)
-		request({
-			Url = SERVER_BASE_URL .. "/api/monitor",
-			Method = "POST",
-			Headers = {
-				["Content-Type"] = "application/json",
-				["X-Device-Id"] = DEVICE_ID,
-				["X-Access-Key"] = ACCESS_KEY_USED,
-			},
-			Body = body,
-		})
+		local reqUrl = SERVER_BASE_URL .. "/api/monitor"
+		local okReq, res = pcall(function()
+			return request({
+				Url = reqUrl,
+				Method = "POST",
+				Headers = {
+					["Content-Type"] = "application/json",
+					["X-Device-Id"] = DEVICE_ID,
+					["X-Access-Key"] = ACCESS_KEY_USED,
+				},
+				Body = body,
+			})
+		end)
+		if okReq and res then
+			logRequest("monitor", reqUrl, "POST", res.StatusCode, res.Body, nil, "accessKey=" .. redactKey(ACCESS_KEY_USED))
+		else
+			logRequest("monitor", reqUrl, "POST", nil, nil, res, "accessKey=" .. redactKey(ACCESS_KEY_USED))
+		end
 	end)
 	return ok, err
 end
