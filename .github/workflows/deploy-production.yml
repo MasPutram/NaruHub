@@ -1,0 +1,139 @@
+name: Deploy NaruHub Monitor
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "StealAnEgg/monitor/**"
+      - ".github/workflows/deploy-production.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: naruhub-production
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: StealAnEgg/monitor
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: StealAnEgg/monitor/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Prepare standalone artifact
+        run: |
+          rm -rf deploy-artifact
+          mkdir -p deploy-artifact/standalone
+
+          cp -a .next/standalone/. deploy-artifact/standalone/
+
+          if [ -d ".next/static" ]; then
+            mkdir -p deploy-artifact/standalone/.next/static
+            cp -a .next/static/. deploy-artifact/standalone/.next/static/
+          fi
+
+          if [ -d "public" ]; then
+            mkdir -p deploy-artifact/standalone/public
+            cp -a public/. deploy-artifact/standalone/public/
+          fi
+
+      - name: Create archive
+        run: tar -czf naruhub-monitor.tar.gz -C deploy-artifact .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: naruhub-monitor-${{ github.sha }}
+          path: StealAnEgg/monitor/naruhub-monitor.tar.gz
+          retention-days: 7
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: naruhub-monitor-${{ github.sha }}
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          RELEASE_ID: ${{ github.sha }}
+        run: |
+          scp naruhub-monitor.tar.gz \
+            "${VPS_USER}@${VPS_HOST}:/tmp/naruhub-monitor-${RELEASE_ID}.tar.gz"
+
+          ssh "${VPS_USER}@${VPS_HOST}" \
+            "RELEASE_ID='${RELEASE_ID}' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          BASE="/root/NaruHub/StealAnEgg/monitor/.deploy"
+          RELEASE="$BASE/releases/$RELEASE_ID"
+          ARCHIVE="/tmp/naruhub-monitor-$RELEASE_ID.tar.gz"
+
+          mkdir -p "$BASE/releases"
+          rm -rf "$RELEASE"
+          mkdir -p "$RELEASE"
+
+          tar -xzf "$ARCHIVE" -C "$RELEASE"
+
+          test -f "$RELEASE/standalone/server.js"
+
+          PREVIOUS="$(readlink -f "$BASE/active" 2>/dev/null || true)"
+
+          ln -sfn "$RELEASE" "$BASE/active"
+          systemctl restart naruhub-monitor
+
+          sleep 2
+
+          if ! systemctl is-active --quiet naruhub-monitor; then
+            echo "New release failed to start."
+
+            if [ -n "$PREVIOUS" ] && [ -d "$PREVIOUS" ]; then
+              ln -sfn "$PREVIOUS" "$BASE/active"
+              systemctl restart naruhub-monitor
+            fi
+
+            exit 1
+          fi
+
+          curl -fsS https://naruhub.my.id/ > /dev/null
+
+          rm -f "$ARCHIVE"
+
+          ls -1dt "$BASE"/releases/* 2>/dev/null |
+            tail -n +6 |
+            xargs -r rm -rf
+          REMOTE
