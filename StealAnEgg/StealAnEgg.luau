@@ -43,21 +43,7 @@ local function redactKey(value)
 	return value:sub(1, 3) .. "***" .. value:sub(-2)
 end
 
-local function logRequest(tag, url, method, statusCode, responseBody, err, extra)
-	print(string.format("[NaruHub][%s] %s %s -> status=%s", tag, method or "?", url or "?", tostring(statusCode or "nil")))
-	if responseBody ~= nil then
-		local bodyText = tostring(responseBody)
-		if #bodyText > 500 then
-			bodyText = bodyText:sub(1, 500) .. "...<truncated>"
-		end
-		print(string.format("[NaruHub][%s] body=%s", tag, bodyText))
-	end
-	if err ~= nil then
-		print(string.format("[NaruHub][%s] error=%s", tag, tostring(err)))
-	end
-	if extra ~= nil then
-		print(string.format("[NaruHub][%s] meta=%s", tag, tostring(extra)))
-	end
+local function logRequest(_tag, _url, _method, _statusCode, _responseBody, _err, _extra)
 end
 
 local DEVICE_ID = "unknown"
@@ -299,6 +285,16 @@ local monitorPara = section:AddParagraph({
 	ContentSize = 16,
 	Center = true,
 })
+
+local placeEggEnabled = false
+section:AddToggle("PlaceEggToggle", {
+	Title = "Place Egg",
+	Default = false,
+	Callback = function(val)
+		placeEggEnabled = val
+	end,
+})
+
 section:AddParagraph({
 	Title = "By",
 	Content = "Putra Ramadhan",
@@ -749,6 +745,48 @@ task.spawn(function()
 			end
 		end)
 		task.wait(3)
+	end
+end)
+
+------------------------------------------------------------
+-- Place Egg loop (toggle-driven)
+------------------------------------------------------------
+task.spawn(function()
+	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		if placeEggEnabled then
+			pcall(function()
+				local records = getMyOwnedEggs()
+				local char = LocalPlayer.Character
+				local hrp = char and char:FindFirstChild("HumanoidRootPart")
+				if not hrp then return end
+
+				local placeCF = hrp.CFrame * CFrame.new(0, -2, -5)
+
+				for uid, rec in pairs(records) do
+					if not placeEggEnabled then break end
+					if rec.Placement == nil then
+						local ok, result, msg = pcall(function()
+							return Remotes.EggWorld.AskPlaceEgg:InvokeServer({
+								Uid = uid,
+								LocalCFrame = placeCF,
+							})
+						end)
+						if ok and result ~= true then
+							placeEggEnabled = false
+							break
+						end
+						if not ok then
+							placeEggEnabled = false
+							break
+						end
+						task.wait(0.3)
+					end
+				end
+			end)
+		end
+		task.wait(2)
 	end
 end)
 
