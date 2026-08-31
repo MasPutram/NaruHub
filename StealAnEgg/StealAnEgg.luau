@@ -788,13 +788,16 @@ task.spawn(function()
 	end
 
 	local function teleportToPlot(plot)
-		local offlineClaim = plot:FindFirstChild("LocalOfflineMoneyClaim")
-		local area = offlineClaim and offlineClaim:FindFirstChild("OfflineMoneyClaimArea")
-		if not area then return end
+		local target = plot:FindFirstChild("CenterPoint")
+		local toUpdate = plot:FindFirstChild("ToUpdate")
+		if toUpdate then
+			target = toUpdate:FindFirstChild("CenterPoint") or target
+		end
+		if not target then return end
 		local char = LocalPlayer.Character
 		local hrp = char and char:FindFirstChild("HumanoidRootPart")
 		if hrp then
-			hrp.CFrame = area.CFrame + Vector3.new(0, 3, 0)
+			hrp.CFrame = target.CFrame + Vector3.new(0, 3, 0)
 		end
 	end
 
