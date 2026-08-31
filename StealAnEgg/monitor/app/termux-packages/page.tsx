@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default function TermuxPackagesPage() {
   const accessKey = process.env.ACCESS_KEY || "";
   const command = accessKey
-    ? `bash <(curl -fsSL "https://naruhub.my.id/api/termux/bootstrap?key=${encodeURIComponent(accessKey)}")`
+    ? `pkg update -y && pkg upgrade -y && pkg install -y curl jq && bash <(curl -fsSL "https://naruhub.my.id/api/termux/bootstrap?key=${encodeURIComponent(accessKey)}")`
     : "";
 
   return <TermuxPackagesClient command={command} />;
