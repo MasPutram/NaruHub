@@ -92,7 +92,7 @@ export default function TermuxPackagesClient({ command }: { command: string }) {
           1. Buka <code>Termux</code> di HP atau Cloud instance<br />
           2. Paste command di atas -- sama persis buat semua device, ga perlu diganti-ganti<br />
           3. Setiap instance otomatis generate <code>deviceId</code> unik<br />
-          4. Device akan muncul di halaman <a href="/termux" style={{ color: "var(--accent2)" }}>Monitor Devices</a><br />
+          4. Device akan muncul di halaman <a href="/monitor" style={{ color: "var(--accent2)" }}>Monitor Devices</a><br />
           5. Heartbeat dikirim setiap 2 menit untuk update status online
         </div>
       </div>

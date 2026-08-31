@@ -17,6 +17,7 @@ interface TermuxStats {
 interface TermuxDevice {
   deviceId: string;
   hostname: string;
+  customName?: string;
   platform: string;
   status: string;
   registeredAt: number;
@@ -56,12 +57,37 @@ function fmtDate(ts: number): string {
   });
 }
 
-export default function TermuxMonitorPage() {
+/** green under 60%, yellow 60-85%, red above 85% -- getting fuller = more urgent. */
+function barColor(pct: number): string {
+  if (pct >= 85) return "#f87171";
+  if (pct >= 60) return "#facc15";
+  return "#34d399";
+}
+
+function ProgressBar({ label, pct, sublabel }: { label: string; pct: number; sublabel: string }) {
+  const clamped = Math.max(0, Math.min(100, pct));
+  return (
+    <div className="pbar-wrap">
+      <div className="pbar-top">
+        <span className="pbar-label">{label}</span>
+        <span className="pbar-sublabel">{sublabel}</span>
+      </div>
+      <div className="pbar-track">
+        <div className="pbar-fill" style={{ width: `${clamped}%`, background: barColor(clamped) }} />
+      </div>
+    </div>
+  );
+}
+
+export default function MonitorPage() {
   const [devices, setDevices] = useState<TermuxDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [layout, setLayout] = useState<Record<string, { cols: number; rows: number }>>({});
   const [launching, setLaunching] = useState<string | null>(null);
   const [launchMsg, setLaunchMsg] = useState<Record<string, string>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [nameEdits, setNameEdits] = useState<Record<string, string>>({});
+  const [nameSaving, setNameSaving] = useState<string | null>(null);
 
   const fetchDevices = useCallback(async () => {
     try {
@@ -109,6 +135,19 @@ export default function TermuxMonitorPage() {
     setTimeout(() => setLaunchMsg((m) => ({ ...m, [key]: "" })), 4000);
   }
 
+  async function saveName(deviceId: string, name: string) {
+    setNameSaving(deviceId);
+    try {
+      await fetch("/api/device-control/rename", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, name }),
+      });
+      setDevices((prev) => prev.map((d) => (d.deviceId === deviceId ? { ...d, customName: name } : d)));
+    } catch {}
+    setNameSaving(null);
+  }
+
   const online = devices.filter((d) => d.status === "online");
   const offline = devices.filter((d) => d.status !== "online");
 
@@ -132,16 +171,34 @@ export default function TermuxMonitorPage() {
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
         .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 14px; padding: 16px; }
         .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-        .dot { width: 8px; height: 8px; border-radius: 50%; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
         .dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
         .dot.offline { background: var(--red); }
-        .device-id { font-weight: 800; font-size: 14px; font-family: "Cascadia Code", "Fira Code", monospace; }
-        .last-seen { color: var(--dim); font-size: 11px; margin-left: auto; }
+        .name-input {
+          flex: 1; min-width: 0; background: transparent; color: var(--ink); border: none;
+          font-weight: 800; font-size: 14px; padding: 3px 4px; border-radius: 4px;
+        }
+        .name-input:hover, .name-input:focus { background: var(--bg); outline: none; }
+        .name-input:focus { border: 1px solid var(--accent); }
+        .last-seen { color: var(--dim); font-size: 11px; white-space: nowrap; }
+        .expand-btn {
+          background: none; border: none; color: var(--dim); cursor: pointer; font-size: 16px;
+          padding: 2px 6px; flex-shrink: 0; transform: rotate(0deg); transition: transform .15s;
+        }
+        .expand-btn.open { transform: rotate(90deg); }
+        .device-id-sub { color: var(--dim); font-size: 10px; font-family: "Cascadia Code", "Fira Code", monospace; margin-bottom: 10px; }
+
+        .pbar-wrap { margin-bottom: 8px; }
+        .pbar-top { display: flex; justify-content: space-between; margin-bottom: 3px; }
+        .pbar-label { color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: .3px; }
+        .pbar-sublabel { color: var(--dim); font-size: 10px; }
+        .pbar-track { height: 6px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+        .pbar-fill { height: 100%; border-radius: 4px; transition: width .3s; }
+
+        .expand-body { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--card-border); }
         .info-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
         .info-item .ilabel { color: var(--dim); font-size: 10px; font-weight: 700; }
         .info-item .ival { font-size: 13px; font-weight: 700; }
-        .pkg-list { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-        .pkg-tag { background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 6px; padding: 2px 8px; font-size: 11px; color: var(--accent); font-weight: 700; }
         .layout-row { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
         .layout-row input {
           width: 44px; background: var(--bg); color: var(--ink); border: 1px solid var(--card-border);
@@ -150,7 +207,7 @@ export default function TermuxMonitorPage() {
         .layout-x { color: var(--dim); font-size: 12px; }
         .pkg-list-full { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
         .pkg-row { display: flex; align-items: center; gap: 8px; }
-        .pkg-row .pkg-tag { flex: 1; }
+        .pkg-tag { background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 6px; padding: 2px 8px; font-size: 11px; color: var(--accent); font-weight: 700; flex: 1; }
         .launch-btn {
           background: var(--accent); color: #1a1030; border: none; border-radius: 6px;
           padding: 4px 12px; font-size: 11px; font-weight: 800; cursor: pointer;
@@ -158,12 +215,11 @@ export default function TermuxMonitorPage() {
         .launch-btn:disabled { opacity: .5; cursor: default; }
         .launch-msg { color: var(--dim); font-size: 11px; white-space: nowrap; }
         .empty { color: var(--dim); text-align: center; padding: 60px 0; font-size: 14px; }
-        .nav-link { color: var(--accent2); text-decoration: none; font-size: 13px; font-weight: 700; background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 8px; padding: 6px 14px; }
       `}</style>
 
       <div style={{ marginBottom: 4 }}>
         <div className="eyebrow">TERMUX CLIENT</div>
-        <h1>Devices</h1>
+        <h1>Monitor</h1>
       </div>
       <div className="subtitle">Monitor semua Termux / Cloud instance yang terhubung.</div>
 
@@ -191,106 +247,125 @@ export default function TermuxMonitorPage() {
         </div>
       ) : (
         <div className="grid">
-          {[...online, ...offline].map((d) => (
-            <div key={d.deviceId} className="card">
-              <div className="card-head">
-                <span className={`dot ${d.status === "online" ? "online" : "offline"}`} />
-                <span className="device-id">{d.deviceId.slice(0, 12)}...</span>
-                <span className="last-seen">{fmtAgo(d.lastSeen)}</span>
-              </div>
-              <div className="info-row">
-                <div className="info-item">
-                  <div className="ilabel">HOSTNAME</div>
-                  <div className="ival">{d.hostname}</div>
+          {[...online, ...offline].map((d) => {
+            const isOpen = !!expanded[d.deviceId];
+            const displayName = nameEdits[d.deviceId] ?? d.customName ?? d.hostname;
+            const ramPct = d.stats?.ram ? (d.stats.ram.usedMB / Math.max(1, d.stats.ram.totalMB)) * 100 : null;
+            const storagePct = d.stats?.storage
+              ? ((d.stats.storage.totalMB - d.stats.storage.freeMB) / Math.max(1, d.stats.storage.totalMB)) * 100
+              : null;
+            const cpuPct = d.stats?.load ? Math.min(100, d.stats.load["1m"] * 100) : null;
+            const pkgs = d.packages.map(normalizePackage);
+            const { cols, rows } = getLayout(d.deviceId, pkgs.length);
+
+            return (
+              <div key={d.deviceId} className="card">
+                <div className="card-head">
+                  <span className={`dot ${d.status === "online" ? "online" : "offline"}`} />
+                  <input
+                    className="name-input"
+                    value={displayName}
+                    onChange={(e) => setNameEdits((prev) => ({ ...prev, [d.deviceId]: e.target.value }))}
+                    onBlur={(e) => {
+                      const val = e.target.value.trim();
+                      if (val && val !== (d.customName ?? d.hostname)) saveName(d.deviceId, val);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    disabled={nameSaving === d.deviceId}
+                  />
+                  <span className="last-seen">{fmtAgo(d.lastSeen)}</span>
+                  <button
+                    className={`expand-btn ${isOpen ? "open" : ""}`}
+                    onClick={() => setExpanded((prev) => ({ ...prev, [d.deviceId]: !prev[d.deviceId] }))}
+                    aria-label="Toggle details"
+                  >
+                    ▶
+                  </button>
                 </div>
-                <div className="info-item">
-                  <div className="ilabel">PLATFORM</div>
-                  <div className="ival">{d.platform}</div>
-                </div>
-                <div className="info-item">
-                  <div className="ilabel">REGISTERED</div>
-                  <div className="ival">{fmtDate(d.registeredAt)}</div>
-                </div>
-              </div>
-              {d.screen && (
-                <div className="info-row">
-                  <div className="info-item">
-                    <div className="ilabel">SCREEN</div>
-                    <div className="ival">{d.screen.width}x{d.screen.height}</div>
-                  </div>
-                </div>
-              )}
-              {d.stats && (d.stats.battery || d.stats.ram || d.stats.storage || d.stats.load) && (
-                <div className="info-row">
-                  {d.stats.battery && d.stats.battery.percent != null && (
-                    <div className="info-item">
-                      <div className="ilabel">BATTERY</div>
-                      <div className="ival">
-                        {d.stats.battery.percent}%{d.stats.battery.charging ? " ⚡" : ""}
+                <div className="device-id-sub">{d.deviceId.slice(0, 16)}...</div>
+
+                {ramPct != null && (
+                  <ProgressBar label="RAM" pct={ramPct} sublabel={`${fmtGB(d.stats!.ram!.usedMB)} / ${fmtGB(d.stats!.ram!.totalMB)}`} />
+                )}
+                {cpuPct != null && (
+                  <ProgressBar label="CPU LOAD" pct={cpuPct} sublabel={d.stats!.load!["1m"].toFixed(2)} />
+                )}
+                {storagePct != null && (
+                  <ProgressBar label="STORAGE" pct={storagePct} sublabel={`${fmtGB(d.stats!.storage!.freeMB)} free`} />
+                )}
+
+                {isOpen && (
+                  <div className="expand-body">
+                    <div className="info-row">
+                      <div className="info-item">
+                        <div className="ilabel">HOSTNAME</div>
+                        <div className="ival">{d.hostname}</div>
+                      </div>
+                      <div className="info-item">
+                        <div className="ilabel">PLATFORM</div>
+                        <div className="ival">{d.platform}</div>
+                      </div>
+                      <div className="info-item">
+                        <div className="ilabel">REGISTERED</div>
+                        <div className="ival">{fmtDate(d.registeredAt)}</div>
                       </div>
                     </div>
-                  )}
-                  {d.stats.ram && (
-                    <div className="info-item">
-                      <div className="ilabel">RAM</div>
-                      <div className="ival">{fmtGB(d.stats.ram.usedMB)} / {fmtGB(d.stats.ram.totalMB)}</div>
-                    </div>
-                  )}
-                  {d.stats.storage && (
-                    <div className="info-item">
-                      <div className="ilabel">STORAGE</div>
-                      <div className="ival">{fmtGB(d.stats.storage.freeMB)} free</div>
-                    </div>
-                  )}
-                  {d.stats.load && (
-                    <div className="info-item">
-                      <div className="ilabel">LOAD</div>
-                      <div className="ival">{d.stats.load["1m"].toFixed(2)}</div>
-                    </div>
-                  )}
-                </div>
-              )}
-              {d.packages.length > 0 && (() => {
-                const pkgs = d.packages.map(normalizePackage);
-                const { cols, rows } = getLayout(d.deviceId, pkgs.length);
-                return (
-                  <>
-                    <div className="layout-row">
-                      <span className="ilabel">LAYOUT</span>
-                      <input
-                        type="number" min={1} max={10} value={cols}
-                        onChange={(e) => setLayoutFor(d.deviceId, { cols: Math.max(1, Number(e.target.value) || 1) })}
-                      />
-                      <span className="layout-x">x</span>
-                      <input
-                        type="number" min={1} max={10} value={rows}
-                        onChange={(e) => setLayoutFor(d.deviceId, { rows: Math.max(1, Number(e.target.value) || 1) })}
-                      />
-                      <span className="ilabel">({cols * rows} slot)</span>
-                    </div>
-                    <div className="pkg-list-full">
-                      {pkgs.map((p, i) => {
-                        const key = `${d.deviceId}:${p.pkg}`;
-                        return (
-                          <div key={p.pkg} className="pkg-row">
-                            <span className="pkg-tag">{p.label || p.pkg}</span>
-                            <button
-                              className="launch-btn"
-                              disabled={launching === key || d.status !== "online"}
-                              onClick={() => launchPackage(d.deviceId, p.pkg, i, pkgs.length)}
-                            >
-                              {launching === key ? "..." : "Buka"}
-                            </button>
-                            {launchMsg[key] && <span className="launch-msg">{launchMsg[key]}</span>}
+                    {d.screen && (
+                      <div className="info-row">
+                        <div className="info-item">
+                          <div className="ilabel">SCREEN</div>
+                          <div className="ival">{d.screen.width}x{d.screen.height}</div>
+                        </div>
+                        {d.stats?.battery && d.stats.battery.percent != null && (
+                          <div className="info-item">
+                            <div className="ilabel">BATTERY</div>
+                            <div className="ival">
+                              {d.stats.battery.percent}%{d.stats.battery.charging ? " ⚡" : ""}
+                            </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          ))}
+                        )}
+                      </div>
+                    )}
+                    {pkgs.length > 0 && (
+                      <>
+                        <div className="layout-row">
+                          <span className="ilabel">LAYOUT</span>
+                          <input
+                            type="number" min={1} max={10} value={cols}
+                            onChange={(e) => setLayoutFor(d.deviceId, { cols: Math.max(1, Number(e.target.value) || 1) })}
+                          />
+                          <span className="layout-x">x</span>
+                          <input
+                            type="number" min={1} max={10} value={rows}
+                            onChange={(e) => setLayoutFor(d.deviceId, { rows: Math.max(1, Number(e.target.value) || 1) })}
+                          />
+                          <span className="ilabel">({cols * rows} slot)</span>
+                        </div>
+                        <div className="pkg-list-full">
+                          {pkgs.map((p, i) => {
+                            const key = `${d.deviceId}:${p.pkg}`;
+                            return (
+                              <div key={p.pkg} className="pkg-row">
+                                <span className="pkg-tag">{p.label || p.pkg}</span>
+                                <button
+                                  className="launch-btn"
+                                  disabled={launching === key || d.status !== "online"}
+                                  onClick={() => launchPackage(d.deviceId, p.pkg, i, pkgs.length)}
+                                >
+                                  {launching === key ? "..." : "Buka"}
+                                </button>
+                                {launchMsg[key] && <span className="launch-msg">{launchMsg[key]}</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </>

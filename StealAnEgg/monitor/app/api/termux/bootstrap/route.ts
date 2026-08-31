@@ -20,6 +20,23 @@ ts() { date +%H:%M:%S; }
 
 mkdir -p "$CONFIG_DIR"
 
+# Multiple background loops (heartbeat, command poller) print to the same
+# terminal concurrently with the foreground process -- without serializing
+# those writes, lines from different processes land mid-line and the output
+# staggers/wraps sideways. mkdir is atomic on any POSIX filesystem, so it
+# works as a lock with zero extra Termux dependencies (no flock needed).
+LOG_LOCK_DIR="$CONFIG_DIR/.log.lock"
+rmdir "$LOG_LOCK_DIR" 2>/dev/null || true
+log() {
+  local tries=0
+  while ! mkdir "$LOG_LOCK_DIR" 2>/dev/null; do
+    tries=$((tries + 1))
+    [ "$tries" -gt 200 ] && break
+  done
+  echo "$1"
+  rmdir "$LOG_LOCK_DIR" 2>/dev/null
+}
+
 command -v jq >/dev/null 2>&1 || pkg install -y jq >/dev/null 2>&1 || true
 
 ANDROID_VER=$(getprop ro.build.version.release 2>/dev/null || true)
@@ -44,33 +61,33 @@ else
 fi
 
 clear
-echo "\${CYAN}\${BOLD}+-----------------------------+\${RESET}"
-echo "\${CYAN}\${BOLD}|        N A R U H U B         |\${RESET}"
-echo "\${CYAN}\${DIM}   Monitoring Agent - v1.0     \${RESET}"
-echo "\${CYAN}\${BOLD}+-----------------------------+\${RESET}"
-echo ""
-echo "\${DIM}License\${RESET}  -> \${YELLOW}\${LICENSE_KEY:0:6}...\${LICENSE_KEY: -4}\${RESET}"
-echo "\${DIM}Device\${RESET}   -> \${CYAN}\${DEVICE_ID:0:8}...\${DEVICE_ID: -6}\${RESET}"
-echo "\${DIM}Model\${RESET}    -> $DEVICE_MODEL"
-echo "\${DIM}Android\${RESET}  -> $ANDROID_VER"
-echo ""
+log "\${CYAN}\${BOLD}+-----------------------------+\${RESET}"
+log "\${CYAN}\${BOLD}|        N A R U H U B         |\${RESET}"
+log "\${CYAN}\${DIM}   Monitoring Agent - v1.0     \${RESET}"
+log "\${CYAN}\${BOLD}+-----------------------------+\${RESET}"
+log ""
+log "\${DIM}License\${RESET}  -> \${YELLOW}\${LICENSE_KEY:0:6}...\${LICENSE_KEY: -4}\${RESET}"
+log "\${DIM}Device\${RESET}   -> \${CYAN}\${DEVICE_ID:0:8}...\${DEVICE_ID: -6}\${RESET}"
+log "\${DIM}Model\${RESET}    -> $DEVICE_MODEL"
+log "\${DIM}Android\${RESET}  -> $ANDROID_VER"
+log ""
 
 if [ "$IS_NEW" = "1" ]; then
-  echo "\${DIM}[$(ts)]\${RESET} registering device..."
+  log "\${DIM}[$(ts)]\${RESET} registering device..."
   HTTP_CODE=$(curl -s -o "$CONFIG_DIR/naruhub_reg.json" -w "%{http_code}" -X POST "$BASE_URL/api/termux/register" \\
     -H "Content-Type: application/json" \\
     -H "X-Access-Key: $LICENSE_KEY" \\
     -d "{\\"deviceId\\":\\"$DEVICE_ID\\",\\"hostname\\":\\"$HOSTNAME\\",\\"platform\\":\\"$PLATFORM\\"}" 2>/dev/null || echo "000")
   if [ "$HTTP_CODE" = "200" ]; then
-    echo "\${GREEN}[$(ts)] registered\${RESET}"
+    log "\${GREEN}[$(ts)] registered\${RESET}"
   else
-    echo "\${RED}[$(ts)] registration failed (HTTP $HTTP_CODE)\${RESET}"
+    log "\${RED}[$(ts)] registration failed (HTTP $HTTP_CODE)\${RESET}"
     cat "$CONFIG_DIR/naruhub_reg.json" 2>/dev/null
-    echo ""
-    echo "\${YELLOW}Cek access key kamu, lalu jalankan ulang command ini.\${RESET}"
+    log ""
+    log "\${YELLOW}Cek access key kamu, lalu jalankan ulang command ini.\${RESET}"
   fi
 else
-  echo "\${DIM}[$(ts)] existing device, skip register\${RESET}"
+  log "\${DIM}[$(ts)] existing device, skip register\${RESET}"
 fi
 
 # Best-effort: enable freeform multi-window support so remote "launch" commands
@@ -201,9 +218,9 @@ heartbeat() {
       -H "X-Access-Key: $LICENSE_KEY" \\
       -d "$body" 2>/dev/null || echo "000")
     if [ "$http_code" = "200" ]; then
-      echo "\${DIM}[$(ts)]\${RESET} \${GREEN}heartbeat ok\${RESET}"
+      log "\${DIM}[$(ts)]\${RESET} \${GREEN}heartbeat ok\${RESET}"
     else
-      echo "\${DIM}[$(ts)]\${RESET} \${RED}heartbeat failed (HTTP $http_code)\${RESET}"
+      log "\${DIM}[$(ts)]\${RESET} \${RED}heartbeat failed (HTTP $http_code)\${RESET}"
     fi
     sleep 120
   done
@@ -224,7 +241,7 @@ poll_commands() {
         if [ "$ctype" = "launch" ]; then
           cpkg=$(echo "$cmd" | jq -r '.package')
           cbounds=$(echo "$cmd" | jq -r '.bounds')
-          echo "\${DIM}[$(ts)]\${RESET} launching \${CYAN}$cpkg\${RESET} @ $cbounds"
+          log "\${DIM}[$(ts)]\${RESET} launching \${CYAN}$cpkg\${RESET} @ $cbounds"
           su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p $cpkg --windowingMode 5" >/dev/null 2>&1 || true
           sleep 1.5
           taskid=$(su -c "am stack list" 2>/dev/null | grep -m1 "$cpkg" | grep -oE 'taskId=[0-9]+' | head -1 | cut -d= -f2)
@@ -233,9 +250,9 @@ poll_commands() {
           fi
           if [ -n "$taskid" ]; then
             su -c "am task resize $taskid $cbounds" >/dev/null 2>&1 || true
-            echo "\${GREEN}[$(ts)] resized task $taskid -> $cbounds\${RESET}"
+            log "\${GREEN}[$(ts)] resized task $taskid -> $cbounds\${RESET}"
           else
-            echo "\${YELLOW}[$(ts)] launched $cpkg but couldn't find task id to resize\${RESET}"
+            log "\${YELLOW}[$(ts)] launched $cpkg but couldn't find task id to resize\${RESET}"
           fi
         fi
       done
@@ -249,12 +266,12 @@ HEARTBEAT_PID=$!
 poll_commands &
 POLL_PID=$!
 
-echo "\${DIM}[$(ts)]\${RESET} heartbeat started (pid $HEARTBEAT_PID)"
-echo "\${DIM}[$(ts)]\${RESET} command listener started (pid $POLL_PID)"
-echo "\${GREEN}[$(ts)] online - streaming\${RESET}"
-echo "\${DIM}Press Ctrl+C to stop.\${RESET}"
+log "\${DIM}[$(ts)]\${RESET} heartbeat started (pid $HEARTBEAT_PID)"
+log "\${DIM}[$(ts)]\${RESET} command listener started (pid $POLL_PID)"
+log "\${GREEN}[$(ts)] online - streaming\${RESET}"
+log "\${DIM}Press Ctrl+C to stop.\${RESET}"
 
-trap 'kill $HEARTBEAT_PID $POLL_PID 2>/dev/null; echo ""; echo "\${YELLOW}[$(ts)] stopped.\${RESET}"; exit 0' INT TERM
+trap 'kill $HEARTBEAT_PID $POLL_PID 2>/dev/null; log ""; log "\${YELLOW}[$(ts)] stopped.\${RESET}"; exit 0' INT TERM
 
 wait
 `;
