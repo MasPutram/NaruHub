@@ -852,9 +852,11 @@ task.spawn(function()
 							table.insert(positions, { x, z })
 						end
 					end
+					local farX = originX * 2
+					local farZ = originZ * 2
 					table.sort(positions, function(a, b)
-						local da = (a[1] - originX)^2 + (a[2] - originZ)^2
-						local db = (b[1] - originX)^2 + (b[2] - originZ)^2
+						local da = (a[1] - farX)^2 + (a[2] - farZ)^2
+						local db = (b[1] - farX)^2 + (b[2] - farZ)^2
 						return da < db
 					end)
 					return positions
