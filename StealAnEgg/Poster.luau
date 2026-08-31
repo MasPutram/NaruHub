@@ -79,6 +79,10 @@ return function(ctx)
 				end)
 				local displayName = tool:GetAttribute("DisplayName") or tool.Name
 				displayName = displayName:gsub("%s*%([^%)]*[Kk][Gg][^%)]*%)%s*$", "")
+				local texId = ""
+				pcall(function()
+					texId = tool.TextureId or ""
+				end)
 				table.insert(pets, {
 					uid = tool:GetAttribute("UID"),
 					name = displayName,
@@ -86,6 +90,7 @@ return function(ctx)
 					mutations = mutations,
 					rate = rate,
 					weight = weight,
+					textureId = texId,
 				})
 			end
 		end
@@ -102,6 +107,13 @@ return function(ctx)
 				pcall(function()
 					weight = AssetItems.WeightKg(item)
 				end)
+				local texId = ""
+				pcall(function()
+					local model = rec.Model
+					if model and model:FindFirstChildWhichIsA("Tool") then
+						texId = model:FindFirstChildWhichIsA("Tool").TextureId or ""
+					end
+				end)
 				table.insert(pets, {
 					uid = rec.UID,
 					name = item.Category,
@@ -109,6 +121,7 @@ return function(ctx)
 					mutations = item.Mutations or {},
 					rate = rec.MoneyPerSecond or 0,
 					weight = weight,
+					textureId = texId,
 				})
 			end
 		end
@@ -523,6 +536,7 @@ return function(ctx)
 					category = p.category,
 					mutations = p.mutations or {},
 					rate = p.rate or 0,
+					textureId = p.textureId or "",
 				})
 			end
 

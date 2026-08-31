@@ -7,6 +7,43 @@ interface Pet {
   name?: string;
   rate: number;
   mutations?: string[];
+  textureId?: string;
+}
+
+function rbxThumbUrl(textureId: string): string | null {
+  if (!textureId) return null;
+  const m = textureId.match(/(\d{5,})/);
+  if (!m) return null;
+  return `https://thumbnails.roblox.com/v1/assets?assetIds=${m[1]}&returnPolicy=PlaceHolder&size=150x150&format=Png`;
+}
+
+function PetThumb({ textureId, name }: { textureId?: string; name: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    const url = rbxThumbUrl(textureId || "");
+    if (!url) return;
+    let cancelled = false;
+    fetch(url)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled && d.data?.[0]?.imageUrl) {
+          setSrc(d.data[0].imageUrl);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [textureId]);
+
+  if (!src) {
+    return (
+      <div style={{ width: 32, height: 32, borderRadius: 6, background: "#262640", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "var(--dim)", flexShrink: 0 }}>
+        {(name || "?")[0]}
+      </div>
+    );
+  }
+
+  return <img src={src} alt={name} style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />;
 }
 
 interface Account {
@@ -305,7 +342,7 @@ export default function DashboardPage() {
         .stat.money .val { color: var(--gold); }
         .stat.speed .val { color: var(--accent); }
         .toppets { display: flex; gap: 6px; overflow-x: auto; }
-        .pet { background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 8px; padding: 4px 6px; text-align: center; min-width: 64px; }
+        .pet { background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 8px; padding: 6px 8px; text-align: center; min-width: 72px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
         .pet .pname { font-size: 9px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 58px; }
         .pet .prate { font-size: 9px; color: var(--gold); font-weight: 700; }
         .genbtn { margin-top: 12px; width: 100%; background: var(--accent); color: #1a1030; border: none; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 800; cursor: pointer; }
@@ -434,6 +471,7 @@ export default function DashboardPage() {
               <div className="toppets">
                 {(a.topPets || []).map((p, i) => (
                   <div key={i} className="pet">
+                    <PetThumb textureId={p.textureId} name={p.name || p.category} />
                     <div className="pname">{p.name || p.category}</div>
                     <div className="prate">{fmtRate(p.rate)}</div>
                   </div>
@@ -504,6 +542,7 @@ function PetSection({ title, pets }: { title: string; pets: Pet[] }) {
         <div className="detail-grid">
           {sorted.map((p, i) => (
             <div key={i} className="dpet">
+              <PetThumb textureId={p.textureId} name={p.name || p.category} />
               <div className="dinfo">
                 <div className="dname">
                   {p.name || p.category}
