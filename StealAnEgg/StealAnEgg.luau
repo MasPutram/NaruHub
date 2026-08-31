@@ -681,9 +681,19 @@ task.spawn(function()
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		pcall(function()
 			local stats = SaveModule.Get()
-			local nextLevel, config = BaseUpgrade.ResolveNextTier(stats)
-			if nextLevel and config and BaseUpgrade.IsNextTierAffordable(stats) then
-				BaseUpgrade.PurchaseNextTier()
+			local penLevel = stats.BaseUpgradeLevel or 0
+			local treadmillMaxed = TreadmillClient.GetNextConfig(stats) == nil
+
+			if penLevel < 10 then
+				local nextLevel, config = BaseUpgrade.ResolveNextTier(stats)
+				if nextLevel and config and BaseUpgrade.IsNextTierAffordable(stats) then
+					BaseUpgrade.PurchaseNextTier()
+				end
+			elseif treadmillMaxed then
+				local nextLevel, config = BaseUpgrade.ResolveNextTier(stats)
+				if nextLevel and config and BaseUpgrade.IsNextTierAffordable(stats) then
+					BaseUpgrade.PurchaseNextTier()
+				end
 			end
 		end)
 		pcall(function()
