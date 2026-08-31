@@ -173,11 +173,7 @@ function loadIconIndex(): Promise<Record<string, string>> {
 }
 
 function petIconUrl(p: Pet, index: Record<string, string>): string | null {
-  const cat = p.category;
-  if (p.rarity && cat) {
-    return `/icons/normal/${encodeURIComponent(cat)} [${encodeURIComponent(p.rarity)}].png`;
-  }
-  const filename = index[cat];
+  const filename = index[p.category];
   if (filename) {
     return `/icons/normal/${encodeURIComponent(filename)}`;
   }
