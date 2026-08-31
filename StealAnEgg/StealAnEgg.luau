@@ -824,34 +824,32 @@ task.spawn(function()
 				local myPlot = findMyPlot()
 				if not myPlot then return end
 
-				local function buildSpiral(plot)
+				local function buildGrid(plot)
 					local centerPoint = plot:FindFirstChild("CenterPoint")
 					local toUpdateCP = plot:FindFirstChild("ToUpdate")
 					if toUpdateCP then
 						centerPoint = toUpdateCP:FindFirstChild("CenterPoint") or centerPoint
 					end
 					local petArea = findPetArea(plot)
+					local halfX, halfZ = 25, 25
 					local originX, originZ = 0, 0
-					if petArea and centerPoint then
-						originX = petArea.Position.X - centerPoint.Position.X
-						originZ = petArea.Position.Z - centerPoint.Position.Z
+					if petArea then
+						halfX = math.floor(petArea.Size.X / 2)
+						halfZ = math.floor(petArea.Size.Z / 2)
+						if centerPoint then
+							originX = petArea.Position.X - centerPoint.Position.X
+							originZ = petArea.Position.Z - centerPoint.Position.Z
+						end
 					end
 					local spacing = 5
 					local positions = {}
-					table.insert(positions, { originX, originZ })
-					local dx, dz = spacing, 0
-					local steps, stepCount, turnCount = 1, 0, 0
-					local cx, cz = originX, originZ
-					for _ = 1, 500 do
-						cx = cx + dx
-						cz = cz + dz
-						table.insert(positions, { cx, cz })
-						stepCount = stepCount + 1
-						if stepCount >= steps then
-							stepCount = 0
-							turnCount = turnCount + 1
-							dx, dz = -dz, dx
-							if turnCount % 2 == 0 then steps = steps + 1 end
+					local startX = originX - halfX
+					local endX = originX + halfX
+					local startZ = originZ - halfZ
+					local endZ = originZ + halfZ
+					for z = startZ, endZ, spacing do
+						for x = startX, endX, spacing do
+							table.insert(positions, { x, z })
 						end
 					end
 					return positions
@@ -911,7 +909,7 @@ task.spawn(function()
 					return anyPlaced
 				end
 
-				local spiralPositions = buildSpiral(myPlot)
+				local spiralPositions = buildGrid(myPlot)
 				local unplaced = getUnplaced()
 				if #unplaced == 0 then return end
 
@@ -924,7 +922,7 @@ task.spawn(function()
 					task.wait(2)
 					unplaced = getUnplaced()
 					if #unplaced > 0 then
-						tryPlaceAll(buildSpiral(myPlot), unplaced)
+						tryPlaceAll(buildGrid(myPlot), unplaced)
 					end
 				end
 			end)
