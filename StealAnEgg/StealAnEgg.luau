@@ -818,7 +818,7 @@ task.spawn(function()
 						originX = claimArea.Position.X - centerPoint.Position.X
 						originZ = claimArea.Position.Z - centerPoint.Position.Z
 					end
-					local spacing = 4
+					local spacing = -4
 					local positions = {}
 					table.insert(positions, { originX, originZ })
 					local dx, dz = spacing, 0
