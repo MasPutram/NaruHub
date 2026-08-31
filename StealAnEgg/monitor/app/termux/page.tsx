@@ -7,6 +7,13 @@ interface TermuxPackage {
   label?: string;
 }
 
+interface TermuxStats {
+  battery?: { percent: number | null; charging: boolean };
+  ram?: { totalMB: number; usedMB: number };
+  storage?: { totalMB: number; freeMB: number };
+  load?: { "1m": number; "5m": number; "15m": number };
+}
+
 interface TermuxDevice {
   deviceId: string;
   hostname: string;
@@ -16,11 +23,16 @@ interface TermuxDevice {
   lastSeen: number;
   packages: (string | TermuxPackage)[];
   screen?: { width: number; height: number };
-  stats?: Record<string, any>;
+  stats?: TermuxStats;
 }
 
 function normalizePackage(p: string | TermuxPackage): TermuxPackage {
   return typeof p === "string" ? { pkg: p } : p;
+}
+
+function fmtGB(mb: number): string {
+  if (mb >= 1024) return (mb / 1024).toFixed(1) + " GB";
+  return mb + " MB";
 }
 
 function fmtAgo(ts: number): string {
@@ -206,6 +218,36 @@ export default function TermuxMonitorPage() {
                     <div className="ilabel">SCREEN</div>
                     <div className="ival">{d.screen.width}x{d.screen.height}</div>
                   </div>
+                </div>
+              )}
+              {d.stats && (d.stats.battery || d.stats.ram || d.stats.storage || d.stats.load) && (
+                <div className="info-row">
+                  {d.stats.battery && d.stats.battery.percent != null && (
+                    <div className="info-item">
+                      <div className="ilabel">BATTERY</div>
+                      <div className="ival">
+                        {d.stats.battery.percent}%{d.stats.battery.charging ? " ⚡" : ""}
+                      </div>
+                    </div>
+                  )}
+                  {d.stats.ram && (
+                    <div className="info-item">
+                      <div className="ilabel">RAM</div>
+                      <div className="ival">{fmtGB(d.stats.ram.usedMB)} / {fmtGB(d.stats.ram.totalMB)}</div>
+                    </div>
+                  )}
+                  {d.stats.storage && (
+                    <div className="info-item">
+                      <div className="ilabel">STORAGE</div>
+                      <div className="ival">{fmtGB(d.stats.storage.freeMB)} free</div>
+                    </div>
+                  )}
+                  {d.stats.load && (
+                    <div className="info-item">
+                      <div className="ilabel">LOAD</div>
+                      <div className="ival">{d.stats.load["1m"].toFixed(2)}</div>
+                    </div>
+                  )}
                 </div>
               )}
               {d.packages.length > 0 && (() => {

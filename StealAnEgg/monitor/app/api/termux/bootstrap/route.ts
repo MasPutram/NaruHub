@@ -125,14 +125,74 @@ collect_screen() {
   fi
 }
 
+# Local device health -- battery/RAM/storage/CPU load. Reads standard
+# world-readable Linux/Android sources (/proc, sysfs, df) so it works
+# without root even though the rest of this agent needs root for the
+# package-launch feature. All KB->MB division is done in bash (native
+# integer math) to keep the jq filter itself free of arithmetic.
+collect_stats() {
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "null"
+    return
+  fi
+  local batt_pct batt_status charging
+  batt_pct=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null || true)
+  batt_status=$(cat /sys/class/power_supply/battery/status 2>/dev/null || true)
+  charging="false"
+  [ "$batt_status" = "Charging" ] && charging="true"
+
+  local mem_total_kb mem_avail_kb mem_used_kb mem_total_mb mem_used_mb
+  mem_total_kb=$(grep -m1 '^MemTotal:' /proc/meminfo 2>/dev/null | grep -oE '[0-9]+')
+  mem_avail_kb=$(grep -m1 '^MemAvailable:' /proc/meminfo 2>/dev/null | grep -oE '[0-9]+')
+  [ -z "$mem_total_kb" ] && mem_total_kb=0
+  [ -z "$mem_avail_kb" ] && mem_avail_kb=0
+  mem_used_kb=$((mem_total_kb - mem_avail_kb))
+  mem_total_mb=$((mem_total_kb / 1024))
+  mem_used_mb=$((mem_used_kb / 1024))
+
+  local load1 load5 load15
+  read -r load1 load5 load15 _ < /proc/loadavg 2>/dev/null
+  load1=\${load1:-0}
+  load5=\${load5:-0}
+  load15=\${load15:-0}
+
+  local disk_total_kb disk_free_kb disk_total_mb disk_free_mb dfline
+  disk_total_kb=0
+  disk_free_kb=0
+  dfline=$(df -k "$HOME" 2>/dev/null | tail -1)
+  if [ -n "$dfline" ]; then
+    disk_total_kb=$(echo "$dfline" | awk '{print $2}')
+    disk_free_kb=$(echo "$dfline" | awk '{print $4}')
+  fi
+  [ -z "$disk_total_kb" ] && disk_total_kb=0
+  [ -z "$disk_free_kb" ] && disk_free_kb=0
+  disk_total_mb=$((disk_total_kb / 1024))
+  disk_free_mb=$((disk_free_kb / 1024))
+
+  if [ -n "$batt_pct" ]; then
+    jq -n --argjson battPct "$batt_pct" --argjson charging "$charging" \\
+      --argjson memTotalMB "$mem_total_mb" --argjson memUsedMB "$mem_used_mb" \\
+      --arg load1 "$load1" --arg load5 "$load5" --arg load15 "$load15" \\
+      --argjson diskTotalMB "$disk_total_mb" --argjson diskFreeMB "$disk_free_mb" \\
+      '{battery:{percent:$battPct,charging:$charging},ram:{totalMB:$memTotalMB,usedMB:$memUsedMB},storage:{totalMB:$diskTotalMB,freeMB:$diskFreeMB},load:{"1m":($load1|tonumber),"5m":($load5|tonumber),"15m":($load15|tonumber)}}'
+  else
+    jq -n --argjson charging "$charging" \\
+      --argjson memTotalMB "$mem_total_mb" --argjson memUsedMB "$mem_used_mb" \\
+      --arg load1 "$load1" --arg load5 "$load5" --arg load15 "$load15" \\
+      --argjson diskTotalMB "$disk_total_mb" --argjson diskFreeMB "$disk_free_mb" \\
+      '{battery:{percent:null,charging:$charging},ram:{totalMB:$memTotalMB,usedMB:$memUsedMB},storage:{totalMB:$diskTotalMB,freeMB:$diskFreeMB},load:{"1m":($load1|tonumber),"5m":($load5|tonumber),"15m":($load15|tonumber)}}'
+  fi
+}
+
 heartbeat() {
   while true; do
-    local pkg_json screen_json body http_code
+    local pkg_json screen_json stats_json body http_code
     pkg_json=$(collect_packages)
     screen_json=$(collect_screen)
+    stats_json=$(collect_stats)
     if command -v jq >/dev/null 2>&1; then
-      body=$(jq -n --arg deviceId "$DEVICE_ID" --argjson packages "$pkg_json" --argjson screen "$screen_json" \\
-        '{deviceId:$deviceId, packages:$packages, screen:$screen}')
+      body=$(jq -n --arg deviceId "$DEVICE_ID" --argjson packages "$pkg_json" --argjson screen "$screen_json" --argjson stats "$stats_json" \\
+        '{deviceId:$deviceId, packages:$packages, screen:$screen, stats:$stats}')
     else
       body="{\\"deviceId\\":\\"$DEVICE_ID\\"}"
     fi
