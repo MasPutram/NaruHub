@@ -304,6 +304,15 @@ section:AddToggle("AutoHatchToggle", {
 	end,
 })
 
+local autoEquipBestEnabled = false
+section:AddToggle("AutoEquipBestToggle", {
+	Title = "Auto Equip Best",
+	Default = false,
+	Callback = function(val)
+		autoEquipBestEnabled = val
+	end,
+})
+
 section:AddParagraph({
 	Title = "By",
 	Content = "Putra Ramadhan",
@@ -924,7 +933,7 @@ task.spawn(function()
 end)
 
 ------------------------------------------------------------
--- Auto Hatch loop (toggle-driven)
+-- Auto Hatch + Auto Equip Best loop
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -961,6 +970,13 @@ task.spawn(function()
 				end
 			end)
 		end
+
+		if autoEquipBestEnabled then
+			pcall(function()
+				Remotes.Haul.WearBest:InvokeServer()
+			end)
+		end
+
 		task.wait(30)
 	end
 end)
