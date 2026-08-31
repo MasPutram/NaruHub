@@ -824,40 +824,17 @@ task.spawn(function()
 				local myPlot = findMyPlot()
 				if not myPlot then return end
 
-				local function buildGrid(plot)
-					local centerPoint = plot:FindFirstChild("CenterPoint")
-					local toUpdateCP = plot:FindFirstChild("ToUpdate")
-					if toUpdateCP then
-						centerPoint = toUpdateCP:FindFirstChild("CenterPoint") or centerPoint
-					end
-					local petArea = findPetArea(plot)
-					local halfX, halfZ = 25, 25
-					local originX, originZ = 0, 0
-					if petArea then
-						halfX = math.floor(petArea.Size.X / 2)
-						halfZ = math.floor(petArea.Size.Z / 2)
-						if centerPoint then
-							originX = petArea.Position.X - centerPoint.Position.X
-							originZ = petArea.Position.Z - centerPoint.Position.Z
-						end
-					end
+				local function buildGrid()
 					local spacing = 5
+					local half = 60
 					local positions = {}
-					local startX = originX - halfX
-					local endX = originX + halfX
-					local startZ = originZ - halfZ
-					local endZ = originZ + halfZ
-					for z = startZ, endZ, spacing do
-						for x = startX, endX, spacing do
+					for z = -half, half, spacing do
+						for x = -half, half, spacing do
 							table.insert(positions, { x, z })
 						end
 					end
-					local farX = originX * 2
-					local farZ = originZ * 2
 					table.sort(positions, function(a, b)
-						local da = (a[1] - farX)^2 + (a[2] - farZ)^2
-						local db = (b[1] - farX)^2 + (b[2] - farZ)^2
-						return da < db
+						return (a[1]*a[1] + a[2]*a[2]) < (b[1]*b[1] + b[2]*b[2])
 					end)
 					return positions
 				end
@@ -916,7 +893,7 @@ task.spawn(function()
 					return anyPlaced
 				end
 
-				local spiralPositions = buildGrid(myPlot)
+				local spiralPositions = buildGrid()
 				local unplaced = getUnplaced()
 				if #unplaced == 0 then return end
 
@@ -929,7 +906,7 @@ task.spawn(function()
 					task.wait(2)
 					unplaced = getUnplaced()
 					if #unplaced > 0 then
-						tryPlaceAll(buildGrid(myPlot), unplaced)
+						tryPlaceAll(buildGrid(), unplaced)
 					end
 				end
 			end)
