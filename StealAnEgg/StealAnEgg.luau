@@ -788,71 +788,46 @@ task.spawn(function()
 	end
 
 	local function teleportToPlot(plot)
-		local target = plot:FindFirstChild("CenterPoint")
-		local toUpdate = plot:FindFirstChild("ToUpdate")
-		if toUpdate then
-			target = toUpdate:FindFirstChild("CenterPoint") or target
-		end
-		if not target then return end
+		local offlineClaim = plot:FindFirstChild("LocalOfflineMoneyClaim")
+		local area = offlineClaim and offlineClaim:FindFirstChild("OfflineMoneyClaimArea")
+		if not area then return end
 		local char = LocalPlayer.Character
 		local hrp = char and char:FindFirstChild("HumanoidRootPart")
 		if hrp then
-			hrp.CFrame = target.CFrame + Vector3.new(0, 3, 0)
+			hrp.CFrame = area.CFrame + Vector3.new(0, 3, 0)
 		end
 	end
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoFarmEnabled then
-			-- Phase 1: Place Egg (runs once, stops when pen full)
+			-- Phase 1: Place Egg (retry teleport if first attempt all-rejected)
 			pcall(function()
 				local myPlot = findMyPlot()
 				if not myPlot then return end
 
-				teleportToPlot(myPlot)
-				task.wait(0.5)
-
-				local records = getMyOwnedEggs()
-				local unplaced = {}
-				for uid, rec in pairs(records) do
-					if rec.Placement == nil then
-						local rate = 0
-						pcall(function()
-							rate = AssetEarnings.RatePerSecond({
-								Category = rec.AssetCategory,
-								Scale = rec.AssetScale or 1,
-								Mutations = rec.Mutations or {},
-							})
-						end)
-						table.insert(unplaced, { uid = uid, rate = rate })
-					end
-				end
-				table.sort(unplaced, function(a, b) return a.rate > b.rate end)
-
-				if #unplaced > 0 then
-					local centerPoint = myPlot:FindFirstChild("CenterPoint")
-					local toUpdateCP = myPlot:FindFirstChild("ToUpdate")
+				local function buildSpiral(plot)
+					local centerPoint = plot:FindFirstChild("CenterPoint")
+					local toUpdateCP = plot:FindFirstChild("ToUpdate")
 					if toUpdateCP then
 						centerPoint = toUpdateCP:FindFirstChild("CenterPoint") or centerPoint
 					end
-					local offlineClaim = myPlot:FindFirstChild("LocalOfflineMoneyClaim")
+					local offlineClaim = plot:FindFirstChild("LocalOfflineMoneyClaim")
 					local claimArea = offlineClaim and offlineClaim:FindFirstChild("OfflineMoneyClaimArea")
-
 					local originX, originZ = 0, 0
 					if claimArea and centerPoint then
-						originX = claimArea.Position.X - centerPoint.Position.X
-						originZ = claimArea.Position.Z - centerPoint.Position.Z
+						originX = -(claimArea.Position.X - centerPoint.Position.X)
+						originZ = -(claimArea.Position.Z - centerPoint.Position.Z)
 					end
-
 					local spacing = 4
-					local spiralPositions = {}
-					table.insert(spiralPositions, { originX, originZ })
+					local positions = {}
+					table.insert(positions, { originX, originZ })
 					local dx, dz = spacing, 0
 					local steps, stepCount, turnCount = 1, 0, 0
 					local cx, cz = originX, originZ
 					for _ = 1, 500 do
 						cx = cx + dx
 						cz = cz + dz
-						table.insert(spiralPositions, { cx, cz })
+						table.insert(positions, { cx, cz })
 						stepCount = stepCount + 1
 						if stepCount >= steps then
 							stepCount = 0
@@ -861,9 +836,33 @@ task.spawn(function()
 							if turnCount % 2 == 0 then steps = steps + 1 end
 						end
 					end
+					return positions
+				end
 
+				local function getUnplaced()
+					local records = getMyOwnedEggs()
+					local list = {}
+					for uid, rec in pairs(records) do
+						if rec.Placement == nil then
+							local rate = 0
+							pcall(function()
+								rate = AssetEarnings.RatePerSecond({
+									Category = rec.AssetCategory,
+									Scale = rec.AssetScale or 1,
+									Mutations = rec.Mutations or {},
+								})
+							end)
+							table.insert(list, { uid = uid, rate = rate })
+						end
+					end
+					table.sort(list, function(a, b) return a.rate > b.rate end)
+					return list
+				end
+
+				local function tryPlaceAll(spiralPositions, unplaced)
 					local gridIdx = 1
 					local rejectStreak = 0
+					local anyPlaced = false
 					for _, egg in ipairs(unplaced) do
 						if not autoFarmEnabled then break end
 						local placed = false
@@ -880,15 +879,34 @@ task.spawn(function()
 							if ok and result == true then
 								rejectStreak = 0
 								placed = true
+								anyPlaced = true
 								break
 							else
 								rejectStreak = rejectStreak + 1
-								if rejectStreak >= 10 then break end
+								if rejectStreak >= 10 then return anyPlaced end
 							end
 							task.wait(0.1)
 						end
-						if not placed or rejectStreak >= 10 then break end
+						if not placed then return anyPlaced end
 						task.wait(0.3)
+					end
+					return anyPlaced
+				end
+
+				local spiralPositions = buildSpiral(myPlot)
+				local unplaced = getUnplaced()
+				if #unplaced == 0 then return end
+
+				teleportToPlot(myPlot)
+				task.wait(1)
+
+				local success = tryPlaceAll(spiralPositions, unplaced)
+				if not success and autoFarmEnabled then
+					teleportToPlot(myPlot)
+					task.wait(2)
+					unplaced = getUnplaced()
+					if #unplaced > 0 then
+						tryPlaceAll(buildSpiral(myPlot), unplaced)
 					end
 				end
 			end)
