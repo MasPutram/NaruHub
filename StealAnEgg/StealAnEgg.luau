@@ -814,7 +814,7 @@ task.spawn(function()
 
 				local gridSpacing = 4
 				local gridPositions = {}
-				for gx = -20, 20, gridSpacing do
+				for gx = -50, -10, gridSpacing do
 					for gz = -20, 20, gridSpacing do
 						table.insert(gridPositions, { gx, gz })
 					end
