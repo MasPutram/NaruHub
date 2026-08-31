@@ -814,10 +814,6 @@ task.spawn(function()
 					local offlineClaim = plot:FindFirstChild("LocalOfflineMoneyClaim")
 					local claimArea = offlineClaim and offlineClaim:FindFirstChild("OfflineMoneyClaimArea")
 					local originX, originZ = 0, 0
-					if claimArea and centerPoint then
-						originX = -(claimArea.Position.X - centerPoint.Position.X)
-						originZ = -(claimArea.Position.Z - centerPoint.Position.Z)
-					end
 					local spacing = 4
 					local positions = {}
 					table.insert(positions, { originX, originZ })
