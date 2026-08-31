@@ -809,7 +809,6 @@ task.spawn(function()
 
 				if #unplaced == 0 then
 					placeEggEnabled = false
-					Fluent:Notify({ Title = "Place Egg", Content = "Semua egg sudah di-place!", Duration = 3 })
 					return
 				end
 
@@ -837,15 +836,14 @@ task.spawn(function()
 					if ok and result == true then
 						placedCount = placedCount + 1
 					else
-						Fluent:Notify({ Title = "Place Egg", Content = "Pen penuh! " .. placedCount .. " egg berhasil di-place. Upgrade pen untuk menambah slot.", Duration = 5 })
 						placeEggEnabled = false
 						break
 					end
 					task.wait(0.3)
 				end
 
-				if placeEggEnabled and placedCount > 0 then
-					Fluent:Notify({ Title = "Place Egg", Content = placedCount .. " egg berhasil di-place!", Duration = 3 })
+				if placedCount > 0 then
+					placeEggEnabled = false
 				end
 			end)
 		end
