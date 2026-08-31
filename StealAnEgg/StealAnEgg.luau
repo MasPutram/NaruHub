@@ -896,44 +896,42 @@ task.spawn(function()
 				end
 			end)
 
-			-- Phase 2: Auto Hatch + Auto Equip Best (runs continuously)
-			while autoFarmEnabled and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-				pcall(function()
-					local records = getMyOwnedEggs()
-					local now = Workspace:GetServerTimeNow()
-					for uid, rec in pairs(records) do
-						if not autoFarmEnabled then break end
-						if rec.Placement ~= nil then
-							local speed = rec.GrowthSpeedMultiplier or 1
-							local nightCredit = 0
-							pcall(function()
-								nightCredit = EggRecords.CurrentNightCredit(rec, now, speed)
+			-- Phase 2: Hatch all ready eggs, then equip best (one-shot)
+			pcall(function()
+				local records = getMyOwnedEggs()
+				local now = Workspace:GetServerTimeNow()
+				for uid, rec in pairs(records) do
+					if not autoFarmEnabled then break end
+					if rec.Placement ~= nil then
+						local speed = rec.GrowthSpeedMultiplier or 1
+						local nightCredit = 0
+						pcall(function()
+							nightCredit = EggRecords.CurrentNightCredit(rec, now, speed)
+						end)
+						local remaining = 0
+						pcall(function()
+							remaining = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer)
+						end)
+						if remaining <= 0 then
+							local ok1, r1 = pcall(function()
+								return Remotes.EggWorld.AskHatch:InvokeServer(uid)
 							end)
-							local remaining = 0
-							pcall(function()
-								remaining = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer)
-							end)
-							if remaining <= 0 then
-								local ok1, r1 = pcall(function()
-									return Remotes.EggWorld.AskHatch:InvokeServer(uid)
+							if ok1 and r1 == true then
+								pcall(function()
+									Remotes.EggWorld.AskFinishHatch:InvokeServer(uid)
 								end)
-								if ok1 and r1 == true then
-									pcall(function()
-										Remotes.EggWorld.AskFinishHatch:InvokeServer(uid)
-									end)
-								end
-								task.wait(0.3)
 							end
+							task.wait(0.3)
 						end
 					end
-				end)
+				end
+			end)
 
-				pcall(function()
-					Remotes.Haul.WearBest:InvokeServer()
-				end)
+			pcall(function()
+				Remotes.Haul.WearBest:InvokeServer()
+			end)
 
-				task.wait(30)
-			end
+			autoFarmEnabled = false
 		end
 		task.wait(2)
 	end
