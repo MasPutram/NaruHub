@@ -768,12 +768,16 @@ task.spawn(function()
 	end
 
 	local function teleportToPlot(plot)
-		local sp = plot:FindFirstChild("SpawnPoint")
-		if not sp then return end
+		local toUpdate = plot:FindFirstChild("ToUpdate")
+		local cp = toUpdate and toUpdate:FindFirstChild("CenterPoint")
+		if not cp then
+			cp = plot:FindFirstChild("CenterPoint")
+		end
+		if not cp then return end
 		local char = LocalPlayer.Character
 		local hrp = char and char:FindFirstChild("HumanoidRootPart")
 		if hrp then
-			hrp.CFrame = sp.CFrame + Vector3.new(0, 3, 0)
+			hrp.CFrame = cp.CFrame + Vector3.new(0, 3, 0)
 		end
 	end
 
