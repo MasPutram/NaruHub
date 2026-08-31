@@ -838,73 +838,37 @@ task.spawn(function()
 					return
 				end
 
-				local toUpdate = myPlot:FindFirstChild("ToUpdate")
-				local petArea = toUpdate and toUpdate:FindFirstChild("PetArea")
-				local centerPoint = toUpdate and toUpdate:FindFirstChild("CenterPoint") or myPlot:FindFirstChild("CenterPoint")
-				if not petArea or not centerPoint then
-					placeEggEnabled = false
-					return
-				end
-
-				local centerPos = centerPoint.Position
-				local petPos = petArea.Position
-				local petSize = petArea.Size
-
-				local minX = (petPos.X - petSize.X / 2) - centerPos.X
-				local maxX = (petPos.X + petSize.X / 2) - centerPos.X
-				local minZ = (petPos.Z - petSize.Z / 2) - centerPos.Z
-				local maxZ = (petPos.Z + petSize.Z / 2) - centerPos.Z
-
-				local treadmill = nil
-				for _, desc in ipairs(myPlot:GetDescendants()) do
-					if desc.Name == "TreadmillBottom" and desc:IsA("BasePart") then
-						treadmill = desc
-						break
-					end
-				end
-
-				local treadmillRelX = nil
-				if treadmill then
-					treadmillRelX = treadmill.Position.X - centerPos.X
-				end
-
-				local margin = 3
-				local startX, endX
-				if treadmillRelX and treadmillRelX > 0 then
-					startX = minX + margin
-					endX = math.min(maxX - margin, treadmillRelX - 15)
-				elseif treadmillRelX and treadmillRelX < 0 then
-					startX = math.max(minX + margin, treadmillRelX + 15)
-					endX = maxX - margin
-				else
-					startX = minX + margin
-					endX = maxX - margin
-				end
-
 				local gridSpacing = 4
 				local gridPositions = {}
-				for gx = startX, endX, gridSpacing do
-					for gz = minZ + margin, maxZ - margin, gridSpacing do
+				for gx = -24, 24, gridSpacing do
+					for gz = -20, 20, gridSpacing do
 						table.insert(gridPositions, { gx, gz })
 					end
 				end
 
 				local placedCount = 0
-				for i, egg in ipairs(unplaced) do
+				local gridIdx = 1
+				for _, egg in ipairs(unplaced) do
 					if not placeEggEnabled then break end
-					if i > #gridPositions then break end
-					local pos = gridPositions[i]
-					local localCF = CFrame.new(pos[1], -0.4, pos[2])
-
-					local ok, result = pcall(function()
-						return Remotes.EggWorld.AskPlaceEgg:InvokeServer({
-							Uid = egg.uid,
-							LocalCFrame = localCF,
-						})
-					end)
-					if ok and result == true then
-						placedCount = placedCount + 1
-					else
+					local placed = false
+					while gridIdx <= #gridPositions do
+						local pos = gridPositions[gridIdx]
+						gridIdx = gridIdx + 1
+						local localCF = CFrame.new(pos[1], -0.4, pos[2])
+						local ok, result = pcall(function()
+							return Remotes.EggWorld.AskPlaceEgg:InvokeServer({
+								Uid = egg.uid,
+								LocalCFrame = localCF,
+							})
+						end)
+						if ok and result == true then
+							placedCount = placedCount + 1
+							placed = true
+							break
+						end
+						task.wait(0.1)
+					end
+					if not placed then
 						placeEggEnabled = false
 						break
 					end
