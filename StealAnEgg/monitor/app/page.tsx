@@ -7,43 +7,50 @@ interface Pet {
   name?: string;
   rate: number;
   mutations?: string[];
-  textureId?: string;
 }
 
-function rbxThumbUrl(textureId: string): string | null {
-  if (!textureId) return null;
-  const m = textureId.match(/(\d{5,})/);
-  if (!m) return null;
-  return `https://thumbnails.roblox.com/v1/assets?assetIds=${m[1]}&returnPolicy=PlaceHolder&size=150x150&format=Png`;
-}
+let iconIndex: Record<string, string> | null = null;
+let iconIndexPromise: Promise<Record<string, string>> | null = null;
 
-function PetThumb({ textureId, name }: { textureId?: string; name: string }) {
-  const [src, setSrc] = useState<string | null>(null);
-
-  useEffect(() => {
-    const url = rbxThumbUrl(textureId || "");
-    if (!url) return;
-    let cancelled = false;
-    fetch(url)
+function loadIconIndex(): Promise<Record<string, string>> {
+  if (iconIndex) return Promise.resolve(iconIndex);
+  if (!iconIndexPromise) {
+    iconIndexPromise = fetch("/icons/index.json")
       .then((r) => r.json())
-      .then((d) => {
-        if (!cancelled && d.data?.[0]?.imageUrl) {
-          setSrc(d.data[0].imageUrl);
-        }
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [textureId]);
+      .then((data) => { iconIndex = data; return data; })
+      .catch(() => { iconIndex = {}; return {}; });
+  }
+  return iconIndexPromise;
+}
 
+function petIconUrl(category: string, index: Record<string, string>): string | null {
+  const filename = index[category];
+  if (filename) return `/icons/normal/${encodeURIComponent(filename)}`;
+  return null;
+}
+
+function PetIcon({ category, name, size = 32 }: { category: string; name: string; size?: number }) {
+  const [index, setIndex] = useState<Record<string, string>>({});
+  useEffect(() => { loadIconIndex().then(setIndex); }, []);
+
+  const src = petIconUrl(category, index);
   if (!src) {
     return (
-      <div style={{ width: 32, height: 32, borderRadius: 6, background: "#262640", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "var(--dim)", flexShrink: 0 }}>
+      <div style={{ width: size, height: size, borderRadius: 6, background: "#262640", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.35, color: "var(--dim)", flexShrink: 0 }}>
         {(name || "?")[0]}
       </div>
     );
   }
-
-  return <img src={src} alt={name} style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />;
+  return (
+    <img
+      src={src}
+      alt={name}
+      width={size}
+      height={size}
+      style={{ borderRadius: 6, objectFit: "contain", background: "#1c1c2b", flexShrink: 0 }}
+      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+    />
+  );
 }
 
 interface Account {
@@ -471,7 +478,7 @@ export default function DashboardPage() {
               <div className="toppets">
                 {(a.topPets || []).map((p, i) => (
                   <div key={i} className="pet">
-                    <PetThumb textureId={p.textureId} name={p.name || p.category} />
+                    <PetIcon category={p.category} name={p.name || p.category} />
                     <div className="pname">{p.name || p.category}</div>
                     <div className="prate">{fmtRate(p.rate)}</div>
                   </div>
@@ -542,7 +549,7 @@ function PetSection({ title, pets }: { title: string; pets: Pet[] }) {
         <div className="detail-grid">
           {sorted.map((p, i) => (
             <div key={i} className="dpet">
-              <PetThumb textureId={p.textureId} name={p.name || p.category} />
+              <PetIcon category={p.category} name={p.name || p.category} size={28} />
               <div className="dinfo">
                 <div className="dname">
                   {p.name || p.category}
