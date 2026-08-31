@@ -787,7 +787,25 @@ task.spawn(function()
 		return candidates[1]
 	end
 
+	local function findPetArea(plot)
+		local toUpdate = plot:FindFirstChild("ToUpdate")
+		if toUpdate then
+			local pa = toUpdate:FindFirstChild("PetArea")
+			if pa then return pa end
+		end
+		return nil
+	end
+
 	local function teleportToPlot(plot)
+		local petArea = findPetArea(plot)
+		if petArea then
+			local char = LocalPlayer.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				hrp.CFrame = petArea.CFrame + Vector3.new(0, 3, 0)
+			end
+			return
+		end
 		local cp = plot:FindFirstChild("CenterPoint")
 		local toUpdate = plot:FindFirstChild("ToUpdate")
 		if toUpdate then cp = toUpdate:FindFirstChild("CenterPoint") or cp end
@@ -812,7 +830,12 @@ task.spawn(function()
 					if toUpdateCP then
 						centerPoint = toUpdateCP:FindFirstChild("CenterPoint") or centerPoint
 					end
+					local petArea = findPetArea(plot)
 					local originX, originZ = 0, 0
+					if petArea and centerPoint then
+						originX = petArea.Position.X - centerPoint.Position.X
+						originZ = petArea.Position.Z - centerPoint.Position.Z
+					end
 					local spacing = -4
 					local positions = {}
 					table.insert(positions, { originX, originZ })
