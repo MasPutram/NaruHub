@@ -848,10 +848,15 @@ task.spawn(function()
 					local startZ = originZ - halfZ
 					local endZ = originZ + halfZ
 					for z = startZ, endZ, spacing do
-						for x = endX, startX, -spacing do
+						for x = startX, endX, spacing do
 							table.insert(positions, { x, z })
 						end
 					end
+					table.sort(positions, function(a, b)
+						local da = (a[1] - originX)^2 + (a[2] - originZ)^2
+						local db = (b[1] - originX)^2 + (b[2] - originZ)^2
+						return da < db
+					end)
 					return positions
 				end
 
