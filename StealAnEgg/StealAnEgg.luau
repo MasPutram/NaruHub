@@ -286,30 +286,12 @@ local monitorPara = section:AddParagraph({
 	Center = true,
 })
 
-local placeEggEnabled = false
-section:AddToggle("PlaceEggToggle", {
-	Title = "Place Egg",
+local autoFarmEnabled = false
+section:AddToggle("AutoFarmToggle", {
+	Title = "Auto Farm",
 	Default = false,
 	Callback = function(val)
-		placeEggEnabled = val
-	end,
-})
-
-local autoHatchEnabled = false
-section:AddToggle("AutoHatchToggle", {
-	Title = "Auto Hatch",
-	Default = false,
-	Callback = function(val)
-		autoHatchEnabled = val
-	end,
-})
-
-local autoEquipBestEnabled = false
-section:AddToggle("AutoEquipBestToggle", {
-	Title = "Auto Equip Best",
-	Default = false,
-	Callback = function(val)
-		autoEquipBestEnabled = val
+		autoFarmEnabled = val
 	end,
 })
 
@@ -823,13 +805,11 @@ task.spawn(function()
 	end
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		if placeEggEnabled then
+		if autoFarmEnabled then
+			-- Phase 1: Place Egg (runs once, stops when pen full)
 			pcall(function()
 				local myPlot = findMyPlot()
-				if not myPlot then
-					placeEggEnabled = false
-					return
-				end
+				if not myPlot then return end
 
 				teleportToPlot(myPlot)
 				task.wait(0.5)
@@ -851,133 +831,111 @@ task.spawn(function()
 				end
 				table.sort(unplaced, function(a, b) return a.rate > b.rate end)
 
-				if #unplaced == 0 then
-					placeEggEnabled = false
-					return
-				end
-
-				local centerPoint = myPlot:FindFirstChild("CenterPoint")
-				local toUpdateCP = myPlot:FindFirstChild("ToUpdate")
-				if toUpdateCP then
-					centerPoint = toUpdateCP:FindFirstChild("CenterPoint") or centerPoint
-				end
-				local offlineClaim = myPlot:FindFirstChild("LocalOfflineMoneyClaim")
-				local claimArea = offlineClaim and offlineClaim:FindFirstChild("OfflineMoneyClaimArea")
-
-				local originX, originZ = 0, 0
-				if claimArea and centerPoint then
-					originX = claimArea.Position.X - centerPoint.Position.X
-					originZ = claimArea.Position.Z - centerPoint.Position.Z
-				end
-
-				local spacing = 4
-				local spiralPositions = {}
-				table.insert(spiralPositions, { originX, originZ })
-				local dx, dz = spacing, 0
-				local steps, stepCount, turnCount = 1, 0, 0
-				local cx, cz = originX, originZ
-				for _ = 1, 500 do
-					cx = cx + dx
-					cz = cz + dz
-					table.insert(spiralPositions, { cx, cz })
-					stepCount = stepCount + 1
-					if stepCount >= steps then
-						stepCount = 0
-						turnCount = turnCount + 1
-						dx, dz = -dz, dx
-						if turnCount % 2 == 0 then steps = steps + 1 end
+				if #unplaced > 0 then
+					local centerPoint = myPlot:FindFirstChild("CenterPoint")
+					local toUpdateCP = myPlot:FindFirstChild("ToUpdate")
+					if toUpdateCP then
+						centerPoint = toUpdateCP:FindFirstChild("CenterPoint") or centerPoint
 					end
-				end
+					local offlineClaim = myPlot:FindFirstChild("LocalOfflineMoneyClaim")
+					local claimArea = offlineClaim and offlineClaim:FindFirstChild("OfflineMoneyClaimArea")
 
-				local placedCount = 0
-				local gridIdx = 1
-				local rejectStreak = 0
-				for _, egg in ipairs(unplaced) do
-					if not placeEggEnabled then break end
-					local placed = false
-					while gridIdx <= #spiralPositions do
-						local pos = spiralPositions[gridIdx]
-						gridIdx = gridIdx + 1
-						local localCF = CFrame.new(pos[1], -0.4, pos[2])
-						local ok, result = pcall(function()
-							return Remotes.EggWorld.AskPlaceEgg:InvokeServer({
-								Uid = egg.uid,
-								LocalCFrame = localCF,
-							})
-						end)
-						if ok and result == true then
-							placedCount = placedCount + 1
-							rejectStreak = 0
-							placed = true
-							break
-						else
-							rejectStreak = rejectStreak + 1
-							if rejectStreak >= 10 then break end
+					local originX, originZ = 0, 0
+					if claimArea and centerPoint then
+						originX = claimArea.Position.X - centerPoint.Position.X
+						originZ = claimArea.Position.Z - centerPoint.Position.Z
+					end
+
+					local spacing = 4
+					local spiralPositions = {}
+					table.insert(spiralPositions, { originX, originZ })
+					local dx, dz = spacing, 0
+					local steps, stepCount, turnCount = 1, 0, 0
+					local cx, cz = originX, originZ
+					for _ = 1, 500 do
+						cx = cx + dx
+						cz = cz + dz
+						table.insert(spiralPositions, { cx, cz })
+						stepCount = stepCount + 1
+						if stepCount >= steps then
+							stepCount = 0
+							turnCount = turnCount + 1
+							dx, dz = -dz, dx
+							if turnCount % 2 == 0 then steps = steps + 1 end
 						end
-						task.wait(0.1)
 					end
-					if not placed or rejectStreak >= 10 then
-						placeEggEnabled = false
-						break
-					end
-					task.wait(0.3)
-				end
 
-				if placedCount > 0 then
-					placeEggEnabled = false
+					local gridIdx = 1
+					local rejectStreak = 0
+					for _, egg in ipairs(unplaced) do
+						if not autoFarmEnabled then break end
+						local placed = false
+						while gridIdx <= #spiralPositions do
+							local pos = spiralPositions[gridIdx]
+							gridIdx = gridIdx + 1
+							local localCF = CFrame.new(pos[1], -0.4, pos[2])
+							local ok, result = pcall(function()
+								return Remotes.EggWorld.AskPlaceEgg:InvokeServer({
+									Uid = egg.uid,
+									LocalCFrame = localCF,
+								})
+							end)
+							if ok and result == true then
+								rejectStreak = 0
+								placed = true
+								break
+							else
+								rejectStreak = rejectStreak + 1
+								if rejectStreak >= 10 then break end
+							end
+							task.wait(0.1)
+						end
+						if not placed or rejectStreak >= 10 then break end
+						task.wait(0.3)
+					end
 				end
 			end)
+
+			-- Phase 2: Auto Hatch + Auto Equip Best (runs continuously)
+			while autoFarmEnabled and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+				pcall(function()
+					local records = getMyOwnedEggs()
+					local now = Workspace:GetServerTimeNow()
+					for uid, rec in pairs(records) do
+						if not autoFarmEnabled then break end
+						if rec.Placement ~= nil then
+							local speed = rec.GrowthSpeedMultiplier or 1
+							local nightCredit = 0
+							pcall(function()
+								nightCredit = EggRecords.CurrentNightCredit(rec, now, speed)
+							end)
+							local remaining = 0
+							pcall(function()
+								remaining = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer)
+							end)
+							if remaining <= 0 then
+								local ok1, r1 = pcall(function()
+									return Remotes.EggWorld.AskHatch:InvokeServer(uid)
+								end)
+								if ok1 and r1 == true then
+									pcall(function()
+										Remotes.EggWorld.AskFinishHatch:InvokeServer(uid)
+									end)
+								end
+								task.wait(0.3)
+							end
+						end
+					end
+				end)
+
+				pcall(function()
+					Remotes.Haul.WearBest:InvokeServer()
+				end)
+
+				task.wait(30)
+			end
 		end
 		task.wait(2)
-	end
-end)
-
-------------------------------------------------------------
--- Auto Hatch + Auto Equip Best loop
-------------------------------------------------------------
-task.spawn(function()
-	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		if autoHatchEnabled then
-			pcall(function()
-				local records = getMyOwnedEggs()
-				local now = Workspace:GetServerTimeNow()
-				for uid, rec in pairs(records) do
-					if not autoHatchEnabled then break end
-					if rec.Placement ~= nil then
-						local speed = rec.GrowthSpeedMultiplier or 1
-						local nightCredit = 0
-						pcall(function()
-							nightCredit = EggRecords.CurrentNightCredit(rec, now, speed)
-						end)
-						local remaining = 0
-						pcall(function()
-							remaining = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer)
-						end)
-						if remaining <= 0 then
-							local ok1, r1 = pcall(function()
-								return Remotes.EggWorld.AskHatch:InvokeServer(uid)
-							end)
-							if ok1 and r1 == true then
-								pcall(function()
-									Remotes.EggWorld.AskFinishHatch:InvokeServer(uid)
-								end)
-							end
-							task.wait(0.3)
-						end
-					end
-				end
-			end)
-		end
-
-		if autoEquipBestEnabled then
-			pcall(function()
-				Remotes.Haul.WearBest:InvokeServer()
-			end)
-		end
-
-		task.wait(30)
 	end
 end)
 
