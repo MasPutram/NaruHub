@@ -287,11 +287,28 @@ local monitorPara = section:AddParagraph({
 })
 
 local placeEggEnabled = false
+local placeEggNoTP = false
 section:AddToggle("PlaceEggToggle", {
 	Title = "Place Egg",
 	Default = false,
 	Callback = function(val)
 		placeEggEnabled = val
+	end,
+})
+section:AddToggle("PlaceEggNoTPToggle", {
+	Title = "Disable Teleport (Place Egg)",
+	Default = false,
+	Callback = function(val)
+		placeEggNoTP = val
+	end,
+})
+
+local autoHatchEnabled = false
+section:AddToggle("AutoHatchToggle", {
+	Title = "Auto Hatch",
+	Default = false,
+	Callback = function(val)
+		autoHatchEnabled = val
 	end,
 })
 
@@ -813,8 +830,10 @@ task.spawn(function()
 					return
 				end
 
-				teleportToPlot(myPlot)
-				task.wait(0.5)
+				if not placeEggNoTP then
+					teleportToPlot(myPlot)
+					task.wait(0.5)
+				end
 
 				local records = getMyOwnedEggs()
 				local unplaced = {}
@@ -907,6 +926,48 @@ task.spawn(function()
 
 				if placedCount > 0 then
 					placeEggEnabled = false
+				end
+			end)
+		end
+		task.wait(2)
+	end
+end)
+
+------------------------------------------------------------
+-- Auto Hatch loop (toggle-driven)
+------------------------------------------------------------
+task.spawn(function()
+	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		if autoHatchEnabled then
+			pcall(function()
+				local records = getMyOwnedEggs()
+				local now = Workspace:GetServerTimeNow()
+				for uid, rec in pairs(records) do
+					if not autoHatchEnabled then break end
+					if rec.Placement ~= nil then
+						local speed = rec.GrowthSpeedMultiplier or 1
+						local nightCredit = 0
+						pcall(function()
+							nightCredit = EggRecords.CurrentNightCredit(rec, now, speed)
+						end)
+						local remaining = 0
+						pcall(function()
+							remaining = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer)
+						end)
+						if remaining <= 0 then
+							local ok1, r1 = pcall(function()
+								return Remotes.EggWorld.AskHatch:InvokeServer(uid)
+							end)
+							if ok1 and r1 == true then
+								pcall(function()
+									Remotes.EggWorld.AskFinishHatch:InvokeServer(uid)
+								end)
+							end
+							task.wait(0.3)
+						end
+					end
 				end
 			end)
 		end
