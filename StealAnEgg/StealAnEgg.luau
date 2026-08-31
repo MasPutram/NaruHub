@@ -787,27 +787,15 @@ task.spawn(function()
 		return candidates[1]
 	end
 
-	local function findPlotTarget(plot)
-		local offlineClaim = plot:FindFirstChild("LocalOfflineMoneyClaim")
-		local area = offlineClaim and offlineClaim:FindFirstChild("OfflineMoneyClaimArea")
-		if area then return area end
-		local toUpdate = plot:FindFirstChild("ToUpdate")
-		if toUpdate then
-			local petArea = toUpdate:FindFirstChild("PetArea")
-			if petArea then return petArea end
-		end
-		local cp = plot:FindFirstChild("CenterPoint")
-		if toUpdate then cp = toUpdate:FindFirstChild("CenterPoint") or cp end
-		return cp
-	end
-
 	local function teleportToPlot(plot)
-		local target = findPlotTarget(plot)
-		if not target then return end
+		local cp = plot:FindFirstChild("CenterPoint")
+		local toUpdate = plot:FindFirstChild("ToUpdate")
+		if toUpdate then cp = toUpdate:FindFirstChild("CenterPoint") or cp end
+		if not cp then return end
 		local char = LocalPlayer.Character
 		local hrp = char and char:FindFirstChild("HumanoidRootPart")
 		if hrp then
-			hrp.CFrame = target.CFrame + Vector3.new(0, 3, 0)
+			hrp.CFrame = cp.CFrame + Vector3.new(0, 3, 0)
 		end
 	end
 
@@ -824,12 +812,7 @@ task.spawn(function()
 					if toUpdateCP then
 						centerPoint = toUpdateCP:FindFirstChild("CenterPoint") or centerPoint
 					end
-					local target = findPlotTarget(plot)
 					local originX, originZ = 0, 0
-					if target and centerPoint then
-						originX = target.Position.X - centerPoint.Position.X
-						originZ = target.Position.Z - centerPoint.Position.Z
-					end
 					local spacing = -4
 					local positions = {}
 					table.insert(positions, { originX, originZ })
