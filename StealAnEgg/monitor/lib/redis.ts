@@ -32,6 +32,13 @@ export function petIconKey(category: string) {
 
 export const PET_ICON_TTL_S = 60 * 60 * 24 * 30; // 30 days
 
+export function termuxCommandQueueKey(deviceId: string) {
+  return `termux:cmdqueue:${deviceId}`;
+}
+
+export const TERMUX_COMMAND_QUEUE_TTL_S = 60 * 10; // 10 minutes -- commands go stale fast
+export const TERMUX_COMMAND_QUEUE_MAX = 50; // cap so a dead/offline device can't grow this forever
+
 type SetOptions = { ex?: number };
 
 function parseMaybeJson<T>(raw: string | null): T | null {
@@ -73,6 +80,27 @@ export const redis = {
   ): Promise<[string, string[]]> {
     const result = await client.scan(cursor, "MATCH", opts.match, "COUNT", opts.count);
     return [String(result[0]), result[1]];
+  },
+
+  // Push a command onto a device's queue (RPUSH), trim it to the last N
+  // entries, and refresh its TTL so a dead device doesn't accumulate junk.
+  async queuePush(key: string, value: string, opts: { ttl: number; maxLen: number }): Promise<void> {
+    const pipe = client.pipeline();
+    pipe.rpush(key, value);
+    pipe.ltrim(key, -opts.maxLen, -1);
+    pipe.expire(key, opts.ttl);
+    await pipe.exec();
+  },
+
+  // Pop up to `count` commands off the front of the queue (FIFO).
+  async queuePop(key: string, count: number): Promise<string[]> {
+    const pipe = client.pipeline();
+    pipe.lrange(key, 0, count - 1);
+    pipe.ltrim(key, count, -1);
+    const results = await pipe.exec();
+    if (!results) return [];
+    const [, rangeResult] = results[0] as [Error | null, string[]];
+    return rangeResult || [];
   },
 
   pipeline() {
