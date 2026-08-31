@@ -754,30 +754,56 @@ end)
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
 
+	local function findMyPlot()
+		local plots = Workspace:FindFirstChild("Plots")
+		if not plots then return nil end
+		local stats = SaveModule.Get()
+		local myLevel = stats and stats.BaseUpgradeLevel or 0
+		for _, plot in ipairs(plots:GetChildren()) do
+			if plot:GetAttribute("BaseUpgradeLevel") == myLevel then
+				return plot
+			end
+		end
+		return nil
+	end
+
+	local function teleportToPlot(plot)
+		local sp = plot:FindFirstChild("SpawnPoint")
+		if not sp then return end
+		local char = LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			hrp.CFrame = sp.CFrame + Vector3.new(0, 3, 0)
+		end
+	end
+
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if placeEggEnabled then
 			pcall(function()
+				local myPlot = findMyPlot()
+				if not myPlot then
+					placeEggEnabled = false
+					return
+				end
+
+				teleportToPlot(myPlot)
+				task.wait(0.5)
+
 				local records = getMyOwnedEggs()
-				local char = LocalPlayer.Character
-				local hrp = char and char:FindFirstChild("HumanoidRootPart")
-				if not hrp then return end
-
-				local placeCF = hrp.CFrame * CFrame.new(0, -2, -5)
-
 				for uid, rec in pairs(records) do
 					if not placeEggEnabled then break end
 					if rec.Placement == nil then
-						local ok, result, msg = pcall(function()
+						local rx = math.random(-20, 20)
+						local rz = math.random(-20, 20)
+						local localCF = CFrame.new(rx, -0.4, rz)
+
+						local ok, result = pcall(function()
 							return Remotes.EggWorld.AskPlaceEgg:InvokeServer({
 								Uid = uid,
-								LocalCFrame = placeCF,
+								LocalCFrame = localCF,
 							})
 						end)
-						if ok and result ~= true then
-							placeEggEnabled = false
-							break
-						end
-						if not ok then
+						if not ok or result ~= true then
 							placeEggEnabled = false
 							break
 						end
