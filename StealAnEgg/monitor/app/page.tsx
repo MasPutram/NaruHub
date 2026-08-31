@@ -29,6 +29,49 @@ function petIconUrl(category: string, index: Record<string, string>): string | n
   return null;
 }
 
+function petRarity(category: string, index: Record<string, string>): string | null {
+  const filename = index[category];
+  if (!filename) return null;
+  const m = filename.match(/\[([^\]]+)\]/);
+  return m ? m[1] : null;
+}
+
+const DIVINE_RARITIES = new Set(["Divine", "Eternal"]);
+const ONE_BILLION = 1_000_000_000;
+
+function pickHighlightPet(pets: Pet[], index: Record<string, string>): { highlight: Pet | null; main: Pet[] } {
+  if (!pets || pets.length === 0) return { highlight: null, main: [] };
+
+  const divineHighRate = pets
+    .filter((p) => DIVINE_RARITIES.has(petRarity(p.category, index) || "") && (p.rate || 0) >= ONE_BILLION)
+    .sort((a, b) => (b.rate || 0) - (a.rate || 0));
+
+  let highlight: Pet;
+  if (divineHighRate.length > 0) {
+    highlight = divineHighRate[0];
+  } else {
+    const sorted = [...pets].sort((a, b) => (b.rate || 0) - (a.rate || 0));
+    highlight = sorted[0];
+  }
+
+  const main = pets.filter((p) => p !== highlight).slice(0, 3);
+  return { highlight, main };
+}
+
+function rarityColor(rarity: string | null): string {
+  switch (rarity) {
+    case "Divine": return "#e879f9";
+    case "Eternal": return "#f97316";
+    case "Secret": return "#ef4444";
+    case "Cosmic": return "#22d3ee";
+    case "Mythic": return "#a78bfa";
+    case "Legendary": return "#fbbf24";
+    case "Epic": return "#818cf8";
+    case "Rare": return "#34d399";
+    default: return "var(--dim)";
+  }
+}
+
 function PetIcon({ category, name, size = 32 }: { category: string; name: string; size?: number }) {
   const [index, setIndex] = useState<Record<string, string>>({});
   useEffect(() => { loadIconIndex().then(setIndex); }, []);
@@ -348,9 +391,27 @@ export default function DashboardPage() {
         .stat .val { font-size: 15px; font-weight: 700; }
         .stat.money .val { color: var(--gold); }
         .stat.speed .val { color: var(--accent); }
-        .toppets { display: flex; gap: 6px; overflow-x: auto; }
-        .pet { background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 8px; padding: 6px 8px; text-align: center; min-width: 72px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-        .pet .pname { font-size: 9px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 58px; }
+        .pet-section { display: flex; gap: 8px; margin-bottom: 12px; }
+        .highlight-card {
+          background: linear-gradient(135deg, #1a1030 0%, #14141f 100%);
+          border: 1px solid #a78bfa44; border-radius: 10px; padding: 10px;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          min-width: 90px; text-align: center; gap: 4px; position: relative; overflow: hidden;
+        }
+        .highlight-card::before {
+          content: ""; position: absolute; inset: 0; border-radius: 10px;
+          background: radial-gradient(ellipse at 50% 0%, rgba(167,139,250,.12) 0%, transparent 70%);
+          pointer-events: none;
+        }
+        .highlight-badge {
+          font-size: 8px; font-weight: 800; letter-spacing: .5px; padding: 1px 6px;
+          border-radius: 4px; text-transform: uppercase;
+        }
+        .highlight-card .pname { font-size: 10px; color: var(--ink); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; }
+        .highlight-card .prate { font-size: 11px; font-weight: 800; }
+        .toppets { display: flex; gap: 6px; overflow-x: auto; flex: 1; }
+        .pet { background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 8px; padding: 6px 8px; text-align: center; min-width: 72px; display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
+        .pet .pname { font-size: 9px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 62px; }
         .pet .prate { font-size: 9px; color: var(--gold); font-weight: 700; }
         .genbtn { margin-top: 12px; width: 100%; background: var(--accent); color: #1a1030; border: none; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 800; cursor: pointer; }
         .genbtn:hover { filter: brightness(1.1); }
@@ -475,15 +536,7 @@ export default function DashboardPage() {
                   <div className="val">{fmtNum(a.stolenCount)} eggs</div>
                 </div>
               </div>
-              <div className="toppets">
-                {(a.topPets || []).map((p, i) => (
-                  <div key={i} className="pet">
-                    <PetIcon category={p.category} name={p.name || p.category} />
-                    <div className="pname">{p.name || p.category}</div>
-                    <div className="prate">{fmtRate(p.rate)}</div>
-                  </div>
-                ))}
-              </div>
+              <PetCards pets={a.topPets || []} />
               <a
                 className="genbtn"
                 href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`}
@@ -533,6 +586,41 @@ export default function DashboardPage() {
         </div>
       )}
     </>
+  );
+}
+
+function PetCards({ pets }: { pets: Pet[] }) {
+  const [index, setIndex] = useState<Record<string, string>>({});
+  useEffect(() => { loadIconIndex().then(setIndex); }, []);
+
+  if (!pets || pets.length === 0) return null;
+
+  const { highlight, main } = pickHighlightPet(pets, index);
+  const hlRarity = highlight ? petRarity(highlight.category, index) : null;
+  const hlColor = rarityColor(hlRarity);
+
+  return (
+    <div className="pet-section">
+      {highlight && (
+        <div className="highlight-card" style={{ borderColor: hlColor + "44" }}>
+          <span className="highlight-badge" style={{ background: hlColor + "22", color: hlColor }}>
+            {hlRarity || "TOP"}
+          </span>
+          <PetIcon category={highlight.category} name={highlight.name || highlight.category} size={40} />
+          <div className="pname">{highlight.name || highlight.category}</div>
+          <div className="prate" style={{ color: hlColor }}>{fmtRate(highlight.rate)}</div>
+        </div>
+      )}
+      <div className="toppets">
+        {main.map((p, i) => (
+          <div key={i} className="pet">
+            <PetIcon category={p.category} name={p.name || p.category} />
+            <div className="pname">{p.name || p.category}</div>
+            <div className="prate">{fmtRate(p.rate)}</div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

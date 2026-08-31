@@ -529,7 +529,7 @@ return function(ctx)
 				return (a.rate or 0) > (b.rate or 0)
 			end)
 			local topPets = {}
-			for i = 1, math.min(3, #pool) do
+			for i = 1, math.min(10, #pool) do
 				local p = pool[i]
 				table.insert(topPets, {
 					name = p.name or p.category,
