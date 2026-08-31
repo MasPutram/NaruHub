@@ -768,16 +768,13 @@ task.spawn(function()
 	end
 
 	local function teleportToPlot(plot)
-		local toUpdate = plot:FindFirstChild("ToUpdate")
-		local cp = toUpdate and toUpdate:FindFirstChild("CenterPoint")
-		if not cp then
-			cp = plot:FindFirstChild("CenterPoint")
-		end
-		if not cp then return end
+		local offlineClaim = plot:FindFirstChild("LocalOfflineMoneyClaim")
+		local area = offlineClaim and offlineClaim:FindFirstChild("OfflineMoneyClaimArea")
+		if not area then return end
 		local char = LocalPlayer.Character
 		local hrp = char and char:FindFirstChild("HumanoidRootPart")
 		if hrp then
-			hrp.CFrame = cp.CFrame + Vector3.new(0, 3, 0)
+			hrp.CFrame = area.CFrame + Vector3.new(0, 3, 0)
 		end
 	end
 
@@ -810,11 +807,17 @@ task.spawn(function()
 				end
 				table.sort(unplaced, function(a, b) return a.rate > b.rate end)
 
+				local gridIndex = 0
+				local gridSpacing = 5
+				local gridCols = 8
 				for _, egg in ipairs(unplaced) do
 					if not placeEggEnabled then break end
-					local rx = math.random(-20, 20)
-					local rz = math.random(-20, 20)
-					local localCF = CFrame.new(rx, -0.4, rz)
+					local col = gridIndex % gridCols
+					local row = math.floor(gridIndex / gridCols)
+					local gx = -17.5 + col * gridSpacing
+					local gz = -17.5 + row * gridSpacing
+					local localCF = CFrame.new(gx, -0.4, gz)
+					gridIndex = gridIndex + 1
 
 					local ok, result = pcall(function()
 						return Remotes.EggWorld.AskPlaceEgg:InvokeServer({
