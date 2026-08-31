@@ -286,10 +286,10 @@ local monitorPara = section:AddParagraph({
 	Center = true,
 })
 
-local autoFarmEnabled = false
+local autoFarmEnabled = true
 section:AddToggle("AutoFarmToggle", {
 	Title = "Auto Farm",
-	Default = false,
+	Default = true,
 	Callback = function(val)
 		autoFarmEnabled = val
 	end,
