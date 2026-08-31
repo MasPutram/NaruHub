@@ -848,7 +848,7 @@ task.spawn(function()
 					local startZ = originZ - halfZ
 					local endZ = originZ + halfZ
 					for z = startZ, endZ, spacing do
-						for x = startX, endX, spacing do
+						for x = endX, startX, -spacing do
 							table.insert(positions, { x, z })
 						end
 					end
