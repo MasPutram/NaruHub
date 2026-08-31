@@ -182,6 +182,15 @@ function displayName(category: string): string {
   return CATEGORY_DISPLAY_NAME[category] || category;
 }
 
+function petRarity(category: string, index: Record<string, string>): string | null {
+  const filename = index[category];
+  if (!filename) return null;
+  const m = filename.match(/\[([^\]]+)\]/);
+  return m ? m[1] : null;
+}
+
+const DIVINE_RARITIES = new Set(["Divine", "Eternal"]);
+
 function petIconUrl(p: Pet, index: Record<string, string>): string | null {
   const filename = index[p.category];
   if (filename) {
@@ -285,7 +294,10 @@ function PosterPage() {
   const [owner, setOwner] = useState("Putra Ramadhan");
   const [checklist, setChecklist] = useState("Data Polos, No Topi, No Sum");
   const [downloading, setDownloading] = useState(false);
+  const [iconIdx, setIconIdx] = useState<Record<string, string>>({});
   const posterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { loadIconIndex().then(setIconIdx); }, []);
 
   const fetchData = useCallback(async () => {
     if (!accountName) return;
@@ -413,10 +425,13 @@ function PosterPage() {
   }
   const poolSorted = [...uniquePool].sort((a, b) => (b.rate || 0) - (a.rate || 0));
 
-  const mutatedAbove1B = poolSorted.filter(
-    (p) => p.mutations && p.mutations.length > 0 && (p.rate || 0) >= HIGH_VALUE_THRESHOLD
-  );
-  let featured: Pet | null = mutatedAbove1B[0] || poolSorted[0] || null;
+  // Prioritas: pet rarity Divine/Eternal dengan rate >= 1B/s (paling gede
+  // di antaranya). Kalau ga ada, baru fallback ke rate tertinggi apapun
+  // rarity/mutasinya.
+  const divineHighRate = poolSorted
+    .filter((p) => DIVINE_RARITIES.has(petRarity(p.category, iconIdx) || "") && (p.rate || 0) >= HIGH_VALUE_THRESHOLD)
+    .sort((a, b) => (b.rate || 0) - (a.rate || 0));
+  let featured: Pet | null = divineHighRate[0] || poolSorted[0] || null;
   const featuredKey = featured ? petKey(featured) : null;
 
   const topPicks: Pet[] = [];
@@ -555,16 +570,13 @@ function PosterPage() {
           background: #fff4d6; border: 1px solid #ca8a04; border-radius: 10px;
           padding: 3px 10px; font-size: 11px; font-weight: 700; color: #ca8a04;
         }
-        .pick-weight {
-          position: absolute; top: 10px; right: 10px;
-          font-size: 13px; color: #64748b;
-        }
         .pick-icon-wrap {
           width: 100%; height: 120px; display: flex; align-items: center; justify-content: center;
           margin-bottom: 10px;
         }
         .pick-card .pname { font-size: 18px; font-weight: 800; color: #1e293b; margin-bottom: 6px; word-break: break-word; }
         .pick-card .prate { font-size: 16px; font-weight: 800; color: #16a34a; }
+        .pick-card .pweight { font-size: 14px; font-weight: 700; color: #475569; margin-top: 4px; }
         .pick-card .pmut { font-size: 11px; font-weight: 700; margin-top: 6px; }
         .egg-badge {
           display: inline-block; background: #fff4d6; border: 1px solid #ca8a04;
@@ -745,10 +757,10 @@ function PosterPage() {
                   return (
                     <div key={i} className="pick-card">
                       {isEgg && <span className="pick-egg-badge">TELUR</span>}
-                      <div className="pick-weight">{p.weight ? fmtWeight(p.weight) : ""}</div>
                       <div className="pick-icon-wrap"><PetIcon pet={p} size={120} /></div>
                       <div className="pname">{p.name || displayName(p.category)}</div>
                       <div className="prate">{fmtRate(p.rate)}</div>
+                      {p.weight ? <div className="pweight">{fmtWeight(p.weight)}</div> : null}
                       {p.mutations && p.mutations.length > 0 && (
                         <div className="pmut" style={{ color: mutColor(p.mutations[0]) }}>
                           MUTASI: {p.mutations.map((m) => m.toUpperCase()).join(" + ")}
