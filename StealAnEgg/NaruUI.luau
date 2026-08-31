@@ -332,7 +332,8 @@ return (function()
 				local logoBtn = Instance.new("ImageButton")
 				logoBtn.Name = "Logo"
 				logoBtn.Size = UDim2.fromOffset(76, 76)
-				logoBtn.Position = UDim2.new(0, 28, 0, 28) -- pojok kiri atas
+				logoBtn.Position = UDim2.new(0.5, -38, 0, 28)
+				logoBtn.AnchorPoint = Vector2.new(0, 0)
 				logoBtn.BackgroundColor3 = Color3.fromRGB(6, 6, 7)
 				logoBtn.BackgroundTransparency = 0.02
 				logoBtn.AutoButtonColor = false

@@ -261,28 +261,20 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Monitoring Steal An Egg",
+	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
 	TabWidth = 0,
-	Size = UDim2.fromOffset(580, 380),
+	Size = UDim2.fromOffset(380, 200),
 	AutoStartMinimized = true,
 })
 
 local StatusTab = Window:AddTab({ Title = "" })
-local section = StatusTab:AddSection("Info Akun", { NoCollapse = true })
+local section = StatusTab:AddSection(LocalPlayer.Name, { NoCollapse = true })
 
-local userPara = section:AddParagraph({
-	Title = "Username",
-	Content = LocalPlayer.Name,
-	TitleSize = 18,
-	ContentSize = 22,
-	Center = true,
-})
 local monitorPara = section:AddParagraph({
-	Title = "Monitoring",
+	Title = "Status",
 	Content = "Starting...",
-	TitleSize = 16,
-	ContentSize = 16,
+	ContentSize = 14,
 	Center = true,
 })
 
@@ -293,14 +285,6 @@ section:AddToggle("AutoFarmToggle", {
 	Callback = function(val)
 		autoFarmEnabled = val
 	end,
-})
-
-section:AddParagraph({
-	Title = "By",
-	Content = "Putra Ramadhan",
-	TitleSize = 14,
-	ContentSize = 14,
-	Center = true,
 })
 
 Window:SelectTab(1)
