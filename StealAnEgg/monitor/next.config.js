@@ -1,4 +1,5 @@
-﻿/** @type {import('next').NextConfig} */
+﻿// @ts-check
+/** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
 
