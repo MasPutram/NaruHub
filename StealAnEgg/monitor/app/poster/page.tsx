@@ -598,7 +598,7 @@ function PosterPage() {
         .featured-name { font-size: 24px; font-weight: 800; color: #1e293b; margin-top: 4px; }
         .featured-rate { font-size: 30px; font-weight: 800; color: #16a34a; margin-top: 6px; }
         .featured-mut { font-size: 15px; font-weight: 700; }
-        .featured-weight { font-size: 15px; color: #64748b; margin-top: 6px; }
+        .featured-weight { font-size: 18px; font-weight: 700; color: #475569; margin-top: 6px; }
         .featured-icon-wrap {
           flex-shrink: 0; width: 170px; height: 160px;
           display: flex; align-items: center; justify-content: center;
