@@ -20,6 +20,12 @@ export function forSaleKey(name: string) {
   return `forsale:${name}`;
 }
 
+export function termuxDeviceKey(deviceId: string) {
+  return `termux:device:${deviceId}`;
+}
+
+export const TERMUX_DEVICE_TTL_S = 300;
+
 type SetOptions = { ex?: number };
 
 function parseMaybeJson<T>(raw: string | null): T | null {

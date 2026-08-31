@@ -676,9 +676,6 @@ function PosterPage() {
       `}</style>
 
       <div className="controls">
-        <a href="/">← Dashboard</a>
-        <a href="/catalog">Katalog</a>
-        <span style={{ width: 1, height: 20, background: "#262636" }} />
         <label>Judul:</label>
         <input value={title} onChange={(e) => setTitle(e.target.value)} />
         <label>Badge:</label>

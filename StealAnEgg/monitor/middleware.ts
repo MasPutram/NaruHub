@@ -5,6 +5,7 @@ const PUBLIC_PATHS = [
   "/api/auth",
   "/api/monitor",
   "/api/check-access",
+  "/api/termux",
 ];
 
 function isPublic(pathname: string): boolean {

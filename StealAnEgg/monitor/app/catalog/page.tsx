@@ -268,8 +268,6 @@ export default function CatalogPage() {
       `}</style>
 
       <div className="topbar">
-        <a href="/">← Dashboard</a>
-        <div className="sep" />
         <h1>Katalog Akun</h1>
         <div style={{ flex: 1 }} />
         <span style={{ color: "var(--dim)", fontSize: 12 }}>
