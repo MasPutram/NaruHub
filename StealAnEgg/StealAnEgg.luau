@@ -931,7 +931,9 @@ task.spawn(function()
 				Remotes.Haul.WearBest:InvokeServer()
 			end)
 
-			autoFarmEnabled = false
+			while autoFarmEnabled and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+				task.wait(1)
+			end
 		end
 		task.wait(2)
 	end
