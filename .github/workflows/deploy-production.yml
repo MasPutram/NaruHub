@@ -86,6 +86,27 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
 
+      - name: Write env file
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          AUTH_USERNAME: ${{ secrets.AUTH_USERNAME }}
+          AUTH_PASSWORD: ${{ secrets.AUTH_PASSWORD }}
+        run: |
+          cat > dotenv.txt <<ENVEOF
+          REDIS_URL=${REDIS_URL}
+          AUTH_SECRET=${AUTH_SECRET}
+          AUTH_USERNAME=${AUTH_USERNAME}
+          AUTH_PASSWORD=${AUTH_PASSWORD}
+          PORT=3000
+          HOSTNAME=0.0.0.0
+          ENVEOF
+          sed -i 's/^          //' dotenv.txt
+          scp dotenv.txt "${VPS_USER}@${VPS_HOST}:/root/NaruHub/StealAnEgg/monitor/.deploy/.env"
+          rm -f dotenv.txt
+
       - name: Deploy
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -110,6 +131,11 @@ jobs:
 
           tar -xzf "$ARCHIVE" -C "$RELEASE"
 
+          # Copy env file into standalone so Node.js picks it up
+          if [ -f "$BASE/.env" ]; then
+            cp "$BASE/.env" "$RELEASE/standalone/.env"
+          fi
+
           if [ ! -f "$RELEASE/standalone/server.js" ]; then
             echo "FATAL: standalone/server.js not found in release"
             rm -rf "$RELEASE"
@@ -133,6 +159,13 @@ jobs:
           TMPLINK="$BASE/active.new.$$"
           ln -s "$RELEASE" "$TMPLINK"
           mv -T "$TMPLINK" "$ACTIVE"
+
+          # Ensure systemd loads env file
+          SVC_FILE="/etc/systemd/system/naruhub-monitor.service"
+          if [ -f "$SVC_FILE" ] && ! grep -q "EnvironmentFile=" "$SVC_FILE"; then
+            sed -i "/\[Service\]/a EnvironmentFile=$BASE/.env" "$SVC_FILE"
+            systemctl daemon-reload
+          fi
 
           # --- Restart and verify ---
           systemctl restart naruhub-monitor
