@@ -265,26 +265,24 @@ local Window = Fluent:CreateWindow({
 	Badge = "PREMIUM",
 	TabWidth = 0,
 	Size = UDim2.fromOffset(380, 200),
-	AutoStartMinimized = true,
+	AutoStartMinimized = false,
 })
 
 local StatusTab = Window:AddTab({ Title = "" })
 local section = StatusTab:AddSection(LocalPlayer.Name, { NoCollapse = true })
+
+section:AddParagraph({
+	Title = "Username",
+	Content = LocalPlayer.Name,
+	ContentSize = 14,
+	Center = true,
+})
 
 local monitorPara = section:AddParagraph({
 	Title = "Status",
 	Content = "Starting...",
 	ContentSize = 14,
 	Center = true,
-})
-
-local autoFarmEnabled = false
-section:AddToggle("AutoFarmToggle", {
-	Title = "Auto Farm",
-	Default = false,
-	Callback = function(val)
-		autoFarmEnabled = val
-	end,
 })
 
 Window:SelectTab(1)
@@ -742,217 +740,6 @@ task.spawn(function()
 	end
 end)
 
-------------------------------------------------------------
--- Place Egg loop (toggle-driven)
-------------------------------------------------------------
-task.spawn(function()
-	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-
-	local function findMyPlot()
-		local plots = Workspace:FindFirstChild("Plots")
-		if not plots then return nil end
-		local stats = SaveModule.Get()
-		local myLevel = stats and stats.BaseUpgradeLevel or 0
-		local candidates = {}
-		for _, plot in ipairs(plots:GetChildren()) do
-			if plot:GetAttribute("BaseUpgradeLevel") == myLevel then
-				table.insert(candidates, plot)
-			end
-		end
-		if #candidates == 1 then return candidates[1] end
-		if #candidates == 0 then return nil end
-		for _, plot in ipairs(candidates) do
-			local loc = plot:FindFirstChild("LocalOfflineMoneyClaim")
-			if loc then
-				local area = loc:FindFirstChild("OfflineMoneyClaimArea")
-				if area then
-					local bb = area:FindFirstChild("OfflineMoneyClaimBillboard")
-					if bb and bb.Enabled then return plot end
-				end
-			end
-		end
-		local char = LocalPlayer.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if hrp then
-			local closest, closestDist = nil, math.huge
-			for _, plot in ipairs(candidates) do
-				local cp = plot:FindFirstChild("CenterPoint")
-				if cp then
-					local dist = (hrp.Position - cp.Position).Magnitude
-					if dist < closestDist then closest, closestDist = plot, dist end
-				end
-			end
-			if closest then return closest end
-		end
-		return candidates[1]
-	end
-
-	local function findPetArea(plot)
-		local toUpdate = plot:FindFirstChild("ToUpdate")
-		if toUpdate then
-			local pa = toUpdate:FindFirstChild("PetArea")
-			if pa then return pa end
-		end
-		return nil
-	end
-
-	local function teleportToPlot(plot)
-		local petArea = findPetArea(plot)
-		if petArea then
-			local char = LocalPlayer.Character
-			local hrp = char and char:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				hrp.CFrame = petArea.CFrame + Vector3.new(0, 3, 0)
-			end
-			return
-		end
-		local cp = plot:FindFirstChild("CenterPoint")
-		local toUpdate = plot:FindFirstChild("ToUpdate")
-		if toUpdate then cp = toUpdate:FindFirstChild("CenterPoint") or cp end
-		if not cp then return end
-		local char = LocalPlayer.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if hrp then
-			hrp.CFrame = cp.CFrame + Vector3.new(0, 3, 0)
-		end
-	end
-
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		if autoFarmEnabled then
-			-- Phase 1: Place Egg (retry teleport if first attempt all-rejected)
-			pcall(function()
-				local myPlot = findMyPlot()
-				if not myPlot then return end
-
-				local function buildGrid()
-					local spacing = 5
-					local half = 60
-					local positions = {}
-					for z = -half, half, spacing do
-						for x = -half, half, spacing do
-							table.insert(positions, { x, z })
-						end
-					end
-					table.sort(positions, function(a, b)
-						return (a[1]*a[1] + a[2]*a[2]) < (b[1]*b[1] + b[2]*b[2])
-					end)
-					return positions
-				end
-
-				local function getUnplaced()
-					local records = getMyOwnedEggs()
-					local list = {}
-					for uid, rec in pairs(records) do
-						if rec.Placement == nil then
-							local rate = 0
-							pcall(function()
-								rate = AssetEarnings.RatePerSecond({
-									Category = rec.AssetCategory,
-									Scale = rec.AssetScale or 1,
-									Mutations = rec.Mutations or {},
-								})
-							end)
-							table.insert(list, { uid = uid, rate = rate })
-						end
-					end
-					table.sort(list, function(a, b) return a.rate > b.rate end)
-					return list
-				end
-
-				local function tryPlaceAll(spiralPositions, unplaced)
-					local gridIdx = 1
-					local rejectStreak = 0
-					local anyPlaced = false
-					for _, egg in ipairs(unplaced) do
-						if not autoFarmEnabled then break end
-						local placed = false
-						while gridIdx <= #spiralPositions do
-							local pos = spiralPositions[gridIdx]
-							gridIdx = gridIdx + 1
-							local localCF = CFrame.new(pos[1], -0.4, pos[2])
-							local ok, result = pcall(function()
-								return Remotes.EggWorld.AskPlaceEgg:InvokeServer({
-									Uid = egg.uid,
-									LocalCFrame = localCF,
-								})
-							end)
-							if ok and result == true then
-								rejectStreak = 0
-								placed = true
-								anyPlaced = true
-								break
-							else
-								rejectStreak = rejectStreak + 1
-								if rejectStreak >= 30 then return anyPlaced end
-							end
-							task.wait(0.1)
-						end
-						if not placed then return anyPlaced end
-						task.wait(0.3)
-					end
-					return anyPlaced
-				end
-
-				local spiralPositions = buildGrid()
-				local unplaced = getUnplaced()
-				if #unplaced == 0 then return end
-
-				teleportToPlot(myPlot)
-				task.wait(1)
-
-				local success = tryPlaceAll(spiralPositions, unplaced)
-				if not success and autoFarmEnabled then
-					teleportToPlot(myPlot)
-					task.wait(2)
-					unplaced = getUnplaced()
-					if #unplaced > 0 then
-						tryPlaceAll(buildGrid(), unplaced)
-					end
-				end
-			end)
-
-			-- Phase 2: Hatch all ready eggs, then equip best (one-shot)
-			pcall(function()
-				local records = getMyOwnedEggs()
-				local now = Workspace:GetServerTimeNow()
-				for uid, rec in pairs(records) do
-					if not autoFarmEnabled then break end
-					if rec.Placement ~= nil then
-						local speed = rec.GrowthSpeedMultiplier or 1
-						local nightCredit = 0
-						pcall(function()
-							nightCredit = EggRecords.CurrentNightCredit(rec, now, speed)
-						end)
-						local remaining = 0
-						pcall(function()
-							remaining = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer)
-						end)
-						if remaining <= 0 then
-							local ok1, r1 = pcall(function()
-								return Remotes.EggWorld.AskHatch:InvokeServer(uid)
-							end)
-							if ok1 and r1 == true then
-								pcall(function()
-									Remotes.EggWorld.AskFinishHatch:InvokeServer(uid)
-								end)
-							end
-							task.wait(0.3)
-						end
-					end
-				end
-			end)
-
-			pcall(function()
-				Remotes.Haul.WearBest:InvokeServer()
-			end)
-
-			while autoFarmEnabled and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-				task.wait(1)
-			end
-		end
-		task.wait(2)
-	end
-end)
 
 ------------------------------------------------------------
 -- Auto-start monitoring loop
