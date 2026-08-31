@@ -287,19 +287,11 @@ local monitorPara = section:AddParagraph({
 })
 
 local placeEggEnabled = false
-local placeEggNoTP = false
 section:AddToggle("PlaceEggToggle", {
 	Title = "Place Egg",
 	Default = false,
 	Callback = function(val)
 		placeEggEnabled = val
-	end,
-})
-section:AddToggle("PlaceEggNoTPToggle", {
-	Title = "Disable Teleport (Place Egg)",
-	Default = false,
-	Callback = function(val)
-		placeEggNoTP = val
 	end,
 })
 
@@ -830,10 +822,8 @@ task.spawn(function()
 					return
 				end
 
-				if not placeEggNoTP then
-					teleportToPlot(myPlot)
-					task.wait(0.5)
-				end
+				teleportToPlot(myPlot)
+				task.wait(0.5)
 
 				local records = getMyOwnedEggs()
 				local unplaced = {}
