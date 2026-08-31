@@ -838,21 +838,47 @@ task.spawn(function()
 					return
 				end
 
-				local gridSpacing = 4
-				local gridPositions = {}
-				for gx = -24, 24, gridSpacing do
-					for gz = -20, 20, gridSpacing do
-						table.insert(gridPositions, { gx, gz })
+				local centerPoint = myPlot:FindFirstChild("CenterPoint")
+				local toUpdateCP = myPlot:FindFirstChild("ToUpdate")
+				if toUpdateCP then
+					centerPoint = toUpdateCP:FindFirstChild("CenterPoint") or centerPoint
+				end
+				local offlineClaim = myPlot:FindFirstChild("LocalOfflineMoneyClaim")
+				local claimArea = offlineClaim and offlineClaim:FindFirstChild("OfflineMoneyClaimArea")
+
+				local originX, originZ = 0, 0
+				if claimArea and centerPoint then
+					originX = claimArea.Position.X - centerPoint.Position.X
+					originZ = claimArea.Position.Z - centerPoint.Position.Z
+				end
+
+				local spacing = 4
+				local spiralPositions = {}
+				table.insert(spiralPositions, { originX, originZ })
+				local dx, dz = spacing, 0
+				local steps, stepCount, turnCount = 1, 0, 0
+				local cx, cz = originX, originZ
+				for _ = 1, 500 do
+					cx = cx + dx
+					cz = cz + dz
+					table.insert(spiralPositions, { cx, cz })
+					stepCount = stepCount + 1
+					if stepCount >= steps then
+						stepCount = 0
+						turnCount = turnCount + 1
+						dx, dz = -dz, dx
+						if turnCount % 2 == 0 then steps = steps + 1 end
 					end
 				end
 
 				local placedCount = 0
 				local gridIdx = 1
+				local rejectStreak = 0
 				for _, egg in ipairs(unplaced) do
 					if not placeEggEnabled then break end
 					local placed = false
-					while gridIdx <= #gridPositions do
-						local pos = gridPositions[gridIdx]
+					while gridIdx <= #spiralPositions do
+						local pos = spiralPositions[gridIdx]
 						gridIdx = gridIdx + 1
 						local localCF = CFrame.new(pos[1], -0.4, pos[2])
 						local ok, result = pcall(function()
@@ -863,12 +889,16 @@ task.spawn(function()
 						end)
 						if ok and result == true then
 							placedCount = placedCount + 1
+							rejectStreak = 0
 							placed = true
 							break
+						else
+							rejectStreak = rejectStreak + 1
+							if rejectStreak >= 10 then break end
 						end
 						task.wait(0.1)
 					end
-					if not placed then
+					if not placed or rejectStreak >= 10 then
 						placeEggEnabled = false
 						break
 					end
