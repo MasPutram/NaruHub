@@ -172,6 +172,16 @@ function loadIconIndex(): Promise<Record<string, string>> {
   return iconIndexPromise;
 }
 
+// Icon lookup uses the raw in-game category (e.g. "Shark"), but some pets
+// display a different name in-game than their internal category.
+const CATEGORY_DISPLAY_NAME: Record<string, string> = {
+  Shark: "Mutant Shark",
+};
+
+function displayName(category: string): string {
+  return CATEGORY_DISPLAY_NAME[category] || category;
+}
+
 function petIconUrl(p: Pet, index: Record<string, string>): string | null {
   const filename = index[p.category];
   if (filename) {
@@ -737,7 +747,7 @@ function PosterPage() {
                       {isEgg && <span className="pick-egg-badge">TELUR</span>}
                       <div className="pick-weight">{p.weight ? fmtWeight(p.weight) : ""}</div>
                       <div className="pick-icon-wrap"><PetIcon pet={p} size={120} /></div>
-                      <div className="pname">{p.name || p.category}</div>
+                      <div className="pname">{p.name || displayName(p.category)}</div>
                       <div className="prate">{fmtRate(p.rate)}</div>
                       {p.mutations && p.mutations.length > 0 && (
                         <div className="pmut" style={{ color: mutColor(p.mutations[0]) }}>
@@ -763,7 +773,7 @@ function PosterPage() {
                         {featured.mutations.map((m) => m.toUpperCase()).join(" + ")}
                       </div>
                     )}
-                    <div className="featured-name">{(featured.name || featured.category).toUpperCase()}</div>
+                    <div className="featured-name">{(featured.name || displayName(featured.category)).toUpperCase()}</div>
                     <div className="featured-rate">{fmtRate(featured.rate)}</div>
                     {featured.weight ? <div className="featured-weight">{fmtWeight(featured.weight)}</div> : null}
                   </div>
@@ -788,7 +798,7 @@ function PosterPage() {
                             <PetIcon pet={p} size={70} />
                             <div style={{ minWidth: 0, overflow: "hidden" }}>
                               <div className="mrate">{fmtRate(p.rate)}</div>
-                              <div className="mname">{p.name || p.category}</div>
+                              <div className="mname">{p.name || displayName(p.category)}</div>
                               {p.weight ? <div className="mweight">{fmtWeight(p.weight)}</div> : null}
                             </div>
                           </div>
@@ -810,8 +820,8 @@ function PosterPage() {
                       <div style={{ minWidth: 0, overflow: "hidden" }}>
                         <div className="ename">
                           {e.mutations && e.mutations.length > 0
-                            ? e.mutations.map((m) => m.toUpperCase()).join(" + ") + " " + e.category
-                            : e.category}
+                            ? e.mutations.map((m) => m.toUpperCase()).join(" + ") + " " + displayName(e.category)
+                            : displayName(e.category)}
                         </div>
                         {e.ready ? (
                           <div className="erate">SIAP MENETAS!</div>
@@ -837,8 +847,8 @@ function PosterPage() {
                       <div style={{ minWidth: 0, overflow: "hidden" }}>
                         <div className="ename">
                           {e.mutations && e.mutations.length > 0
-                            ? e.mutations.map((m) => m.toUpperCase()).join(" + ") + " " + e.category
-                            : e.category}
+                            ? e.mutations.map((m) => m.toUpperCase()).join(" + ") + " " + displayName(e.category)
+                            : displayName(e.category)}
                         </div>
                         {e.rate ? <div className="erate">{fmtRate(e.rate)}</div> : null}
                         {e.weight ? <div className="eweight">{fmtWeight(e.weight)}</div> : null}
@@ -864,7 +874,7 @@ function PosterPage() {
                   <div key={i} className="pet-row">
                     <PetIcon pet={p} size={48} />
                     <div className="pet-info">
-                      <div className="piname">{p.name || p.category}</div>
+                      <div className="piname">{p.name || displayName(p.category)}</div>
                       <div className="pirate">{fmtRate(p.rate)}</div>
                       {p.weight ? <div className="piweight">{fmtWeight(p.weight)}</div> : null}
                     </div>
