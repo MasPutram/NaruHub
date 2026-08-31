@@ -790,25 +790,39 @@ task.spawn(function()
 				task.wait(0.5)
 
 				local records = getMyOwnedEggs()
+				local unplaced = {}
 				for uid, rec in pairs(records) do
-					if not placeEggEnabled then break end
 					if rec.Placement == nil then
-						local rx = math.random(-20, 20)
-						local rz = math.random(-20, 20)
-						local localCF = CFrame.new(rx, -0.4, rz)
-
-						local ok, result = pcall(function()
-							return Remotes.EggWorld.AskPlaceEgg:InvokeServer({
-								Uid = uid,
-								LocalCFrame = localCF,
+						local rate = 0
+						pcall(function()
+							rate = AssetEarnings.RatePerSecond({
+								Category = rec.AssetCategory,
+								Scale = rec.AssetScale or 1,
+								Mutations = rec.Mutations or {},
 							})
 						end)
-						if not ok or result ~= true then
-							placeEggEnabled = false
-							break
-						end
-						task.wait(0.3)
+						table.insert(unplaced, { uid = uid, rate = rate })
 					end
+				end
+				table.sort(unplaced, function(a, b) return a.rate > b.rate end)
+
+				for _, egg in ipairs(unplaced) do
+					if not placeEggEnabled then break end
+					local rx = math.random(-20, 20)
+					local rz = math.random(-20, 20)
+					local localCF = CFrame.new(rx, -0.4, rz)
+
+					local ok, result = pcall(function()
+						return Remotes.EggWorld.AskPlaceEgg:InvokeServer({
+							Uid = egg.uid,
+							LocalCFrame = localCF,
+						})
+					end)
+					if not ok or result ~= true then
+						placeEggEnabled = false
+						break
+					end
+					task.wait(0.3)
 				end
 			end)
 		end
