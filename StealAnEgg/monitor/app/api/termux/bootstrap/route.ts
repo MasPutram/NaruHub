@@ -57,7 +57,7 @@ echo ""
 
 if [ "$IS_NEW" = "1" ]; then
   echo "\${DIM}[$(ts)]\${RESET} registering device..."
-  HTTP_CODE=$(curl -s -o /tmp/naruhub_reg.json -w "%{http_code}" -X POST "$BASE_URL/api/termux/register" \\
+  HTTP_CODE=$(curl -s -o "$CONFIG_DIR/naruhub_reg.json" -w "%{http_code}" -X POST "$BASE_URL/api/termux/register" \\
     -H "Content-Type: application/json" \\
     -H "X-Access-Key: $LICENSE_KEY" \\
     -d "{\\"deviceId\\":\\"$DEVICE_ID\\",\\"hostname\\":\\"$HOSTNAME\\",\\"platform\\":\\"$PLATFORM\\"}" 2>/dev/null || echo "000")
@@ -65,7 +65,7 @@ if [ "$IS_NEW" = "1" ]; then
     echo "\${GREEN}[$(ts)] registered\${RESET}"
   else
     echo "\${RED}[$(ts)] registration failed (HTTP $HTTP_CODE)\${RESET}"
-    cat /tmp/naruhub_reg.json 2>/dev/null
+    cat "$CONFIG_DIR/naruhub_reg.json" 2>/dev/null
     echo ""
     echo "\${YELLOW}Cek access key kamu, lalu jalankan ulang command ini.\${RESET}"
   fi
