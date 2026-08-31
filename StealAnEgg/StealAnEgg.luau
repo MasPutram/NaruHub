@@ -836,7 +836,7 @@ task.spawn(function()
 						originX = petArea.Position.X - centerPoint.Position.X
 						originZ = petArea.Position.Z - centerPoint.Position.Z
 					end
-					local spacing = -4
+					local spacing = 5
 					local positions = {}
 					table.insert(positions, { originX, originZ })
 					local dx, dz = spacing, 0
@@ -901,7 +901,7 @@ task.spawn(function()
 								break
 							else
 								rejectStreak = rejectStreak + 1
-								if rejectStreak >= 10 then return anyPlaced end
+								if rejectStreak >= 30 then return anyPlaced end
 							end
 							task.wait(0.1)
 						end
