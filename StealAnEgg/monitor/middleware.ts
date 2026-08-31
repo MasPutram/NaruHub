@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
 
 const PUBLIC_PATHS = [
   "/login",
@@ -12,26 +11,36 @@ function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
-function verifyTokenEdge(token: string, secret: string): boolean {
+async function verifyTokenEdge(token: string, secret: string): Promise<boolean> {
   const [b64, sig] = token.split(".");
   if (!b64 || !sig) return false;
-  const expected = crypto.createHmac("sha256", secret).update(b64).digest("base64url");
-  if (sig.length !== expected.length) return false;
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return false;
+
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, enc.encode(b64));
+  const bytes = new Uint8Array(signature);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  const expected = btoa(binary)
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+  if (sig !== expected) return false;
+
   try {
-    const payload = JSON.parse(Buffer.from(b64, "base64url").toString());
+    const payload = JSON.parse(atob(b64.replace(/-/g, "+").replace(/_/g, "/")));
     return payload.exp > Date.now();
   } catch {
     return false;
   }
 }
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (isPublic(pathname)) return NextResponse.next();
 
-  // Static assets and Next.js internals
   if (pathname.startsWith("/_next/") || pathname.startsWith("/icons/") || pathname.includes(".")) {
     return NextResponse.next();
   }
@@ -39,7 +48,7 @@ export function middleware(req: NextRequest) {
   const token = req.cookies.get("naruhub_session")?.value;
   const secret = process.env.AUTH_SECRET;
 
-  if (!secret || !token || !verifyTokenEdge(token, secret)) {
+  if (!secret || !token || !(await verifyTokenEdge(token, secret))) {
     const loginUrl = req.nextUrl.clone();
     loginUrl.pathname = "/login";
     return NextResponse.redirect(loginUrl);

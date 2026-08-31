@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import crypto from "crypto";
 
 const COOKIE_NAME = "naruhub_session";
@@ -17,34 +16,10 @@ export function createToken(username: string): string {
   return `${b64}.${sig}`;
 }
 
-export function verifyToken(token: string): string | null {
-  const [b64, sig] = token.split(".");
-  if (!b64 || !sig) return null;
-  const expected = crypto.createHmac("sha256", getSecret()).update(b64).digest("base64url");
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
-  try {
-    const payload = JSON.parse(Buffer.from(b64, "base64url").toString());
-    if (payload.exp < Date.now()) return null;
-    return payload.u;
-  } catch {
-    return null;
-  }
+export function sessionCookieHeader(token: string): string {
+  return `${COOKIE_NAME}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${MAX_AGE}`;
 }
 
-export function setSessionCookie(token: string) {
-  cookies().set(COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: MAX_AGE,
-  });
-}
-
-export function clearSessionCookie() {
-  cookies().delete(COOKIE_NAME);
-}
-
-export function getSessionCookie(): string | undefined {
-  return cookies().get(COOKIE_NAME)?.value;
+export function clearCookieHeader(): string {
+  return `${COOKIE_NAME}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`;
 }
