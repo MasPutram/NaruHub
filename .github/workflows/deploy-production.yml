@@ -102,6 +102,7 @@ jobs:
           BASE="/root/NaruHub/StealAnEgg/monitor/.deploy"
           RELEASE="$BASE/releases/$RELEASE_ID"
           ARCHIVE="/tmp/naruhub-monitor-$RELEASE_ID.tar.gz"
+          ACTIVE="$BASE/active"
 
           mkdir -p "$BASE/releases"
           rm -rf "$RELEASE"
@@ -109,31 +110,87 @@ jobs:
 
           tar -xzf "$ARCHIVE" -C "$RELEASE"
 
-          test -f "$RELEASE/standalone/server.js"
-
-          PREVIOUS="$(readlink -f "$BASE/active" 2>/dev/null || true)"
-
-          ln -sfn "$RELEASE" "$BASE/active"
-          systemctl restart naruhub-monitor
-
-          sleep 2
-
-          if ! systemctl is-active --quiet naruhub-monitor; then
-            echo "New release failed to start."
-
-            if [ -n "$PREVIOUS" ] && [ -d "$PREVIOUS" ]; then
-              ln -sfn "$PREVIOUS" "$BASE/active"
-              systemctl restart naruhub-monitor
-            fi
-
+          if [ ! -f "$RELEASE/standalone/server.js" ]; then
+            echo "FATAL: standalone/server.js not found in release"
+            rm -rf "$RELEASE"
             exit 1
           fi
 
-          curl -fsS https://naruhub.my.id/ > /dev/null
+          # --- Resolve previous release and handle active ---
+          PREVIOUS=""
 
+          if [ -L "$ACTIVE" ]; then
+            # Kondisi A: active is a symlink — read its target
+            PREVIOUS="$(readlink -f "$ACTIVE")"
+          elif [ -d "$ACTIVE" ]; then
+            # Kondisi B: active is a plain directory — remove it
+            echo "WARNING: active is a plain directory, removing it"
+            rm -rf "$ACTIVE"
+          fi
+          # Kondisi C: active doesn't exist — PREVIOUS stays empty
+
+          # Atomic symlink swap: create temp symlink then mv (rename is atomic)
+          TMPLINK="$BASE/active.new.$$"
+          ln -s "$RELEASE" "$TMPLINK"
+          mv -T "$TMPLINK" "$ACTIVE"
+
+          # --- Restart and verify ---
+          systemctl restart naruhub-monitor
+          sleep 3
+
+          HEALTHY=false
+          for i in 1 2 3 4 5; do
+            if systemctl is-active --quiet naruhub-monitor; then
+              HEALTHY=true
+              break
+            fi
+            echo "Waiting for service to start... attempt $i"
+            sleep 2
+          done
+
+          if [ "$HEALTHY" = true ]; then
+            # Health check the HTTP endpoint
+            if ! curl -fsS --max-time 10 https://naruhub.my.id/ > /dev/null 2>&1; then
+              echo "WARNING: HTTP health check failed, but service is running"
+            fi
+          fi
+
+          if [ "$HEALTHY" = false ]; then
+            echo "ERROR: New release failed to start"
+            journalctl -u naruhub-monitor --no-pager -n 30
+
+            if [ -n "$PREVIOUS" ] && [ -d "$PREVIOUS" ] && [ "$PREVIOUS" != "$RELEASE" ]; then
+              echo "Rolling back to $PREVIOUS"
+              TMPLINK_RB="$BASE/active.rollback.$$"
+              ln -s "$PREVIOUS" "$TMPLINK_RB"
+              mv -T "$TMPLINK_RB" "$ACTIVE"
+              systemctl restart naruhub-monitor
+              sleep 2
+              if systemctl is-active --quiet naruhub-monitor; then
+                echo "Rollback successful"
+              else
+                echo "Rollback also failed"
+              fi
+            else
+              echo "No previous release available for rollback"
+            fi
+
+            rm -f "$ARCHIVE"
+            exit 1
+          fi
+
+          echo "Deployment successful: $RELEASE_ID"
+
+          # Cleanup: keep last 5 releases
           rm -f "$ARCHIVE"
-
-          ls -1dt "$BASE"/releases/* 2>/dev/null |
+          cd "$BASE/releases"
+          ls -1dt */ 2>/dev/null |
             tail -n +6 |
-            xargs -r rm -rf
+            while read -r old; do
+              OLDPATH="$BASE/releases/$old"
+              # Don't delete the currently active or previous release
+              if [ "$OLDPATH" != "$RELEASE" ] && [ "$OLDPATH" != "${PREVIOUS%/}" ]; then
+                rm -rf "$OLDPATH"
+              fi
+            done
           REMOTE
