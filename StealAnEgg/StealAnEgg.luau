@@ -807,17 +807,26 @@ task.spawn(function()
 				end
 				table.sort(unplaced, function(a, b) return a.rate > b.rate end)
 
-				local gridIndex = 0
-				local gridSpacing = 5
-				local gridCols = 8
-				for _, egg in ipairs(unplaced) do
+				if #unplaced == 0 then
+					placeEggEnabled = false
+					Fluent:Notify({ Title = "Place Egg", Content = "Semua egg sudah di-place!", Duration = 3 })
+					return
+				end
+
+				local gridSpacing = 4
+				local gridPositions = {}
+				for gx = -20, 20, gridSpacing do
+					for gz = -20, 20, gridSpacing do
+						table.insert(gridPositions, { gx, gz })
+					end
+				end
+
+				local placedCount = 0
+				for i, egg in ipairs(unplaced) do
 					if not placeEggEnabled then break end
-					local col = gridIndex % gridCols
-					local row = math.floor(gridIndex / gridCols)
-					local gx = -17.5 + col * gridSpacing
-					local gz = -17.5 + row * gridSpacing
-					local localCF = CFrame.new(gx, -0.4, gz)
-					gridIndex = gridIndex + 1
+					if i > #gridPositions then break end
+					local pos = gridPositions[i]
+					local localCF = CFrame.new(pos[1], -0.4, pos[2])
 
 					local ok, result = pcall(function()
 						return Remotes.EggWorld.AskPlaceEgg:InvokeServer({
@@ -825,11 +834,18 @@ task.spawn(function()
 							LocalCFrame = localCF,
 						})
 					end)
-					if not ok or result ~= true then
+					if ok and result == true then
+						placedCount = placedCount + 1
+					else
+						Fluent:Notify({ Title = "Place Egg", Content = "Pen penuh! " .. placedCount .. " egg berhasil di-place. Upgrade pen untuk menambah slot.", Duration = 5 })
 						placeEggEnabled = false
 						break
 					end
 					task.wait(0.3)
+				end
+
+				if placeEggEnabled and placedCount > 0 then
+					Fluent:Notify({ Title = "Place Egg", Content = placedCount .. " egg berhasil di-place!", Duration = 3 })
 				end
 			end)
 		end
