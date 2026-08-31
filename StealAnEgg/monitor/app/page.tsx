@@ -76,8 +76,26 @@ function PetIcon({ category, name, size = 32 }: { category: string; name: string
   const [index, setIndex] = useState<Record<string, string>>({});
   useEffect(() => { loadIconIndex().then(setIndex); }, []);
 
-  const src = petIconUrl(category, index);
-  if (!src) {
+  const staticSrc = petIconUrl(category, index);
+  const fallbackSrc = `/api/pet-icon?category=${encodeURIComponent(category)}`;
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => { setSrc(staticSrc); setFailed(false); }, [staticSrc]);
+
+  if (!src || failed) {
+    if (!staticSrc && !failed && category) {
+      return (
+        <img
+          src={fallbackSrc}
+          alt={name}
+          width={size}
+          height={size}
+          style={{ borderRadius: 6, objectFit: "contain", background: "#1c1c2b", flexShrink: 0 }}
+          onError={() => setFailed(true)}
+        />
+      );
+    }
     return (
       <div style={{ width: size, height: size, borderRadius: 6, background: "#262640", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.35, color: "var(--dim)", flexShrink: 0 }}>
         {(name || "?")[0]}
@@ -91,7 +109,10 @@ function PetIcon({ category, name, size = 32 }: { category: string; name: string
       width={size}
       height={size}
       style={{ borderRadius: 6, objectFit: "contain", background: "#1c1c2b", flexShrink: 0 }}
-      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+      onError={() => {
+        if (staticSrc && !failed) setSrc(fallbackSrc);
+        else setFailed(true);
+      }}
     />
   );
 }

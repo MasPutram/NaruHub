@@ -26,6 +26,12 @@ export function termuxDeviceKey(deviceId: string) {
 
 export const TERMUX_DEVICE_TTL_S = 300;
 
+export function petIconKey(category: string) {
+  return `peticon:${category}`;
+}
+
+export const PET_ICON_TTL_S = 60 * 60 * 24 * 30; // 30 days
+
 type SetOptions = { ex?: number };
 
 function parseMaybeJson<T>(raw: string | null): T | null {

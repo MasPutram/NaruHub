@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, accountKey, detailKey, ACCOUNT_TTL_S } from "@/lib/redis";
+import { redis, accountKey, detailKey, ACCOUNT_TTL_S, petIconKey, PET_ICON_TTL_S } from "@/lib/redis";
 
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
@@ -50,6 +50,22 @@ export async function POST(req: NextRequest) {
 
     if (data.fullData) {
       pipeline.set(detailKey(name), JSON.stringify(data.fullData), { ex: ACCOUNT_TTL_S });
+    }
+
+    const allPets = [
+      ...(data.topPets || []),
+      ...(data.fullData?.activePets || []),
+      ...(data.fullData?.allPets || []),
+      ...(data.fullData?.growingEggs || []),
+      ...(data.fullData?.backpackEggs || []),
+    ];
+    for (const p of allPets) {
+      if (p.category && p.textureId) {
+        const match = String(p.textureId).match(/(\d+)/);
+        if (match) {
+          pipeline.set(petIconKey(p.category), match[1], { ex: PET_ICON_TTL_S });
+        }
+      }
     }
 
     await pipeline.exec();

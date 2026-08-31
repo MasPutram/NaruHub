@@ -184,8 +184,30 @@ function PetIcon({ pet, size = 48 }: { pet: Pet; size?: number }) {
   const [index, setIndex] = useState<Record<string, string>>({});
   useEffect(() => { loadIconIndex().then(setIndex); }, []);
 
-  const src = petIconUrl(pet, index);
-  if (!src) {
+  const staticSrc = petIconUrl(pet, index);
+  const fallbackSrc = `/api/pet-icon?category=${encodeURIComponent(pet.category)}`;
+
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setSrc(staticSrc);
+    setFailed(false);
+  }, [staticSrc]);
+
+  if (!src || failed) {
+    if (!staticSrc && !failed && pet.category) {
+      return (
+        <img
+          src={fallbackSrc}
+          alt={pet.category}
+          width={size}
+          height={size}
+          style={{ borderRadius: 10, objectFit: "contain", background: "#f1f5f9", flexShrink: 0 }}
+          onError={() => setFailed(true)}
+        />
+      );
+    }
     return (
       <div
         style={{
@@ -205,13 +227,12 @@ function PetIcon({ pet, size = 48 }: { pet: Pet; size?: number }) {
       width={size}
       height={size}
       style={{ borderRadius: 10, objectFit: "contain", background: "#f1f5f9", flexShrink: 0 }}
-      onError={(e) => {
-        const el = e.currentTarget;
-        el.style.display = "none";
-        const placeholder = document.createElement("div");
-        placeholder.style.cssText = `width:${size}px;height:${size}px;background:#f1f5f9;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:${size * 0.4}px;color:#94a3b8;flex-shrink:0`;
-        placeholder.textContent = "🐾";
-        el.parentElement?.insertBefore(placeholder, el);
+      onError={() => {
+        if (staticSrc && !failed) {
+          setSrc(fallbackSrc);
+        } else {
+          setFailed(true);
+        }
       }}
     />
   );
