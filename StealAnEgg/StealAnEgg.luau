@@ -759,12 +759,38 @@ task.spawn(function()
 		if not plots then return nil end
 		local stats = SaveModule.Get()
 		local myLevel = stats and stats.BaseUpgradeLevel or 0
+		local candidates = {}
 		for _, plot in ipairs(plots:GetChildren()) do
 			if plot:GetAttribute("BaseUpgradeLevel") == myLevel then
-				return plot
+				table.insert(candidates, plot)
 			end
 		end
-		return nil
+		if #candidates == 1 then return candidates[1] end
+		if #candidates == 0 then return nil end
+		for _, plot in ipairs(candidates) do
+			local loc = plot:FindFirstChild("LocalOfflineMoneyClaim")
+			if loc then
+				local area = loc:FindFirstChild("OfflineMoneyClaimArea")
+				if area then
+					local bb = area:FindFirstChild("OfflineMoneyClaimBillboard")
+					if bb and bb.Enabled then return plot end
+				end
+			end
+		end
+		local char = LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			local closest, closestDist = nil, math.huge
+			for _, plot in ipairs(candidates) do
+				local cp = plot:FindFirstChild("CenterPoint")
+				if cp then
+					local dist = (hrp.Position - cp.Position).Magnitude
+					if dist < closestDist then closest, closestDist = plot, dist end
+				end
+			end
+			if closest then return closest end
+		end
+		return candidates[1]
 	end
 
 	local function teleportToPlot(plot)
