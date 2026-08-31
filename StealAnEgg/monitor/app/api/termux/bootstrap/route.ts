@@ -201,10 +201,41 @@ collect_stats() {
   fi
 }
 
+# Auto RAM trim: when memory usage crosses the threshold, clear each
+# detected Roblox clone's CACHE dir only (/data/data/<pkg>/cache) --
+# never touches app data, so nobody gets logged out, and the process
+# keeps running (no force-stop). Android itself clears cache dirs
+# under storage pressure all the time, so this is safe to do live.
+RAM_TRIM_THRESHOLD_PCT=85
+
+maybe_trim_ram() {
+  local pkg_json="$1"
+  local mem_total_kb mem_avail_kb mem_used_pct
+  mem_total_kb=$(grep -m1 '^MemTotal:' /proc/meminfo 2>/dev/null | grep -oE '[0-9]+')
+  mem_avail_kb=$(grep -m1 '^MemAvailable:' /proc/meminfo 2>/dev/null | grep -oE '[0-9]+')
+  [ -z "$mem_total_kb" ] && return
+  [ -z "$mem_avail_kb" ] && return
+  [ "$mem_total_kb" -eq 0 ] 2>/dev/null && return
+  mem_used_pct=$(( (mem_total_kb - mem_avail_kb) * 100 / mem_total_kb ))
+  if [ "$mem_used_pct" -lt "$RAM_TRIM_THRESHOLD_PCT" ]; then
+    return
+  fi
+  if ! command -v jq >/dev/null 2>&1; then
+    return
+  fi
+  log "\${YELLOW}[$(ts)] RAM \${mem_used_pct}% >= \${RAM_TRIM_THRESHOLD_PCT}% -- auto trim RAM (clearing Roblox cache)\${RESET}"
+  echo "$pkg_json" | jq -r '.[].pkg' 2>/dev/null | while IFS= read -r pkg; do
+    [ -z "$pkg" ] && continue
+    su -c "rm -rf /data/data/$pkg/cache/*" >/dev/null 2>&1 || true
+  done
+  log "\${GREEN}[$(ts)] auto trim RAM done\${RESET}"
+}
+
 heartbeat() {
   while true; do
     local pkg_json screen_json stats_json body http_code
     pkg_json=$(collect_packages)
+    maybe_trim_ram "$pkg_json"
     screen_json=$(collect_screen)
     stats_json=$(collect_stats)
     if command -v jq >/dev/null 2>&1; then
