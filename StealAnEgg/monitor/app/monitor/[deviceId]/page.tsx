@@ -72,6 +72,7 @@ export default function DeviceDetailPage() {
   const [layout, setLayout] = useState<{ cols: number; rows: number }>({ cols: 5, rows: 2 });
   const [launching, setLaunching] = useState<string | null>(null);
   const [launchMsg, setLaunchMsg] = useState<Record<string, string>>({});
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
 
   const fetchDevice = useCallback(async () => {
     try {
@@ -116,10 +117,9 @@ export default function DeviceDetailPage() {
     setTimeout(() => setLaunchMsg((m) => ({ ...m, [key]: "" })), 4000);
   }
 
-  async function launchAll(pkgs: TermuxPackage[]) {
-    // Fire in sequence so the device doesn't see 10 launches at once and
-    // race with itself picking task ids -- we already need a per-launch
-    // delay in the agent, this just spaces them out at the source too.
+  async function launchMany(pkgs: TermuxPackage[]) {
+    // Fire in sequence so the device doesn't see them all at once and
+    // race with itself -- spaces launches out a bit at the source too.
     for (let i = 0; i < pkgs.length; i++) {
       await launchPackage(pkgs[i].pkg, i);
       await new Promise((r) => setTimeout(r, 500));
@@ -127,6 +127,31 @@ export default function DeviceDetailPage() {
   }
 
   const pkgs = (device?.packages || []).map(normalizePackage);
+  const selectedPkgs = pkgs.filter((p) => selected[p.pkg] !== false);
+
+  // Default every package to selected the first time it's seen.
+  useEffect(() => {
+    setSelected((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const p of pkgs) {
+        if (!(p.pkg in next)) {
+          next[p.pkg] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [device?.packages]);
+
+  function toggleAll(value: boolean) {
+    setSelected((prev) => {
+      const next = { ...prev };
+      for (const p of pkgs) next[p.pkg] = value;
+      return next;
+    });
+  }
 
   const styles = (
     <style>{`
@@ -195,6 +220,27 @@ export default function DeviceDetailPage() {
       .launch-msg { color: var(--dim); font-size: 11px; margin-left: 8px; }
       .empty { color: var(--dim); text-align: center; padding: 60px 0; font-size: 14px; }
       .not-found { color: var(--dim); padding: 40px 0; text-align: center; font-size: 14px; }
+
+      .layout-warning {
+        background: rgba(250, 204, 21, .08); border: 1px solid rgba(250, 204, 21, .3); border-radius: 12px;
+        padding: 10px 14px; margin-bottom: 16px; font-size: 12px; color: #facc15; line-height: 1.5;
+      }
+      .preview-wrap {
+        background: var(--card); border: 1px solid var(--card-border); border-radius: 14px;
+        padding: 16px; margin-bottom: 16px;
+      }
+      .preview-title { color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: 1px; margin-bottom: 10px; }
+      .preview-screen {
+        background: #05050a; border: 1px solid var(--card-border); border-radius: 8px;
+        display: grid; gap: 3px; padding: 3px; margin: 0 auto;
+      }
+      .preview-cell {
+        background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 4px;
+        display: flex; align-items: center; justify-content: center; text-align: center;
+        font-size: 10px; color: var(--dim); padding: 4px; overflow: hidden; min-height: 36px;
+      }
+      .preview-cell.filled { background: var(--accent); color: #1a1030; font-weight: 700; border-color: var(--accent); }
+      .preview-cell .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
     `}</style>
   );
 
@@ -263,6 +309,12 @@ export default function DeviceDetailPage() {
         )}
       </div>
 
+      <div className="layout-warning">
+        ⚠ Auto-resize window sementara dimatikan -- di device asli itu bikin restart. Tombol "Buka" cuma
+        buka package biasa (fullscreen), belum otomatis nge-posisiin ke slot grid. Preview di bawah cuma
+        gambaran, belum ke-apply ke device.
+      </div>
+
       <div className="controls-bar">
         <label>LAYOUT</label>
         <input type="number" min={1} max={10} value={layout.cols}
@@ -273,12 +325,44 @@ export default function DeviceDetailPage() {
           onChange={(e) => setLayout((l) => ({ ...l, rows: Math.max(1, Number(e.target.value) || 1) }))}
         />
         <span style={{ color: "var(--dim)", fontSize: 12 }}>({layout.cols * layout.rows} slot)</span>
-        <div style={{ marginLeft: "auto" }}>
-          <button className="btn" onClick={() => launchAll(pkgs)} disabled={pkgs.length === 0 || device.status !== "online"}>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+          <button
+            className="btn"
+            onClick={() => launchMany(selectedPkgs)}
+            disabled={selectedPkgs.length === 0 || device.status !== "online"}
+          >
+            Buka Terpilih ({selectedPkgs.length})
+          </button>
+          <button className="btn ghost" onClick={() => launchMany(pkgs)} disabled={pkgs.length === 0 || device.status !== "online"}>
             Buka Semua ({pkgs.length})
           </button>
         </div>
       </div>
+
+      {pkgs.length > 0 && (
+        <div className="preview-wrap">
+          <div className="preview-title">PREVIEW LAYOUT ({layout.cols}x{layout.rows}){device.screen ? ` -- layar ${device.screen.width}x${device.screen.height}` : ""}</div>
+          <div
+            className="preview-screen"
+            style={{
+              gridTemplateColumns: `repeat(${layout.cols}, 1fr)`,
+              gridTemplateRows: `repeat(${layout.rows}, 1fr)`,
+              width: "100%",
+              maxWidth: 420,
+              aspectRatio: device.screen ? `${device.screen.width} / ${device.screen.height}` : "9 / 16",
+            }}
+          >
+            {Array.from({ length: layout.cols * layout.rows }).map((_, slot) => {
+              const p = selectedPkgs[slot];
+              return (
+                <div key={slot} className={`preview-cell ${p ? "filled" : ""}`}>
+                  {p ? <span className="pname">{p.username || p.label || p.pkg}</span> : slot + 1}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="table-wrap">
         {pkgs.length === 0 ? (
@@ -287,6 +371,13 @@ export default function DeviceDetailPage() {
           <table>
             <thead>
               <tr>
+                <th style={{ width: 32 }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedPkgs.length === pkgs.length && pkgs.length > 0}
+                    onChange={(e) => toggleAll(e.target.checked)}
+                  />
+                </th>
                 <th>PACKAGE</th>
                 <th>ACCOUNT</th>
                 <th>SESSION</th>
@@ -300,6 +391,13 @@ export default function DeviceDetailPage() {
                 const sessionSecs = acc?.online && acc.firstSeen ? Math.max(0, Date.now() / 1000 - acc.firstSeen) : null;
                 return (
                   <tr key={p.pkg}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selected[p.pkg] !== false}
+                        onChange={(e) => setSelected((prev) => ({ ...prev, [p.pkg]: e.target.checked }))}
+                      />
+                    </td>
                     <td>
                       <div className="pkg-name">{p.pkg}</div>
                       {p.label && p.label !== p.pkg && <div className="pkg-label">{p.label}</div>}
