@@ -334,10 +334,20 @@ poll_commands() {
           log "\${DIM}[$(ts)]\${RESET} launching \${CYAN}$cpkg\${RESET}"
           su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p $cpkg" >/dev/null 2>&1 || true
           log "\${GREEN}[$(ts)] launched $cpkg\${RESET}"
+          local waited=0 maxwait=60
+          while [ "$waited" -lt "$maxwait" ]; do
+            if su -c "am stack list" 2>/dev/null | grep -q " $cpkg/"; then
+              log "\${GREEN}[$(ts)] $cpkg is ready (waited \${waited}s)\${RESET}"
+              break
+            fi
+            sleep 2
+            waited=$((waited + 2))
+          done
+          [ "$waited" -ge "$maxwait" ] && log "\${YELLOW}[$(ts)] timeout waiting for $cpkg\${RESET}"
           local cdelay
           cdelay=$(echo "$cmd" | jq -r '.launchDelay // 5')
           if [ "$cdelay" -gt 0 ] 2>/dev/null; then
-            log "\${DIM}[$(ts)]\${RESET} waiting \${cdelay}s before next launch..."
+            log "\${DIM}[$(ts)]\${RESET} extra delay \${cdelay}s..."
             sleep "$cdelay"
           fi
         fi
