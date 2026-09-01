@@ -582,10 +582,10 @@ export default function DeviceDetailPage() {
                   }}
                 >
                   {Array.from({ length: draftLayout.cols * draftLayout.rows }).map((_, slot) => {
-                    const p = selectedPkgs[slot];
+                    const used = slot < selectedPkgs.length;
                     return (
-                      <div key={slot} className={`cell ${p ? "filled" : ""}`}>
-                        {p ? <span className="pname">{p.username || p.label || p.pkg}</span> : `#${slot + 1}`}
+                      <div key={slot} className={`cell ${used ? "filled" : ""}`}>
+                        #{slot + 1}
                       </div>
                     );
                   })}

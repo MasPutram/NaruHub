@@ -142,11 +142,22 @@ collect_screen() {
     echo "null"
     return
   fi
-  local raw w h
+  local raw w h rot
   raw=$(su -c "wm size" 2>/dev/null)
   w=$(echo "$raw" | grep -oE '[0-9]+x[0-9]+' | tail -1 | cut -dx -f1)
   h=$(echo "$raw" | grep -oE '[0-9]+x[0-9]+' | tail -1 | cut -dx -f2)
+  # "wm size" reports the display's size in its natural/physical
+  # orientation, which stays portrait-shaped numbers even when the device
+  # is actually showing landscape right now (common on these cloud-phone
+  # images). SurfaceOrientation from dumpsys input tells us the current
+  # rotation (0/2 = no swap, 1/3 = rotated 90/270 -- swap w/h) so the
+  # reported size matches what's actually on screen.
+  rot=$(su -c "dumpsys input" 2>/dev/null | grep -m1 "SurfaceOrientation" | grep -oE '[0-9]+' | head -1)
   if [ -n "$w" ] && [ -n "$h" ]; then
+    if [ "$rot" = "1" ] || [ "$rot" = "3" ]; then
+      local tmp
+      tmp="$w"; w="$h"; h="$tmp"
+    fi
     jq -n --argjson w "$w" --argjson h "$h" '{"width":$w,"height":$h}'
   else
     echo "null"
