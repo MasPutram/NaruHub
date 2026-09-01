@@ -97,8 +97,16 @@ su -c "settings put global enable_freeform_support 1" >/dev/null 2>&1 || true
 su -c "settings put global force_resizable_activities 1" >/dev/null 2>&1 || true
 
 # Lists installed Roblox clone packages (rooted device -- app-cloner-style
-# multi-account setups). Emits a JSON array [{"pkg":...,"label":...}] via
-# jq, or "[]" if jq / root / no matching packages.
+# multi-account setups). Emits a JSON array [{"pkg":...,"label":...,"username":...}]
+# via jq, or "[]" if jq / root / no matching packages.
+#
+# username comes from Roblox's own shared_prefs/prefs.xml (<string
+# name="username">...</string>) -- this is Roblox's own native Android
+# preferences file, written by the app itself, and holds the currently
+# logged-in account. Confirmed against a real device: matched the actual
+# active account (BlekokGong102), unlike two earlier attempts that read
+# stale/wrong data from appStorage.json's cached PlayerHydrationBlob and
+# from rbx-storage.db (which turned out to be an unrelated asset cache).
 collect_packages() {
   if ! command -v jq >/dev/null 2>&1; then
     echo "[]"
@@ -110,7 +118,7 @@ collect_packages() {
   if [ -n "$pkgs" ]; then
     while IFS= read -r pkg; do
       [ -z "$pkg" ] && continue
-      local apkpath label
+      local apkpath label username
       apkpath=$(su -c "pm path $pkg" 2>/dev/null | sed -n 's/^package://p' | head -1)
       label="$pkg"
       if command -v aapt >/dev/null 2>&1 && [ -n "$apkpath" ]; then
@@ -118,7 +126,8 @@ collect_packages() {
         al=$(su -c "aapt dump badging '$apkpath'" 2>/dev/null | grep -m1 "application-label:" | sed -n "s/^application-label:'\\\\(.*\\\\)'\\$/\\\\1/p")
         [ -n "$al" ] && label="$al"
       fi
-      result=$(echo "$result" | jq --arg pkg "$pkg" --arg label "$label" '. + [{"pkg":$pkg,"label":$label}]')
+      username=$(su -c "cat /data/data/$pkg/shared_prefs/prefs.xml" 2>/dev/null | grep -o '<string name="username">[^<]*</string>' | sed -n 's/.*>\\(.*\\)<.*/\\1/p')
+      result=$(echo "$result" | jq --arg pkg "$pkg" --arg label "$label" --arg username "$username" '. + [{"pkg":$pkg,"label":$label,"username":$username}]')
     done <<< "$pkgs"
   fi
   echo "$result"
