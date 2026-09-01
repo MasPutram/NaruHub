@@ -90,12 +90,12 @@ else
   log "\${DIM}[$(ts)] existing device, skip register\${RESET}"
 fi
 
-# NOTE: forcing freeform windowing (enable_freeform_support +
-# force_resizable_activities global settings) is DISABLED here. A real
-# device test showed it causing the device to restart when a package was
-# launched, and windows placed this way came out clipped/fixed instead of
-# freely resizable. Until that's root-caused on a real device, "launch" only
-# opens the package -- it does not try to position/resize its window.
+# Resize method: App Cloner (used to create Roblox multi-account clones)
+# stores window bounds in each package's shared_prefs XML. Writing
+# app_cloner_{launch,current,original}_window_{left,top,right,bottom}
+# BEFORE launching makes the app open at exactly those bounds. This
+# bypasses "am task resize" which is blocked on most cloud-phone images
+# (throws IllegalArgumentException: resizeTask not allowed, sz=1).
 
 # Lists installed Roblox clone packages (rooted device -- app-cloner-style
 # multi-account setups). Emits a JSON array [{"pkg":...,"label":...,"username":...}]
@@ -293,15 +293,8 @@ heartbeat() {
   done
 }
 
-# Polls for remote "open this package" commands queued from the website
-# and executes them via root.
-#
-# NOTE: this used to ALSO force freeform windowing on ("settings put global
-# enable_freeform_support 1" / "force_resizable_activities 1") before
-# resizing, which caused the device to restart. This cloud-phone image
-# already runs freeform windowing by default (windows are draggable/
-# resizable out of the box), so we never touch those global settings --
-# "am task resize" alone is enough once a task id is found.
+# Polls for remote commands queued from the website and executes them.
+# Resize writes App Cloner window bounds to shared_prefs before launch.
 poll_commands() {
   while true; do
     local resp
@@ -314,41 +307,30 @@ poll_commands() {
           cpkg=$(echo "$cmd" | jq -r '.package')
           cbounds=$(echo "$cmd" | jq -r '.bounds // empty')
           capply=$(echo "$cmd" | jq -r '.resize // false')
-          # Kill any running instance first. If the package is already alive
-          # in some window state, "am start" just resumes it in place and
-          # "am task resize" right after gets silently overridden -- the WM
-          # on this cloud-phone image remembers/restores each app's last
-          # window size on resume. Force-stopping first guarantees "am
-          # start" creates a brand new task, so the resize actually sticks.
           su -c "am force-stop $cpkg" >/dev/null 2>&1 || true
           sleep 0.5
+          if [ "$capply" = "true" ] && [ -n "$cbounds" ]; then
+            local left top right bottom prefFile
+            left=$(echo "$cbounds" | cut -d, -f1)
+            top=$(echo "$cbounds" | cut -d, -f2)
+            right=$(echo "$cbounds" | cut -d, -f3)
+            bottom=$(echo "$cbounds" | cut -d, -f4)
+            prefFile="/data/data/$cpkg/shared_prefs/\${cpkg}_preferences.xml"
+            if su -c "test -f $prefFile"; then
+              for prefix in launch current original; do
+                su -c "sed -i 's/app_cloner_\${prefix}_window_left\\" value=\\"[0-9]*/app_cloner_\${prefix}_window_left\\" value=\\"$left/' $prefFile" 2>/dev/null || true
+                su -c "sed -i 's/app_cloner_\${prefix}_window_top\\" value=\\"[0-9]*/app_cloner_\${prefix}_window_top\\" value=\\"$top/' $prefFile" 2>/dev/null || true
+                su -c "sed -i 's/app_cloner_\${prefix}_window_right\\" value=\\"[0-9]*/app_cloner_\${prefix}_window_right\\" value=\\"$right/' $prefFile" 2>/dev/null || true
+                su -c "sed -i 's/app_cloner_\${prefix}_window_bottom\\" value=\\"[0-9]*/app_cloner_\${prefix}_window_bottom\\" value=\\"$bottom/' $prefFile" 2>/dev/null || true
+              done
+              log "\${DIM}[$(ts)]\${RESET} set bounds $cbounds for \${CYAN}$cpkg\${RESET}"
+            else
+              log "\${YELLOW}[$(ts)]\${RESET} prefs not found for $cpkg, launching without resize"
+            fi
+          fi
           log "\${DIM}[$(ts)]\${RESET} launching \${CYAN}$cpkg\${RESET}"
           su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p $cpkg" >/dev/null 2>&1 || true
           log "\${GREEN}[$(ts)] launched $cpkg\${RESET}"
-          if [ "$capply" = "true" ] && [ -n "$cbounds" ]; then
-            sleep 1.5
-            local taskId
-            # "am stack list" indents each "taskId=N: pkg/..." line under its
-            # "Stack id=..." header (confirmed on a real device: 4 leading
-            # spaces) -- an anchored "^taskId=" never matched, so taskId was
-            # always empty and every resize got skipped. Allow leading
-            # whitespace.
-            taskId=$(su -c "am stack list" 2>/dev/null | grep -m1 " $cpkg/" | sed -n 's/^[[:space:]]*taskId=\\([0-9]*\\):.*/\\1/p')
-            if [ -z "$taskId" ]; then
-              taskId=$(su -c "dumpsys activity activities" 2>/dev/null | grep -m1 "$cpkg" | grep -oE 'taskId=[0-9]+' | head -1 | cut -d= -f2)
-            fi
-            if [ -n "$taskId" ]; then
-              local left top right bottom
-              left=$(echo "$cbounds" | cut -d, -f1)
-              top=$(echo "$cbounds" | cut -d, -f2)
-              right=$(echo "$cbounds" | cut -d, -f3)
-              bottom=$(echo "$cbounds" | cut -d, -f4)
-              su -c "am task resize $taskId $left $top $right $bottom" >/dev/null 2>&1 || true
-              log "\${DIM}[$(ts)]\${RESET} resized \${CYAN}$cpkg\${RESET} to $cbounds (task $taskId)"
-            else
-              log "\${YELLOW}[$(ts)]\${RESET} resize skipped: no taskId found for $cpkg"
-            fi
-          fi
         fi
       done
     fi

@@ -58,19 +58,17 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < packageNames.length; i++) {
       const packageName = packageNames[i];
       let bounds = "";
-      // Bounds are best-effort/unused by the agent right now (on-device
-      // resize is disabled -- see the bootstrap script), but still
-      // computed for the web UI's layout preview and kept on the command
-      // in case resize is re-enabled later.
       if (screen && screen.width && screen.height) {
-        const cellW = Math.floor(screen.width / c);
-        const cellH = Math.floor(screen.height / r);
+        const gap = 16;
+        const topPad = 50;
+        const cellW = Math.floor((screen.width - gap * (c + 1)) / c);
+        const cellH = Math.floor((screen.height - topPad - gap * r) / r);
         const col = i % c;
         const row = Math.floor(i / c);
-        const left = col * cellW;
-        const top = row * cellH;
-        const right = col === c - 1 ? screen.width : left + cellW;
-        const bottom = row === r - 1 ? screen.height : top + cellH;
+        const left = gap + col * (cellW + gap);
+        const top = topPad + row * (cellH + gap);
+        const right = left + cellW;
+        const bottom = top + cellH;
         bounds = `${left},${top},${right},${bottom}`;
       }
 
