@@ -332,11 +332,14 @@ poll_commands() {
             fi
           fi
           log "\${DIM}[$(ts)]\${RESET} launching \${CYAN}$cpkg\${RESET}"
-          su -c "am start -S -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p $cpkg" >/dev/null 2>&1 || true
+          su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p $cpkg" >/dev/null 2>&1 || true
           log "\${GREEN}[$(ts)] launched $cpkg\${RESET}"
           local cdelay
           cdelay=$(echo "$cmd" | jq -r '.launchDelay // 5')
-          [ "$cdelay" -gt 0 ] 2>/dev/null && sleep "$cdelay"
+          if [ "$cdelay" -gt 0 ] 2>/dev/null; then
+            log "\${DIM}[$(ts)]\${RESET} waiting \${cdelay}s before next launch..."
+            sleep "$cdelay"
+          fi
         fi
       done
     fi
