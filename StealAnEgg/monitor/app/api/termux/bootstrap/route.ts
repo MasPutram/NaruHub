@@ -142,22 +142,35 @@ collect_screen() {
     echo "null"
     return
   fi
-  local raw w h rot
-  raw=$(su -c "wm size" 2>/dev/null)
-  w=$(echo "$raw" | grep -oE '[0-9]+x[0-9]+' | tail -1 | cut -dx -f1)
-  h=$(echo "$raw" | grep -oE '[0-9]+x[0-9]+' | tail -1 | cut -dx -f2)
-  # "wm size" reports the display's size in its natural/physical
-  # orientation, which stays portrait-shaped numbers even when the device
-  # is actually showing landscape right now (common on these cloud-phone
-  # images). SurfaceOrientation from dumpsys input tells us the current
-  # rotation (0/2 = no swap, 1/3 = rotated 90/270 -- swap w/h) so the
-  # reported size matches what's actually on screen.
-  rot=$(su -c "dumpsys input" 2>/dev/null | grep -m1 "SurfaceOrientation" | grep -oE '[0-9]+' | head -1)
-  if [ -n "$w" ] && [ -n "$h" ]; then
+  local w h cur
+  # Primary source: "dumpsys window displays" (falls back to "dumpsys
+  # window" on some ROMs) exposes the display's CURRENT already-rotated
+  # size directly via "cur=WxH" -- no need to separately detect rotation
+  # and swap w/h ourselves. That swap approach turned out fragile:
+  # "dumpsys input"'s SurfaceOrientation line can appear more than once
+  # (once per registered input device, not just the active display), so
+  # grep -m1 can silently latch onto the wrong one and never swap.
+  cur=$(su -c "dumpsys window displays" 2>/dev/null | grep -m1 -oE 'cur=[0-9]+x[0-9]+')
+  [ -z "$cur" ] && cur=$(su -c "dumpsys window" 2>/dev/null | grep -m1 -oE 'cur=[0-9]+x[0-9]+')
+  if [ -n "$cur" ]; then
+    w=$(echo "\${cur#cur=}" | cut -dx -f1)
+    h=$(echo "\${cur#cur=}" | cut -dx -f2)
+  else
+    # Fallback: "wm size" reports the display's natural/physical
+    # orientation, which stays portrait-shaped even when actually rotated
+    # to landscape. Cross-check SurfaceOrientation and swap w/h if rotated
+    # 90/270 deg -- only used when "cur=" isn't available at all.
+    local raw rot
+    raw=$(su -c "wm size" 2>/dev/null)
+    w=$(echo "$raw" | grep -oE '[0-9]+x[0-9]+' | tail -1 | cut -dx -f1)
+    h=$(echo "$raw" | grep -oE '[0-9]+x[0-9]+' | tail -1 | cut -dx -f2)
+    rot=$(su -c "dumpsys input" 2>/dev/null | grep -m1 "SurfaceOrientation" | grep -oE '[0-9]+' | head -1)
     if [ "$rot" = "1" ] || [ "$rot" = "3" ]; then
       local tmp
       tmp="$w"; w="$h"; h="$tmp"
     fi
+  fi
+  if [ -n "$w" ] && [ -n "$h" ]; then
     jq -n --argjson w "$w" --argjson h "$h" '{"width":$w,"height":$h}'
   else
     echo "null"
@@ -301,6 +314,14 @@ poll_commands() {
           cpkg=$(echo "$cmd" | jq -r '.package')
           cbounds=$(echo "$cmd" | jq -r '.bounds // empty')
           capply=$(echo "$cmd" | jq -r '.resize // false')
+          # Kill any running instance first. If the package is already alive
+          # in some window state, "am start" just resumes it in place and
+          # "am task resize" right after gets silently overridden -- the WM
+          # on this cloud-phone image remembers/restores each app's last
+          # window size on resume. Force-stopping first guarantees "am
+          # start" creates a brand new task, so the resize actually sticks.
+          su -c "am force-stop $cpkg" >/dev/null 2>&1 || true
+          sleep 0.5
           log "\${DIM}[$(ts)]\${RESET} launching \${CYAN}$cpkg\${RESET}"
           su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p $cpkg" >/dev/null 2>&1 || true
           log "\${GREEN}[$(ts)] launched $cpkg\${RESET}"

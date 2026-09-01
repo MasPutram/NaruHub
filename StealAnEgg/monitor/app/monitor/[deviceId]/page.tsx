@@ -557,15 +557,23 @@ export default function DeviceDetailPage() {
             </div>
             {(() => {
               // Locked to the actual device's screen aspect ratio (fallback
-              // to a typical portrait phone if we don't have it yet) --
+              // to a landscape shape if we don't have it yet -- these
+              // cloud-phone farm devices run landscape, never portrait) --
               // rows/cols only subdivide this fixed shape, they never resize
               // the box itself. Matches HipHub: the outer frame stays put,
               // only the internal split changes. Computed in px (not CSS
               // aspect-ratio auto-sizing, which doesn't reliably shrink a
               // plain block grid to fit both a max-width AND max-height at
               // once) so the preview is guaranteed to actually match shape.
-              const sw = device.screen?.width || 1080;
-              const sh = device.screen?.height || 1920;
+              //
+              // NOTE: if this still renders portrait for a real device, the
+              // Termux agent on that device hasn't been reinstalled since
+              // the rotation-aware collect_screen() fix -- it's still
+              // reporting stale unswapped (portrait) numbers from before.
+              // Re-run the bootstrap curl command on that device to pick up
+              // the fix.
+              const sw = device.screen?.width || 1920;
+              const sh = device.screen?.height || 1080;
               const maxW = 620;
               const maxH = 380;
               const scale = Math.min(maxW / sw, maxH / sh);
