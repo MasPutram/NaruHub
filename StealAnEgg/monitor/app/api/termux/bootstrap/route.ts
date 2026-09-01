@@ -259,9 +259,10 @@ heartbeat() {
       -H "Content-Type: application/json" \\
       -H "X-Access-Key: $LICENSE_KEY" \\
       -d "$body" 2>/dev/null || echo "000")
-    if [ "$http_code" = "200" ]; then
-      log "\${DIM}[$(ts)]\${RESET} \${GREEN}heartbeat ok\${RESET}"
-    else
+    # Quiet by design: only failures get printed. A successful heartbeat
+    # every 2 minutes doesn't need to say anything -- matches how HipHub's
+    # agent behaves (silent until there's something worth telling the user).
+    if [ "$http_code" != "200" ]; then
       log "\${DIM}[$(ts)]\${RESET} \${RED}heartbeat failed (HTTP $http_code)\${RESET}"
     fi
     sleep 120
