@@ -314,8 +314,10 @@ export default function DeviceDetailPage() {
       .modal-overlay { position: fixed; inset: 0; background: #000a; display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
       .modal { width: min(700px, 92vw); background: #12121b; border: 1px solid var(--border); border-radius: 14px; padding: 20px; box-shadow: 0 18px 50px #0007; max-height: 90vh; overflow-y: auto; }
       .modal h2 { margin: 0 0 5px; font-size: 17px; }
-      .modalgrid { display: grid; gap: 7px; margin: 18px 0; }
-      .cell { aspect-ratio: 1.2; background: #1c1c2a; border: 1px solid #343449; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--dim); padding: 4px; overflow: hidden; text-align: center; }
+      .gridpreviewhead { display: flex; justify-content: space-between; align-items: baseline; margin-top: 16px; font-size: 10px; letter-spacing: .06em; color: var(--dim); }
+      .gridpreviewhead .dims { color: var(--accent2); font-weight: 700; }
+      .modalgrid { display: grid; gap: 7px; margin: 8px auto 18px; max-width: 100%; }
+      .cell { background: #1c1c2a; border: 1px solid #343449; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--dim); padding: 4px; overflow: hidden; text-align: center; }
       .cell.filled { border-color: var(--accent); color: var(--accent); background: rgba(167,139,250,.08); font-weight: 700; }
       .cell .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
       .selects { display: flex; gap: 7px; }
@@ -547,19 +549,49 @@ export default function DeviceDetailPage() {
               want a different shape. Save preview (visual only) or Apply to device (test) to actually resize
               windows on the real device.
             </div>
-            <div
-              className="modalgrid"
-              style={{ gridTemplateColumns: `repeat(${draftLayout.cols}, 1fr)`, gridTemplateRows: `repeat(${draftLayout.rows}, 1fr)` }}
-            >
-              {Array.from({ length: draftLayout.cols * draftLayout.rows }).map((_, slot) => {
-                const p = selectedPkgs[slot];
-                return (
-                  <div key={slot} className={`cell ${p ? "filled" : ""}`}>
-                    {p ? <span className="pname">{p.username || p.label || p.pkg}</span> : `slot ${slot + 1}`}
-                  </div>
-                );
-              })}
+            <div className="gridpreviewhead">
+              <span>LAYOUT PREVIEW</span>
+              <span className="dims">
+                {draftLayout.rows} ROWS &times; {draftLayout.cols} COLUMNS ({draftLayout.rows * draftLayout.cols} SLOTS)
+              </span>
             </div>
+            {(() => {
+              // Locked to the actual device's screen aspect ratio (fallback
+              // to a typical portrait phone if we don't have it yet) --
+              // rows/cols only subdivide this fixed shape, they never resize
+              // the box itself. Matches HipHub: the outer frame stays put,
+              // only the internal split changes. Computed in px (not CSS
+              // aspect-ratio auto-sizing, which doesn't reliably shrink a
+              // plain block grid to fit both a max-width AND max-height at
+              // once) so the preview is guaranteed to actually match shape.
+              const sw = device.screen?.width || 1080;
+              const sh = device.screen?.height || 1920;
+              const maxW = 620;
+              const maxH = 380;
+              const scale = Math.min(maxW / sw, maxH / sh);
+              const previewW = Math.round(sw * scale);
+              const previewH = Math.round(sh * scale);
+              return (
+                <div
+                  className="modalgrid"
+                  style={{
+                    gridTemplateColumns: `repeat(${draftLayout.cols}, 1fr)`,
+                    gridTemplateRows: `repeat(${draftLayout.rows}, 1fr)`,
+                    width: previewW,
+                    height: previewH,
+                  }}
+                >
+                  {Array.from({ length: draftLayout.cols * draftLayout.rows }).map((_, slot) => {
+                    const p = selectedPkgs[slot];
+                    return (
+                      <div key={slot} className={`cell ${p ? "filled" : ""}`}>
+                        {p ? <span className="pname">{p.username || p.label || p.pkg}</span> : `#${slot + 1}`}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
             <div className="selects">
               <select value={draftLayout.cols} onChange={(e) => setDraftLayout((l) => ({ ...l, cols: Number(e.target.value) }))}>
                 {Array.from({ length: 8 }).map((_, i) => <option key={i + 1} value={i + 1}>{i + 1} columns</option>)}
