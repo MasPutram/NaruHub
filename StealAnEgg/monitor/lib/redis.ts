@@ -39,6 +39,15 @@ export function termuxCommandQueueKey(deviceId: string) {
 export const TERMUX_COMMAND_QUEUE_TTL_S = 60 * 10; // 10 minutes -- commands go stale fast
 export const TERMUX_COMMAND_QUEUE_MAX = 50; // cap so a dead/offline device can't grow this forever
 
+// Separate from the delivery queue above: a persistent (non-consumed) log of
+// admin actions per device, for the web UI's "command console" panel.
+export function termuxCommandLogKey(deviceId: string) {
+  return `termux:cmdlog:${deviceId}`;
+}
+
+export const TERMUX_COMMAND_LOG_TTL_S = 60 * 60 * 24; // 24 hours
+export const TERMUX_COMMAND_LOG_MAX = 30;
+
 type SetOptions = { ex?: number };
 
 function parseMaybeJson<T>(raw: string | null): T | null {
@@ -101,6 +110,13 @@ export const redis = {
     if (!results) return [];
     const [, rangeResult] = results[0] as [Error | null, string[]];
     return rangeResult || [];
+  },
+
+  // Read the most recent `count` entries WITHOUT consuming them -- for
+  // display logs (unlike queuePop, which is for one-shot delivery queues).
+  async queuePeek(key: string, count: number): Promise<string[]> {
+    const results = await client.lrange(key, -count, -1);
+    return results.reverse(); // newest first
   },
 
   pipeline() {

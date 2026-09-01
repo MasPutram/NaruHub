@@ -23,6 +23,13 @@ interface TermuxStats {
   load?: { "1m": number; "5m": number; "15m": number };
 }
 
+interface LogEntry {
+  id: string;
+  ts: number;
+  action: string;
+  packages: string[];
+}
+
 interface TermuxDevice {
   deviceId: string;
   hostname: string;
@@ -63,22 +70,28 @@ function fmtSession(seconds: number): string {
   return `${m}m`;
 }
 
+function fmtClock(ts: number): string {
+  return new Date(ts).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
 export default function DeviceDetailPage() {
   const params = useParams();
   const deviceId = String(params?.deviceId || "");
   const [device, setDevice] = useState<TermuxDevice | null>(null);
   const [accounts, setAccounts] = useState<Record<string, AccountInfo>>({});
+  const [consoleLog, setConsoleLog] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [layout, setLayout] = useState<{ cols: number; rows: number }>({ cols: 5, rows: 2 });
-  const [launching, setLaunching] = useState<string | null>(null);
-  const [launchMsg, setLaunchMsg] = useState<Record<string, string>>({});
+  const [launchingBatch, setLaunchingBatch] = useState(false);
+  const [launchMsg, setLaunchMsg] = useState<string>("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
 
   const fetchDevice = useCallback(async () => {
     try {
-      const [devRes, accRes] = await Promise.all([
+      const [devRes, accRes, logRes] = await Promise.all([
         fetch("/api/termux/devices"),
         fetch("/api/accounts"),
+        fetch(`/api/device-control/log?deviceId=${encodeURIComponent(deviceId)}`),
       ]);
       const devData = await devRes.json();
       const found = (devData.devices || []).find((d: TermuxDevice) => d.deviceId === deviceId);
@@ -88,6 +101,9 @@ export default function DeviceDetailPage() {
       const byName: Record<string, AccountInfo> = {};
       for (const a of accData.accounts || []) byName[a.sourceAccount] = a;
       setAccounts(byName);
+
+      const logData = await logRes.json();
+      setConsoleLog(logData.entries || []);
     } catch {}
     setLoading(false);
   }, [deviceId]);
@@ -98,32 +114,29 @@ export default function DeviceDetailPage() {
     return () => clearInterval(id);
   }, [fetchDevice]);
 
-  async function launchPackage(packageName: string, index: number) {
-    const key = packageName;
-    setLaunching(key);
-    setLaunchMsg((m) => ({ ...m, [key]: "" }));
+  async function launchMany(pkgs: TermuxPackage[]) {
+    if (pkgs.length === 0) return;
+    setLaunchingBatch(true);
+    setLaunchMsg("");
     try {
       const res = await fetch("/api/device-control/launch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId, packageName, cols: layout.cols, rows: layout.rows, index }),
+        body: JSON.stringify({
+          deviceId,
+          packageNames: pkgs.map((p) => p.pkg),
+          cols: layout.cols,
+          rows: layout.rows,
+        }),
       });
       const data = await res.json();
-      setLaunchMsg((m) => ({ ...m, [key]: data.ok ? "Dikirim ✓" : `Gagal: ${data.error}` }));
+      setLaunchMsg(data.ok ? `Dikirim ✓ (${pkgs.length} package)` : `Gagal: ${data.error}`);
+      if (data.ok) fetchDevice(); // refresh console log right away
     } catch (e: any) {
-      setLaunchMsg((m) => ({ ...m, [key]: "Gagal: " + e.message }));
+      setLaunchMsg("Gagal: " + e.message);
     }
-    setLaunching(null);
-    setTimeout(() => setLaunchMsg((m) => ({ ...m, [key]: "" })), 4000);
-  }
-
-  async function launchMany(pkgs: TermuxPackage[]) {
-    // Fire in sequence so the device doesn't see them all at once and
-    // race with itself -- spaces launches out a bit at the source too.
-    for (let i = 0; i < pkgs.length; i++) {
-      await launchPackage(pkgs[i].pkg, i);
-      await new Promise((r) => setTimeout(r, 500));
-    }
+    setLaunchingBatch(false);
+    setTimeout(() => setLaunchMsg(""), 4000);
   }
 
   const pkgs = (device?.packages || []).map(normalizePackage);
@@ -241,6 +254,20 @@ export default function DeviceDetailPage() {
       }
       .preview-cell.filled { background: var(--accent); color: #1a1030; font-weight: 700; border-color: var(--accent); }
       .preview-cell .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
+
+      .console-wrap {
+        background: #05050a; border: 1px solid var(--card-border); border-radius: 14px;
+        padding: 14px 16px; margin-bottom: 16px;
+      }
+      .console-title { color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: 1px; margin-bottom: 8px; }
+      .console-body { max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+      .console-line {
+        font-family: "Cascadia Code", "Fira Code", monospace; font-size: 12px; line-height: 1.6;
+        display: flex; gap: 8px;
+      }
+      .console-ts { color: var(--green); flex-shrink: 0; }
+      .console-text { color: var(--dim); }
+      .console-pkgs { color: var(--accent2); }
     `}</style>
   );
 
@@ -325,19 +352,36 @@ export default function DeviceDetailPage() {
           onChange={(e) => setLayout((l) => ({ ...l, rows: Math.max(1, Number(e.target.value) || 1) }))}
         />
         <span style={{ color: "var(--dim)", fontSize: 12 }}>({layout.cols * layout.rows} slot)</span>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          {launchMsg && <span className="launch-msg">{launchMsg}</span>}
           <button
             className="btn"
             onClick={() => launchMany(selectedPkgs)}
-            disabled={selectedPkgs.length === 0 || device.status !== "online"}
+            disabled={selectedPkgs.length === 0 || device.status !== "online" || launchingBatch}
           >
-            Buka Terpilih ({selectedPkgs.length})
+            {launchingBatch ? "Mengirim..." : `Buka Terpilih (${selectedPkgs.length})`}
           </button>
-          <button className="btn ghost" onClick={() => launchMany(pkgs)} disabled={pkgs.length === 0 || device.status !== "online"}>
+          <button className="btn ghost" onClick={() => launchMany(pkgs)} disabled={pkgs.length === 0 || device.status !== "online" || launchingBatch}>
             Buka Semua ({pkgs.length})
           </button>
         </div>
       </div>
+
+      {consoleLog.length > 0 && (
+        <div className="console-wrap">
+          <div className="console-title">COMMAND CONSOLE</div>
+          <div className="console-body">
+            {consoleLog.map((entry) => (
+              <div key={entry.id} className="console-line">
+                <span className="console-ts">{fmtClock(entry.ts)}</span>
+                <span className="console-text">
+                  Send Open Selected Packages to: <span className="console-pkgs">{entry.packages.join(", ")}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {pkgs.length > 0 && (
         <div className="preview-wrap">
@@ -386,7 +430,7 @@ export default function DeviceDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {pkgs.map((p, i) => {
+              {pkgs.map((p) => {
                 const acc = p.username ? accounts[p.username] : undefined;
                 const sessionSecs = acc?.online && acc.firstSeen ? Math.max(0, Date.now() / 1000 - acc.firstSeen) : null;
                 return (
@@ -428,11 +472,10 @@ export default function DeviceDetailPage() {
                     </td>
                     <td>
                       <div className="actions">
-                        {launchMsg[p.pkg] && <span className="launch-msg">{launchMsg[p.pkg]}</span>}
                         <button
                           className="icon-btn"
-                          disabled={launching === p.pkg || device.status !== "online"}
-                          onClick={() => launchPackage(p.pkg, i)}
+                          disabled={launchingBatch || device.status !== "online"}
+                          onClick={() => launchMany([p])}
                           title="Buka"
                         >▶</button>
                       </div>

@@ -3,14 +3,19 @@ import {
   redis,
   termuxDeviceKey,
   termuxCommandQueueKey,
+  termuxCommandLogKey,
   TERMUX_COMMAND_QUEUE_TTL_S,
   TERMUX_COMMAND_QUEUE_MAX,
+  TERMUX_COMMAND_LOG_TTL_S,
+  TERMUX_COMMAND_LOG_MAX,
 } from "@/lib/redis";
 
 // Admin-only (protected by middleware session auth -- this path is NOT under
 // /api/termux/ so it does not get the public device access-key bypass).
-// Queues a "launch this Roblox clone in a specific screen cell" command that
-// the Termux agent will pick up on its next command-poll tick.
+// Queues "open this package" commands (one per package) that the Termux
+// agent will pick up on its next command-poll tick, and records ONE
+// aggregate entry in the device's command log for the web UI's "command
+// console" panel.
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
 }
@@ -18,17 +23,23 @@ export async function OPTIONS() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { deviceId, packageName, cols, rows, index } = body;
+    // Accept both the current batch shape and the older single-package
+    // shape (packageName) for backward compatibility.
+    const { deviceId, cols, rows } = body;
+    const packageNames: string[] = Array.isArray(body.packageNames)
+      ? body.packageNames
+      : body.packageName
+        ? [body.packageName]
+        : [];
 
     if (!deviceId || typeof deviceId !== "string") {
       return NextResponse.json({ ok: false, error: "deviceId required" }, { status: 400 });
     }
-    if (!packageName || typeof packageName !== "string") {
-      return NextResponse.json({ ok: false, error: "packageName required" }, { status: 400 });
+    if (packageNames.length === 0) {
+      return NextResponse.json({ ok: false, error: "packageNames required (non-empty array)" }, { status: 400 });
     }
     const c = Math.max(1, Number(cols) || 1);
     const r = Math.max(1, Number(rows) || 1);
-    const i = Math.max(0, Number(index) || 0);
 
     const deviceRaw = await redis.get<string>(termuxDeviceKey(deviceId));
     if (!deviceRaw) {
@@ -36,36 +47,54 @@ export async function POST(req: NextRequest) {
     }
     const device = typeof deviceRaw === "string" ? JSON.parse(deviceRaw) : deviceRaw;
     const screen = device.screen;
-    if (!screen || !screen.width || !screen.height) {
-      return NextResponse.json(
-        { ok: false, error: "Device belum lapor ukuran layar (screen). Coba lagi setelah heartbeat berikutnya." },
-        { status: 400 }
-      );
+
+    const queueKey = termuxCommandQueueKey(deviceId);
+    const commands: any[] = [];
+    for (let i = 0; i < packageNames.length; i++) {
+      const packageName = packageNames[i];
+      let bounds = "";
+      // Bounds are best-effort/unused by the agent right now (on-device
+      // resize is disabled -- see the bootstrap script), but still
+      // computed for the web UI's layout preview and kept on the command
+      // in case resize is re-enabled later.
+      if (screen && screen.width && screen.height) {
+        const cellW = Math.floor(screen.width / c);
+        const cellH = Math.floor(screen.height / r);
+        const col = i % c;
+        const row = Math.floor(i / c);
+        const left = col * cellW;
+        const top = row * cellH;
+        const right = col === c - 1 ? screen.width : left + cellW;
+        const bottom = row === r - 1 ? screen.height : top + cellH;
+        bounds = `${left},${top},${right},${bottom}`;
+      }
+
+      const command = {
+        id: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+        type: "launch",
+        package: packageName,
+        bounds,
+        createdAt: Date.now(),
+      };
+      commands.push(command);
+      await redis.queuePush(queueKey, JSON.stringify(command), {
+        ttl: TERMUX_COMMAND_QUEUE_TTL_S,
+        maxLen: TERMUX_COMMAND_QUEUE_MAX,
+      });
     }
 
-    const cellW = Math.floor(screen.width / c);
-    const cellH = Math.floor(screen.height / r);
-    const col = i % c;
-    const row = Math.floor(i / c);
-    const left = col * cellW;
-    const top = row * cellH;
-    const right = col === c - 1 ? screen.width : left + cellW;
-    const bottom = row === r - 1 ? screen.height : top + cellH;
-
-    const command = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      type: "launch",
-      package: packageName,
-      bounds: `${left},${top},${right},${bottom}`,
-      createdAt: Date.now(),
+    const logEntry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      ts: Date.now(),
+      action: "launch",
+      packages: packageNames,
     };
-
-    await redis.queuePush(termuxCommandQueueKey(deviceId), JSON.stringify(command), {
-      ttl: TERMUX_COMMAND_QUEUE_TTL_S,
-      maxLen: TERMUX_COMMAND_QUEUE_MAX,
+    await redis.queuePush(termuxCommandLogKey(deviceId), JSON.stringify(logEntry), {
+      ttl: TERMUX_COMMAND_LOG_TTL_S,
+      maxLen: TERMUX_COMMAND_LOG_MAX,
     });
 
-    return NextResponse.json({ ok: true, command });
+    return NextResponse.json({ ok: true, commands });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
