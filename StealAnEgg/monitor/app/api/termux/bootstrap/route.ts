@@ -328,7 +328,12 @@ poll_commands() {
           if [ "$capply" = "true" ] && [ -n "$cbounds" ]; then
             sleep 1.5
             local taskId
-            taskId=$(su -c "am stack list" 2>/dev/null | grep -m1 " $cpkg/" | sed -n 's/^taskId=\\([0-9]*\\):.*/\\1/p')
+            # "am stack list" indents each "taskId=N: pkg/..." line under its
+            # "Stack id=..." header (confirmed on a real device: 4 leading
+            # spaces) -- an anchored "^taskId=" never matched, so taskId was
+            # always empty and every resize got skipped. Allow leading
+            # whitespace.
+            taskId=$(su -c "am stack list" 2>/dev/null | grep -m1 " $cpkg/" | sed -n 's/^[[:space:]]*taskId=\\([0-9]*\\):.*/\\1/p')
             if [ -z "$taskId" ]; then
               taskId=$(su -c "dumpsys activity activities" 2>/dev/null | grep -m1 "$cpkg" | grep -oE 'taskId=[0-9]+' | head -1 | cut -d= -f2)
             fi
