@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const LUA_AGENT = `
-local VERSION = "2.0"
+local VERSION = "3.0"
 
 -- ─── Config ───
 local CONFIG_DIR = os.getenv("HOME") .. "/.cache/log"
 local CONFIG_FILE = CONFIG_DIR .. "/naruhub_config.json"
 local LOG_FILE = CONFIG_DIR .. "/naruhub_agent.log"
-local BASE_URL = "https://naruhub.my.id"
+local WS_URL = "wss://ws.naruhub.my.id"
 local LICENSE_KEY = "$$LICENSE$$"
 local RAM_TRIM_PCT = 85
 local HEARTBEAT_INTERVAL = 120
-local POLL_INTERVAL = 5
+local RECONNECT_DELAY = 5
+
+-- Paths set after CONFIG_DIR
+local WS_INBOX = nil
+local WS_OUTBOX = nil
 
 -- ─── Colors ───
 local C = {
@@ -87,7 +91,6 @@ function json.encode(val)
   end
   if t == "table" then
     if #val > 0 or next(val) == nil and val[1] ~= nil then
-      -- detect array: has numeric keys
       local isArr = true
       local maxn = 0
       for k in pairs(val) do
@@ -100,7 +103,6 @@ function json.encode(val)
         return "[" .. table.concat(parts, ",") .. "]"
       end
     end
-    -- empty table = empty array if we got here via collect_packages returning {}
     if next(val) == nil then return "[]" end
     local parts = {}
     for k, v in pairs(val) do
@@ -113,8 +115,6 @@ end
 
 function json.decode(str)
   if not str or str == "" then return nil end
-  -- Use a simple approach: leverage Lua pattern matching for basic JSON
-  -- For our needs (server responses), this is sufficient
   local pos = 1
   local function skip_ws()
     pos = str:find("[^ \\t\\n\\r]", pos) or pos
@@ -193,35 +193,6 @@ function json.decode(str)
   return parse_value()
 end
 
--- ─── HTTP via curl ───
-local function http_post(url, body, headers)
-  local hdr = ""
-  if headers then
-    for k, v in pairs(headers) do
-      hdr = hdr .. " -H " .. string.format("%q", k .. ": " .. v)
-    end
-  end
-  local tmp = CONFIG_DIR .. "/.http_resp"
-  local cmd = string.format(
-    'curl -s -o %s -w "%%{http_code}" -X POST %q %s -d %q 2>/dev/null',
-    tmp, url, hdr, body
-  )
-  local code = shell(cmd)
-  local resp_body = fread(tmp) or ""
-  return tonumber(code) or 0, resp_body
-end
-
-local function http_get(url, headers)
-  local hdr = ""
-  if headers then
-    for k, v in pairs(headers) do
-      hdr = hdr .. " -H " .. string.format("%q", k .. ": " .. v)
-    end
-  end
-  local cmd = string.format('curl -s %q %s 2>/dev/null', url, hdr)
-  return shell(cmd)
-end
-
 -- ─── Device info ───
 local function get_device_id()
   local raw = fread("/proc/sys/kernel/random/uuid")
@@ -242,13 +213,12 @@ local function collect_packages()
   for line in raw:gmatch("[^\\n]+") do
     local pkg = line:match("=([%w%.]+)$")
     if pkg then
-      local label = pkg
       local username = ""
       local prefs = shell(string.format('su -c "cat /data/data/%s/shared_prefs/prefs.xml"', pkg))
       if prefs ~= "" then
         username = prefs:match('<string name="username">([^<]*)</string>') or ""
       end
-      pkgs[#pkgs+1] = { pkg = pkg, label = label, username = username }
+      pkgs[#pkgs+1] = { pkg = pkg, label = pkg, username = username }
     end
   end
   return pkgs
@@ -264,7 +234,6 @@ local function collect_screen()
     local w, h = cur:match("cur=(%d+)x(%d+)")
     if w and h then return { width = tonumber(w), height = tonumber(h) } end
   end
-  -- Fallback: wm size + rotation
   local raw = shell('su -c "wm size"')
   local w, h = raw:match("(%d+)x(%d+)")
   if w and h then
@@ -276,33 +245,22 @@ local function collect_screen()
   return nil
 end
 
--- ─── Stats collection ───
+-- ─── Stats ───
 local function collect_stats()
   local stats = {}
-  -- Battery
   local batt_pct = fread("/sys/class/power_supply/battery/capacity")
   local batt_status = fread("/sys/class/power_supply/battery/status")
   stats.battery = {
     percent = batt_pct and tonumber(batt_pct:match("%d+")) or nil,
     charging = batt_status and batt_status:match("Charging") ~= nil or false,
   }
-  -- RAM
   local meminfo = fread("/proc/meminfo") or ""
   local mem_total = tonumber(meminfo:match("MemTotal:%s*(%d+)")) or 0
   local mem_avail = tonumber(meminfo:match("MemAvailable:%s*(%d+)")) or 0
-  stats.ram = {
-    totalMB = math.floor(mem_total / 1024),
-    usedMB = math.floor((mem_total - mem_avail) / 1024),
-  }
-  -- Load
+  stats.ram = { totalMB = math.floor(mem_total / 1024), usedMB = math.floor((mem_total - mem_avail) / 1024) }
   local loadavg = fread("/proc/loadavg") or "0 0 0"
   local l1, l5, l15 = loadavg:match("([%d%.]+)%s+([%d%.]+)%s+([%d%.]+)")
-  stats.load = {
-    ["1m"] = tonumber(l1) or 0,
-    ["5m"] = tonumber(l5) or 0,
-    ["15m"] = tonumber(l15) or 0,
-  }
-  -- Storage
+  stats.load = { ["1m"] = tonumber(l1) or 0, ["5m"] = tonumber(l5) or 0, ["15m"] = tonumber(l15) or 0 }
   local dfline = shell("df -k $HOME | tail -1")
   local df_total, df_free = 0, 0
   if dfline ~= "" then
@@ -311,10 +269,7 @@ local function collect_stats()
     df_total = tonumber(parts[2]) or 0
     df_free = tonumber(parts[4]) or 0
   end
-  stats.storage = {
-    totalMB = math.floor(df_total / 1024),
-    freeMB = math.floor(df_free / 1024),
-  }
+  stats.storage = { totalMB = math.floor(df_total / 1024), freeMB = math.floor(df_free / 1024) }
   return stats
 end
 
@@ -326,11 +281,11 @@ local function maybe_trim_ram(pkgs)
   if total == 0 then return end
   local pct = math.floor((total - avail) * 100 / total)
   if pct < RAM_TRIM_PCT then return end
-  log(C.yellow .. "[" .. ts() .. "] RAM " .. pct .. "% >= " .. RAM_TRIM_PCT .. "% -- auto trim (clearing cache)" .. C.reset)
+  log(C.yellow .. "[" .. ts() .. "] RAM " .. pct .. "% -- auto trim" .. C.reset)
   for _, p in ipairs(pkgs) do
     shellcode(string.format('su -c "rm -rf /data/data/%s/cache/*"', p.pkg))
   end
-  log(C.green .. "[" .. ts() .. "] auto trim done" .. C.reset)
+  log(C.green .. "[" .. ts() .. "] trim done" .. C.reset)
 end
 
 -- ─── Resize via shared_prefs ───
@@ -338,32 +293,30 @@ local function set_window_bounds(pkg, left, top, right, bottom)
   local prefFile = string.format("/data/data/%s/shared_prefs/%s_preferences.xml", pkg, pkg)
   local exists = shellcode(string.format('su -c "test -f %s"', prefFile))
   if not exists then
-    log(C.yellow .. "[" .. ts() .. "] prefs not found for " .. pkg .. C.reset)
+    log(C.yellow .. "[" .. ts() .. "] prefs not found: " .. pkg .. C.reset)
     return false
   end
   for _, prefix in ipairs({"launch", "current", "original"}) do
     for _, side in ipairs({"left", "top", "right", "bottom"}) do
       local val = ({left=left, top=top, right=right, bottom=bottom})[side]
       local sed = string.format(
-        [[su -c "sed -i 's/app_cloner_%s_window_%s\" value=\"[0-9]*/app_cloner_%s_window_%s\" value=\"%d/' %s"]],
+        [[su -c "sed -i 's/app_cloner_%s_window_%s\\" value=\\"[0-9]*/app_cloner_%s_window_%s\\" value=\\"%d/' %s"]],
         prefix, side, prefix, side, val, prefFile
       )
       shellcode(sed)
     end
   end
-  log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " set bounds " .. left .. "," .. top .. "," .. right .. "," .. bottom .. " for " .. C.cyan .. pkg .. C.reset)
+  log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " bounds " .. left .. "," .. top .. "," .. right .. "," .. bottom .. " -> " .. C.cyan .. pkg .. C.reset)
   return true
 end
 
 -- ─── Launch app ───
 local function launch_app(pkg, bounds, resize, delay)
-  -- Kill existing
   shellcode(string.format('su -c "am force-stop %s"', pkg))
   local pid = shell(string.format('su -c "pidof %s"', pkg))
   if pid ~= "" then shellcode(string.format('su -c "kill -9 %s"', pid)) end
   sleep(1)
 
-  -- Set bounds if resize requested
   if resize and bounds and bounds ~= "" then
     local left, top, right, bottom = bounds:match("(%d+),(%d+),(%d+),(%d+)")
     if left then
@@ -371,40 +324,95 @@ local function launch_app(pkg, bounds, resize, delay)
     end
   end
 
-  -- Launch
   log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset)
   shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
-  log(C.green .. "[" .. ts() .. "] launched " .. pkg .. C.reset)
 
-  -- Wait for app to be ready
   local waited = 0
-  local maxwait = 60
-  while waited < maxwait do
+  while waited < 60 do
     local stack = shell('su -c "am stack list"')
     if stack:find(pkg .. "/", 1, true) then
-      log(C.green .. "[" .. ts() .. "] " .. pkg .. " is ready (waited " .. waited .. "s)" .. C.reset)
+      log(C.green .. "[" .. ts() .. "] " .. pkg .. " ready (" .. waited .. "s)" .. C.reset)
       break
     end
     sleep(2)
     waited = waited + 2
   end
-  if waited >= maxwait then
-    log(C.yellow .. "[" .. ts() .. "] timeout waiting for " .. pkg .. C.reset)
+  if waited >= 60 then
+    log(C.yellow .. "[" .. ts() .. "] timeout: " .. pkg .. C.reset)
   end
 
-  -- Extra delay
   delay = tonumber(delay) or 5
-  if delay > 0 then
-    log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " extra delay " .. delay .. "s...")
-    sleep(delay)
+  if delay > 0 then sleep(delay) end
+end
+
+-- ─── WebSocket (bidirectional via websocat + named pipe) ───
+local function stop_ws()
+  shellcode("pkill -f 'websocat.*ws.naruhub'")
+  sleep(1)
+end
+
+local function start_ws(device_id)
+  WS_INBOX = CONFIG_DIR .. "/.ws_inbox"
+  WS_OUTBOX = CONFIG_DIR .. "/.ws_outbox"
+
+  fwrite(WS_INBOX, "")
+  os.remove(WS_OUTBOX)
+  shellcode("mkfifo " .. WS_OUTBOX .. " 2>/dev/null")
+
+  -- websocat reads from FIFO (outbox), writes to inbox file
+  -- tail -f keeps the FIFO open so websocat doesn't exit
+  local cmd = string.format(
+    "tail -f %s | websocat -n %q >> %s 2>/dev/null &",
+    WS_OUTBOX, WS_URL, WS_INBOX
+  )
+  os.execute(cmd)
+  sleep(2)
+
+  -- Check if websocat started
+  local alive = shell("pgrep -f 'websocat.*ws.naruhub'")
+  if alive == "" then return false end
+  return true
+end
+
+local function ws_send(msg_table)
+  if not WS_OUTBOX then return false end
+  local data = json.encode(msg_table)
+  -- Append to the FIFO via shell (non-blocking write)
+  local cmd = string.format("echo %q >> %s", data, WS_OUTBOX)
+  return shellcode(cmd)
+end
+
+local function ws_recv()
+  if not WS_INBOX then return {} end
+  local content = fread(WS_INBOX)
+  if not content or content == "" then return {} end
+  fwrite(WS_INBOX, "")
+  local messages = {}
+  for line in content:gmatch("[^\\n]+") do
+    if line ~= "" then
+      local msg = json.decode(line)
+      if msg then messages[#messages+1] = msg end
+    end
   end
+  return messages
+end
+
+local function ws_alive()
+  return shell("pgrep -f 'websocat.*ws.naruhub'") ~= ""
 end
 
 -- ─── Main ───
 os.execute("mkdir -p " .. CONFIG_DIR)
-
--- Reset log file
 fwrite(LOG_FILE, "")
+
+if shell("which websocat") == "" then
+  log(C.yellow .. "Installing websocat..." .. C.reset)
+  shellcode("pkg install websocat -y")
+  if shell("which websocat") == "" then
+    log(C.red .. "websocat not found. Run: pkg install websocat" .. C.reset)
+    os.exit(1)
+  end
+end
 
 local DEVICE_ID, HOSTNAME, PLATFORM, IS_NEW
 
@@ -428,7 +436,7 @@ if not DEVICE_ID then
     deviceId = DEVICE_ID,
     hostname = HOSTNAME,
     platform = PLATFORM,
-    baseUrl = BASE_URL,
+    wsUrl = WS_URL,
     accessKey = LICENSE_KEY,
     registeredAt = os.time(),
   }))
@@ -440,88 +448,123 @@ end
 local ANDROID_VER = get_prop("ro.build.version.release")
 local DEVICE_MODEL = get_prop("ro.product.model")
 
--- Banner
 os.execute("clear")
-log(C.cyan .. C.bold .. "+-----------------------------+" .. C.reset)
-log(C.cyan .. C.bold .. "|        N A R U H U B         |" .. C.reset)
-log(C.cyan .. C.dim  .. "   Monitoring Agent - v" .. VERSION .. "     " .. C.reset)
-log(C.cyan .. C.bold .. "+-----------------------------+" .. C.reset)
+log(C.cyan .. C.bold .. "+------------------------------+" .. C.reset)
+log(C.cyan .. C.bold .. "|         N A R U H U B         |" .. C.reset)
+log(C.cyan .. C.dim  .. "   Monitoring Agent v" .. VERSION .. " (WS)   " .. C.reset)
+log(C.cyan .. C.bold .. "+------------------------------+" .. C.reset)
 log("")
-log(C.dim .. "License" .. C.reset .. "  -> " .. C.yellow .. LICENSE_KEY:sub(1, 6) .. "..." .. LICENSE_KEY:sub(-4) .. C.reset)
-log(C.dim .. "Device" .. C.reset .. "   -> " .. C.cyan .. DEVICE_ID:sub(1, 8) .. "..." .. DEVICE_ID:sub(-6) .. C.reset)
+log(C.dim .. "License" .. C.reset .. "  -> " .. C.yellow .. LICENSE_KEY:sub(1,6) .. "..." .. LICENSE_KEY:sub(-4) .. C.reset)
+log(C.dim .. "Device" .. C.reset .. "   -> " .. C.cyan .. DEVICE_ID:sub(1,8) .. "..." .. DEVICE_ID:sub(-6) .. C.reset)
 log(C.dim .. "Model" .. C.reset .. "    -> " .. DEVICE_MODEL)
 log(C.dim .. "Android" .. C.reset .. "  -> " .. ANDROID_VER)
+log(C.dim .. "Server" .. C.reset .. "   -> " .. C.cyan .. WS_URL .. C.reset)
 log("")
 
--- Register if new
-if IS_NEW then
-  log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " registering device...")
-  local body = json.encode({
-    deviceId = DEVICE_ID,
-    hostname = HOSTNAME,
-    platform = PLATFORM,
-  })
-  local code = http_post(
-    BASE_URL .. "/api/termux/register",
-    body,
-    { ["Content-Type"] = "application/json", ["X-Access-Key"] = LICENSE_KEY }
-  )
-  if code == 200 then
-    log(C.green .. "[" .. ts() .. "] registered" .. C.reset)
-  else
-    log(C.red .. "[" .. ts() .. "] registration failed (HTTP " .. code .. ")" .. C.reset)
-  end
-else
-  log(C.dim .. "[" .. ts() .. "] existing device, skip register" .. C.reset)
-end
-
--- ─── Main loop (single-threaded, alternating heartbeat + poll) ───
-local last_heartbeat = 0
-
-log(C.green .. "[" .. ts() .. "] online - streaming" .. C.reset)
-log(C.dim .. "Press Ctrl+C to stop." .. C.reset)
-
+-- ─── Connection loop (auto-reconnect) ───
 while true do
-  local now = os.time()
+  stop_ws()
+  log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " connecting to " .. WS_URL .. "...")
 
-  -- Heartbeat
-  if now - last_heartbeat >= HEARTBEAT_INTERVAL then
-    local pkgs = collect_packages()
-    maybe_trim_ram(pkgs)
-    local screen = collect_screen()
-    local stats = collect_stats()
-    local body = json.encode({
-      deviceId = DEVICE_ID,
-      packages = pkgs,
-      screen = screen,
-      stats = stats,
-    })
-    local code = http_post(
-      BASE_URL .. "/api/termux/heartbeat",
-      body,
-      { ["Content-Type"] = "application/json", ["X-Access-Key"] = LICENSE_KEY }
-    )
-    if code ~= 200 then
-      log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " " .. C.red .. "heartbeat failed (HTTP " .. code .. ")" .. C.reset)
-    end
-    last_heartbeat = now
+  local ok = start_ws(DEVICE_ID)
+  if not ok then
+    log(C.red .. "[" .. ts() .. "] connect failed, retry in " .. RECONNECT_DELAY .. "s" .. C.reset)
+    sleep(RECONNECT_DELAY)
+    goto continue
   end
 
-  -- Poll commands
-  local resp = http_get(
-    BASE_URL .. "/api/termux/commands?deviceId=" .. DEVICE_ID,
-    { ["X-Access-Key"] = LICENSE_KEY }
-  )
-  local data = json.decode(resp)
-  if data and data.commands then
-    for _, cmd in ipairs(data.commands) do
-      if cmd.type == "launch" then
-        launch_app(cmd.package, cmd.bounds, cmd.resize, cmd.launchDelay)
+  log(C.green .. "[" .. ts() .. "] WS connected" .. C.reset)
+
+  -- Auth
+  ws_send({
+    type = "auth",
+    role = "device",
+    deviceId = DEVICE_ID,
+    accessKey = LICENSE_KEY,
+  })
+
+  -- Register if new
+  if IS_NEW then
+    ws_send({
+      type = "register",
+      deviceId = DEVICE_ID,
+      hostname = HOSTNAME,
+      platform = PLATFORM,
+    })
+    IS_NEW = false
+  end
+
+  log(C.green .. "[" .. ts() .. "] online - streaming" .. C.reset)
+  log(C.dim .. "Press Ctrl+C to stop." .. C.reset)
+
+  local last_heartbeat = 0
+
+  while true do
+    local now = os.time()
+
+    -- Heartbeat via WS
+    if now - last_heartbeat >= HEARTBEAT_INTERVAL then
+      local pkgs = collect_packages()
+      maybe_trim_ram(pkgs)
+      local screen = collect_screen()
+      local stats = collect_stats()
+      local sent = ws_send({
+        type = "heartbeat",
+        deviceId = DEVICE_ID,
+        hostname = HOSTNAME,
+        packages = pkgs,
+        screen = screen,
+        stats = stats,
+      })
+      if sent then
+        last_heartbeat = now
+      else
+        log(C.red .. "[" .. ts() .. "] heartbeat send failed" .. C.reset)
       end
     end
+
+    -- Read incoming WS messages
+    local messages = ws_recv()
+    for _, msg in ipairs(messages) do
+      if msg.type == "auth" then
+        if msg.ok then
+          log(C.green .. "[" .. ts() .. "] authenticated" .. C.reset)
+        else
+          log(C.red .. "[" .. ts() .. "] auth failed: " .. (msg.error or "?") .. C.reset)
+        end
+      elseif msg.type == "register" then
+        if msg.ok then
+          log(C.green .. "[" .. ts() .. "] registered" .. C.reset)
+        end
+      elseif msg.type == "heartbeat" then
+        if msg.ok then
+          log(C.dim .. "[" .. ts() .. "] heartbeat ok" .. C.reset)
+        end
+      elseif msg.type == "command" then
+        if msg.commands then
+          for _, cmd in ipairs(msg.commands) do
+            if cmd.type == "launch" then
+              log(C.cyan .. "[" .. ts() .. "] >> launch " .. cmd.package .. C.reset)
+              launch_app(cmd.package, cmd.bounds, cmd.resize, cmd.launchDelay)
+            end
+          end
+        end
+      end
+    end
+
+    -- Check websocat alive
+    if not ws_alive() then
+      log(C.red .. "[" .. ts() .. "] WS disconnected" .. C.reset)
+      break
+    end
+
+    sleep(1)
   end
 
-  sleep(POLL_INTERVAL)
+  log(C.yellow .. "[" .. ts() .. "] reconnecting in " .. RECONNECT_DELAY .. "s..." .. C.reset)
+  sleep(RECONNECT_DELAY)
+
+  ::continue::
 end
 `;
 
@@ -532,13 +575,13 @@ export async function OPTIONS() {
 export async function GET(req: NextRequest) {
   const accessKey = req.nextUrl.searchParams.get("key");
   if (!accessKey) {
-    return new NextResponse("-- Error: access key required\nos.exit(1)\n", {
+    return new NextResponse("-- Error: access key required\\nos.exit(1)\\n", {
       status: 400,
       headers: { "Content-Type": "text/plain" },
     });
   }
 
-  const script = LUA_AGENT.replace(/\$\$LICENSE\$\$/g, accessKey);
+  const script = LUA_AGENT.replace(/\\$\\$LICENSE\\$\\$/g, accessKey);
 
   return new NextResponse(script, {
     status: 200,
