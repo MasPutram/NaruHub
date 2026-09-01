@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 interface TermuxPackage {
   pkg: string;
@@ -47,20 +47,18 @@ function normalizePackage(p: string | TermuxPackage): TermuxPackage {
   return typeof p === "string" ? { pkg: p } : p;
 }
 
-function fmtGB(mb: number): string {
+function fmtMB(mb: number): string {
   if (mb >= 1024) return (mb / 1024).toFixed(1) + " GB";
   return mb + " MB";
 }
 
-function fmtAgo(ts: number): string {
-  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+function ago(ts: number): string {
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
   if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
+  const m = Math.round(s / 60);
   if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ${m % 60}m ago`;
-  const d = Math.floor(h / 24);
-  return `${d}d ${h % 24}h ago`;
+  const h = Math.round(m / 60);
+  return `${h}h ago`;
 }
 
 function fmtSession(seconds: number): string {
@@ -74,19 +72,33 @@ function fmtClock(ts: number): string {
   return new Date(ts).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
+function pctUsed(m?: { totalMB: number; usedMB: number }): number {
+  if (!m || !m.totalMB) return 0;
+  return Math.round((m.usedMB / m.totalMB) * 100);
+}
+
+function pctStorageUsed(m?: { totalMB: number; freeMB: number }): number {
+  if (!m || !m.totalMB) return 0;
+  return Math.round(((m.totalMB - m.freeMB) / m.totalMB) * 100);
+}
+
 export default function DeviceDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const deviceId = String(params?.deviceId || "");
+
   const [device, setDevice] = useState<TermuxDevice | null>(null);
   const [accounts, setAccounts] = useState<Record<string, AccountInfo>>({});
   const [consoleLog, setConsoleLog] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [layout, setLayout] = useState<{ cols: number; rows: number }>({ cols: 5, rows: 2 });
-  const [draftLayout, setDraftLayout] = useState<{ cols: number; rows: number }>({ cols: 5, rows: 2 });
+  const [layout, setLayout] = useState<{ cols: number; rows: number }>({ cols: 4, rows: 3 });
+  const [draftLayout, setDraftLayout] = useState<{ cols: number; rows: number }>({ cols: 4, rows: 3 });
   const [gridModalOpen, setGridModalOpen] = useState(false);
   const [launchingBatch, setLaunchingBatch] = useState(false);
-  const [launchMsg, setLaunchMsg] = useState<string>("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [renaming, setRenaming] = useState(false);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [toast, setToast] = useState("");
 
   const fetchDevice = useCallback(async () => {
     try {
@@ -105,7 +117,7 @@ export default function DeviceDetailPage() {
       setAccounts(byName);
 
       const logData = await logRes.json();
-      setConsoleLog(logData.entries || []);
+      setConsoleLog((logData.entries || []).slice().reverse()); // oldest first, like a real console
     } catch {}
     setLoading(false);
   }, [deviceId]);
@@ -116,49 +128,66 @@ export default function DeviceDetailPage() {
     return () => clearInterval(id);
   }, [fetchDevice]);
 
-  async function launchMany(pkgs: TermuxPackage[]) {
-    if (pkgs.length === 0) return;
-    setLaunchingBatch(true);
-    setLaunchMsg("");
-    try {
-      const res = await fetch("/api/device-control/launch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          deviceId,
-          packageNames: pkgs.map((p) => p.pkg),
-          cols: layout.cols,
-          rows: layout.rows,
-        }),
-      });
-      const data = await res.json();
-      setLaunchMsg(data.ok ? `Dikirim ✓ (${pkgs.length} package)` : `Gagal: ${data.error}`);
-      if (data.ok) fetchDevice(); // refresh console log right away
-    } catch (e: any) {
-      setLaunchMsg("Gagal: " + e.message);
-    }
-    setLaunchingBatch(false);
-    setTimeout(() => setLaunchMsg(""), 4000);
-  }
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 2500);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const pkgs = (device?.packages || []).map(normalizePackage);
   const selectedPkgs = pkgs.filter((p) => selected[p.pkg] !== false);
 
-  // Default every package to selected the first time it's seen.
   useEffect(() => {
     setSelected((prev) => {
       let changed = false;
       const next = { ...prev };
       for (const p of pkgs) {
-        if (!(p.pkg in next)) {
-          next[p.pkg] = true;
-          changed = true;
-        }
+        if (!(p.pkg in next)) { next[p.pkg] = true; changed = true; }
       }
       return changed ? next : prev;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [device?.packages]);
+
+  function displayName(d: TermuxDevice) {
+    return d.customName || d.hostname;
+  }
+
+  async function saveRename() {
+    if (!device) return;
+    const val = renameDraft.trim();
+    setRenaming(false);
+    if (!val) return;
+    try {
+      await fetch("/api/device-control/rename", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, name: val }),
+      });
+      setDevice((d) => (d ? { ...d, customName: val } : d));
+      setToast("Rename saved (POST /api/device-control/rename)");
+    } catch {
+      setToast("Gagal rename");
+    }
+  }
+
+  async function launchMany(list: TermuxPackage[]) {
+    if (list.length === 0) return;
+    setLaunchingBatch(true);
+    try {
+      const res = await fetch("/api/device-control/launch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, packageNames: list.map((p) => p.pkg), cols: layout.cols, rows: layout.rows }),
+      });
+      const data = await res.json();
+      setToast(data.ok ? `Launch queued for ${list.length} package${list.length !== 1 ? "s" : ""}` : `Gagal: ${data.error}`);
+      if (data.ok) fetchDevice();
+    } catch (e: any) {
+      setToast("Gagal: " + e.message);
+    }
+    setLaunchingBatch(false);
+  }
 
   function toggleAll(value: boolean) {
     setSelected((prev) => {
@@ -171,132 +200,84 @@ export default function DeviceDetailPage() {
   const styles = (
     <style>{`
       :root {
-        --bg: #0b0b12; --card: #14141f; --card-border: #262636;
-        --ink: #e8e8f0; --dim: #8b8ba3; --accent: #a78bfa; --accent2: #22d3ee;
-        --green: #34d399; --red: #f87171;
+        --bg: #0b0b12; --card: #14141f; --border: #262636;
+        --ink: #e8e8f0; --dim: #8b8ba3; --accent: #a78bfa; --cyan: #22d3ee;
+        --green: #34d399; --yellow: #fbbf24; --red: #f87171;
       }
       * { box-sizing: border-box; }
-      body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, "Segoe UI", Roboto, sans-serif; padding: 28px; }
-      .back-link { color: var(--accent2); font-size: 12px; font-weight: 700; text-decoration: none; letter-spacing: 1px; }
-      .header { display: flex; align-items: center; gap: 12px; margin: 6px 0 20px; }
-      .header .dot { width: 10px; height: 10px; border-radius: 50%; }
-      .header .dot.online { background: var(--green); box-shadow: 0 0 8px var(--green); }
-      .header .dot.offline { background: var(--red); }
-      h1 { font-size: 22px; margin: 0; }
-      .header-meta { color: var(--dim); font-size: 12px; margin-left: auto; }
+      body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, "Segoe UI", Roboto, sans-serif; padding: 28px 34px 50px; }
+      button, input, select { font: inherit; }
+      button { cursor: pointer; }
 
-      .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
-      .stat-card { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; padding: 12px 14px; }
-      .stat-label { color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: .5px; margin-bottom: 4px; }
-      .stat-value { font-size: 18px; font-weight: 800; }
+      .back { border: 0; background: none; color: var(--dim); padding: 0; margin-bottom: 14px; font-size: 13px; }
+      .back:hover { color: var(--ink); }
+      .top { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; margin-bottom: 25px; flex-wrap: wrap; }
+      .crumb { color: var(--dim); font-size: 12px; margin-bottom: 7px; }
+      .crumb b { color: var(--ink); }
+      h1 { margin: 0; font-size: 27px; display: flex; align-items: center; gap: 8px; }
+      .sub { color: var(--dim); margin-top: 6px; font-size: 13px; }
+      .edit { display: flex; gap: 6px; align-items: center; }
+      .edit input { width: 220px; background: #0e0e16; color: var(--ink); border: 1px solid var(--accent); border-radius: 6px; padding: 5px 8px; font-size: 20px; }
+      .rename-btn { border: 0; background: none; color: var(--dim); font-size: 15px; padding: 2px; }
+      .rename-btn:hover { color: var(--ink); }
 
-      .controls-bar {
-        background: var(--card); border: 1px solid var(--card-border); border-radius: 12px;
-        padding: 12px 16px; display: flex; align-items: center; gap: 14px; margin-bottom: 16px; flex-wrap: wrap;
-      }
-      .controls-bar label { color: var(--dim); font-size: 11px; font-weight: 700; }
-      .controls-bar input {
-        width: 50px; background: var(--bg); color: var(--ink); border: 1px solid var(--card-border);
-        border-radius: 6px; padding: 4px 8px; font-size: 13px; text-align: center;
-      }
-      .btn {
-        background: var(--accent); color: #1a1030; border: none; border-radius: 8px;
-        padding: 7px 16px; font-size: 12px; font-weight: 800; cursor: pointer;
-      }
-      .btn:hover { filter: brightness(1.1); }
-      .btn:disabled { opacity: .5; cursor: default; }
-      .btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+      .live { display: inline-flex; align-items: center; gap: 7px; border: 1px solid #2a5548; background: #10251f; color: var(--green); padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+      .live.offline { border-color: #4a2a2a; background: #251010; color: var(--red); }
+      .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
+      .detail-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .btn { border: 1px solid var(--border); background: #181823; color: var(--ink); padding: 9px 13px; border-radius: 8px; font-size: 12px; font-weight: 600; }
+      .btn:hover { border-color: #44445a; }
+      .btn.primary { background: var(--accent); border-color: var(--accent); color: #100d19; font-weight: 700; }
+      .btn:disabled { opacity: .35; cursor: not-allowed; }
 
-      .table-wrap { background: var(--card); border: 1px solid var(--card-border); border-radius: 14px; overflow: hidden; }
-      table { width: 100%; border-collapse: collapse; }
-      th { text-align: left; color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: 1px; padding: 12px 16px; border-bottom: 1px solid var(--card-border); }
-      td { padding: 14px 16px; border-bottom: 1px solid var(--card-border); font-size: 13px; }
-      tr:last-child td { border-bottom: none; }
-      .pkg-name { font-weight: 700; color: var(--ink); }
-      .pkg-label { color: var(--accent); font-size: 11px; font-weight: 700; margin-top: 2px; }
-      .account-name { font-weight: 700; }
-      .account-none { color: var(--dim); font-style: italic; font-size: 12px; }
-      .status-badge {
-        display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px;
-        font-size: 10px; font-weight: 800; letter-spacing: .5px;
-      }
-      .status-badge.online { background: rgba(52,211,153,.15); color: var(--green); }
-      .status-badge.offline { background: rgba(139,139,163,.15); color: var(--dim); }
-      .status-badge .sdot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-      .session-val { color: var(--dim); font-size: 12px; }
-      .actions { display: flex; gap: 6px; justify-content: flex-end; }
-      .icon-btn {
-        width: 28px; height: 28px; background: var(--bg); border: 1px solid var(--card-border);
-        border-radius: 6px; cursor: pointer; color: var(--ink); font-size: 12px;
-        display: inline-flex; align-items: center; justify-content: center;
-      }
-      .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
-      .icon-btn:disabled { opacity: .4; cursor: default; }
-      .launch-msg { color: var(--dim); font-size: 11px; margin-left: 8px; }
-      .empty { color: var(--dim); text-align: center; padding: 60px 0; font-size: 14px; }
+      .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 13px; margin-bottom: 22px; }
+      .stat { background: var(--card); border: 1px solid var(--border); border-top: 2px solid var(--accent); border-radius: 11px; padding: 16px; }
+      .stat.cyan { border-top-color: var(--cyan); }
+      .stat.green { border-top-color: var(--green); }
+      .stat.yellow { border-top-color: var(--yellow); }
+      .stat.red { border-top-color: var(--red); }
+      .stat .label { color: var(--dim); font-size: 12px; }
+      .stat .value { font-size: 21px; font-weight: 750; margin-top: 8px; }
+      .stat small { color: var(--dim); font-size: 11px; }
+
+      .two { display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; }
+      .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 17px; }
+      .panelhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 13px; }
+      .panel h3 { margin: 0; font-size: 14px; }
+      .muted { color: var(--dim); font-size: 12px; }
+      .table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      .table th { color: var(--dim); font-size: 10px; text-transform: uppercase; text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
+      .table td { padding: 11px 8px; border-bottom: 1px solid #20202d; }
+      .table tr:last-child td { border-bottom: 0; }
+      .badge { padding: 4px 7px; border-radius: 6px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+      .badge.game { background: #123027; color: var(--green); }
+      .badge.off { background: #2b191c; color: var(--red); }
+      .badge.unk { background: #1e1e2a; color: var(--dim); }
+      .account-none { color: var(--dim); font-style: italic; }
+      .launchbar { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-top: 13px; }
+
+      .console { background: #090910; border: 1px solid #1d1d2a; border-radius: 8px; padding: 11px; height: 215px; overflow: auto; font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; }
+      .log { margin: 0 0 10px; }
+      .log .time { color: #66667c; }
+      .log .cmd { color: var(--cyan); }
+      .disabled-note { font-size: 11px; color: var(--dim); margin-top: 7px; }
+
+      .modal-overlay { position: fixed; inset: 0; background: #000a; display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+      .modal { width: min(700px, 92vw); background: #12121b; border: 1px solid var(--border); border-radius: 14px; padding: 20px; box-shadow: 0 18px 50px #0007; max-height: 90vh; overflow-y: auto; }
+      .modal h2 { margin: 0 0 5px; font-size: 17px; }
+      .modalgrid { display: grid; gap: 7px; margin: 18px 0; }
+      .cell { aspect-ratio: 1.2; background: #1c1c2a; border: 1px solid #343449; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--dim); padding: 4px; overflow: hidden; text-align: center; }
+      .cell.filled { border-color: var(--accent); color: var(--accent); background: rgba(167,139,250,.08); font-weight: 700; }
+      .cell .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
+      .selects { display: flex; gap: 7px; }
+      .selects select { background: #0f0f18; color: var(--ink); border: 1px solid var(--border); border-radius: 7px; padding: 7px; }
+      .modalfoot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+
+      .empty { color: var(--dim); text-align: center; padding: 40px 0; font-size: 14px; }
       .not-found { color: var(--dim); padding: 40px 0; text-align: center; font-size: 14px; }
+      .toast { position: fixed; right: 20px; bottom: 20px; background: #191923; border: 1px solid #39394d; padding: 11px 14px; border-radius: 8px; z-index: 20; box-shadow: 0 18px 50px #0007; font-size: 13px; }
 
-      .layout-warning {
-        background: rgba(250, 204, 21, .08); border: 1px solid rgba(250, 204, 21, .3); border-radius: 12px;
-        padding: 10px 14px; margin-bottom: 16px; font-size: 12px; color: #facc15; line-height: 1.5;
-      }
-      .modal-overlay {
-        position: fixed; inset: 0; background: rgba(5,5,10,.7); backdrop-filter: blur(2px);
-        display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px;
-      }
-      .modal-box {
-        background: #0e0e18; border: 1px solid var(--card-border); border-radius: 18px;
-        padding: 24px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto;
-      }
-      .modal-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
-      .modal-title { font-size: 15px; font-weight: 800; letter-spacing: .5px; }
-      .modal-subtitle { color: var(--dim); font-size: 12px; margin-top: 4px; }
-      .modal-close {
-        background: none; border: none; color: var(--dim); font-size: 16px; cursor: pointer;
-        padding: 4px 8px; line-height: 1;
-      }
-      .modal-close:hover { color: var(--ink); }
-      .modal-section-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
-      .modal-section-label { color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: 1px; }
-      .modal-section-count { color: var(--accent2); font-size: 10px; font-weight: 700; letter-spacing: .5px; }
-      .grid-preview {
-        display: grid; gap: 8px; margin-bottom: 22px; background: #05050a;
-        border: 1px solid var(--card-border); border-radius: 10px; padding: 8px;
-      }
-      .grid-cell {
-        background: #141420; border: 1px solid var(--card-border); border-radius: 8px;
-        display: flex; align-items: center; justify-content: center; text-align: center;
-        font-size: 12px; font-weight: 700; color: var(--dim); padding: 6px; overflow: hidden; min-height: 68px;
-      }
-      .grid-cell.filled { border-color: var(--accent); color: var(--accent); background: rgba(167,139,250,.08); }
-      .grid-cell .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
-      .modal-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
-      .modal-field { margin-bottom: 14px; }
-      .modal-field label { display: block; color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: 1px; margin-bottom: 6px; }
-      .modal-field select {
-        width: 100%; background: #05050a; color: var(--ink); border: 1px solid var(--card-border);
-        border-radius: 8px; padding: 10px 12px; font-size: 13px; font-weight: 700; cursor: pointer;
-      }
-      .modal-field select:disabled { opacity: .5; cursor: default; }
-      .modal-apply-btn {
-        width: 100%; background: var(--accent); color: #1a1030; border: none; border-radius: 10px;
-        padding: 13px; font-size: 13px; font-weight: 800; cursor: pointer; margin-top: 4px;
-      }
-      .modal-apply-btn:hover { filter: brightness(1.1); }
-
-      .console-wrap {
-        background: #05050a; border: 1px solid var(--card-border); border-radius: 14px;
-        padding: 14px 16px; margin-bottom: 16px;
-      }
-      .console-title { color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: 1px; margin-bottom: 8px; }
-      .console-body { max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
-      .console-line {
-        font-family: "Cascadia Code", "Fira Code", monospace; font-size: 12px; line-height: 1.6;
-        display: flex; gap: 8px;
-      }
-      .console-ts { color: var(--green); flex-shrink: 0; }
-      .console-text { color: var(--dim); }
-      .console-pkgs { color: var(--accent2); }
+      @media (max-width: 1000px) { .stats { grid-template-columns: repeat(2, 1fr); } .two { grid-template-columns: 1fr; } }
     `}</style>
   );
 
@@ -304,7 +285,7 @@ export default function DeviceDetailPage() {
     return (
       <>
         {styles}
-        <a href="/monitor" className="back-link">← MONITOR</a>
+        <button className="back" onClick={() => router.push("/monitor")}>← Back to devices</button>
         <div className="empty">Memuat device...</div>
       </>
     );
@@ -314,256 +295,224 @@ export default function DeviceDetailPage() {
     return (
       <>
         {styles}
-        <a href="/monitor" className="back-link">← MONITOR</a>
+        <button className="back" onClick={() => router.push("/monitor")}>← Back to devices</button>
         <div className="not-found">Device tidak ditemukan atau sudah offline lama.</div>
       </>
     );
   }
 
-  const displayName = device.customName || device.hostname;
+  const ram = pctUsed(device.stats?.ram);
+  const storage = pctStorageUsed(device.stats?.storage);
 
   return (
     <>
       {styles}
-      <a href="/monitor" className="back-link">← MONITOR</a>
-      <div className="header">
-        <span className={`dot ${device.status === "online" ? "online" : "offline"}`} />
-        <h1>{displayName}</h1>
-        <span className="header-meta">{fmtAgo(device.lastSeen)} · {device.deviceId.slice(0, 12)}...</span>
+      <button className="back" onClick={() => router.push("/monitor")}>← Back to devices</button>
+
+      <div className="top">
+        <div>
+          <div className="crumb">Monitor / Devices / <b>{displayName(device)}</b></div>
+          {renaming ? (
+            <div className="edit">
+              <input
+                autoFocus
+                value={renameDraft}
+                onChange={(e) => setRenameDraft(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && saveRename()}
+              />
+              <button className="rename-btn" onClick={saveRename}>✓</button>
+            </div>
+          ) : (
+            <h1>
+              {displayName(device)}
+              <button className="rename-btn" onClick={() => { setRenaming(true); setRenameDraft(displayName(device)); }}>✎</button>
+            </h1>
+          )}
+          <div className="sub">
+            {device.hostname} &bull; Android/Termux &bull; HWID {device.deviceId.slice(0, 8)}… &bull; Updated {ago(device.lastSeen)}
+          </div>
+        </div>
+        <div className="detail-actions">
+          <span className={`live ${device.status !== "online" ? "offline" : ""}`}>
+            <span className="dot" /> DEVICE {device.status.toUpperCase()}
+          </span>
+          <button className="btn" disabled>Screenshot — unavailable</button>
+          <button className="btn" disabled>Restart — unavailable</button>
+        </div>
       </div>
 
-      <div className="stats-grid">
+      <div className="stats">
         {device.stats?.battery && device.stats.battery.percent != null && (
-          <div className="stat-card">
-            <div className="stat-label">BATTERY</div>
-            <div className="stat-value">{device.stats.battery.percent}%{device.stats.battery.charging ? " ⚡" : ""}</div>
+          <div className={`stat ${device.stats.battery.percent < 20 ? "red" : "green"}`}>
+            <div className="label">BATTERY</div>
+            <div className="value">{device.stats.battery.percent}%</div>
+            <small>{device.stats.battery.charging ? "⚡ Charging" : "Not charging"}</small>
           </div>
         )}
         {device.stats?.ram && (
-          <div className="stat-card">
-            <div className="stat-label">RAM</div>
-            <div className="stat-value">{fmtGB(device.stats.ram.usedMB)} / {fmtGB(device.stats.ram.totalMB)}</div>
+          <div className={`stat ${ram >= 85 ? "red" : "cyan"}`}>
+            <div className="label">RAM</div>
+            <div className="value">{fmtMB(device.stats.ram.usedMB)} / {fmtMB(device.stats.ram.totalMB)}</div>
+            <small>{ram}% used</small>
           </div>
         )}
         {device.stats?.storage && (
-          <div className="stat-card">
-            <div className="stat-label">STORAGE FREE</div>
-            <div className="stat-value">{fmtGB(device.stats.storage.freeMB)}</div>
+          <div className="stat yellow">
+            <div className="label">STORAGE</div>
+            <div className="value">{fmtMB(device.stats.storage.freeMB)} free</div>
+            <small>{storage}% used</small>
           </div>
         )}
         {device.stats?.load && (
-          <div className="stat-card">
-            <div className="stat-label">CPU LOAD (1m)</div>
-            <div className="stat-value">{device.stats.load["1m"].toFixed(2)}</div>
+          <div className="stat green">
+            <div className="label">CPU LOAD</div>
+            <div className="value">{device.stats.load["1m"].toFixed(2)}</div>
+            <small>1 minute load</small>
           </div>
         )}
         {device.screen && (
-          <div className="stat-card">
-            <div className="stat-label">SCREEN</div>
-            <div className="stat-value">{device.screen.width}x{device.screen.height}</div>
+          <div className="stat cyan">
+            <div className="label">SCREEN</div>
+            <div className="value">{device.screen.width} × {device.screen.height}</div>
+            <small>resolution</small>
           </div>
         )}
       </div>
 
-      <div className="layout-warning">
-        ⚠ Auto-resize window sementara dimatikan -- di device asli itu bikin restart. Tombol "Buka" cuma
-        buka package biasa (fullscreen), belum otomatis nge-posisiin ke slot grid. Preview di bawah cuma
-        gambaran, belum ke-apply ke device.
-      </div>
-
-      <div className="controls-bar">
-        <button
-          className="btn ghost"
-          onClick={() => { setDraftLayout(layout); setGridModalOpen(true); }}
-        >
-          ⊞ Configure Grid Layout
-        </button>
-        <span style={{ color: "var(--dim)", fontSize: 12 }}>
-          {layout.rows} rows × {layout.cols} cols ({layout.cols * layout.rows} slot)
-        </span>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-          {launchMsg && <span className="launch-msg">{launchMsg}</span>}
-          <button
-            className="btn"
-            onClick={() => launchMany(selectedPkgs)}
-            disabled={selectedPkgs.length === 0 || device.status !== "online" || launchingBatch}
-          >
-            {launchingBatch ? "Mengirim..." : `Buka Terpilih (${selectedPkgs.length})`}
-          </button>
-          <button className="btn ghost" onClick={() => launchMany(pkgs)} disabled={pkgs.length === 0 || device.status !== "online" || launchingBatch}>
-            Buka Semua ({pkgs.length})
-          </button>
-        </div>
-      </div>
-
-      {consoleLog.length > 0 && (
-        <div className="console-wrap">
-          <div className="console-title">COMMAND CONSOLE</div>
-          <div className="console-body">
-            {consoleLog.map((entry) => (
-              <div key={entry.id} className="console-line">
-                <span className="console-ts">{fmtClock(entry.ts)}</span>
-                <span className="console-text">
-                  Send Open Selected Packages to: <span className="console-pkgs">{entry.packages.join(", ")}</span>
-                </span>
-              </div>
-            ))}
+      <div className="two">
+        <section className="panel">
+          <div className="panelhead">
+            <h3>Roblox Packages</h3>
+            <span className="muted">{pkgs.length} detected</span>
           </div>
-        </div>
-      )}
+          {pkgs.length === 0 ? (
+            <div className="empty">Belum ada package terdeteksi di device ini.</div>
+          ) : (
+            <>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 24 }}>
+                      <input type="checkbox" checked={selectedPkgs.length === pkgs.length && pkgs.length > 0} onChange={(e) => toggleAll(e.target.checked)} />
+                    </th>
+                    <th>PACKAGE</th>
+                    <th>ACCOUNT</th>
+                    <th>SESSION</th>
+                    <th>STATUS</th>
+                    <th>ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pkgs.map((p) => {
+                    const acc = p.username ? accounts[p.username] : undefined;
+                    const sessionSecs = acc?.online && acc.firstSeen ? Math.max(0, Date.now() / 1000 - acc.firstSeen) : null;
+                    return (
+                      <tr key={p.pkg}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={selected[p.pkg] !== false}
+                            onChange={(e) => setSelected((prev) => ({ ...prev, [p.pkg]: e.target.checked }))}
+                          />
+                        </td>
+                        <td>{p.pkg}</td>
+                        <td>{p.username ? p.username : <span className="account-none">belum terdeteksi</span>}</td>
+                        <td>{sessionSecs != null ? fmtSession(sessionSecs) : "—"}</td>
+                        <td>
+                          {p.username ? (
+                            <span className={`badge ${acc?.online ? "game" : "off"}`}>{acc?.online ? "IN GAME" : "DISCONNECTED"}</span>
+                          ) : (
+                            <span className="badge unk">UNKNOWN</span>
+                          )}
+                        </td>
+                        <td>
+                          <button className="btn" disabled={launchingBatch || device.status !== "online"} onClick={() => launchMany([p])}>
+                            Open
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <div className="launchbar">
+                <span className="muted">Multi-select &middot; batch launch</span>
+                <button
+                  className="btn primary"
+                  disabled={selectedPkgs.length === 0 || launchingBatch || device.status !== "online"}
+                  onClick={() => launchMany(selectedPkgs)}
+                >
+                  {launchingBatch ? "Mengirim..." : `Launch selected (${selectedPkgs.length})`}
+                </button>
+              </div>
+            </>
+          )}
+        </section>
+
+        <section className="panel">
+          <div className="panelhead">
+            <h3>Command Console</h3>
+            <span className="muted">launch history</span>
+          </div>
+          <div className="console">
+            {consoleLog.length === 0 ? (
+              <div className="log muted">Belum ada command yang dikirim.</div>
+            ) : (
+              consoleLog.map((entry) => (
+                <div key={entry.id} className="log">
+                  <span className="time">{fmtClock(entry.ts)}</span> <span className="cmd">{entry.action}</span> → {entry.packages.join(", ")}
+                </div>
+              ))
+            )}
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <button className="btn" onClick={() => { setDraftLayout(layout); setGridModalOpen(true); }}>
+              Grid Layout Configuration
+            </button>
+            <div className="disabled-note">
+              Preview only. Window auto-resize/apply is intentionally disabled on the real device (caused a restart).
+            </div>
+          </div>
+        </section>
+      </div>
 
       {gridModalOpen && (
         <div className="modal-overlay" onClick={() => setGridModalOpen(false)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div>
-                <div className="modal-title">⊞ GRID LAYOUT CONFIGURATION</div>
-                <div className="modal-subtitle">Device: {displayName}</div>
-              </div>
-              <button className="modal-close" onClick={() => setGridModalOpen(false)}>✕</button>
-            </div>
-
-            <div className="modal-section-row">
-              <span className="modal-section-label">LAYOUT PREVIEW</span>
-              <span className="modal-section-count">
-                {draftLayout.rows} ROWS × {draftLayout.cols} COLUMNS ({draftLayout.rows * draftLayout.cols} SLOTS)
-              </span>
-            </div>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Grid Layout Configuration</h2>
+            <div className="muted">Visual preview only — not applied to the Android device.</div>
             <div
-              className="grid-preview"
-              style={{
-                gridTemplateColumns: `repeat(${draftLayout.cols}, 1fr)`,
-                gridTemplateRows: `repeat(${draftLayout.rows}, 1fr)`,
-              }}
+              className="modalgrid"
+              style={{ gridTemplateColumns: `repeat(${draftLayout.cols}, 1fr)`, gridTemplateRows: `repeat(${draftLayout.rows}, 1fr)` }}
             >
               {Array.from({ length: draftLayout.cols * draftLayout.rows }).map((_, slot) => {
                 const p = selectedPkgs[slot];
                 return (
-                  <div key={slot} className={`grid-cell ${p ? "filled" : ""}`}>
-                    {p ? <span className="pname">{p.username || p.label || p.pkg}</span> : `#${slot + 1}`}
+                  <div key={slot} className={`cell ${p ? "filled" : ""}`}>
+                    {p ? <span className="pname">{p.username || p.label || p.pkg}</span> : `slot ${slot + 1}`}
                   </div>
                 );
               })}
             </div>
-
-            <div className="modal-field-row">
-              <div className="modal-field">
-                <label>ROWS</label>
-                <select
-                  value={draftLayout.rows}
-                  onChange={(e) => setDraftLayout((l) => ({ ...l, rows: Number(e.target.value) }))}
-                >
-                  {Array.from({ length: 10 }).map((_, i) => (
-                    <option key={i + 1} value={i + 1}>{i + 1} Row{i + 1 > 1 ? "s" : ""}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="modal-field">
-                <label>COLUMNS</label>
-                <select
-                  value={draftLayout.cols}
-                  onChange={(e) => setDraftLayout((l) => ({ ...l, cols: Number(e.target.value) }))}
-                >
-                  {Array.from({ length: 10 }).map((_, i) => (
-                    <option key={i + 1} value={i + 1}>{i + 1} Column{i + 1 > 1 ? "s" : ""}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="modal-field">
-              <label>SIZE MODE</label>
-              <select disabled defaultValue="full">
-                <option value="full">Full Screen (Fills device screen)</option>
+            <div className="selects">
+              <select value={draftLayout.cols} onChange={(e) => setDraftLayout((l) => ({ ...l, cols: Number(e.target.value) }))}>
+                {Array.from({ length: 8 }).map((_, i) => <option key={i + 1} value={i + 1}>{i + 1} columns</option>)}
+              </select>
+              <select value={draftLayout.rows} onChange={(e) => setDraftLayout((l) => ({ ...l, rows: Number(e.target.value) }))}>
+                {Array.from({ length: 8 }).map((_, i) => <option key={i + 1} value={i + 1}>{i + 1} rows</option>)}
               </select>
             </div>
-
-            <button className="modal-apply-btn" onClick={() => { setLayout(draftLayout); setGridModalOpen(false); }}>
-              ✓ Apply Grid Layout
-            </button>
+            <div className="modalfoot">
+              <button className="btn" onClick={() => setGridModalOpen(false)}>Close</button>
+              <button className="btn primary" onClick={() => { setLayout(draftLayout); setGridModalOpen(false); setToast("Preview saved locally — not applied to device"); }}>
+                Save preview
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="table-wrap">
-        {pkgs.length === 0 ? (
-          <div className="empty">Belum ada package terdeteksi di device ini.</div>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: 32 }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedPkgs.length === pkgs.length && pkgs.length > 0}
-                    onChange={(e) => toggleAll(e.target.checked)}
-                  />
-                </th>
-                <th>PACKAGE</th>
-                <th>ACCOUNT</th>
-                <th>SESSION</th>
-                <th>STATUS</th>
-                <th style={{ textAlign: "right" }}>ACTIONS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pkgs.map((p) => {
-                const acc = p.username ? accounts[p.username] : undefined;
-                const sessionSecs = acc?.online && acc.firstSeen ? Math.max(0, Date.now() / 1000 - acc.firstSeen) : null;
-                return (
-                  <tr key={p.pkg}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={selected[p.pkg] !== false}
-                        onChange={(e) => setSelected((prev) => ({ ...prev, [p.pkg]: e.target.checked }))}
-                      />
-                    </td>
-                    <td>
-                      <div className="pkg-name">{p.pkg}</div>
-                      {p.label && p.label !== p.pkg && <div className="pkg-label">{p.label}</div>}
-                    </td>
-                    <td>
-                      {p.username ? (
-                        <div className="account-name">{p.username}</div>
-                      ) : (
-                        <div className="account-none">belum terdeteksi</div>
-                      )}
-                    </td>
-                    <td>
-                      {sessionSecs != null ? (
-                        <span className="session-val">{fmtSession(sessionSecs)}</span>
-                      ) : (
-                        <span className="session-val">—</span>
-                      )}
-                    </td>
-                    <td>
-                      {p.username ? (
-                        <span className={`status-badge ${acc?.online ? "online" : "offline"}`}>
-                          <span className="sdot" />
-                          {acc?.online ? "IN GAME" : "DISCONNECTED"}
-                        </span>
-                      ) : (
-                        <span className="status-badge offline"><span className="sdot" />UNKNOWN</span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="actions">
-                        <button
-                          className="icon-btn"
-                          disabled={launchingBatch || device.status !== "online"}
-                          onClick={() => launchMany([p])}
-                          title="Buka"
-                        >▶</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {toast && <div className="toast">{toast}</div>}
     </>
   );
 }
