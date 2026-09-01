@@ -742,6 +742,51 @@ end)
 
 
 ------------------------------------------------------------
+-- Auto Hatch + Equip Best (runs forever, no toggle)
+------------------------------------------------------------
+task.spawn(function()
+	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		pcall(function()
+			local records = getMyOwnedEggs()
+			local now = Workspace:GetServerTimeNow()
+			local hatched = 0
+			for uid, rec in pairs(records) do
+				if rec.Placement ~= nil then
+					local speed = rec.GrowthSpeedMultiplier or 1
+					local nightCredit = 0
+					pcall(function()
+						nightCredit = EggRecords.CurrentNightCredit(rec, now, speed)
+					end)
+					local remaining = 0
+					pcall(function()
+						remaining = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer)
+					end)
+					if remaining <= 0 then
+						local ok1, r1 = pcall(function()
+							return Remotes.EggWorld.AskHatch:InvokeServer(uid)
+						end)
+						if ok1 and r1 == true then
+							pcall(function()
+								Remotes.EggWorld.AskFinishHatch:InvokeServer(uid)
+							end)
+							hatched = hatched + 1
+						end
+						task.wait(0.3)
+					end
+				end
+			end
+			if hatched > 0 then
+				pcall(function()
+					Remotes.Haul.WearBest:InvokeServer()
+				end)
+			end
+		end)
+		task.wait(5)
+	end
+end)
+
+------------------------------------------------------------
 -- Auto-start monitoring loop
 ------------------------------------------------------------
 task.spawn(function()
