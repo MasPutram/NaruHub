@@ -285,6 +285,20 @@ local monitorPara = section:AddParagraph({
 	Center = true,
 })
 
+local AUTO_SELL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Mythic", "Legendary", "Cosmic" }
+section:AddToggle("AutoSellToggle", {
+	Title = "Auto Sell (< 300M/s)",
+	Default = false,
+	Callback = function(val)
+		task.spawn(function()
+			local Remotes = require(ReplicatedStorage.Shared.Remotes)
+			pcall(function()
+				Remotes.Haul.WriteAutoSell:InvokeServer(val and AUTO_SELL_RARITIES or {})
+			end)
+		end)
+	end,
+})
+
 Window:SelectTab(1)
 
 
@@ -740,6 +754,38 @@ task.spawn(function()
 	end
 end)
 
+
+------------------------------------------------------------
+-- Auto Sell Low-Value Eggs (< 300M/s, unplaced only)
+------------------------------------------------------------
+task.spawn(function()
+	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+	local MIN_RATE = 300_000_000
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		pcall(function()
+			local records = getMyOwnedEggs()
+			for uid, rec in pairs(records) do
+				if rec.Placement == nil then
+					local rate = 0
+					pcall(function()
+						rate = AssetEarnings.RatePerSecond({
+							Category = rec.AssetCategory,
+							Scale = rec.AssetScale or 1,
+							Mutations = rec.Mutations or {},
+						})
+					end)
+					if rate < MIN_RATE and rate > 0 then
+						pcall(function()
+							Remotes.EggWorld.AskSell:InvokeServer(uid)
+						end)
+						task.wait(0.2)
+					end
+				end
+			end
+		end)
+		task.wait(5)
+	end
+end)
 
 ------------------------------------------------------------
 -- Auto Hatch + Equip Best (runs forever, no toggle)
