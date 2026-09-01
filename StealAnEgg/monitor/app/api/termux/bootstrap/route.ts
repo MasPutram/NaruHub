@@ -308,7 +308,10 @@ poll_commands() {
           cbounds=$(echo "$cmd" | jq -r '.bounds // empty')
           capply=$(echo "$cmd" | jq -r '.resize // false')
           su -c "am force-stop $cpkg" >/dev/null 2>&1 || true
-          sleep 0.5
+          local pid
+          pid=$(su -c "pidof $cpkg" 2>/dev/null || true)
+          [ -n "$pid" ] && su -c "kill -9 $pid" >/dev/null 2>&1 || true
+          sleep 1
           if [ "$capply" = "true" ] && [ -n "$cbounds" ]; then
             local left top right bottom prefFile
             left=$(echo "$cbounds" | cut -d, -f1)
@@ -329,7 +332,7 @@ poll_commands() {
             fi
           fi
           log "\${DIM}[$(ts)]\${RESET} launching \${CYAN}$cpkg\${RESET}"
-          su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p $cpkg" >/dev/null 2>&1 || true
+          su -c "am start -S -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p $cpkg" >/dev/null 2>&1 || true
           log "\${GREEN}[$(ts)] launched $cpkg\${RESET}"
           local cdelay
           cdelay=$(echo "$cmd" | jq -r '.launchDelay // 5')
