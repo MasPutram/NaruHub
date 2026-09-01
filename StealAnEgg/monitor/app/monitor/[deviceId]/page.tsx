@@ -82,6 +82,8 @@ export default function DeviceDetailPage() {
   const [consoleLog, setConsoleLog] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [layout, setLayout] = useState<{ cols: number; rows: number }>({ cols: 5, rows: 2 });
+  const [draftLayout, setDraftLayout] = useState<{ cols: number; rows: number }>({ cols: 5, rows: 2 });
+  const [gridModalOpen, setGridModalOpen] = useState(false);
   const [launchingBatch, setLaunchingBatch] = useState(false);
   const [launchMsg, setLaunchMsg] = useState<string>("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
@@ -238,22 +240,49 @@ export default function DeviceDetailPage() {
         background: rgba(250, 204, 21, .08); border: 1px solid rgba(250, 204, 21, .3); border-radius: 12px;
         padding: 10px 14px; margin-bottom: 16px; font-size: 12px; color: #facc15; line-height: 1.5;
       }
-      .preview-wrap {
-        background: var(--card); border: 1px solid var(--card-border); border-radius: 14px;
-        padding: 16px; margin-bottom: 16px;
+      .modal-overlay {
+        position: fixed; inset: 0; background: rgba(5,5,10,.7); backdrop-filter: blur(2px);
+        display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px;
       }
-      .preview-title { color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: 1px; margin-bottom: 10px; }
-      .preview-screen {
-        background: #05050a; border: 1px solid var(--card-border); border-radius: 8px;
-        display: grid; gap: 3px; padding: 3px; margin: 0 auto;
+      .modal-box {
+        background: #0e0e18; border: 1px solid var(--card-border); border-radius: 18px;
+        padding: 24px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto;
       }
-      .preview-cell {
-        background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 4px;
+      .modal-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
+      .modal-title { font-size: 15px; font-weight: 800; letter-spacing: .5px; }
+      .modal-subtitle { color: var(--dim); font-size: 12px; margin-top: 4px; }
+      .modal-close {
+        background: none; border: none; color: var(--dim); font-size: 16px; cursor: pointer;
+        padding: 4px 8px; line-height: 1;
+      }
+      .modal-close:hover { color: var(--ink); }
+      .modal-section-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+      .modal-section-label { color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: 1px; }
+      .modal-section-count { color: var(--accent2); font-size: 10px; font-weight: 700; letter-spacing: .5px; }
+      .grid-preview {
+        display: grid; gap: 8px; margin-bottom: 22px; background: #05050a;
+        border: 1px solid var(--card-border); border-radius: 10px; padding: 8px;
+      }
+      .grid-cell {
+        background: #141420; border: 1px solid var(--card-border); border-radius: 8px;
         display: flex; align-items: center; justify-content: center; text-align: center;
-        font-size: 10px; color: var(--dim); padding: 4px; overflow: hidden; min-height: 36px;
+        font-size: 12px; font-weight: 700; color: var(--dim); padding: 6px; overflow: hidden; min-height: 68px;
       }
-      .preview-cell.filled { background: var(--accent); color: #1a1030; font-weight: 700; border-color: var(--accent); }
-      .preview-cell .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
+      .grid-cell.filled { border-color: var(--accent); color: var(--accent); background: rgba(167,139,250,.08); }
+      .grid-cell .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
+      .modal-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+      .modal-field { margin-bottom: 14px; }
+      .modal-field label { display: block; color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: 1px; margin-bottom: 6px; }
+      .modal-field select {
+        width: 100%; background: #05050a; color: var(--ink); border: 1px solid var(--card-border);
+        border-radius: 8px; padding: 10px 12px; font-size: 13px; font-weight: 700; cursor: pointer;
+      }
+      .modal-field select:disabled { opacity: .5; cursor: default; }
+      .modal-apply-btn {
+        width: 100%; background: var(--accent); color: #1a1030; border: none; border-radius: 10px;
+        padding: 13px; font-size: 13px; font-weight: 800; cursor: pointer; margin-top: 4px;
+      }
+      .modal-apply-btn:hover { filter: brightness(1.1); }
 
       .console-wrap {
         background: #05050a; border: 1px solid var(--card-border); border-radius: 14px;
@@ -343,15 +372,15 @@ export default function DeviceDetailPage() {
       </div>
 
       <div className="controls-bar">
-        <label>LAYOUT</label>
-        <input type="number" min={1} max={10} value={layout.cols}
-          onChange={(e) => setLayout((l) => ({ ...l, cols: Math.max(1, Number(e.target.value) || 1) }))}
-        />
-        <span style={{ color: "var(--dim)" }}>x</span>
-        <input type="number" min={1} max={10} value={layout.rows}
-          onChange={(e) => setLayout((l) => ({ ...l, rows: Math.max(1, Number(e.target.value) || 1) }))}
-        />
-        <span style={{ color: "var(--dim)", fontSize: 12 }}>({layout.cols * layout.rows} slot)</span>
+        <button
+          className="btn ghost"
+          onClick={() => { setDraftLayout(layout); setGridModalOpen(true); }}
+        >
+          ⊞ Configure Grid Layout
+        </button>
+        <span style={{ color: "var(--dim)", fontSize: 12 }}>
+          {layout.rows} rows × {layout.cols} cols ({layout.cols * layout.rows} slot)
+        </span>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
           {launchMsg && <span className="launch-msg">{launchMsg}</span>}
           <button
@@ -383,27 +412,75 @@ export default function DeviceDetailPage() {
         </div>
       )}
 
-      {pkgs.length > 0 && (
-        <div className="preview-wrap">
-          <div className="preview-title">PREVIEW LAYOUT ({layout.cols}x{layout.rows}){device.screen ? ` -- layar ${device.screen.width}x${device.screen.height}` : ""}</div>
-          <div
-            className="preview-screen"
-            style={{
-              gridTemplateColumns: `repeat(${layout.cols}, 1fr)`,
-              gridTemplateRows: `repeat(${layout.rows}, 1fr)`,
-              width: "100%",
-              maxWidth: 420,
-              aspectRatio: device.screen ? `${device.screen.width} / ${device.screen.height}` : "9 / 16",
-            }}
-          >
-            {Array.from({ length: layout.cols * layout.rows }).map((_, slot) => {
-              const p = selectedPkgs[slot];
-              return (
-                <div key={slot} className={`preview-cell ${p ? "filled" : ""}`}>
-                  {p ? <span className="pname">{p.username || p.label || p.pkg}</span> : slot + 1}
-                </div>
-              );
-            })}
+      {gridModalOpen && (
+        <div className="modal-overlay" onClick={() => setGridModalOpen(false)}>
+          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <div className="modal-title">⊞ GRID LAYOUT CONFIGURATION</div>
+                <div className="modal-subtitle">Device: {displayName}</div>
+              </div>
+              <button className="modal-close" onClick={() => setGridModalOpen(false)}>✕</button>
+            </div>
+
+            <div className="modal-section-row">
+              <span className="modal-section-label">LAYOUT PREVIEW</span>
+              <span className="modal-section-count">
+                {draftLayout.rows} ROWS × {draftLayout.cols} COLUMNS ({draftLayout.rows * draftLayout.cols} SLOTS)
+              </span>
+            </div>
+            <div
+              className="grid-preview"
+              style={{
+                gridTemplateColumns: `repeat(${draftLayout.cols}, 1fr)`,
+                gridTemplateRows: `repeat(${draftLayout.rows}, 1fr)`,
+              }}
+            >
+              {Array.from({ length: draftLayout.cols * draftLayout.rows }).map((_, slot) => {
+                const p = selectedPkgs[slot];
+                return (
+                  <div key={slot} className={`grid-cell ${p ? "filled" : ""}`}>
+                    {p ? <span className="pname">{p.username || p.label || p.pkg}</span> : `#${slot + 1}`}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="modal-field-row">
+              <div className="modal-field">
+                <label>ROWS</label>
+                <select
+                  value={draftLayout.rows}
+                  onChange={(e) => setDraftLayout((l) => ({ ...l, rows: Number(e.target.value) }))}
+                >
+                  {Array.from({ length: 10 }).map((_, i) => (
+                    <option key={i + 1} value={i + 1}>{i + 1} Row{i + 1 > 1 ? "s" : ""}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="modal-field">
+                <label>COLUMNS</label>
+                <select
+                  value={draftLayout.cols}
+                  onChange={(e) => setDraftLayout((l) => ({ ...l, cols: Number(e.target.value) }))}
+                >
+                  {Array.from({ length: 10 }).map((_, i) => (
+                    <option key={i + 1} value={i + 1}>{i + 1} Column{i + 1 > 1 ? "s" : ""}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="modal-field">
+              <label>SIZE MODE</label>
+              <select disabled defaultValue="full">
+                <option value="full">Full Screen (Fills device screen)</option>
+              </select>
+            </div>
+
+            <button className="modal-apply-btn" onClick={() => { setLayout(draftLayout); setGridModalOpen(false); }}>
+              ✓ Apply Grid Layout
+            </button>
           </div>
         </div>
       )}
