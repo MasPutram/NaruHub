@@ -287,6 +287,7 @@ local monitorPara = section:AddParagraph({
 
 local AUTO_SELL_MIN_RATE = 300_000_000
 local AUTO_SELL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Mythic", "Legendary", "Cosmic" }
+local AUTO_SELL_NEVER = { Eternal = true, Divine = true, Titan = true }
 local autoSellEnabled = false
 section:AddToggle("AutoSellToggle", {
 	Title = "Auto Sell (< 300M/s)",
@@ -759,39 +760,7 @@ end)
 
 
 ------------------------------------------------------------
--- Auto Sell Low-Value Eggs (< 300M/s, unplaced only)
-------------------------------------------------------------
-task.spawn(function()
-	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	local MIN_RATE = 300_000_000
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		pcall(function()
-			local records = getMyOwnedEggs()
-			for uid, rec in pairs(records) do
-				if rec.Placement == nil then
-					local rate = 0
-					pcall(function()
-						rate = AssetEarnings.RatePerSecond({
-							Category = rec.AssetCategory,
-							Scale = rec.AssetScale or 1,
-							Mutations = rec.Mutations or {},
-						})
-					end)
-					if rate < MIN_RATE and rate > 0 then
-						pcall(function()
-							Remotes.EggWorld.AskSell:InvokeServer(uid)
-						end)
-						task.wait(0.2)
-					end
-				end
-			end
-		end)
-		task.wait(5)
-	end
-end)
-
-------------------------------------------------------------
--- Auto Sell inventory backlog (< 300M/s, unplaced only)
+-- Auto Sell inventory backlog (< 300M/s, unplaced only, never Divine/Titan)
 -- Requires equip (AskWearTool) then SellPet on the held UID.
 ------------------------------------------------------------
 task.spawn(function()
@@ -803,6 +772,7 @@ task.spawn(function()
 				for uid, rec in pairs(records) do
 					if not autoSellEnabled then break end
 					if rec.Placement == nil then
+						local rarity = getRarity(rec.AssetCategory)
 						local rate = 0
 						pcall(function()
 							rate = AssetEarnings.RatePerSecond({
@@ -811,7 +781,7 @@ task.spawn(function()
 								Mutations = rec.Mutations or {},
 							})
 						end)
-						if rate > 0 and rate < AUTO_SELL_MIN_RATE then
+						if not AUTO_SELL_NEVER[rarity] and rate > 0 and rate < AUTO_SELL_MIN_RATE then
 							pcall(function()
 								Remotes.EggWorld.AskWearTool:InvokeServer(uid)
 							end)
