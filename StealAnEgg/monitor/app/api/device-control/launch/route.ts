@@ -31,6 +31,11 @@ export async function POST(req: NextRequest) {
       : body.packageName
         ? [body.packageName]
         : [];
+    // Opt-in: only set true from the Grid Layout modal's "Apply to device"
+    // action. Normal "Launch selected" stays resize:false (just opens the
+    // app) -- resizing is a separate, deliberate step so it can be tested
+    // on one device before trusting it everywhere.
+    const applyResize = body.resize === true;
 
     if (!deviceId || typeof deviceId !== "string") {
       return NextResponse.json({ ok: false, error: "deviceId required" }, { status: 400 });
@@ -74,6 +79,7 @@ export async function POST(req: NextRequest) {
         type: "launch",
         package: packageName,
         bounds,
+        resize: applyResize,
         createdAt: Date.now(),
       };
       commands.push(command);
@@ -86,7 +92,7 @@ export async function POST(req: NextRequest) {
     const logEntry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       ts: Date.now(),
-      action: "launch",
+      action: applyResize ? "launch+resize" : "launch",
       packages: packageNames,
     };
     await redis.queuePush(termuxCommandLogKey(deviceId), JSON.stringify(logEntry), {

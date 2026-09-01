@@ -171,22 +171,45 @@ export default function DeviceDetailPage() {
     }
   }
 
-  async function launchMany(list: TermuxPackage[]) {
+  async function launchMany(list: TermuxPackage[], resize = false, gridOverride?: { cols: number; rows: number }) {
     if (list.length === 0) return;
     setLaunchingBatch(true);
     try {
+      const g = gridOverride || layout;
       const res = await fetch("/api/device-control/launch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId, packageNames: list.map((p) => p.pkg), cols: layout.cols, rows: layout.rows }),
+        body: JSON.stringify({ deviceId, packageNames: list.map((p) => p.pkg), cols: g.cols, rows: g.rows, resize }),
       });
       const data = await res.json();
-      setToast(data.ok ? `Launch queued for ${list.length} package${list.length !== 1 ? "s" : ""}` : `Gagal: ${data.error}`);
+      setToast(
+        data.ok
+          ? resize
+            ? `Grid applied: resize queued for ${list.length} package${list.length !== 1 ? "s" : ""}`
+            : `Launch queued for ${list.length} package${list.length !== 1 ? "s" : ""}`
+          : `Gagal: ${data.error}`
+      );
       if (data.ok) fetchDevice();
     } catch (e: any) {
       setToast("Gagal: " + e.message);
     }
     setLaunchingBatch(false);
+  }
+
+  function applyGridToDevice() {
+    if (selectedPkgs.length === 0) {
+      setToast("Pilih dulu package yang mau di-grid (checkbox di tabel)");
+      return;
+    }
+    const ok = window.confirm(
+      `Terapkan grid ${draftLayout.cols}x${draftLayout.rows} ke device ini sekarang?\n\n` +
+        `${selectedPkgs.length} package akan di-launch + resize di device SUNGGUHAN. ` +
+        `Uji dulu di 1 device sebelum dipakai luas.`
+    );
+    if (!ok) return;
+    setLayout(draftLayout);
+    setGridModalOpen(false);
+    launchMany(selectedPkgs, true, draftLayout);
   }
 
   function toggleAll(value: boolean) {
@@ -470,7 +493,9 @@ export default function DeviceDetailPage() {
               Grid Layout Configuration
             </button>
             <div className="disabled-note">
-              Preview only. Window auto-resize/apply is intentionally disabled on the real device (caused a restart).
+              "Save preview" is visual only. "Apply to device" inside the modal actually resizes windows on the
+              real device — this relies on the cloud phone's built-in freeform windowing and skips the settings
+              toggle that caused a restart before. Still test on one device first.
             </div>
           </div>
         </section>
@@ -480,7 +505,10 @@ export default function DeviceDetailPage() {
         <div className="modal-overlay" onClick={() => setGridModalOpen(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>Grid Layout Configuration</h2>
-            <div className="muted">Visual preview only — not applied to the Android device.</div>
+            <div className="muted">
+              Preview grid, pick which checked packages land in which slot, then Save preview (visual only) or
+              Apply to device (test) to actually resize windows on the real device.
+            </div>
             <div
               className="modalgrid"
               style={{ gridTemplateColumns: `repeat(${draftLayout.cols}, 1fr)`, gridTemplateRows: `repeat(${draftLayout.rows}, 1fr)` }}
@@ -504,8 +532,16 @@ export default function DeviceDetailPage() {
             </div>
             <div className="modalfoot">
               <button className="btn" onClick={() => setGridModalOpen(false)}>Close</button>
-              <button className="btn primary" onClick={() => { setLayout(draftLayout); setGridModalOpen(false); setToast("Preview saved locally — not applied to device"); }}>
+              <button className="btn" onClick={() => { setLayout(draftLayout); setGridModalOpen(false); setToast("Preview saved locally — not applied to device"); }}>
                 Save preview
+              </button>
+              <button
+                className="btn primary"
+                disabled={launchingBatch || device.status !== "online"}
+                onClick={applyGridToDevice}
+                title="Launches the checked packages and resizes their windows to this grid on the real device"
+              >
+                Apply to device (test)
               </button>
             </div>
           </div>
