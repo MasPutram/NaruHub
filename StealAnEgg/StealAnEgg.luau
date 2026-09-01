@@ -285,11 +285,14 @@ local monitorPara = section:AddParagraph({
 	Center = true,
 })
 
+local AUTO_SELL_MIN_RATE = 300_000_000
 local AUTO_SELL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Mythic", "Legendary", "Cosmic" }
+local autoSellEnabled = false
 section:AddToggle("AutoSellToggle", {
 	Title = "Auto Sell (< 300M/s)",
 	Default = false,
 	Callback = function(val)
+		autoSellEnabled = val
 		task.spawn(function()
 			local Remotes = require(ReplicatedStorage.Shared.Remotes)
 			pcall(function()
@@ -784,6 +787,45 @@ task.spawn(function()
 			end
 		end)
 		task.wait(5)
+	end
+end)
+
+------------------------------------------------------------
+-- Auto Sell inventory backlog (< 300M/s, unplaced only)
+-- Requires equip (AskWearTool) then SellPet on the held UID.
+------------------------------------------------------------
+task.spawn(function()
+	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		if autoSellEnabled then
+			pcall(function()
+				local records = getMyOwnedEggs()
+				for uid, rec in pairs(records) do
+					if not autoSellEnabled then break end
+					if rec.Placement == nil then
+						local rate = 0
+						pcall(function()
+							rate = AssetEarnings.RatePerSecond({
+								Category = rec.AssetCategory,
+								Scale = rec.AssetScale or 1,
+								Mutations = rec.Mutations or {},
+							})
+						end)
+						if rate > 0 and rate < AUTO_SELL_MIN_RATE then
+							pcall(function()
+								Remotes.EggWorld.AskWearTool:InvokeServer(uid)
+							end)
+							task.wait(0.3)
+							pcall(function()
+								Remotes.PetSatchel.SellPet:FireServer({ uid })
+							end)
+							task.wait(0.5)
+						end
+					end
+				end
+			end)
+		end
+		task.wait(3)
 	end
 end)
 
