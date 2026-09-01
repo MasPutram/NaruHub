@@ -196,6 +196,32 @@ export default function DeviceDetailPage() {
     setLaunchingBatch(false);
   }
 
+  // Auto-fit: given N packages, pick a near-square cols x rows (favors more
+  // columns than rows since phone/cloud-phone screens are usually taller
+  // than wide, so a wider grid keeps each cell less letterboxed).
+  function autoGridDims(n: number): { cols: number; rows: number } {
+    if (n <= 0) return { cols: 1, rows: 1 };
+    const cols = Math.max(1, Math.ceil(Math.sqrt(n)));
+    const rows = Math.max(1, Math.ceil(n / cols));
+    return { cols, rows };
+  }
+
+  function autoGridAndApply() {
+    if (selectedPkgs.length === 0) {
+      setToast("Pilih dulu package yang mau di-grid (checkbox di tabel)");
+      return;
+    }
+    const dims = autoGridDims(selectedPkgs.length);
+    const ok = window.confirm(
+      `Auto grid ${dims.cols}x${dims.rows} untuk ${selectedPkgs.length} package yang dipilih.\n\n` +
+        `Langsung launch + resize di device SUNGGUHAN. Lanjut?`
+    );
+    if (!ok) return;
+    setLayout(dims);
+    setDraftLayout(dims);
+    launchMany(selectedPkgs, true, dims);
+  }
+
   function applyGridToDevice() {
     if (selectedPkgs.length === 0) {
       setToast("Pilih dulu package yang mau di-grid (checkbox di tabel)");
@@ -461,6 +487,14 @@ export default function DeviceDetailPage() {
               <div className="launchbar">
                 <span className="muted">Multi-select &middot; batch launch</span>
                 <button
+                  className="btn"
+                  disabled={selectedPkgs.length === 0 || launchingBatch || device.status !== "online"}
+                  onClick={autoGridAndApply}
+                  title="Computes a near-square grid for the selected packages and applies it immediately"
+                >
+                  {launchingBatch ? "Mengirim..." : `Auto Grid & Apply (${selectedPkgs.length})`}
+                </button>
+                <button
                   className="btn primary"
                   disabled={selectedPkgs.length === 0 || launchingBatch || device.status !== "online"}
                   onClick={() => launchMany(selectedPkgs)}
@@ -489,7 +523,10 @@ export default function DeviceDetailPage() {
             )}
           </div>
           <div style={{ marginTop: 14 }}>
-            <button className="btn" onClick={() => { setDraftLayout(layout); setGridModalOpen(true); }}>
+            <button
+              className="btn"
+              onClick={() => { setDraftLayout(selectedPkgs.length > 0 ? autoGridDims(selectedPkgs.length) : layout); setGridModalOpen(true); }}
+            >
               Grid Layout Configuration
             </button>
             <div className="disabled-note">
@@ -506,8 +543,9 @@ export default function DeviceDetailPage() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>Grid Layout Configuration</h2>
             <div className="muted">
-              Preview grid, pick which checked packages land in which slot, then Save preview (visual only) or
-              Apply to device (test) to actually resize windows on the real device.
+              Cols/rows auto-suggested from your checked packages ({selectedPkgs.length}) — override below if you
+              want a different shape. Save preview (visual only) or Apply to device (test) to actually resize
+              windows on the real device.
             </div>
             <div
               className="modalgrid"
