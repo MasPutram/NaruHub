@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
     // app) -- resizing is a separate, deliberate step so it can be tested
     // on one device before trusting it everywhere.
     const applyResize = body.resize === true;
+    const launchDelay = Math.max(0, Number(body.launchDelay) || 5);
 
     if (!deviceId || typeof deviceId !== "string") {
       return NextResponse.json({ ok: false, error: "deviceId required" }, { status: 400 });
@@ -78,6 +79,7 @@ export async function POST(req: NextRequest) {
         package: packageName,
         bounds,
         resize: applyResize,
+        launchDelay,
         createdAt: Date.now(),
       };
       commands.push(command);

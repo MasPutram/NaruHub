@@ -93,6 +93,7 @@ export default function DeviceDetailPage() {
   const [loading, setLoading] = useState(true);
   const [layout, setLayout] = useState<{ cols: number; rows: number }>({ cols: 4, rows: 3 });
   const [draftLayout, setDraftLayout] = useState<{ cols: number; rows: number }>({ cols: 4, rows: 3 });
+  const [launchDelay, setLaunchDelay] = useState(5);
   const [gridModalOpen, setGridModalOpen] = useState(false);
   const [launchingBatch, setLaunchingBatch] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
@@ -179,7 +180,7 @@ export default function DeviceDetailPage() {
       const res = await fetch("/api/device-control/launch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId, packageNames: list.map((p) => p.pkg), cols: g.cols, rows: g.rows, resize }),
+        body: JSON.stringify({ deviceId, packageNames: list.map((p) => p.pkg), cols: g.cols, rows: g.rows, resize, launchDelay }),
       });
       const data = await res.json();
       setToast(
@@ -607,6 +608,11 @@ export default function DeviceDetailPage() {
               <select value={draftLayout.rows} onChange={(e) => setDraftLayout((l) => ({ ...l, rows: Number(e.target.value) }))}>
                 {Array.from({ length: 8 }).map((_, i) => <option key={i + 1} value={i + 1}>{i + 1} rows</option>)}
               </select>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--dim)", fontSize: 13 }}>
+                Launch delay
+                <input type="number" min={0} max={120} value={launchDelay} onChange={(e) => setLaunchDelay(Math.max(0, Number(e.target.value)))} style={{ width: 54, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 8px", color: "var(--ink)", textAlign: "center" }} />
+                sec
+              </label>
             </div>
             <div className="modalfoot">
               <button className="btn" onClick={() => setGridModalOpen(false)}>Close</button>
