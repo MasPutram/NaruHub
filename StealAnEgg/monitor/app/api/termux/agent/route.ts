@@ -366,30 +366,42 @@ local function launch_app(pkg, bounds, resize, delay)
   if delay > 0 then sleep(delay) end
 end
 
--- ─── HTTP heartbeat (writes to Redis so dashboard can read) ───
+-- ─── HTTP helpers (writes to Redis so dashboard can read) ───
+local HTTP_BODY_FILE = CONFIG_DIR .. "/.http_body.json"
+
+local function http_post(path, body_table)
+  local body = json.encode(body_table)
+  fwrite(HTTP_BODY_FILE, body)
+  local result = shell(string.format(
+    'curl -s -w "%%{http_code}" -o /dev/null -X POST "%s%s" -H "Content-Type: application/json" -H "X-Access-Key: %s" -d @%s',
+    BASE_URL, path, LICENSE_KEY, HTTP_BODY_FILE
+  ))
+  return result
+end
+
 local function http_register()
-  local body = json.encode({
+  local code = http_post("/api/termux/register", {
     deviceId = DEVICE_ID,
     hostname = HOSTNAME,
     platform = PLATFORM,
   })
-  shellcode(string.format(
-    'curl -s -o /dev/null -X POST "%s/api/termux/register" -H "Content-Type: application/json" -H "X-Access-Key: %s" -d %q',
-    BASE_URL, LICENSE_KEY, body
-  ))
+  if code == "200" then
+    log(C.green .. "[" .. ts() .. "] HTTP register ok" .. C.reset)
+  else
+    log(C.red .. "[" .. ts() .. "] HTTP register failed (" .. code .. ")" .. C.reset)
+  end
 end
 
 local function http_heartbeat(pkgs, screen, stats)
-  local body = json.encode({
+  local code = http_post("/api/termux/heartbeat", {
     deviceId = DEVICE_ID,
     packages = pkgs,
     screen = screen,
     stats = stats,
   })
-  shellcode(string.format(
-    'curl -s -o /dev/null -X POST "%s/api/termux/heartbeat" -H "Content-Type: application/json" -H "X-Access-Key: %s" -d %q',
-    BASE_URL, LICENSE_KEY, body
-  ))
+  if code ~= "200" then
+    log(C.red .. "[" .. ts() .. "] HTTP heartbeat failed (" .. code .. ")" .. C.reset)
+  end
 end
 
 -- ─── WebSocket (bidirectional via websocat + named pipe) ───
@@ -534,14 +546,22 @@ while true do
       hostname = HOSTNAME,
       platform = PLATFORM,
     })
-    http_register()
     IS_NEW = false
+  end
+
+  -- Always register + first heartbeat via HTTP on connect
+  http_register()
+  do
+    local pkgs = collect_packages()
+    local screen = collect_screen()
+    local stats = collect_stats()
+    http_heartbeat(pkgs, screen, stats)
   end
 
   log(C.green .. "[" .. ts() .. "] online - streaming" .. C.reset)
   log(C.dim .. "Press Ctrl+C to stop." .. C.reset)
 
-  local last_heartbeat = 0
+  local last_heartbeat = os.time()
 
   while true do
     local now = os.time()
