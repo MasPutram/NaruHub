@@ -38,7 +38,8 @@ function fmtMB(mb: number): string {
   return mb + " MB";
 }
 
-function ago(ts: number): string {
+function ago(ts?: number): string {
+  if (!ts || !Number.isFinite(ts)) return "unknown";
   const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
   if (s < 60) return `${s}s ago`;
   const m = Math.round(s / 60);

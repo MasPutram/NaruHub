@@ -37,9 +37,17 @@ export async function POST(req: NextRequest) {
 
     await redis.set(termuxDeviceKey(deviceId), JSON.stringify(device), { ex: TERMUX_DEVICE_TTL_S });
 
-    if (!meta) {
-      await redis.set(termuxDeviceMetaKey(deviceId), JSON.stringify({ registeredAt: now }));
-    }
+    // Persist a snapshot so an offline device still shows its last-known
+    // hostname/platform (and any prior stats) on the dashboard.
+    const snapshot: Record<string, any> = {
+      ...(meta || {}),
+      hostname: device.hostname,
+      platform: device.platform,
+      registeredAt: device.registeredAt,
+      lastSeen: device.lastSeen,
+    };
+    if (device.customName) snapshot.customName = device.customName;
+    await redis.set(termuxDeviceMetaKey(deviceId), JSON.stringify(snapshot));
 
     return NextResponse.json({ ok: true, device });
   } catch (e: any) {

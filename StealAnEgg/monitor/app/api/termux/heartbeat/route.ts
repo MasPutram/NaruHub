@@ -49,6 +49,25 @@ export async function POST(req: NextRequest) {
 
     await redis.set(termuxDeviceKey(deviceId), JSON.stringify(device), { ex: TERMUX_DEVICE_TTL_S });
 
+    // Persist a full snapshot in the meta key so an offline device still
+    // shows its last-known state (packages, stats, screen) on the dashboard.
+    const metaRawExisting = await redis.get<string>(termuxDeviceMetaKey(deviceId));
+    const metaExisting = metaRawExisting
+      ? (typeof metaRawExisting === "string" ? JSON.parse(metaRawExisting) : metaRawExisting)
+      : {};
+    const snapshot: Record<string, any> = {
+      ...metaExisting,
+      hostname: device.hostname,
+      platform: device.platform,
+      registeredAt: device.registeredAt || metaExisting.registeredAt || Date.now(),
+      lastSeen: device.lastSeen,
+      packages: device.packages,
+      stats: device.stats,
+      screen: device.screen,
+    };
+    if (device.customName) snapshot.customName = device.customName;
+    await redis.set(termuxDeviceMetaKey(deviceId), JSON.stringify(snapshot));
+
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
