@@ -28,6 +28,13 @@ local C = {
   reset  = "\\27[0m",
 }
 
+-- ─── Fix PATH when running via curl pipe ───
+local PREFIX = os.getenv("PREFIX") or "/data/data/com.termux/files/usr"
+local HOME = os.getenv("HOME") or "/data/data/com.termux/files/home"
+os.execute(string.format('export PATH="%s/bin:%s/bin/applets:$PATH"', PREFIX, PREFIX))
+-- For io.popen/os.execute subshells, inject PATH via env
+local ENV_PREFIX = string.format('PATH="%s/bin:%s/bin/applets:/usr/bin:/bin" ', PREFIX, PREFIX)
+
 -- ─── Helpers ───
 local function ts()
   return os.date("%H:%M:%S")
@@ -45,7 +52,7 @@ local function log(msg)
 end
 
 local function shell(cmd)
-  local h = io.popen(cmd .. " 2>/dev/null", "r")
+  local h = io.popen(ENV_PREFIX .. cmd .. " 2>/dev/null", "r")
   if not h then return "" end
   local out = h:read("*a") or ""
   h:close()
@@ -53,7 +60,7 @@ local function shell(cmd)
 end
 
 local function shellcode(cmd)
-  local ok = os.execute(cmd .. " >/dev/null 2>&1")
+  local ok = os.execute(ENV_PREFIX .. cmd .. " >/dev/null 2>&1")
   if type(ok) == "number" then return ok == 0 end
   return ok == true
 end
@@ -375,8 +382,8 @@ local function start_ws(device_id)
   -- websocat reads from FIFO (outbox), writes to inbox file
   -- tail -f keeps the FIFO open so websocat doesn't exit
   local cmd = string.format(
-    "tail -f %s | %s -n %q >> %s 2>/dev/null &",
-    WS_OUTBOX, WEBSOCAT, WS_URL, WS_INBOX
+    "tail -f %s | websocat -n %q >> %s 2>/dev/null &",
+    WS_OUTBOX, WS_URL, WS_INBOX
   )
   os.execute(cmd)
   sleep(2)
@@ -418,19 +425,7 @@ end
 os.execute("mkdir -p " .. CONFIG_DIR)
 fwrite(LOG_FILE, "")
 
-local WEBSOCAT = shell("command -v websocat")
-if WEBSOCAT == "" then
-  WEBSOCAT = shell("find /data/data/com.termux/files/usr/bin -name websocat 2>/dev/null")
-end
-if WEBSOCAT == "" then
-  log(C.yellow .. "Installing websocat..." .. C.reset)
-  shellcode("pkg install websocat -y")
-  WEBSOCAT = shell("command -v websocat")
-  if WEBSOCAT == "" then
-    WEBSOCAT = "/data/data/com.termux/files/usr/bin/websocat"
-  end
-end
-if shell(WEBSOCAT .. " --version") == "" then
+if shell("websocat --version") == "" then
   log(C.red .. "websocat not found. Run: pkg install websocat" .. C.reset)
   os.exit(1)
 end
