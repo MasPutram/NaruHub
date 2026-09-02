@@ -641,7 +641,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const script = LUA_AGENT.replace(/\\$\\$LICENSE\\$\\$/g, accessKey);
+  const script = LUA_AGENT.replace(/\$\$LICENSE\$\$/g, accessKey);
 
   return new NextResponse(script, {
     status: 200,
