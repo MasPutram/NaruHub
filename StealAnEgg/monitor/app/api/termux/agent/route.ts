@@ -111,7 +111,7 @@ function json.encode(val)
         return "[" .. table.concat(parts, ",") .. "]"
       end
     end
-    if next(val) == nil then return "[]" end
+    if next(val) == nil then return "{}" end
     local parts = {}
     for k, v in pairs(val) do
       parts[#parts+1] = json.encode(tostring(k)) .. ":" .. json.encode(v)
@@ -369,21 +369,27 @@ end
 -- ─── HTTP helpers (writes to Redis so dashboard can read) ───
 local function http_post(path, body_table)
   local body = json.encode(body_table)
-  local escaped = body:gsub("'", "'\\''")
+  local tmpfile = CONFIG_DIR .. "/.http_body.json"
+  fwrite(tmpfile, body)
+  local url = BASE_URL .. path
   local cmd = string.format(
-    "curl -s -w '%%{http_code}' -o /dev/null -X POST '%s%s' -H 'Content-Type: application/json' -H 'X-Access-Key: %s' -d '%s'",
-    BASE_URL, path, LICENSE_KEY, escaped
+    "curl -s -w '%%{http_code}' -o /dev/null -X POST '%s' -H 'Content-Type: application/json' -H 'X-Access-Key: %s' -d @%s",
+    url, LICENSE_KEY, tmpfile
   )
   local result = shell(cmd)
   return result
 end
 
 local function http_register()
-  log(C.dim .. "[" .. ts() .. "] registering deviceId=" .. (DEVICE_ID or "nil") .. C.reset)
+  if not DEVICE_ID then
+    log(C.red .. "[" .. ts() .. "] skip HTTP register: no deviceId" .. C.reset)
+    return
+  end
+  log(C.dim .. "[" .. ts() .. "] HTTP register deviceId=" .. DEVICE_ID:sub(1,8) .. C.reset)
   local code = http_post("/api/termux/register", {
     deviceId = DEVICE_ID,
-    hostname = HOSTNAME,
-    platform = PLATFORM,
+    hostname = HOSTNAME or "unknown",
+    platform = PLATFORM or "unknown",
   })
   if code == "200" then
     log(C.green .. "[" .. ts() .. "] HTTP register ok" .. C.reset)
@@ -393,11 +399,12 @@ local function http_register()
 end
 
 local function http_heartbeat(pkgs, screen, stats)
+  if not DEVICE_ID then return end
   local code = http_post("/api/termux/heartbeat", {
     deviceId = DEVICE_ID,
-    packages = pkgs,
+    packages = pkgs or {},
     screen = screen,
-    stats = stats,
+    stats = stats or {},
   })
   if code ~= "200" then
     log(C.red .. "[" .. ts() .. "] HTTP heartbeat failed (" .. code .. ")" .. C.reset)
