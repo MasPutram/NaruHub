@@ -159,7 +159,7 @@ export default function MonitorListPage() {
 
   const online = devices.filter((d) => d.status === "online");
   const offline = devices.filter((d) => d.status !== "online");
-  const totalPackages = devices.reduce((a, d) => a + d.packages.length, 0);
+  const totalPackages = devices.reduce((a, d) => a + (d.packages?.length ?? 0), 0);
   const visible = devices.filter((d) => filter === "all" || d.status === filter);
 
   return (
@@ -373,7 +373,7 @@ export default function MonitorListPage() {
                 )}
 
                 <div className="devicefoot">
-                  <span className="pkg">{d.packages.length} Roblox package{d.packages.length !== 1 ? "s" : ""}</span>
+                  <span className="pkg">{d.packages?.length ?? 0} Roblox package{(d.packages?.length ?? 0) !== 1 ? "s" : ""}</span>
                   <span>Updated {ago(d.lastSeen)}</span>
                 </div>
                 <div className="device-actions">
