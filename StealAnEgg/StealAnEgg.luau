@@ -26,6 +26,18 @@ do
 			end
 		end
 	end
+
+	-- Wipe cached NaruUI config so window size / toggle state always reflects latest script
+	if listfiles and delfile then
+		pcall(function()
+			for _, path in ipairs(listfiles("")) do
+				local name = tostring(path):match("[^/\\]+$") or ""
+				if name:match("^StealAnEgg_Config_.+%.json$") then
+					pcall(delfile, path)
+				end
+			end
+		end)
+	end
 end
 
 ------------------------------------------------------------
