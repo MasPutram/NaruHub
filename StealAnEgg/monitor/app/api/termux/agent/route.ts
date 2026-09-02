@@ -7,6 +7,7 @@ local VERSION = "3.0"
 local CONFIG_DIR = os.getenv("HOME") .. "/.cache/log"
 local CONFIG_FILE = CONFIG_DIR .. "/naruhub_config.json"
 local LOG_FILE = CONFIG_DIR .. "/naruhub_agent.log"
+local BASE_URL = "https://naruhub.my.id"
 local WS_URL = "wss://ws.naruhub.my.id"
 local LICENSE_KEY = "$$LICENSE$$"
 local RAM_TRIM_PCT = 90
@@ -365,6 +366,32 @@ local function launch_app(pkg, bounds, resize, delay)
   if delay > 0 then sleep(delay) end
 end
 
+-- ─── HTTP heartbeat (writes to Redis so dashboard can read) ───
+local function http_register()
+  local body = json.encode({
+    deviceId = DEVICE_ID,
+    hostname = HOSTNAME,
+    platform = PLATFORM,
+  })
+  shellcode(string.format(
+    'curl -s -o /dev/null -X POST "%s/api/termux/register" -H "Content-Type: application/json" -H "X-Access-Key: %s" -d %q',
+    BASE_URL, LICENSE_KEY, body
+  ))
+end
+
+local function http_heartbeat(pkgs, screen, stats)
+  local body = json.encode({
+    deviceId = DEVICE_ID,
+    packages = pkgs,
+    screen = screen,
+    stats = stats,
+  })
+  shellcode(string.format(
+    'curl -s -o /dev/null -X POST "%s/api/termux/heartbeat" -H "Content-Type: application/json" -H "X-Access-Key: %s" -d %q',
+    BASE_URL, LICENSE_KEY, body
+  ))
+end
+
 -- ─── WebSocket (bidirectional via websocat + named pipe) ───
 local function stop_ws()
   shellcode("pkill -f 'websocat.*ws.naruhub'")
@@ -507,6 +534,7 @@ while true do
       hostname = HOSTNAME,
       platform = PLATFORM,
     })
+    http_register()
     IS_NEW = false
   end
 
@@ -524,7 +552,7 @@ while true do
       maybe_trim_ram(pkgs)
       local screen = collect_screen()
       local stats = collect_stats()
-      local sent = ws_send({
+      ws_send({
         type = "heartbeat",
         deviceId = DEVICE_ID,
         hostname = HOSTNAME,
@@ -532,10 +560,24 @@ while true do
         screen = screen,
         stats = stats,
       })
-      if sent then
-        last_heartbeat = now
-      else
-        log(C.red .. "[" .. ts() .. "] heartbeat send failed" .. C.reset)
+      http_heartbeat(pkgs, screen, stats)
+      last_heartbeat = now
+    end
+
+    -- Poll HTTP commands (dashboard queues commands via HTTP API)
+    local cmd_raw = shell(string.format(
+      'curl -s "%s/api/termux/commands?deviceId=%s" -H "X-Access-Key: %s"',
+      BASE_URL, DEVICE_ID, LICENSE_KEY
+    ))
+    if cmd_raw ~= "" then
+      local cmd_data = json.decode(cmd_raw)
+      if cmd_data and cmd_data.commands then
+        for _, cmd in ipairs(cmd_data.commands) do
+          if cmd.type == "launch" then
+            log(C.cyan .. "[" .. ts() .. "] >> launch " .. cmd.package .. C.reset)
+            launch_app(cmd.package, cmd.bounds, cmd.resize, cmd.launchDelay)
+          end
+        end
       end
     end
 
