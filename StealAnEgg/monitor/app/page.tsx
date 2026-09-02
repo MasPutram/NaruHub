@@ -334,11 +334,29 @@ export default function DashboardPage() {
         body: JSON.stringify({ account, forSale: true }),
       });
       const body = await res.json();
-      if (res.ok && body.ok) {
-        setAccounts((prev) => prev.filter((a) => a.sourceAccount !== account));
-        setGenMsg(account, "Akun dipindah ke Katalog.", "var(--green)");
-      } else {
+      if (!res.ok || !body.ok) {
         setGenMsg(account, "Gagal: " + (body.error || "unknown"), "#f87171");
+        return;
+      }
+      setAccounts((prev) => prev.filter((a) => a.sourceAccount !== account));
+      setGenMsg(account, "Akun dipindah, membuka package buat logout...", "var(--dim)");
+
+      // Auto-launch the matching package on its device so the operator can
+      // log this account out immediately.
+      try {
+        const lres = await fetch("/api/device-control/launch-by-username", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: account }),
+        });
+        const lbody = await lres.json();
+        if (lres.ok && lbody.ok) {
+          setGenMsg(account, `Package dibuka di ${lbody.hostname}.`, "var(--green)");
+        } else {
+          setGenMsg(account, "Katalog OK, tapi launch gagal: " + (lbody.error || "unknown"), "#f59e0b");
+        }
+      } catch (e: any) {
+        setGenMsg(account, "Katalog OK, tapi launch error: " + e.message, "#f59e0b");
       }
     } catch (e: any) {
       setGenMsg(account, "Gagal: " + e.message, "#f87171");
