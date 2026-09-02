@@ -584,7 +584,7 @@ export default function DashboardPage() {
 
         {tab === "monitor" && <MonitorTab showToast={setToast} />}
         {tab === "accounts" && <AccountsTab showToast={setToast} />}
-        {tab === "poster" && <EmbedTab path="/poster" />}
+        {tab === "poster" && <PosterTab />}
         {tab === "scanner" && <PlaceholderTab name="Scanner" desc="Scan and discover accounts automatically." />}
         {tab === "settings" && <PlaceholderTab name="Settings" desc="Configure dashboard and agent settings." />}
       </div>
@@ -1488,6 +1488,96 @@ function PetDetailSection({ title, pets }: { title: string; pets: Pet[] }) {
 }
 
 // ─── Placeholder tab ───
+function PosterTab() {
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [loading, setLoading] = useState(true);
+  const genMsgs = useRef<Record<string, { text: string; color: string }>>({});
+  const [, forceUpdate] = useState(0);
+
+  const fetchAccounts = useCallback(async () => {
+    try {
+      const res = await fetch("/api/accounts");
+      const data = await res.json();
+      setAccounts((data.accounts || []).filter((a: Account) => a.forSale));
+    } catch {}
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchAccounts();
+    const id = setInterval(fetchAccounts, 5000);
+    return () => clearInterval(id);
+  }, [fetchAccounts]);
+
+  function setGenMsg(account: string, text: string, color: string) {
+    genMsgs.current[account] = { text, color };
+    forceUpdate((n) => n + 1);
+  }
+
+  async function generatePoster(account: string) {
+    setGenMsg(account, "Mengirim...", "var(--ink-muted)");
+    try {
+      const res = await fetch("/api/generate-poster", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ account }) });
+      const body = await res.json();
+      if (res.ok && body.ok) {
+        setGenMsg(account, body.mode === "discord-price-flow" ? "Draft terkirim ke Discord." : "Poster terkirim ke Discord.", "var(--green)");
+      } else {
+        setGenMsg(account, "Gagal: " + (body.error || "unknown"), "var(--red)");
+      }
+    } catch (e: any) {
+      setGenMsg(account, "Gagal: " + e.message, "var(--red)");
+    }
+  }
+
+  if (loading) return <div className="db-empty">Memuat akun siap jual...</div>;
+
+  return (
+    <>
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Akun Siap Jual</h2>
+        <p style={{ color: "var(--ink-muted)", fontSize: 13 }}>
+          Akun yang sudah ditandai "Siap Jual" dari tab Accounts. Klik Generate Poster untuk buat poster.
+        </p>
+      </div>
+      {accounts.length === 0 ? (
+        <div className="db-empty">Belum ada akun yang ditandai Siap Jual. Tandai dari tab Accounts.</div>
+      ) : (
+        <div className="db-card-grid">
+          {accounts.map((a) => (
+            <div key={a.sourceAccount} className="acc-card">
+              <div className="acc-head">
+                <span className="acc-name">{a.sourceAccount}</span>
+                {deviceLabel(a.sourceAccount) && <span className="acc-tag">{deviceLabel(a.sourceAccount)}</span>}
+              </div>
+              <div className="acc-stats">
+                <div className="acc-stat speed"><div className="label">SPEED</div><div className="val">{fmtCompactNum(a.speed)}</div></div>
+                <div className="acc-stat money"><div className="label">CASH</div><div className="val">{fmtMoney(a.money)}</div></div>
+                <div className="acc-stat"><div className="label">INCOME AKTIF</div><div className="val">{fmtRate(a.incomeAktif)}</div></div>
+                <div className="acc-stat"><div className="label">PETS</div><div className="val">{fmtNum(a.petsCount)}</div></div>
+              </div>
+              <a
+                className="btn-yellow"
+                href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: "block", textAlign: "center", textDecoration: "none", marginTop: 8 }}
+              >
+                Generate Poster
+              </a>
+              <button className="btn-outline" onClick={() => generatePoster(a.sourceAccount)} style={{ width: "100%", marginTop: 6 }}>
+                Kirim ke Discord
+              </button>
+              <div style={{ fontSize: 11, marginTop: 5, minHeight: 14, color: genMsgs.current[a.sourceAccount]?.color || "var(--ink-muted)" }}>
+                {genMsgs.current[a.sourceAccount]?.text || ""}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 function PlaceholderTab({ name, desc }: { name: string; desc: string }) {
   return (
     <div className="db-empty">
