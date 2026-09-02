@@ -244,7 +244,7 @@ collect_stats() {
 # never touches app data, so nobody gets logged out, and the process
 # keeps running (no force-stop). Android itself clears cache dirs
 # under storage pressure all the time, so this is safe to do live.
-RAM_TRIM_THRESHOLD_PCT=85
+RAM_TRIM_THRESHOLD_PCT=80
 
 maybe_trim_ram() {
   local pkg_json="$1"
@@ -261,10 +261,16 @@ maybe_trim_ram() {
   if ! command -v jq >/dev/null 2>&1; then
     return
   fi
-  log "\${YELLOW}[$(ts)] RAM \${mem_used_pct}% >= \${RAM_TRIM_THRESHOLD_PCT}% -- auto trim RAM (clearing Roblox cache)\${RESET}"
+  log "\${YELLOW}[$(ts)] RAM \${mem_used_pct}% >= \${RAM_TRIM_THRESHOLD_PCT}% -- auto trim RAM\${RESET}"
   echo "$pkg_json" | jq -r '.[].pkg' 2>/dev/null | while IFS= read -r pkg; do
     [ -z "$pkg" ] && continue
-    su -c "rm -rf /data/data/$pkg/cache/*" >/dev/null 2>&1 || true
+    local pids
+    pids=$(su -c "pgrep -f \\"$pkg\\"" 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+      echo "$pids" | while IFS= read -r pid; do
+        [ -n "$pid" ] && su -c "am send-trim-memory $pid RUNNING_CRITICAL" >/dev/null 2>&1 || true
+      done
+    fi
   done
   log "\${GREEN}[$(ts)] auto trim RAM done\${RESET}"
 }
@@ -311,9 +317,13 @@ poll_commands() {
           cbounds=$(echo "$cmd" | jq -r '.bounds // empty')
           capply=$(echo "$cmd" | jq -r '.resize // false')
           su -c "am force-stop $cpkg" >/dev/null 2>&1 || true
-          local pid
-          pid=$(su -c "pidof $cpkg" 2>/dev/null || true)
-          [ -n "$pid" ] && su -c "kill -9 $pid" >/dev/null 2>&1 || true
+          local pids
+          pids=$(su -c "pgrep -f \\"$cpkg\\"" 2>/dev/null || true)
+          if [ -n "$pids" ]; then
+            echo "$pids" | while IFS= read -r pid; do
+              [ -n "$pid" ] && su -c "kill -9 $pid" >/dev/null 2>&1 || true
+            done
+          fi
           sleep 1
           if [ "$capply" = "true" ] && [ -n "$cbounds" ]; then
             local left top right bottom prefFile

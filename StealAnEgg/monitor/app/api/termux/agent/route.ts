@@ -9,7 +9,7 @@ local CONFIG_FILE = CONFIG_DIR .. "/naruhub_config.json"
 local LOG_FILE = CONFIG_DIR .. "/naruhub_agent.log"
 local WS_URL = "wss://ws.naruhub.my.id"
 local LICENSE_KEY = "$$LICENSE$$"
-local RAM_TRIM_PCT = 85
+local RAM_TRIM_PCT = 80
 local HEARTBEAT_INTERVAL = 120
 local RECONNECT_DELAY = 5
 
@@ -281,9 +281,14 @@ local function maybe_trim_ram(pkgs)
   if total == 0 then return end
   local pct = math.floor((total - avail) * 100 / total)
   if pct < RAM_TRIM_PCT then return end
-  log(C.yellow .. "[" .. ts() .. "] RAM " .. pct .. "% -- auto trim" .. C.reset)
+  log(C.yellow .. "[" .. ts() .. "] RAM " .. pct .. "% >= " .. RAM_TRIM_PCT .. "% -- auto trim" .. C.reset)
   for _, p in ipairs(pkgs) do
-    shellcode(string.format('su -c "rm -rf /data/data/%s/cache/*"', p.pkg))
+    local pid = shell(string.format('su -c "pgrep -f %s"', p.pkg))
+    if pid ~= "" then
+      for line in pid:gmatch("[^\\n]+") do
+        shellcode(string.format('su -c "am send-trim-memory %s RUNNING_CRITICAL"', line))
+      end
+    end
   end
   log(C.green .. "[" .. ts() .. "] trim done" .. C.reset)
 end
@@ -311,10 +316,18 @@ local function set_window_bounds(pkg, left, top, right, bottom)
 end
 
 -- ─── Launch app ───
-local function launch_app(pkg, bounds, resize, delay)
+local function kill_pkg(pkg)
   shellcode(string.format('su -c "am force-stop %s"', pkg))
-  local pid = shell(string.format('su -c "pidof %s"', pkg))
-  if pid ~= "" then shellcode(string.format('su -c "kill -9 %s"', pid)) end
+  local pids = shell(string.format('su -c "pgrep -f \\\\"%s\\\\""', pkg))
+  if pids ~= "" then
+    for line in pids:gmatch("[^\\n]+") do
+      shellcode(string.format('su -c "kill -9 %s"', line))
+    end
+  end
+end
+
+local function launch_app(pkg, bounds, resize, delay)
+  kill_pkg(pkg)
   sleep(1)
 
   if resize and bounds and bounds ~= "" then
