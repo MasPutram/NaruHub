@@ -203,6 +203,26 @@ end
 
 -- ─── Device info ───
 local function get_device_id()
+  -- Stable hardware fingerprint so the same physical device always gets the
+  -- same id, even if the config file is wiped.
+  local parts = {}
+  local serial = shell("getprop ro.serialno")
+  if serial ~= "" and serial ~= "unknown" then parts[#parts+1] = serial end
+  local model = shell("getprop ro.product.model")
+  if model ~= "" then parts[#parts+1] = model end
+  local mfr = shell("getprop ro.product.manufacturer")
+  if mfr ~= "" then parts[#parts+1] = mfr end
+  local android_id = shell("settings get secure android_id")
+  if android_id ~= "" and android_id ~= "null" then parts[#parts+1] = android_id end
+
+  if #parts >= 2 then
+    local fp = table.concat(parts, "|")
+    -- printf %s (no trailing newline) so the hash is deterministic.
+    local hash = shell(string.format("printf %%s %q | sha256sum | cut -c1-32", fp))
+    if hash ~= "" then return hash end
+  end
+
+  -- Last-resort fallback: random uuid (not stable across resets)
   local raw = fread("/proc/sys/kernel/random/uuid")
   if raw and #raw > 0 then return raw:gsub("%s+", "") end
   return tostring(os.time()) .. tostring(math.random(100000, 999999))
