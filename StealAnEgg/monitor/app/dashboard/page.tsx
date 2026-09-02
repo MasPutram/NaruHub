@@ -584,7 +584,7 @@ export default function DashboardPage() {
 
         {tab === "monitor" && <MonitorTab showToast={setToast} />}
         {tab === "accounts" && <AccountsTab showToast={setToast} />}
-        {tab === "poster" && <PlaceholderTab name="Poster" desc="Generate and manage account posters for Discord." />}
+        {tab === "poster" && <EmbedTab path="/poster" />}
         {tab === "scanner" && <PlaceholderTab name="Scanner" desc="Scan and discover accounts automatically." />}
         {tab === "settings" && <PlaceholderTab name="Settings" desc="Configure dashboard and agent settings." />}
       </div>
@@ -1143,7 +1143,8 @@ function DeviceDetail({
 // ACCOUNTS TAB
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function AccountsTab({ showToast }: { showToast: (s: string) => void }) {
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [allAccounts, setAllAccounts] = useState<Account[]>([]);
+  const [viewMode, setViewMode] = useState<"active" | "forsale">("active");
   const [sortMode, setSortMode] = useState("name_asc");
   const [deviceFilter, setDeviceFilter] = useState("");
   const [detail, setDetail] = useState<{ name: string; data: AccountDetail | null; loading: boolean } | null>(null);
@@ -1156,10 +1157,13 @@ function AccountsTab({ showToast }: { showToast: (s: string) => void }) {
     try {
       const res = await fetch("/api/accounts");
       const data = await res.json();
-      const active = (data.accounts || []).filter((a: Account) => a.online && !a.forSale);
-      setAccounts(active);
+      setAllAccounts(data.accounts || []);
     } catch {}
   }, []);
+
+  const accounts = viewMode === "active"
+    ? allAccounts.filter((a) => a.online && !a.forSale)
+    : allAccounts.filter((a) => a.forSale);
 
   useEffect(() => {
     fetchAccounts();
@@ -1230,14 +1234,14 @@ function AccountsTab({ showToast }: { showToast: (s: string) => void }) {
     }
   }
 
-  async function markForSale(account: string) {
-    setGenMsg(account, "Memindahkan ke katalog...", "var(--ink-muted)");
+  async function markForSale(account: string, forSale: boolean) {
+    setGenMsg(account, forSale ? "Memindahkan ke Siap Jual..." : "Membatalkan jual...", "var(--ink-muted)");
     try {
-      const res = await fetch("/api/mark-forsale", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ account, forSale: true }) });
+      const res = await fetch("/api/mark-forsale", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ account, forSale }) });
       const body = await res.json();
       if (res.ok && body.ok) {
-        setAccounts((prev) => prev.filter((a) => a.sourceAccount !== account));
-        setGenMsg(account, "Akun dipindah ke Katalog.", "var(--green)");
+        fetchAccounts();
+        setGenMsg(account, forSale ? "Akun dipindah ke Siap Jual." : "Akun dikembalikan ke Active.", "var(--green)");
       } else {
         setGenMsg(account, "Gagal: " + (body.error || "unknown"), "var(--red)");
       }
@@ -1290,6 +1294,14 @@ function AccountsTab({ showToast }: { showToast: (s: string) => void }) {
       </div>
 
       <div className="db-toolbar">
+        <div className="db-pills">
+          <button className={`db-pill ${viewMode === "active" ? "active" : ""}`} onClick={() => setViewMode("active")}>
+            Active ({allAccounts.filter((a) => a.online && !a.forSale).length})
+          </button>
+          <button className={`db-pill ${viewMode === "forsale" ? "active" : ""}`} onClick={() => setViewMode("forsale")}>
+            Siap Jual ({allAccounts.filter((a) => a.forSale).length})
+          </button>
+        </div>
         <select className="db-select" value={sortMode} onChange={(e) => setSortMode(e.target.value)}>
           <option value="name_asc">Nama Akun (Nomor)</option>
           <option value="speed_desc">Speed (Tertinggi)</option>
@@ -1305,9 +1317,11 @@ function AccountsTab({ showToast }: { showToast: (s: string) => void }) {
 
       {visible.length === 0 ? (
         <div className="db-empty">
-          {accounts.length > 0
-            ? "Ga ada akun yang cocok sama filter device itu."
-            : "Belum ada akun yang lapor. Nyalain Auto Report di GUI game."}
+          {viewMode === "forsale"
+            ? "Belum ada akun yang ditandai Siap Jual."
+            : accounts.length > 0
+              ? "Ga ada akun yang cocok sama filter device itu."
+              : "Belum ada akun yang lapor. Nyalain Auto Report di GUI game."}
         </div>
       ) : (
         <div className="db-card-grid">
@@ -1338,9 +1352,15 @@ function AccountsTab({ showToast }: { showToast: (s: string) => void }) {
               >
                 Generate Poster
               </a>
-              <button className="btn-red" onClick={(e) => { e.stopPropagation(); markForSale(a.sourceAccount); }} style={{ width: "100%", marginTop: 6 }}>
-                Siap Jual
-              </button>
+              {viewMode === "active" ? (
+                <button className="btn-red" onClick={(e) => { e.stopPropagation(); markForSale(a.sourceAccount, true); }} style={{ width: "100%", marginTop: 6 }}>
+                  Siap Jual
+                </button>
+              ) : (
+                <button className="btn-outline" onClick={(e) => { e.stopPropagation(); markForSale(a.sourceAccount, false); }} style={{ width: "100%", marginTop: 6 }}>
+                  Batalkan Jual
+                </button>
+              )}
               <div style={{ fontSize: 11, marginTop: 5, minHeight: 14, color: genMsgs.current[a.sourceAccount]?.color || "var(--ink-muted)" }}>
                 {genMsgs.current[a.sourceAccount]?.text || ""}
               </div>
@@ -1475,5 +1495,20 @@ function PlaceholderTab({ name, desc }: { name: string; desc: string }) {
       <div>{desc}</div>
       <div style={{ marginTop: 8, color: "var(--yellow)", fontSize: 13 }}>Coming soon</div>
     </div>
+  );
+}
+
+function EmbedTab({ path }: { path: string }) {
+  return (
+    <iframe
+      src={path}
+      style={{
+        width: "100%",
+        height: "calc(100vh - 140px)",
+        border: "none",
+        borderRadius: 8,
+        background: "var(--bg)",
+      }}
+    />
   );
 }
