@@ -271,12 +271,44 @@ local Window = Fluent:CreateWindow({
 local StatusTab = Window:AddTab({ Title = "" })
 local section = StatusTab:AddSection(LocalPlayer.Name, { NoCollapse = true })
 
-section:AddParagraph({
+local usernamePara = section:AddParagraph({
 	Title = "Username",
 	Content = LocalPlayer.Name,
 	ContentSize = 14,
 	Center = true,
 })
+
+do
+	local Players = game:GetService("Players")
+	local myName = LocalPlayer.Name
+	local myPrefix = myName:match("^(%D+)%d+$")
+
+	local function refreshUsernameList()
+		if not myPrefix then
+			usernamePara:SetContent(myName)
+			return
+		end
+		local matches = {}
+		for _, p in ipairs(Players:GetPlayers()) do
+			local prefix, num = p.Name:match("^(%D+)(%d+)$")
+			if prefix == myPrefix then
+				table.insert(matches, { name = p.Name, num = tonumber(num) or 0 })
+			end
+		end
+		if #matches <= 1 then
+			usernamePara:SetContent(myName)
+			return
+		end
+		table.sort(matches, function(a, b) return a.num < b.num end)
+		local names = {}
+		for _, m in ipairs(matches) do names[#names+1] = m.name end
+		usernamePara:SetContent(table.concat(names, "\n"))
+	end
+
+	Players.PlayerAdded:Connect(function() task.wait(0.5) refreshUsernameList() end)
+	Players.PlayerRemoving:Connect(function() task.wait(0.5) refreshUsernameList() end)
+	task.spawn(refreshUsernameList)
+end
 
 local monitorPara = section:AddParagraph({
 	Title = "Status",
