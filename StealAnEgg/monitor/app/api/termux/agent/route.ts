@@ -213,6 +213,9 @@ local function get_prop(key)
   return v ~= "" and v or "?"
 end
 
+-- ─── Forward-declare state (must be before functions that reference them) ───
+local DEVICE_ID, HOSTNAME, PLATFORM, IS_NEW
+
 -- ─── Package collection ───
 local function collect_packages()
   local raw = shell('su -c "pm list packages -f" | grep -i roblox')
@@ -475,8 +478,6 @@ if shell("websocat --version") == "" then
   log(C.red .. "websocat not found. Run: pkg install websocat" .. C.reset)
   os.exit(1)
 end
-
-local DEVICE_ID, HOSTNAME, PLATFORM, IS_NEW
 
 local config_raw = fread(CONFIG_FILE)
 if config_raw then
