@@ -314,7 +314,7 @@ local function maybe_trim_ram(pkgs)
   if pct < RAM_TRIM_PCT then return end
   log(C.yellow .. "[" .. ts() .. "] RAM " .. pct .. "% >= " .. RAM_TRIM_PCT .. "% -- auto trim" .. C.reset)
   for _, p in ipairs(pkgs) do
-    local pid = shell(string.format('su -c "pgrep -f %s"', p.pkg))
+    local pid = shell(string.format('su -c "pgrep -x %s"', p.pkg))
     if pid ~= "" then
       for line in pid:gmatch("[^\\n]+") do
         shellcode(string.format('su -c "am send-trim-memory %s RUNNING_CRITICAL"', line))
@@ -347,9 +347,13 @@ local function set_window_bounds(pkg, left, top, right, bottom)
 end
 
 -- ─── Launch app ───
+-- kill_pkg must ONLY kill the exact package (not sibling App Cloner clones
+-- whose package names share a prefix). pgrep -f matches on the full cmdline
+-- and is too broad; pgrep -x matches only exact process names, which is
+-- what Android uses for app processes (proc/<pid>/cmdline).
 local function kill_pkg(pkg)
   shellcode(string.format('su -c "am force-stop %s"', pkg))
-  local pids = shell(string.format('su -c "pgrep -f \\\\"%s\\\\""', pkg))
+  local pids = shell(string.format('su -c "pgrep -x %s"', pkg))
   if pids ~= "" then
     for line in pids:gmatch("[^\\n]+") do
       shellcode(string.format('su -c "kill -9 %s"', line))
