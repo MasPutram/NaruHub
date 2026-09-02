@@ -24,6 +24,10 @@ export function termuxDeviceKey(deviceId: string) {
   return `termux:device:${deviceId}`;
 }
 
+export function termuxDeviceMetaKey(deviceId: string) {
+  return `termux:device:meta:${deviceId}`;
+}
+
 export const TERMUX_DEVICE_TTL_S = 300;
 
 export function petIconKey(category: string) {

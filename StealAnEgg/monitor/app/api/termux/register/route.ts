@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, termuxDeviceKey, TERMUX_DEVICE_TTL_S } from "@/lib/redis";
+import { redis, termuxDeviceKey, termuxDeviceMetaKey, TERMUX_DEVICE_TTL_S } from "@/lib/redis";
 
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
@@ -21,17 +21,25 @@ export async function POST(req: NextRequest) {
     }
 
     const now = Date.now();
-    const device = {
+    const metaRaw = await redis.get<string>(termuxDeviceMetaKey(deviceId));
+    const meta = metaRaw ? (typeof metaRaw === "string" ? JSON.parse(metaRaw) : metaRaw) : null;
+
+    const device: Record<string, any> = {
       deviceId,
       hostname: hostname || "unknown",
       platform: platform || "unknown",
       status: "online",
-      registeredAt: now,
+      registeredAt: meta?.registeredAt || now,
       lastSeen: now,
       packages: [] as string[],
     };
+    if (meta?.customName) device.customName = meta.customName;
 
     await redis.set(termuxDeviceKey(deviceId), JSON.stringify(device), { ex: TERMUX_DEVICE_TTL_S });
+
+    if (!meta) {
+      await redis.set(termuxDeviceMetaKey(deviceId), JSON.stringify({ registeredAt: now }));
+    }
 
     return NextResponse.json({ ok: true, device });
   } catch (e: any) {

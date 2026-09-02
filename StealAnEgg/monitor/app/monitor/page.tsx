@@ -115,6 +115,27 @@ export default function MonitorListPage() {
     });
   }
 
+  async function deleteDevice(e: React.MouseEvent, deviceId: string, name: string) {
+    e.stopPropagation();
+    if (!window.confirm(`Hapus device "${name}"? Data device akan dihapus permanen.`)) return;
+    try {
+      const res = await fetch("/api/device-control/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setDevices((prev) => prev.filter((d) => d.deviceId !== deviceId));
+        setToast("Device dihapus");
+      } else {
+        setToast("Gagal: " + data.error);
+      }
+    } catch (err: any) {
+      setToast("Gagal: " + err.message);
+    }
+  }
+
   function displayName(d: TermuxDevice) {
     return d.customName || d.hostname;
   }
@@ -204,8 +225,11 @@ export default function MonitorListPage() {
         .fill.danger { background: var(--red); }
         .devicefoot { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--border); color: var(--dim); font-size: 11px; }
         .pkg { color: var(--cyan); }
-        .openbtn { border: 1px solid var(--border); background: #181823; color: var(--ink); padding: 9px 13px; border-radius: 8px; width: 100%; margin-top: 12px; }
+        .device-actions { display: flex; gap: 8px; margin-top: 12px; }
+        .openbtn { border: 1px solid var(--border); background: #181823; color: var(--ink); padding: 9px 13px; border-radius: 8px; flex: 1; }
         .openbtn:hover { border-color: #44445a; }
+        .delbtn { border: 1px solid #3b1c1c; background: #1c1012; color: var(--red); padding: 9px 13px; border-radius: 8px; font-size: 12px; white-space: nowrap; }
+        .delbtn:hover { border-color: var(--red); }
 
         .empty { color: var(--dim); text-align: center; padding: 60px 0; font-size: 14px; }
         .toast { position: fixed; right: 20px; bottom: 20px; background: #191923; border: 1px solid #39394d; padding: 11px 14px; border-radius: 8px; z-index: 20; box-shadow: 0 18px 50px #0007; font-size: 13px; }
@@ -352,9 +376,14 @@ export default function MonitorListPage() {
                   <span className="pkg">{d.packages.length} Roblox package{d.packages.length !== 1 ? "s" : ""}</span>
                   <span>Updated {ago(d.lastSeen)}</span>
                 </div>
-                <button className="openbtn" onClick={(e) => { e.stopPropagation(); router.push(`/monitor/${d.deviceId}`); }}>
-                  Open device →
-                </button>
+                <div className="device-actions">
+                  <button className="openbtn" onClick={(e) => { e.stopPropagation(); router.push(`/monitor/${d.deviceId}`); }}>
+                    Open device →
+                  </button>
+                  <button className="delbtn" onClick={(e) => deleteDevice(e, d.deviceId, displayName(d))}>
+                    Hapus
+                  </button>
+                </div>
               </div>
             );
           })}

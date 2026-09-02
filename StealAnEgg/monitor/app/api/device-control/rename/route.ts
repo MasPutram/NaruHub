@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, termuxDeviceKey, TERMUX_DEVICE_TTL_S } from "@/lib/redis";
+import { redis, termuxDeviceKey, termuxDeviceMetaKey, TERMUX_DEVICE_TTL_S } from "@/lib/redis";
 
 // Admin-only (protected by middleware session auth -- outside /api/termux/).
 // Sets a custom display name for a device, shown instead of its raw hostname.
@@ -27,6 +27,12 @@ export async function POST(req: NextRequest) {
     device.customName = name.trim();
 
     await redis.set(termuxDeviceKey(deviceId), JSON.stringify(device), { ex: TERMUX_DEVICE_TTL_S });
+
+    const metaRaw = await redis.get<string>(termuxDeviceMetaKey(deviceId));
+    const meta = metaRaw ? (typeof metaRaw === "string" ? JSON.parse(metaRaw) : metaRaw) : {};
+    meta.customName = name.trim();
+    if (!meta.registeredAt) meta.registeredAt = device.registeredAt || Date.now();
+    await redis.set(termuxDeviceMetaKey(deviceId), JSON.stringify(meta));
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
