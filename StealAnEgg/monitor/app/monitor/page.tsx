@@ -69,6 +69,10 @@ export default function MonitorListPage() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [toast, setToast] = useState("");
+  const [showCommand, setShowCommand] = useState(false);
+  const [command, setCommand] = useState("");
+  const [commandLoading, setCommandLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const fetchDevices = useCallback(async () => {
     try {
@@ -90,6 +94,26 @@ export default function MonitorListPage() {
     const t = setTimeout(() => setToast(""), 2200);
     return () => clearTimeout(t);
   }, [toast]);
+
+  async function openCommandModal() {
+    setShowCommand(true);
+    if (command) return;
+    setCommandLoading(true);
+    try {
+      const res = await fetch("/api/device-control/bootstrap-command");
+      const data = await res.json();
+      setCommand(data.command || "");
+    } catch {}
+    setCommandLoading(false);
+  }
+
+  function copyCommand() {
+    if (!command) return;
+    navigator.clipboard.writeText(command).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   function displayName(d: TermuxDevice) {
     return d.customName || d.hostname;
@@ -186,6 +210,23 @@ export default function MonitorListPage() {
         .empty { color: var(--dim); text-align: center; padding: 60px 0; font-size: 14px; }
         .toast { position: fixed; right: 20px; bottom: 20px; background: #191923; border: 1px solid #39394d; padding: 11px 14px; border-radius: 8px; z-index: 20; box-shadow: 0 18px 50px #0007; font-size: 13px; }
 
+        .gen-btn { border: 1px solid var(--border); background: #181823; color: var(--cyan); padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+        .gen-btn:hover { border-color: var(--cyan); }
+
+        .modal-overlay { position: fixed; inset: 0; background: #000a; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 24px; max-width: 640px; width: 100%; max-height: 90vh; overflow-y: auto; }
+        .modal h2 { margin: 0 0 6px; font-size: 18px; }
+        .modal .msub { color: var(--dim); font-size: 13px; margin-bottom: 18px; }
+        .modal .mlabel { color: var(--cyan); font-size: 12px; font-weight: 800; letter-spacing: .5px; margin-bottom: 10px; }
+        .modal .command-box { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-family: "Cascadia Code", "Fira Code", monospace; font-size: 13px; word-break: break-all; color: var(--green); display: flex; align-items: center; gap: 12px; }
+        .modal .command-text { flex: 1; }
+        .modal .copy-btn { background: var(--accent); color: #1a1030; border: none; border-radius: 8px; padding: 8px 16px; font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap; }
+        .modal .copy-btn:hover { filter: brightness(1.1); }
+        .modal .steps { color: var(--dim); font-size: 13px; line-height: 1.8; margin-top: 16px; }
+        .modal .steps code { background: #1c1c2b; padding: 2px 6px; border-radius: 4px; color: var(--ink); font-size: 12px; }
+        .modal .close-btn { border: 1px solid var(--border); background: transparent; color: var(--dim); padding: 8px 16px; border-radius: 8px; font-size: 13px; margin-top: 16px; }
+        .modal .close-btn:hover { color: var(--ink); border-color: #44445a; }
+
         @media (max-width: 1000px) { .stats { grid-template-columns: repeat(2, 1fr); } }
       `}</style>
 
@@ -195,7 +236,10 @@ export default function MonitorListPage() {
           <h1>Device Monitor</h1>
           <div className="sub">Termux root devices &bull; polling every 10 seconds</div>
         </div>
-        <span className="live"><span className="dot" /> LIVE</span>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <button className="gen-btn" onClick={openCommandModal}>+ Generate Command</button>
+          <span className="live"><span className="dot" /> LIVE</span>
+        </div>
       </div>
 
       <div className="stats">
@@ -245,7 +289,7 @@ export default function MonitorListPage() {
       ) : devices.length === 0 ? (
         <div className="empty">
           Belum ada device terhubung.<br />
-          <a href="/termux-packages" style={{ color: "var(--cyan)" }}>Generate command</a> untuk menambahkan device.
+          <button onClick={openCommandModal} style={{ color: "var(--cyan)", background: "none", border: "none", cursor: "pointer", textDecoration: "underline", font: "inherit" }}>Generate command</button> untuk menambahkan device.
         </div>
       ) : (
         <div className="grid">
@@ -314,6 +358,34 @@ export default function MonitorListPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {showCommand && (
+        <div className="modal-overlay" onClick={() => setShowCommand(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Generate Command</h2>
+            <div className="msub">Command tetap (key sudah dipatenkan) — tinggal copy &amp; paste ke Termux / Cloud instance manapun.</div>
+            <div className="mlabel">COMMAND</div>
+            {commandLoading ? (
+              <div style={{ color: "var(--dim)", fontSize: 13 }}>Memuat...</div>
+            ) : command ? (
+              <div className="command-box">
+                <div className="command-text">{command}</div>
+                <button className="copy-btn" onClick={copyCommand}>{copied ? "Copied!" : "Copy"}</button>
+              </div>
+            ) : (
+              <div style={{ color: "var(--red)", fontSize: 13 }}>ACCESS_KEY belum diset di server (.env).</div>
+            )}
+            <div className="steps">
+              1. Buka <code>Termux</code> di HP atau Cloud instance<br />
+              2. Paste command di atas — sama persis buat semua device<br />
+              3. Setiap instance otomatis generate <code>deviceId</code> unik<br />
+              4. Device akan muncul di halaman ini<br />
+              5. Heartbeat dikirim setiap 2 menit untuk update status
+            </div>
+            <button className="close-btn" onClick={() => setShowCommand(false)}>Tutup</button>
+          </div>
         </div>
       )}
 
