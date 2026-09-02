@@ -375,8 +375,8 @@ local function start_ws(device_id)
   -- websocat reads from FIFO (outbox), writes to inbox file
   -- tail -f keeps the FIFO open so websocat doesn't exit
   local cmd = string.format(
-    "tail -f %s | websocat -n %q >> %s 2>/dev/null &",
-    WS_OUTBOX, WS_URL, WS_INBOX
+    "tail -f %s | %s -n %q >> %s 2>/dev/null &",
+    WS_OUTBOX, WEBSOCAT, WS_URL, WS_INBOX
   )
   os.execute(cmd)
   sleep(2)
@@ -418,13 +418,21 @@ end
 os.execute("mkdir -p " .. CONFIG_DIR)
 fwrite(LOG_FILE, "")
 
-if shell("which websocat") == "" then
+local WEBSOCAT = shell("command -v websocat")
+if WEBSOCAT == "" then
+  WEBSOCAT = shell("find /data/data/com.termux/files/usr/bin -name websocat 2>/dev/null")
+end
+if WEBSOCAT == "" then
   log(C.yellow .. "Installing websocat..." .. C.reset)
   shellcode("pkg install websocat -y")
-  if shell("which websocat") == "" then
-    log(C.red .. "websocat not found. Run: pkg install websocat" .. C.reset)
-    os.exit(1)
+  WEBSOCAT = shell("command -v websocat")
+  if WEBSOCAT == "" then
+    WEBSOCAT = "/data/data/com.termux/files/usr/bin/websocat"
   end
+end
+if shell(WEBSOCAT .. " --version") == "" then
+  log(C.red .. "websocat not found. Run: pkg install websocat" .. C.reset)
+  os.exit(1)
 end
 
 local DEVICE_ID, HOSTNAME, PLATFORM, IS_NEW
