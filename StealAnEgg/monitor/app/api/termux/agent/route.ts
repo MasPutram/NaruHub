@@ -367,19 +367,19 @@ local function launch_app(pkg, bounds, resize, delay)
 end
 
 -- ─── HTTP helpers (writes to Redis so dashboard can read) ───
-local HTTP_BODY_FILE = CONFIG_DIR .. "/.http_body.json"
-
 local function http_post(path, body_table)
   local body = json.encode(body_table)
-  fwrite(HTTP_BODY_FILE, body)
-  local result = shell(string.format(
-    'curl -s -w "%%{http_code}" -o /dev/null -X POST "%s%s" -H "Content-Type: application/json" -H "X-Access-Key: %s" -d @%s',
-    BASE_URL, path, LICENSE_KEY, HTTP_BODY_FILE
-  ))
+  local escaped = body:gsub("'", "'\\''")
+  local cmd = string.format(
+    "curl -s -w '%%{http_code}' -o /dev/null -X POST '%s%s' -H 'Content-Type: application/json' -H 'X-Access-Key: %s' -d '%s'",
+    BASE_URL, path, LICENSE_KEY, escaped
+  )
+  local result = shell(cmd)
   return result
 end
 
 local function http_register()
+  log(C.dim .. "[" .. ts() .. "] registering deviceId=" .. (DEVICE_ID or "nil") .. C.reset)
   local code = http_post("/api/termux/register", {
     deviceId = DEVICE_ID,
     hostname = HOSTNAME,
