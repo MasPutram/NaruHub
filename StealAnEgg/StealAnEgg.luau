@@ -832,6 +832,19 @@ task.spawn(function()
 end)
 
 ------------------------------------------------------------
+-- Auto Equip Best (runs forever, every 20s, no toggle)
+------------------------------------------------------------
+task.spawn(function()
+	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		pcall(function()
+			Remotes.Haul.WearBest:InvokeServer()
+		end)
+		task.wait(20)
+	end
+end)
+
+------------------------------------------------------------
 -- Auto Hatch + Equip Best (runs forever, no toggle)
 ------------------------------------------------------------
 task.spawn(function()
