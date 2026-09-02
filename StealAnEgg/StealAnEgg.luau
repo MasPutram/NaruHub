@@ -264,7 +264,7 @@ local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
 	TabWidth = 0,
-	Size = UDim2.fromOffset(380, 200),
+	Size = UDim2.fromOffset(380, 360),
 	AutoStartMinimized = false,
 })
 
