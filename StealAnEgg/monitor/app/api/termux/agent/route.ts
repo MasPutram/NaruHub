@@ -584,6 +584,8 @@ while true do
 end
 `;
 
+export const dynamic = "force-dynamic";
+
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
 }
