@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const accessKey = process.env.ACCESS_KEY || "";
   if (!accessKey) {
