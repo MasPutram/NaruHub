@@ -28,7 +28,7 @@ export function termuxDeviceMetaKey(deviceId: string) {
   return `termux:device:meta:${deviceId}`;
 }
 
-export const TERMUX_DEVICE_TTL_S = 300;
+export const TERMUX_DEVICE_TTL_S = 90;
 
 export function petIconKey(category: string) {
   return `peticon:${category}`;

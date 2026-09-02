@@ -11,7 +11,7 @@ local BASE_URL = "https://naruhub.my.id"
 local WS_URL = "wss://ws.naruhub.my.id"
 local LICENSE_KEY = "$$LICENSE$$"
 local RAM_TRIM_PCT = 90
-local HEARTBEAT_INTERVAL = 120
+local HEARTBEAT_INTERVAL = 30
 local RECONNECT_DELAY = 5
 
 -- Paths set after CONFIG_DIR
