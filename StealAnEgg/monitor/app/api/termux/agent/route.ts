@@ -9,7 +9,7 @@ local CONFIG_FILE = CONFIG_DIR .. "/naruhub_config.json"
 local LOG_FILE = CONFIG_DIR .. "/naruhub_agent.log"
 local WS_URL = "wss://ws.naruhub.my.id"
 local LICENSE_KEY = "$$LICENSE$$"
-local RAM_TRIM_PCT = 80
+local RAM_TRIM_PCT = 90
 local HEARTBEAT_INTERVAL = 120
 local RECONNECT_DELAY = 5
 

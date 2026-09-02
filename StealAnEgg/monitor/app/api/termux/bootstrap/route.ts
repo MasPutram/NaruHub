@@ -244,7 +244,7 @@ collect_stats() {
 # never touches app data, so nobody gets logged out, and the process
 # keeps running (no force-stop). Android itself clears cache dirs
 # under storage pressure all the time, so this is safe to do live.
-RAM_TRIM_THRESHOLD_PCT=80
+RAM_TRIM_THRESHOLD_PCT=90
 
 maybe_trim_ram() {
   local pkg_json="$1"
