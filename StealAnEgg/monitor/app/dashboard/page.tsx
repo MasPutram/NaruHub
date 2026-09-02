@@ -107,6 +107,8 @@ function fmtMoney(v: number | null | undefined): string {
   if (v == null) return "-";
   const n = Number(v);
   const abs = Math.abs(n);
+  if (abs >= 1e18) return "$" + (n / 1e18).toFixed(1) + "Qi";
+  if (abs >= 1e15) return "$" + (n / 1e15).toFixed(1) + "Qa";
   if (abs >= 1e12) return "$" + (n / 1e12).toFixed(1) + "T";
   if (abs >= 1e9) return "$" + (n / 1e9).toFixed(1) + "B";
   if (abs >= 1e6) return "$" + (n / 1e6).toFixed(1) + "M";
@@ -123,6 +125,8 @@ function fmtCompactNum(v: number | null | undefined): string {
   if (v == null) return "-";
   const n = Number(v);
   const abs = Math.abs(n);
+  if (abs >= 1e18) return (n / 1e18).toFixed(1) + "Qi+";
+  if (abs >= 1e15) return (n / 1e15).toFixed(1) + "Qa+";
   if (abs >= 1e12) return (n / 1e12).toFixed(1) + "T+";
   if (abs >= 1e9) return (n / 1e9).toFixed(1) + "B+";
   if (abs >= 1e6) return (n / 1e6).toFixed(1) + "M+";
@@ -1319,7 +1323,7 @@ function AccountsTab({ showToast }: { showToast: (s: string) => void }) {
                 <div className="acc-stat speed"><div className="label">SPEED</div><div className="val">{fmtCompactNum(a.speed)}</div></div>
                 <div className="acc-stat money"><div className="label">CASH</div><div className="val">{fmtMoney(a.money)}</div></div>
                 <div className="acc-stat"><div className="label">INCOME AKTIF</div><div className="val">{fmtRate(a.incomeAktif)}</div></div>
-                <div className="acc-stat"><div className="label">PET &gt;= 1B/S</div><div className="val">{fmtRate(a.highValuePetTotal)}</div></div>
+                <div className="acc-stat"><div className="label">POTENSI 18 PET AKTIF</div><div className="val">{fmtRate(a.highValuePetTotal)}</div></div>
                 <div className="acc-stat"><div className="label">KANDANG</div><div className="val">{fmtLevel(a.kandangLevel)}</div></div>
                 <div className="acc-stat"><div className="label">TREADMILL</div><div className="val">{fmtLevel(a.treadmillLevel)}</div></div>
                 <div className="acc-stat"><div className="label">PETS</div><div className="val">{fmtNum(a.petsCount)}</div></div>

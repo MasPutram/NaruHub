@@ -46,7 +46,7 @@ interface AccountDetail {
   backpackEggs: Pet[];
 }
 
-const MAX_EQUIP = 17;
+const MAX_EQUIP = 18;
 const HIGH_VALUE_THRESHOLD = 1_000_000_000;
 const NOTABLE_THRESHOLD = 300_000_000;
 
@@ -54,6 +54,8 @@ function fmtMoney(v: number | null | undefined): string {
   if (v == null) return "-";
   const n = Number(v);
   const abs = Math.abs(n);
+  if (abs >= 1e18) return "$" + (n / 1e18).toFixed(1) + "Qi";
+  if (abs >= 1e15) return "$" + (n / 1e15).toFixed(1) + "Qa";
   if (abs >= 1e12) return "$" + (n / 1e12).toFixed(1) + "T";
   if (abs >= 1e9) return "$" + (n / 1e9).toFixed(1) + "B";
   if (abs >= 1e6) return "$" + (n / 1e6).toFixed(1) + "M";
@@ -70,6 +72,8 @@ function fmtCompact(v: number | null | undefined): string {
   if (v == null) return "-";
   const n = Number(v);
   const abs = Math.abs(n);
+  if (abs >= 1e18) return (n / 1e18).toFixed(1) + "Qi+";
+  if (abs >= 1e15) return (n / 1e15).toFixed(1) + "Qa+";
   if (abs >= 1e12) return (n / 1e12).toFixed(1) + "T+";
   if (abs >= 1e9) return (n / 1e9).toFixed(1) + "B+";
   if (abs >= 1e6) return (n / 1e6).toFixed(1) + "M+";
@@ -131,14 +135,16 @@ function formatRupiah(n: number): string {
   return "Rp " + (n < 0 ? "-" : "") + dotted.split("").reverse().join("");
 }
 
-function computeAutoPrice(detail: AccountDetail | null, ratePerBStr: string, rateHvPerBStr: string): string {
+function computeAutoPrice(detail: AccountDetail | null, summary: AccountSummary | null, ratePerBStr: string, rateHvPerBStr: string, rateSpeedPerBStr: string): string {
   if (!detail) return "";
   const ratePerB = (parseFloat(ratePerBStr) || 0) * 1000;
   const rateHvPerB = (parseFloat(rateHvPerBStr) || 0) * 1000;
-  if (ratePerB === 0 && rateHvPerB === 0) return "";
+  const rateSpeedPerB = (parseFloat(rateSpeedPerBStr) || 0) * 1000;
+  if (ratePerB === 0 && rateHvPerB === 0 && rateSpeedPerB === 0) return "";
   const incomeB = computeIncomePotensiPetAktif(detail) / 1e9;
   const highvalueB = computeHighValuePetTotal(detail) / 1e9;
-  const priceValue = Math.round(incomeB * ratePerB + highvalueB * rateHvPerB);
+  const speedB = (Number(summary?.speed) || 0) / 1e9;
+  const priceValue = Math.round(incomeB * ratePerB + highvalueB * rateHvPerB + speedB * rateSpeedPerB);
   if (priceValue <= 0) return "";
   return formatRupiah(priceValue);
 }
@@ -287,8 +293,9 @@ function PosterPage() {
   const [detail, setDetail] = useState<AccountDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [price, setPrice] = useState("");
-  const [ratePerB, setRatePerB] = useState("5");
-  const [rateHvPerB, setRateHvPerB] = useState("3");
+  const [ratePerB, setRatePerB] = useState("");
+  const [rateHvPerB, setRateHvPerB] = useState("");
+  const [rateSpeedPerB, setRateSpeedPerB] = useState("");
   const [title, setTitle] = useState("Jual Akun GACOR");
   const [badge, setBadge] = useState("");
   const [owner, setOwner] = useState("Putra Ramadhan");
@@ -504,8 +511,12 @@ function PosterPage() {
     { label: "SPEED", value: fmtCompact(summary.speed) },
     { label: "CASH", value: fmtMoney(summary.money) },
     { label: "INCOME POTENSI PET AKTIF", value: fmtRate(potentialActiveRate) },
-    { label: "TOTAL PET >= 1B/S", value: fmtRate(highValueTotal) },
+    { label: `POTENSI ${MAX_EQUIP} PET AKTIF B/S`, value: fmtRate(highValueTotal) },
+    { label: "TOTAL PET DI TAS", value: `${allSorted.length} pets` },
     { label: "TOTAL EGG", value: `${totalEggs} eggs` },
+    ...(summary.kandangLevel != null
+      ? [{ label: "PEN LEVEL", value: `Lv. ${summary.kandangLevel}` }]
+      : []),
     ...(summary.treadmillLevel != null
       ? [{ label: "TREADMILL LEVEL", value: `Lv. ${summary.treadmillLevel}` }]
       : []),
@@ -722,9 +733,11 @@ function PosterPage() {
         <label>Harga (langsung):</label>
         <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="kosongin = auto" style={{ width: 120 }} />
         <label>Rate Income/1B (rb):</label>
-        <input value={ratePerB} onChange={(e) => setRatePerB(e.target.value)} placeholder="5" style={{ width: 50 }} />
+        <input value={ratePerB} onChange={(e) => setRatePerB(e.target.value)} placeholder="" style={{ width: 50 }} />
         <label>Rate Pet≥1B/1B (rb):</label>
-        <input value={rateHvPerB} onChange={(e) => setRateHvPerB(e.target.value)} placeholder="3" style={{ width: 50 }} />
+        <input value={rateHvPerB} onChange={(e) => setRateHvPerB(e.target.value)} placeholder="" style={{ width: 50 }} />
+        <label>Rate Speed/1B (rb):</label>
+        <input value={rateSpeedPerB} onChange={(e) => setRateSpeedPerB(e.target.value)} placeholder="" style={{ width: 50 }} />
         <label>Owner:</label>
         <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="nama Facebook" />
         <label>Checklist:</label>
@@ -922,8 +935,8 @@ function PosterPage() {
 
             <div className="price-box">
               <div className="price-label">PRICE ACC</div>
-              {(price || computeAutoPrice(detail, ratePerB, rateHvPerB)) ? (
-                <div className="price-value">{price || computeAutoPrice(detail, ratePerB, rateHvPerB)}</div>
+              {(price || computeAutoPrice(detail, summary, ratePerB, rateHvPerB, rateSpeedPerB)) ? (
+                <div className="price-value">{price || computeAutoPrice(detail, summary, ratePerB, rateHvPerB, rateSpeedPerB)}</div>
               ) : (
                 <div className="price-empty">Isi harga atau rate di controls atas</div>
               )}

@@ -157,6 +157,8 @@ function fmtMoney(v: number | null | undefined): string {
   if (v == null) return "-";
   const n = Number(v);
   const abs = Math.abs(n);
+  if (abs >= 1e18) return "$" + (n / 1e18).toFixed(1) + "Qi";
+  if (abs >= 1e15) return "$" + (n / 1e15).toFixed(1) + "Qa";
   if (abs >= 1e12) return "$" + (n / 1e12).toFixed(1) + "T";
   if (abs >= 1e9) return "$" + (n / 1e9).toFixed(1) + "B";
   if (abs >= 1e6) return "$" + (n / 1e6).toFixed(1) + "M";
@@ -173,6 +175,8 @@ function fmtCompactNum(v: number | null | undefined): string {
   if (v == null) return "-";
   const n = Number(v);
   const abs = Math.abs(n);
+  if (abs >= 1e18) return (n / 1e18).toFixed(1) + "Qi+";
+  if (abs >= 1e15) return (n / 1e15).toFixed(1) + "Qa+";
   if (abs >= 1e12) return (n / 1e12).toFixed(1) + "T+";
   if (abs >= 1e9) return (n / 1e9).toFixed(1) + "B+";
   if (abs >= 1e6) return (n / 1e6).toFixed(1) + "M+";
@@ -537,7 +541,7 @@ export default function DashboardPage() {
                   <div className="val">{fmtRate(a.incomeAktif)}</div>
                 </div>
                 <div className="stat">
-                  <div className="label">TOTAL PET &gt;= 1B/S</div>
+                  <div className="label">POTENSI 18 PET AKTIF</div>
                   <div className="val">{fmtRate(a.highValuePetTotal)}</div>
                 </div>
                 <div className="stat">

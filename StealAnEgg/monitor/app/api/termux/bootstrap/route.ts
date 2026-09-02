@@ -25,8 +25,10 @@ mkdir -p "$CONFIG_DIR"
 # those writes, lines from different processes land mid-line and the output
 # staggers/wraps sideways. mkdir is atomic on any POSIX filesystem, so it
 # works as a lock with zero extra Termux dependencies (no flock needed).
+LOG_FILE="$CONFIG_DIR/naruhub_agent.log"
 LOG_LOCK_DIR="$CONFIG_DIR/.log.lock"
 rmdir "$LOG_LOCK_DIR" 2>/dev/null || true
+: > "$LOG_FILE"
 log() {
   local tries=0
   while ! mkdir "$LOG_LOCK_DIR" 2>/dev/null; do
@@ -34,6 +36,7 @@ log() {
     [ "$tries" -gt 200 ] && break
   done
   echo "$1"
+  echo "$(date '+%Y-%m-%d %H:%M:%S') $1" | sed 's/\\033\\[[0-9;]*m//g' >> "$LOG_FILE" 2>/dev/null
   rmdir "$LOG_LOCK_DIR" 2>/dev/null
 }
 
