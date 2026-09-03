@@ -423,20 +423,6 @@ local function launch_app(pkg, bounds, resize, delay)
   kill_pkg(pkg)
   sleep(1)
 
-  -- Free up kernel page cache before launch so the OS has more RAM to
-  -- hand to the new clone without evicting an existing clone via LMK.
-  shellcode('su -c "sync"')
-  shellcode('su -c "echo 3 > /proc/sys/vm/drop_caches"')
-  -- Protect all currently-running Roblox clones from LMK by lowering
-  -- their oom_score_adj. Kernel picks victims with the HIGHEST score
-  -- first, so pushing them toward -1000 makes them nearly unkillable.
-  local roblox_pids = shell('su -c "pgrep -f com.roblox"')
-  if roblox_pids ~= "" then
-    for line in roblox_pids:gmatch("[^\\n]+") do
-      shellcode(string.format('su -c "echo -800 > /proc/%s/oom_score_adj"', line))
-    end
-  end
-
   if resize and bounds and bounds ~= "" then
     local left, top, right, bottom = bounds:match("(%d+),(%d+),(%d+),(%d+)")
     if left then
@@ -463,6 +449,17 @@ local function launch_app(pkg, bounds, resize, delay)
 
   delay = tonumber(delay) or 5
   if delay > 0 then sleep(delay) end
+
+  -- Hip-style: trim JUST this package after it's up and stable so it
+  -- releases any startup cache/allocation it doesn't strictly need.
+  -- Frees RAM for the next clone without touching existing clones or
+  -- risking an LMK cascade.
+  local pid = shell(string.format('su -c "pgrep -x %s"', pkg))
+  if pid ~= "" then
+    for line in pid:gmatch("[^\\n]+") do
+      shellcode(string.format('su -c "am send-trim-memory %s RUNNING_MODERATE"', line))
+    end
+  end
 end
 
 -- ─── HTTP helpers (writes to Redis so dashboard can read) ───
