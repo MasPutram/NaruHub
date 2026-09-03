@@ -419,56 +419,19 @@ local function kill_pkg(pkg)
   end
 end
 
--- Force-enable freeform multi-window at the system level (idempotent).
--- Without this, --windowingMode 5 silently downgrades to fullscreen on
--- Android 10 -- exactly what App Cloner mods used to work around before
--- the update removed those mods.
-local FREEFORM_ENABLED = false
-local function ensure_freeform_enabled()
-  if FREEFORM_ENABLED then return end
-  shellcode('su -c "settings put global enable_freeform_support 1"')
-  shellcode('su -c "settings put global force_resizable_activities 1"')
-  shellcode('su -c "settings put global enable_sizecompat_freeform 1"')
-  shellcode('su -c "settings put global development_enable_freeform_windows_support 1"')
-  FREEFORM_ENABLED = true
-end
-
--- After am start, look up the task id for this package so we can move it
--- to freeform mode + explicitly resize it to our bounds. Returns nil if
--- not found.
-local function find_task_id(pkg)
-  -- Format on Android 10+: "taskId=<n>: <pkg>/<activity> ..."
-  local raw = shell(string.format('su -c "am stack list" | grep -m1 "taskId=[0-9]*:.*%s/"', pkg))
-  if raw == "" then
-    raw = shell(string.format('su -c "am stack list" | grep -m1 "%s/"', pkg))
-  end
-  local tid = raw:match("taskId=(%d+)")
-  return tid
-end
-
 local function launch_app(pkg, bounds, resize, delay)
-  ensure_freeform_enabled()
   kill_pkg(pkg)
   sleep(1)
 
-  -- Still write App Cloner shared_prefs bounds as a fallback in case the
-  -- clone's floating-window mod happens to be intact on this device.
-  local left, top, right, bottom
-  if bounds and bounds ~= "" then
-    left, top, right, bottom = bounds:match("(%d+),(%d+),(%d+),(%d+)")
-  end
-  if resize and left then
-    set_window_bounds(pkg, tonumber(left), tonumber(top), tonumber(right), tonumber(bottom))
+  if resize and bounds and bounds ~= "" then
+    local left, top, right, bottom = bounds:match("(%d+),(%d+),(%d+),(%d+)")
+    if left then
+      set_window_bounds(pkg, tonumber(left), tonumber(top), tonumber(right), tonumber(bottom))
+    end
   end
 
   log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset)
-  local ok = shellcode(string.format(
-    'su -c "am start --windowingMode 5 -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"',
-    pkg
-  ))
-  if not ok then
-    shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
-  end
+  shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
 
   local waited = 0
   while waited < 60 do
@@ -482,24 +445,6 @@ local function launch_app(pkg, bounds, resize, delay)
   end
   if waited >= 60 then
     log(C.yellow .. "[" .. ts() .. "] timeout: " .. pkg .. C.reset)
-  end
-
-  -- After the task is up, coerce it into freeform windowing mode and
-  -- resize it to our target bounds so multiple clones stay visible as
-  -- side-by-side floating tiles. This replaces the App Cloner shared_prefs
-  -- path that broke after App Cloner update.
-  if left and top and right and bottom then
-    local tid = find_task_id(pkg)
-    if tid then
-      -- Windowing mode 5 = FREEFORM.
-      shellcode(string.format('su -c "am task set-windowing-mode %s 5"', tid))
-      -- Explicit resize to our computed cell. Works on Android 10+ when
-      -- freeform is enabled.
-      shellcode(string.format('su -c "am task resizeTask %s %s %s %s %s"', tid, left, top, right, bottom))
-      log(C.dim .. "[" .. ts() .. "] freeform " .. left .. "," .. top .. "," .. right .. "," .. bottom .. " (task " .. tid .. ")" .. C.reset)
-    else
-      log(C.yellow .. "[" .. ts() .. "] no taskId found for " .. pkg .. C.reset)
-    end
   end
 
   delay = tonumber(delay) or 5

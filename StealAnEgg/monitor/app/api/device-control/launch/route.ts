@@ -60,20 +60,14 @@ export async function POST(req: NextRequest) {
       const packageName = packageNames[i];
       let bounds = "";
       if (screen && screen.width && screen.height) {
-        // Layout: explicit top/bottom margins (status bar + nav bar
-        // clearance) + uniform gap between cells. All cells identical size
-        // so the grid reads as one clean, consistent block.
-        const marginTop = 60;    // status bar clearance
-        const marginBottom = 40; // gesture/nav bar clearance
-        const gap = 16;          // between adjacent cells (horiz + vert)
-        const usableW = screen.width - gap * (c + 1);
-        const usableH = screen.height - marginTop - marginBottom - gap * (r - 1);
-        const cellW = Math.floor(usableW / c);
-        const cellH = Math.floor(usableH / r);
+        const gap = 16;
+        const topPad = 50;
+        const cellW = Math.floor((screen.width - gap * (c + 1)) / c);
+        const cellH = Math.floor((screen.height - topPad - gap * r) / r);
         const col = i % c;
         const row = Math.floor(i / c);
         const left = gap + col * (cellW + gap);
-        const top = marginTop + row * (cellH + gap);
+        const top = topPad + row * (cellH + gap);
         const right = left + cellW;
         const bottom = top + cellH;
         bounds = `${left},${top},${right},${bottom}`;
