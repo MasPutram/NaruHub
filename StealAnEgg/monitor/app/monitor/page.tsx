@@ -161,7 +161,13 @@ export default function MonitorListPage() {
   const online = devices.filter((d) => d.status === "online");
   const offline = devices.filter((d) => d.status !== "online");
   const totalPackages = devices.reduce((a, d) => a + (d.packages?.length ?? 0), 0);
-  const visible = devices.filter((d) => filter === "all" || d.status === filter);
+  // Sort by display name using natural order so SAE11 < SAE21 < SAE101 (not
+  // lexicographic where "SAE101" would come before "SAE21").
+  const nameCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+  const visible = devices
+    .filter((d) => filter === "all" || d.status === filter)
+    .slice()
+    .sort((a, b) => nameCollator.compare(displayName(a), displayName(b)));
 
   return (
     <>

@@ -271,6 +271,111 @@ function mutColor(mut: string): string {
   return "#2563eb";
 }
 
+// React style presets for mutation/rarity badges. Rainbow uses an actual
+// gradient background; solids use a colored border + tinted background.
+type BadgeStyle = { color?: string; borderColor?: string; background?: string; WebkitTextFillColor?: string; WebkitBackgroundClip?: string; backgroundClip?: string; textShadow?: string };
+
+function mutBadgeStyle(mut: string): BadgeStyle {
+  const m = mut.toLowerCase();
+  if (m.includes("rainbow")) {
+    return {
+      background: "linear-gradient(90deg,#ef4444,#f59e0b,#eab308,#22c55e,#06b6d4,#3b82f6,#a855f7)",
+      color: "#ffffff",
+      borderColor: "#7c3aed",
+      textShadow: "0 1px 1px rgba(0,0,0,0.35)",
+    };
+  }
+  if (m.includes("golden")) {
+    return {
+      background: "linear-gradient(90deg,#fef3c7,#fde68a,#fcd34d)",
+      color: "#78350f",
+      borderColor: "#ca8a04",
+    };
+  }
+  if (m.includes("silver")) {
+    return {
+      background: "linear-gradient(90deg,#f1f5f9,#e2e8f0,#cbd5e1)",
+      color: "#334155",
+      borderColor: "#64748b",
+    };
+  }
+  return { background: "#dbeafe", color: "#1d4ed8", borderColor: "#2563eb" };
+}
+
+// Text-only style (for inline mutation labels like "MUTASI: RAINBOW" that
+// aren't badges). Rainbow uses gradient text via background-clip.
+function mutTextStyle(mut: string): BadgeStyle {
+  const m = mut.toLowerCase();
+  if (m.includes("rainbow")) {
+    return {
+      background: "linear-gradient(90deg,#ef4444,#f59e0b,#eab308,#22c55e,#06b6d4,#3b82f6,#a855f7)",
+      WebkitBackgroundClip: "text",
+      backgroundClip: "text",
+      WebkitTextFillColor: "transparent",
+      color: "transparent",
+    };
+  }
+  if (m.includes("golden")) return { color: "#b45309" };
+  if (m.includes("silver")) return { color: "#475569" };
+  return { color: "#2563eb" };
+}
+
+function rarityBadgeStyle(rarity: string): BadgeStyle {
+  const r = rarity.toLowerCase();
+  if (r === "rainbow" || r === "prismatic") {
+    return {
+      background: "linear-gradient(90deg,#ef4444,#f59e0b,#eab308,#22c55e,#06b6d4,#3b82f6,#a855f7)",
+      color: "#ffffff",
+      borderColor: "#7c3aed",
+      textShadow: "0 1px 1px rgba(0,0,0,0.35)",
+    };
+  }
+  if (r === "eternal") {
+    return {
+      background: "linear-gradient(90deg,#ddd6fe,#c4b5fd,#a78bfa)",
+      color: "#4c1d95",
+      borderColor: "#7c3aed",
+    };
+  }
+  if (r === "divine") {
+    return {
+      background: "linear-gradient(90deg,#cffafe,#a5f3fc,#67e8f9)",
+      color: "#155e75",
+      borderColor: "#0891b2",
+    };
+  }
+  if (r === "secret") {
+    return {
+      background: "linear-gradient(90deg,#1e293b,#334155)",
+      color: "#f8fafc",
+      borderColor: "#0f172a",
+    };
+  }
+  if (r === "godly" || r === "god" || r === "mythicgod") {
+    return { background: "#fef9c3", color: "#854d0e", borderColor: "#eab308" };
+  }
+  if (r === "mythical" || r === "mythic") {
+    return { background: "#fce7f3", color: "#9d174d", borderColor: "#ec4899" };
+  }
+  if (r === "legendary") {
+    return { background: "#ffedd5", color: "#9a3412", borderColor: "#f59e0b" };
+  }
+  if (r === "epic") {
+    return { background: "#ede9fe", color: "#5b21b6", borderColor: "#8b5cf6" };
+  }
+  if (r === "rare") {
+    return { background: "#dbeafe", color: "#1d4ed8", borderColor: "#3b82f6" };
+  }
+  if (r === "uncommon") {
+    return { background: "#dcfce7", color: "#166534", borderColor: "#22c55e" };
+  }
+  if (r === "common") {
+    return { background: "#f1f5f9", color: "#334155", borderColor: "#94a3b8" };
+  }
+  // Unknown rarity -- neutral purple, matches previous default look.
+  return { background: "#ede9fe", color: "#6d28d9", borderColor: "#7c3aed" };
+}
+
 function groupByMutation(pets: Pet[]): [string, Pet[]][] {
   const groups: Record<string, Pet[]> = {};
   for (const p of pets) {
@@ -802,14 +907,19 @@ function PosterPage() {
                     <div key={i} className="pick-card">
                       {isEgg && <span className="pick-egg-badge">TELUR</span>}
                       {rarity && (
-                        <span className={`pick-rarity-badge ${isEgg ? "" : "pick-rarity-solo"}`}>{rarity}</span>
+                        <span
+                          className={`pick-rarity-badge ${isEgg ? "" : "pick-rarity-solo"}`}
+                          style={rarityBadgeStyle(rarity)}
+                        >
+                          {rarity}
+                        </span>
                       )}
                       <div className="pick-icon-wrap"><PetIcon pet={p} size={120} /></div>
                       <div className="pname">{p.name || displayName(p.category)}</div>
                       <div className="prate">{fmtRate(p.rate)}</div>
                       {p.weight ? <div className="pweight">{fmtWeight(p.weight)}</div> : null}
                       {p.mutations && p.mutations.length > 0 && (
-                        <div className="pmut" style={{ color: mutColor(p.mutations[0]) }}>
+                        <div className="pmut" style={mutTextStyle(p.mutations[0])}>
                           MUTASI: {p.mutations.map((m) => m.toUpperCase()).join(" + ")}
                         </div>
                       )}
@@ -829,12 +939,17 @@ function PosterPage() {
                   <span className="egg-badge featured-egg-badge">TELUR</span>
                 )}
                 {featuredRarity && (
-                  <span className={`featured-rarity-badge ${isFeaturedEgg ? "" : "featured-rarity-solo"}`}>{featuredRarity}</span>
+                  <span
+                    className={`featured-rarity-badge ${isFeaturedEgg ? "" : "featured-rarity-solo"}`}
+                    style={rarityBadgeStyle(featuredRarity)}
+                  >
+                    {featuredRarity}
+                  </span>
                 )}
                 <div className="featured-content">
                   <div className="featured-text">
                     {featured.mutations && featured.mutations.length > 0 && (
-                      <div className="featured-mut" style={{ color: mutColor(featured.mutations[0]) }}>
+                      <div className="featured-mut" style={mutTextStyle(featured.mutations[0])}>
                         {featured.mutations.map((m) => m.toUpperCase()).join(" + ")}
                       </div>
                     )}
@@ -855,7 +970,7 @@ function PosterPage() {
                   const originalCount = mutGroups.find(([n]) => n === groupName)?.[1].length ?? items.length;
                   return (
                     <div key={groupName}>
-                      <div className="mut-group-label" style={{ color: mutColor(groupName.split(" + ")[0]) }}>
+                      <div className="mut-group-label" style={mutTextStyle(groupName.split(" + ")[0])}>
                         {groupName} ({originalCount})
                       </div>
                       <div className="mut-grid">
@@ -947,11 +1062,13 @@ function PosterPage() {
                       {p.weight ? <div className="piweight">{fmtWeight(p.weight)}</div> : null}
                     </div>
                     {eggKeys.has(petKey(p)) && <span className="egg-badge">TELUR</span>}
-                    {rowRarity && <span className="rarity-badge">{rowRarity}</span>}
+                    {rowRarity && (
+                      <span className="rarity-badge" style={rarityBadgeStyle(rowRarity)}>{rowRarity}</span>
+                    )}
                     {p.mutations && p.mutations.length > 0 && (
                       <div
                         className="mut-tag"
-                        style={{ color: mutColor(p.mutations[0]), borderColor: mutColor(p.mutations[0]) }}
+                        style={mutBadgeStyle(p.mutations[0])}
                       >
                         {p.mutations.map((m) => m.toUpperCase()).join(" + ")}
                       </div>
