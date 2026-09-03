@@ -413,11 +413,19 @@ function PosterPage() {
   const backpackEggsSorted = [...backpackEggs].sort((a, b) => (b.rate || 0) - (a.rate || 0));
   const eggKeys = new Set([...growingEggsSorted, ...backpackEggsSorted].map(petKey));
 
-  // "Aktif" -- 17 rate TERTINGGI dari gabungan pet aktif + isi tas + telur
-  // (lagi tumbuh + di tas), terlepas lagi keequip/ditaro apa ngga.
-  const petPoolSorted = [...activePets, ...allPets, ...growingEggs, ...backpackEggs].sort(
-    (a, b) => (b.rate || 0) - (a.rate || 0)
-  );
+  // "Aktif" -- MAX_EQUIP rate TERTINGGI dari gabungan pet aktif + isi tas +
+  // telur (lagi tumbuh + di tas), terlepas lagi keequip/ditaro apa ngga.
+  // Dedup dulu supaya pet yang muncul di equipped DAN inventory tidak
+  // dihitung dua kali.
+  const _poolSeen = new Set<string>();
+  const petPoolDeduped: Pet[] = [];
+  for (const p of [...activePets, ...allPets, ...growingEggs, ...backpackEggs]) {
+    const k = petKey(p);
+    if (_poolSeen.has(k)) continue;
+    _poolSeen.add(k);
+    petPoolDeduped.push(p);
+  }
+  const petPoolSorted = petPoolDeduped.sort((a, b) => (b.rate || 0) - (a.rate || 0));
   const activePetsSorted = petPoolSorted.slice(0, MAX_EQUIP);
 
   // Kandidat 3 card utama + Paling Gacor.
@@ -510,8 +518,8 @@ function PosterPage() {
   const statItems = [
     { label: "SPEED", value: fmtCompact(summary.speed) },
     { label: "CASH", value: fmtMoney(summary.money) },
-    { label: "INCOME POTENSI PET AKTIF", value: fmtRate(potentialActiveRate) },
-    { label: `POTENSI ${MAX_EQUIP} PET AKTIF B/S`, value: fmtRate(highValueTotal) },
+    { label: `POTENSI ${MAX_EQUIP} PET AKTIF`, value: fmtRate(potentialActiveRate) },
+    { label: "TOTAL PET ≥ B/S", value: fmtRate(highValueTotal) },
     { label: "TOTAL PET DI TAS", value: `${allSorted.length} pets` },
     { label: "TOTAL EGG", value: `${totalEggs} eggs` },
     ...(summary.kandangLevel != null
@@ -581,6 +589,28 @@ function PosterPage() {
           background: #fff4d6; border: 1px solid #ca8a04; border-radius: 10px;
           padding: 3px 10px; font-size: 11px; font-weight: 700; color: #ca8a04;
         }
+        .pick-rarity-badge {
+          position: absolute; top: 36px; left: 10px;
+          background: #ede9fe; border: 1px solid #7c3aed; border-radius: 10px;
+          padding: 3px 10px; font-size: 10px; font-weight: 700; color: #6d28d9;
+          text-transform: uppercase; letter-spacing: 0.3px;
+        }
+        /* When there's no TELUR badge, snap the rarity to where TELUR was. */
+        .pick-rarity-badge.pick-rarity-solo { top: 10px; }
+        .rarity-badge {
+          display: inline-block; background: #ede9fe; border: 1px solid #7c3aed;
+          border-radius: 10px; padding: 2px 8px; font-size: 10px; font-weight: 700;
+          color: #6d28d9; text-transform: uppercase; letter-spacing: 0.3px;
+          margin-left: 4px;
+        }
+        .featured-rarity-badge {
+          position: absolute; top: -12px; left: 232px;
+          background: #ede9fe; border: 1px solid #7c3aed; border-radius: 10px;
+          padding: 4px 12px; font-size: 11px; font-weight: 700; color: #6d28d9;
+          text-transform: uppercase; letter-spacing: 0.3px;
+        }
+        /* If TELUR is absent, snap featured rarity to where TELUR would sit. */
+        .featured-rarity-badge.featured-rarity-solo { left: 182px; }
         .pick-icon-wrap {
           width: 100%; height: 120px; display: flex; align-items: center; justify-content: center;
           margin-bottom: 10px;
@@ -767,9 +797,13 @@ function PosterPage() {
               <div className="top3">
                 {topPicks.map((p, i) => {
                   const isEgg = eggKeys.has(petKey(p));
+                  const rarity = petRarity(p.category, iconIdx);
                   return (
                     <div key={i} className="pick-card">
                       {isEgg && <span className="pick-egg-badge">TELUR</span>}
+                      {rarity && (
+                        <span className={`pick-rarity-badge ${isEgg ? "" : "pick-rarity-solo"}`}>{rarity}</span>
+                      )}
                       <div className="pick-icon-wrap"><PetIcon pet={p} size={120} /></div>
                       <div className="pname">{p.name || displayName(p.category)}</div>
                       <div className="prate">{fmtRate(p.rate)}</div>
@@ -785,11 +819,17 @@ function PosterPage() {
               </div>
             )}
 
-            {featured && (
+            {featured && (() => {
+              const isFeaturedEgg = eggKeys.has(petKey(featured));
+              const featuredRarity = petRarity(featured.category, iconIdx);
+              return (
               <div className="featured-box">
                 <div className="featured-ribbon">PALING GACOR!</div>
-                {eggKeys.has(petKey(featured)) && (
+                {isFeaturedEgg && (
                   <span className="egg-badge featured-egg-badge">TELUR</span>
+                )}
+                {featuredRarity && (
+                  <span className={`featured-rarity-badge ${isFeaturedEgg ? "" : "featured-rarity-solo"}`}>{featuredRarity}</span>
                 )}
                 <div className="featured-content">
                   <div className="featured-text">
@@ -805,7 +845,8 @@ function PosterPage() {
                   <div className="featured-icon-wrap"><PetIcon pet={featured} size={160} /></div>
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {groupsShown.length > 0 && (
               <>
@@ -895,7 +936,9 @@ function PosterPage() {
 
             {rightPanelShown.length > 0 ? (
               <div className="pet-list">
-                {rightPanelShown.map((p, i) => (
+                {rightPanelShown.map((p, i) => {
+                  const rowRarity = petRarity(p.category, iconIdx);
+                  return (
                   <div key={i} className="pet-row">
                     <PetIcon pet={p} size={48} />
                     <div className="pet-info">
@@ -904,6 +947,7 @@ function PosterPage() {
                       {p.weight ? <div className="piweight">{fmtWeight(p.weight)}</div> : null}
                     </div>
                     {eggKeys.has(petKey(p)) && <span className="egg-badge">TELUR</span>}
+                    {rowRarity && <span className="rarity-badge">{rowRarity}</span>}
                     {p.mutations && p.mutations.length > 0 && (
                       <div
                         className="mut-tag"
@@ -913,7 +957,8 @@ function PosterPage() {
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="pet-list" style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>
