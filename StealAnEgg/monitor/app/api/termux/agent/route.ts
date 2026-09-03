@@ -10,7 +10,9 @@ local LOG_FILE = CONFIG_DIR .. "/naruhub_agent.log"
 local BASE_URL = "https://naruhub.my.id"
 local WS_URL = "wss://ws.naruhub.my.id"
 local LICENSE_KEY = "$$LICENSE$$"
-local RAM_TRIM_PCT = 90
+local RAM_TRIM_PCT = 80
+local RAM_TRIM_COOLDOWN = 60  -- seconds between trim cycles
+local LAST_TRIM_TS = 0
 local HEARTBEAT_INTERVAL = 30
 local RECONNECT_DELAY = 5
 
@@ -305,6 +307,24 @@ local function collect_stats()
 end
 
 -- ─── Auto RAM trim ───
+-- Staged trimming: warns background apps early (MODERATE), and only escalates
+-- to CRITICAL for apps that are NOT the current foreground. Never trims the
+-- foreground process -- CRITICAL on the active app causes ANR/GC storms that
+-- can cascade into an LMK-triggered soft reboot.
+local function get_foreground_pkg()
+  local raw = shell('su -c "dumpsys activity activities" | grep -m1 -oE "mResumedActivity: ActivityRecord\\\\{[^ ]+ [^ ]+ [^ /]+/"')
+  if raw ~= "" then
+    local pkg = raw:match("([%w%.]+)/$")
+    if pkg then return pkg end
+  end
+  raw = shell('su -c "dumpsys window" | grep -m1 -oE "mCurrentFocus=Window\\\\{[^ ]+ [^ ]+ [^ /]+/"')
+  if raw ~= "" then
+    local pkg = raw:match("([%w%.]+)/$")
+    if pkg then return pkg end
+  end
+  return nil
+end
+
 local function maybe_trim_ram(pkgs)
   local meminfo = fread("/proc/meminfo") or ""
   local total = tonumber(meminfo:match("MemTotal:%s*(%d+)")) or 0
@@ -312,16 +332,31 @@ local function maybe_trim_ram(pkgs)
   if total == 0 then return end
   local pct = math.floor((total - avail) * 100 / total)
   if pct < RAM_TRIM_PCT then return end
-  log(C.yellow .. "[" .. ts() .. "] RAM " .. pct .. "% >= " .. RAM_TRIM_PCT .. "% -- auto trim" .. C.reset)
+
+  local now = os.time()
+  if now - LAST_TRIM_TS < RAM_TRIM_COOLDOWN then return end
+  LAST_TRIM_TS = now
+
+  local fg = get_foreground_pkg()
+  local level = pct >= 90 and "RUNNING_LOW" or "RUNNING_MODERATE"
+  log(C.yellow .. "[" .. ts() .. "] RAM " .. pct .. "% -- trim " .. level ..
+      (fg and " (skip fg=" .. fg .. ")" or "") .. C.reset)
+
+  local trimmed = 0
   for _, p in ipairs(pkgs) do
-    local pid = shell(string.format('su -c "pgrep -x %s"', p.pkg))
-    if pid ~= "" then
-      for line in pid:gmatch("[^\\n]+") do
-        shellcode(string.format('su -c "am send-trim-memory %s RUNNING_CRITICAL"', line))
+    if p.pkg ~= fg then
+      local pid = shell(string.format('su -c "pgrep -x %s"', p.pkg))
+      if pid ~= "" then
+        for line in pid:gmatch("[^\\n]+") do
+          shellcode(string.format('su -c "am send-trim-memory %s %s"', line, level))
+          trimmed = trimmed + 1
+          -- small stagger so all clones don't GC at the same instant
+          os.execute("sleep 0.2")
+        end
       end
     end
   end
-  log(C.green .. "[" .. ts() .. "] trim done" .. C.reset)
+  log(C.green .. "[" .. ts() .. "] trim done (" .. trimmed .. " procs)" .. C.reset)
 end
 
 -- ─── Resize via shared_prefs ───
