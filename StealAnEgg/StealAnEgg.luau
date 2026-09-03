@@ -268,6 +268,43 @@ local Window = Fluent:CreateWindow({
 	AutoStartMinimized = false,
 })
 
+-- Draggable minimize floating button (top-center) for small screens
+do
+	local hui = (gethui and gethui()) or game:GetService("CoreGui")
+	for _, o in ipairs(hui:GetChildren()) do
+		if o.Name == "StealAnEggMinBtn" then pcall(function() o:Destroy() end) end
+	end
+	local sg = Instance.new("ScreenGui")
+	sg.Name = "StealAnEggMinBtn"
+	sg.ResetOnSpawn = false
+	sg.DisplayOrder = 10000
+	sg.Parent = hui
+
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.fromOffset(44, 44)
+	btn.Position = UDim2.new(0.5, -22, 0, 4)
+	btn.BackgroundColor3 = Color3.fromRGB(6, 6, 7)
+	btn.BackgroundTransparency = 0.1
+	btn.Text = "—"
+	btn.TextColor3 = Color3.fromRGB(255, 214, 10)
+	btn.TextSize = 24
+	btn.Font = Enum.Font.GothamBold
+	btn.AutoButtonColor = false
+	btn.Active = true
+	btn.Draggable = true
+	btn.Parent = sg
+	local c = Instance.new("UICorner") c.CornerRadius = UDim.new(1, 0) c.Parent = btn
+	local s = Instance.new("UIStroke") s.Color = Color3.fromRGB(255, 214, 10) s.Thickness = 1.5 s.Parent = btn
+
+	btn.MouseButton1Click:Connect(function()
+		if Fluent.GUI and Fluent.GUI.Enabled then
+			if Window.Minimize then Window.Minimize() end
+		else
+			if Window.Restore then Window.Restore() end
+		end
+	end)
+end
+
 local StatusTab = Window:AddTab({ Title = "" })
 local section = StatusTab:AddSection(LocalPlayer.Name, { NoCollapse = true })
 
