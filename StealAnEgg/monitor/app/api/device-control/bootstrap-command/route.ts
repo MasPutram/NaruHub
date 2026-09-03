@@ -12,6 +12,11 @@ export async function GET() {
   // don't fail on random 404s from out-of-date community mirrors like
   // termux.3san.dev. --fix-missing keeps a temporary hiccup from breaking
   // the whole bootstrap.
-  const command = `echo 'deb https://grimler.se/termux/termux-main stable main' > $PREFIX/etc/apt/sources.list && pkg update --fix-missing -y && pkg upgrade --fix-missing -y && pkg install lua54 curl websocat -y && mkdir -p ~/.cache/log && [ -f ~/.cache/log/naruhub_config.json ] || echo '{"license_key":"${accessKey}"}' > ~/.cache/log/naruhub_config.json && curl -s "https://naruhub.my.id/api/termux/agent?key=${key}" | lua5.4`;
+  // NOTE: use `if [ ! -f ... ]; then ... fi` (not `... || echo`) so that a
+  // failing pkg install upstream does NOT cause the config to be overwritten
+  // -- previously `A && [ -f Y ] || echo Z > Y` would clobber the deviceId
+  // whenever any earlier `&&` step failed, defeating the whole point of
+  // persisting the id.
+  const command = `echo 'deb https://grimler.se/termux/termux-main stable main' > $PREFIX/etc/apt/sources.list && pkg update --fix-missing -y && pkg upgrade --fix-missing -y && pkg install lua54 curl websocat -y && mkdir -p ~/.cache/log && if [ ! -f ~/.cache/log/naruhub_config.json ]; then echo '{"license_key":"${accessKey}"}' > ~/.cache/log/naruhub_config.json; fi && curl -s "https://naruhub.my.id/api/termux/agent?key=${key}" | lua5.4`;
   return NextResponse.json({ ok: true, command });
 }

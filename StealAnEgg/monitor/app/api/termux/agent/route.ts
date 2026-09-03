@@ -36,7 +36,7 @@ local PREFIX = os.getenv("PREFIX") or "/data/data/com.termux/files/usr"
 local HOME = os.getenv("HOME") or "/data/data/com.termux/files/home"
 os.execute(string.format('export PATH="%s/bin:%s/bin/applets:$PATH"', PREFIX, PREFIX))
 -- For io.popen/os.execute subshells, inject PATH via env
-local ENV_PREFIX = string.format('PATH="%s/bin:%s/bin/applets:/usr/bin:/bin" ', PREFIX, PREFIX)
+local ENV_PREFIX = string.format('PATH="%s/bin:%s/bin/applets:/system/bin:/system/xbin:/usr/bin:/bin" ', PREFIX, PREFIX)
 
 -- ─── Helpers ───
 local function ts()
@@ -206,20 +206,40 @@ end
 -- ─── Device info ───
 local function get_device_id()
   -- Stable hardware fingerprint so the same physical device always gets the
-  -- same id, even if the config file is wiped.
+  -- same id, even if the config file is wiped or across App Cloner clones.
   local parts = {}
-  local serial = shell("getprop ro.serialno")
-  if serial ~= "" and serial ~= "unknown" then parts[#parts+1] = serial end
-  local model = shell("getprop ro.product.model")
-  if model ~= "" then parts[#parts+1] = model end
-  local mfr = shell("getprop ro.product.manufacturer")
-  if mfr ~= "" then parts[#parts+1] = mfr end
-  local android_id = shell("settings get secure android_id")
-  if android_id ~= "" and android_id ~= "null" then parts[#parts+1] = android_id end
+  local function add(v)
+    if v and v ~= "" and v ~= "unknown" and v ~= "null" then
+      parts[#parts+1] = v
+    end
+  end
+
+  -- getprop keys (try several serial variants -- restricted on Android 10+)
+  add(shell("getprop ro.serialno"))
+  add(shell("getprop ro.boot.serialno"))
+  add(shell("getprop ro.build.serial"))
+  add(shell("getprop ro.product.model"))
+  add(shell("getprop ro.product.manufacturer"))
+  add(shell("getprop ro.product.device"))
+  add(shell("getprop ro.product.board"))
+  add(shell("getprop ro.hardware"))
+  add(shell("getprop ro.build.fingerprint"))
+
+  -- android_id (via su if plain settings fails)
+  local aid = shell("settings get secure android_id")
+  if aid == "" or aid == "null" then aid = shell('su -c "settings get secure android_id"') end
+  add(aid)
+
+  -- MAC address (needs su on Android 10+)
+  local mac = fread("/sys/class/net/wlan0/address")
+  if not mac or mac == "" then mac = shell('su -c "cat /sys/class/net/wlan0/address"') end
+  if mac then add(mac:gsub("%s+", "")) end
+
+  -- Kernel version + bootloader (stable per device firmware)
+  add(shell("getprop ro.bootloader"))
 
   if #parts >= 2 then
     local fp = table.concat(parts, "|")
-    -- printf %s (no trailing newline) so the hash is deterministic.
     local hash = shell(string.format("printf %%s %q | sha256sum | cut -c1-32", fp))
     if hash ~= "" then return hash end
   end
@@ -605,7 +625,9 @@ while true do
     accessKey = LICENSE_KEY,
   })
 
-  -- Register if new
+  -- Register ONLY on first connect of this agent session. Heartbeats keep
+  -- the existing device entry alive; re-registering on every reconnect just
+  -- churns the device record without adding info.
   if IS_NEW then
     ws_send({
       type = "register",
@@ -613,11 +635,11 @@ while true do
       hostname = HOSTNAME,
       platform = PLATFORM,
     })
+    http_register()
     IS_NEW = false
   end
 
-  -- Always register + first heartbeat via HTTP on connect
-  http_register()
+  -- First heartbeat immediately so the dashboard sees fresh data.
   do
     local pkgs = collect_packages()
     local screen = collect_screen()
