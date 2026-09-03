@@ -276,29 +276,23 @@ do
 	end
 end
 
--- Hide our GUI + launcher when the Roblox core menu (Esc menu / settings) is open
+-- Drop our GUI + launcher behind Roblox's core menu (Esc / settings) while it's open
 do
 	local GuiService = game:GetService("GuiService")
 	local hui = (gethui and gethui()) or game:GetService("CoreGui")
-	local mainWasEnabled, launcherWasEnabled = true, false
+	local NORMAL, BEHIND = 100, -1000
 	local function getLauncher()
 		return hui:FindFirstChild("StealAnEggLauncher")
 	end
 	GuiService.MenuOpened:Connect(function()
-		if Fluent.GUI then
-			mainWasEnabled = Fluent.GUI.Enabled
-			Fluent.GUI.Enabled = false
-		end
+		if Fluent.GUI then Fluent.GUI.DisplayOrder = BEHIND end
 		local lc = getLauncher()
-		if lc then
-			launcherWasEnabled = lc.Enabled
-			lc.Enabled = false
-		end
+		if lc then lc.DisplayOrder = BEHIND end
 	end)
 	GuiService.MenuClosed:Connect(function()
-		if Fluent.GUI then Fluent.GUI.Enabled = mainWasEnabled end
+		if Fluent.GUI then Fluent.GUI.DisplayOrder = NORMAL end
 		local lc = getLauncher()
-		if lc then lc.Enabled = launcherWasEnabled end
+		if lc then lc.DisplayOrder = 9999 end
 	end)
 end
 
