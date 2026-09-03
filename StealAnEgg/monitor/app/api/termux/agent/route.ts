@@ -442,6 +442,12 @@ local function launch_app(pkg, bounds, resize, delay)
   kill_pkg(pkg)
   sleep(1)
 
+  -- Free kernel page cache before each launch so the OS has more RAM
+  -- headroom for the incoming clone. Doesn't touch any app's data --
+  -- only the OS-level page cache that Linux/Android would evict on its
+  -- own anyway under pressure.
+  shellcode('su -c "sync && echo 3 > /proc/sys/vm/drop_caches"')
+
   if resize and bounds and bounds ~= "" then
     local left, top, right, bottom = bounds:match("(%d+),(%d+),(%d+),(%d+)")
     if left then
@@ -466,7 +472,7 @@ local function launch_app(pkg, bounds, resize, delay)
     log(C.yellow .. "[" .. ts() .. "] timeout: " .. pkg .. C.reset)
   end
 
-  delay = tonumber(delay) or 5
+  delay = tonumber(delay) or 10
   if delay > 0 then sleep(delay) end
 
   -- Hip-style: trim JUST this package after it's up and stable so it

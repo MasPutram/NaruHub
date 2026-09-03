@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
       package: matchPkg,
       bounds: "",
       resize: false,
-      launchDelay: 5,
+      launchDelay: 10,
       createdAt: Date.now(),
     };
     await redis.queuePush(termuxCommandQueueKey(matchDevice.deviceId), JSON.stringify(command), {

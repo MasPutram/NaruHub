@@ -93,7 +93,7 @@ export default function DeviceDetailPage() {
   const [loading, setLoading] = useState(true);
   const [layout, setLayout] = useState<{ cols: number; rows: number }>({ cols: 4, rows: 3 });
   const [draftLayout, setDraftLayout] = useState<{ cols: number; rows: number }>({ cols: 4, rows: 3 });
-  const [launchDelay, setLaunchDelay] = useState(5);
+  const [launchDelay, setLaunchDelay] = useState(10);
   const [gridModalOpen, setGridModalOpen] = useState(false);
   const [launchingBatch, setLaunchingBatch] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});

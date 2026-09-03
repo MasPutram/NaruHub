@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     // app) -- resizing is a separate, deliberate step so it can be tested
     // on one device before trusting it everywhere.
     const applyResize = body.resize === true;
-    const launchDelay = Math.max(0, Number(body.launchDelay) || 5);
+    const launchDelay = Math.max(0, Number(body.launchDelay) || 10);
 
     if (!deviceId || typeof deviceId !== "string") {
       return NextResponse.json({ ok: false, error: "deviceId required" }, { status: 400 });
