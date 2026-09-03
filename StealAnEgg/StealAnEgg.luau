@@ -281,13 +281,13 @@ do
 	sg.Parent = hui
 
 	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.fromOffset(44, 44)
-	btn.Position = UDim2.new(0.5, -22, 0, 4)
+	btn.Size = UDim2.fromOffset(38, 38)
+	btn.Position = UDim2.fromOffset(8, 56)
 	btn.BackgroundColor3 = Color3.fromRGB(6, 6, 7)
 	btn.BackgroundTransparency = 0.1
-	btn.Text = "—"
+	btn.Text = "N"
 	btn.TextColor3 = Color3.fromRGB(255, 214, 10)
-	btn.TextSize = 24
+	btn.TextSize = 20
 	btn.Font = Enum.Font.GothamBold
 	btn.AutoButtonColor = false
 	btn.Active = true
