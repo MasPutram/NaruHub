@@ -60,20 +60,20 @@ export async function POST(req: NextRequest) {
       const packageName = packageNames[i];
       let bounds = "";
       if (screen && screen.width && screen.height) {
-        // Uniform gap around and between cells. Formula matches the user's
-        // mental model: "inti layar = screen - border, cell = inti / N".
-        // Reserving (c+1) gaps horizontally means every edge + every seam
-        // between cells has the SAME spacing -> layout looks consistent.
-        const gap = 16;
-        const topPad = 50; // status bar clearance (bigger than side gaps)
+        // Layout: explicit top/bottom margins (status bar + nav bar
+        // clearance) + uniform gap between cells. All cells identical size
+        // so the grid reads as one clean, consistent block.
+        const marginTop = 60;    // status bar clearance
+        const marginBottom = 40; // gesture/nav bar clearance
+        const gap = 16;          // between adjacent cells (horiz + vert)
         const usableW = screen.width - gap * (c + 1);
-        const usableH = screen.height - topPad - gap * r;
+        const usableH = screen.height - marginTop - marginBottom - gap * (r - 1);
         const cellW = Math.floor(usableW / c);
         const cellH = Math.floor(usableH / r);
         const col = i % c;
         const row = Math.floor(i / c);
         const left = gap + col * (cellW + gap);
-        const top = topPad + row * (cellH + gap);
+        const top = marginTop + row * (cellH + gap);
         const right = left + cellW;
         const bottom = top + cellH;
         bounds = `${left},${top},${right},${bottom}`;
