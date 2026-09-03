@@ -276,6 +276,32 @@ do
 	end
 end
 
+-- Hide our GUI + launcher when the Roblox core menu (Esc menu / settings) is open
+do
+	local GuiService = game:GetService("GuiService")
+	local hui = (gethui and gethui()) or game:GetService("CoreGui")
+	local mainWasEnabled, launcherWasEnabled = true, false
+	local function getLauncher()
+		return hui:FindFirstChild("StealAnEggLauncher")
+	end
+	GuiService.MenuOpened:Connect(function()
+		if Fluent.GUI then
+			mainWasEnabled = Fluent.GUI.Enabled
+			Fluent.GUI.Enabled = false
+		end
+		local lc = getLauncher()
+		if lc then
+			launcherWasEnabled = lc.Enabled
+			lc.Enabled = false
+		end
+	end)
+	GuiService.MenuClosed:Connect(function()
+		if Fluent.GUI then Fluent.GUI.Enabled = mainWasEnabled end
+		local lc = getLauncher()
+		if lc then lc.Enabled = launcherWasEnabled end
+	end)
+end
+
 local StatusTab = Window:AddTab({ Title = "" })
 local section = StatusTab:AddSection(LocalPlayer.Name, { NoCollapse = true })
 
