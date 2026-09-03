@@ -485,25 +485,6 @@ local function launch_app(pkg, bounds, resize, delay)
   kill_pkg(pkg)
   sleep(1)
 
-  -- Free kernel page cache before each launch so the OS has more RAM
-  -- headroom for the incoming clone. Doesn't touch any app's data --
-  -- only the OS-level page cache that Linux/Android would evict on its
-  -- own anyway under pressure.
-  shellcode('su -c "sync && echo 3 > /proc/sys/vm/drop_caches"')
-
-  -- Pin oom_score_adj of every currently-running Roblox clone to a very
-  -- low value so Android's LMK does NOT pick them as its first victim
-  -- when a new clone starts allocating memory. Score range is -1000
-  -- (unkillable) to 1000 (kill first); background apps default around
-  -- 200-900. Setting to -800 makes them near-unkillable without touching
-  -- system_server (-1000).
-  local existing_pids = shell('su -c "pgrep -f com.roblox"')
-  if existing_pids ~= "" then
-    for line in existing_pids:gmatch("[^\\n]+") do
-      shellcode(string.format('su -c "echo -800 > /proc/%s/oom_score_adj"', line))
-    end
-  end
-
   if resize and bounds and bounds ~= "" then
     local left, top, right, bottom = bounds:match("(%d+),(%d+),(%d+),(%d+)")
     if left then
@@ -547,17 +528,6 @@ local function launch_app(pkg, bounds, resize, delay)
 
   delay = tonumber(delay) or 10
   if delay > 0 then sleep(delay) end
-
-  -- Hip-style: trim JUST this package after it's up and stable so it
-  -- releases any startup cache/allocation it doesn't strictly need.
-  -- Frees RAM for the next clone without touching existing clones or
-  -- risking an LMK cascade.
-  local pid = shell(string.format('su -c "pgrep -x %s"', pkg))
-  if pid ~= "" then
-    for line in pid:gmatch("[^\\n]+") do
-      shellcode(string.format('su -c "am send-trim-memory %s RUNNING_MODERATE"', line))
-    end
-  end
 end
 
 -- ─── HTTP helpers (writes to Redis so dashboard can read) ───
