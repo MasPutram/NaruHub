@@ -431,7 +431,16 @@ local function launch_app(pkg, bounds, resize, delay)
   end
 
   log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset)
-  shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
+  -- Try freeform windowing mode (5) first so multiple clones stay visible as
+  -- side-by-side floating tiles instead of stacking on top of each other.
+  -- If the device does not support freeform, fall back to the normal launch.
+  local ok = shellcode(string.format(
+    'su -c "am start --windowingMode 5 -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"',
+    pkg
+  ))
+  if not ok then
+    shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
+  end
 
   local waited = 0
   while waited < 60 do
