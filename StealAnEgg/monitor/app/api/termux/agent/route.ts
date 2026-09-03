@@ -10,8 +10,8 @@ local LOG_FILE = CONFIG_DIR .. "/naruhub_agent.log"
 local BASE_URL = "https://naruhub.my.id"
 local WS_URL = "wss://ws.naruhub.my.id"
 local LICENSE_KEY = "$$LICENSE$$"
-local RAM_TRIM_PCT = 80
-local RAM_TRIM_COOLDOWN = 60  -- seconds between trim cycles
+local RAM_TRIM_PCT = 92
+local RAM_TRIM_COOLDOWN = 90  -- seconds between trim cycles
 local LAST_TRIM_TS = 0
 local HEARTBEAT_INTERVAL = 30
 local RECONNECT_DELAY = 5
@@ -358,7 +358,10 @@ local function maybe_trim_ram(pkgs)
   LAST_TRIM_TS = now
 
   local fg = get_foreground_pkg()
-  local level = pct >= 90 and "RUNNING_LOW" or "RUNNING_MODERATE"
+  -- Only ever send MODERATE. LOW/CRITICAL push borderline background clones
+  -- over the edge into an LMK kill, which the user sees as a random
+  -- force-close right after they open something else.
+  local level = "RUNNING_MODERATE"
   log(C.yellow .. "[" .. ts() .. "] RAM " .. pct .. "% -- trim " .. level ..
       (fg and " (skip fg=" .. fg .. ")" or "") .. C.reset)
 
