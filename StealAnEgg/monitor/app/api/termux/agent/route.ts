@@ -568,9 +568,31 @@ if config_raw then
   end
 end
 
+-- Pick a friendly device name (what Hip shows): prefer the user's custom
+-- device name from Android settings, then the marketing name, then the raw
+-- model. `hostname` is always "localhost" on Android so it's a last resort.
+local function get_device_name()
+  local candidates = {
+    shell('settings get global device_name'),
+    shell('su -c "settings get global device_name"'),
+    shell('settings get secure bluetooth_name'),
+    shell('su -c "settings get secure bluetooth_name"'),
+    shell("getprop ro.product.marketing_name"),
+    shell("getprop ro.product.vendor.marketing_name"),
+    shell("getprop ro.config.marketing_name"),
+    shell("getprop ro.product.model"),
+  }
+  for _, c in ipairs(candidates) do
+    if c and c ~= "" and c ~= "null" and c ~= "unknown" and c ~= "localhost" then
+      return c
+    end
+  end
+  return shell("hostname")
+end
+
 if not DEVICE_ID then
   DEVICE_ID = get_device_id()
-  HOSTNAME = shell("hostname")
+  HOSTNAME = get_device_name()
   if HOSTNAME == "" then HOSTNAME = "termux-" .. DEVICE_ID:sub(1, 8) end
   PLATFORM = shell("uname -m")
   if PLATFORM == "" then PLATFORM = "unknown" end
@@ -585,6 +607,16 @@ if not DEVICE_ID then
   IS_NEW = true
 else
   IS_NEW = false
+  -- Refresh hostname if config still has the "localhost" placeholder from
+  -- an older agent version, so existing installs upgrade automatically.
+  if HOSTNAME == "localhost" or HOSTNAME == "" or HOSTNAME == nil then
+    HOSTNAME = get_device_name()
+    if HOSTNAME == "" then HOSTNAME = "termux-" .. DEVICE_ID:sub(1, 8) end
+    -- Persist the updated name so we don't recompute every launch.
+    local cfg_now = json.decode(config_raw) or {}
+    cfg_now.hostname = HOSTNAME
+    fwrite(CONFIG_FILE, json.encode(cfg_now))
+  end
 end
 
 local ANDROID_VER = get_prop("ro.build.version.release")
