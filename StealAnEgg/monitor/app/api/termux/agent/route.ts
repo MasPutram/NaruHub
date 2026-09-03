@@ -404,6 +404,25 @@ local function set_window_bounds(pkg, left, top, right, bottom)
   return true
 end
 
+-- ─── Command dedupe ───
+-- A single admin action can reach us BOTH via the HTTP command queue AND
+-- via a WS push, which would run launch_app twice for the same package.
+-- Track seen command ids and skip duplicates. Keep the map small by
+-- expiring entries after 5 minutes.
+local SEEN_COMMANDS = {}
+local SEEN_TTL = 300
+local function was_seen(cmd_id)
+  if not cmd_id then return false end -- old commands without ids: always run
+  local now = os.time()
+  -- Sweep old entries every call (cheap; map stays tiny).
+  for k, ts in pairs(SEEN_COMMANDS) do
+    if now - ts > SEEN_TTL then SEEN_COMMANDS[k] = nil end
+  end
+  if SEEN_COMMANDS[cmd_id] then return true end
+  SEEN_COMMANDS[cmd_id] = now
+  return false
+end
+
 -- ─── Launch app ───
 -- kill_pkg must ONLY kill the exact package (not sibling App Cloner clones
 -- whose package names share a prefix). pgrep -f matches on the full cmdline
@@ -705,7 +724,9 @@ while true do
     -- Heartbeat via WS
     if now - last_heartbeat >= HEARTBEAT_INTERVAL then
       local pkgs = collect_packages()
-      maybe_trim_ram(pkgs)
+      -- No periodic trim -- Hip only trims per-launch. Doing it every
+      -- heartbeat can nuke a clone that just went to background during a
+      -- batch launch, which the user sees as a random force-close.
       local screen = collect_screen()
       local stats = collect_stats()
       ws_send({
@@ -729,7 +750,7 @@ while true do
       local cmd_data = json.decode(cmd_raw)
       if cmd_data and cmd_data.commands then
         for _, cmd in ipairs(cmd_data.commands) do
-          if cmd.type == "launch" then
+          if cmd.type == "launch" and not was_seen(cmd.id) then
             log(C.cyan .. "[" .. ts() .. "] >> launch " .. cmd.package .. C.reset)
             launch_app(cmd.package, cmd.bounds, cmd.resize, cmd.launchDelay)
           end
@@ -757,7 +778,7 @@ while true do
       elseif msg.type == "command" then
         if msg.commands then
           for _, cmd in ipairs(msg.commands) do
-            if cmd.type == "launch" then
+            if cmd.type == "launch" and not was_seen(cmd.id) then
               log(C.cyan .. "[" .. ts() .. "] >> launch " .. cmd.package .. C.reset)
               launch_app(cmd.package, cmd.bounds, cmd.resize, cmd.launchDelay)
             end
