@@ -383,12 +383,55 @@ local function maybe_trim_ram(pkgs)
 end
 
 -- ─── Resize via shared_prefs ───
+-- Seed a minimal preferences XML with the App Cloner window keys so the
+-- FIRST launch of a fresh clone already lands at our tile bounds. Without
+-- this, the very first launch after install renders fullscreen (App Cloner
+-- creates the file only after that first launch), which triggers force-
+-- close cascades on 4GB devices because two fullscreen Roblox instances
+-- overwhelm RAM.
+local function seed_prefs(pkg, prefFile, left, top, right, bottom)
+  local dir = string.format("/data/data/%s/shared_prefs", pkg)
+  shellcode(string.format('su -c "mkdir -p %s"', dir))
+  local body = string.format(
+    [[<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <int name="app_cloner_launch_window_left" value="%d" />
+    <int name="app_cloner_launch_window_top" value="%d" />
+    <int name="app_cloner_launch_window_right" value="%d" />
+    <int name="app_cloner_launch_window_bottom" value="%d" />
+    <int name="app_cloner_current_window_left" value="%d" />
+    <int name="app_cloner_current_window_top" value="%d" />
+    <int name="app_cloner_current_window_right" value="%d" />
+    <int name="app_cloner_current_window_bottom" value="%d" />
+    <int name="app_cloner_original_window_left" value="%d" />
+    <int name="app_cloner_original_window_top" value="%d" />
+    <int name="app_cloner_original_window_right" value="%d" />
+    <int name="app_cloner_original_window_bottom" value="%d" />
+</map>
+]],
+    left, top, right, bottom,
+    left, top, right, bottom,
+    left, top, right, bottom
+  )
+  local escaped = body:gsub("'", "'\\\\''")
+  local cmd = string.format("su -c 'cat > %s' <<'PREF_EOF'\\n%s\\nPREF_EOF", prefFile, escaped)
+  os.execute(ENV_PREFIX .. cmd .. " >/dev/null 2>&1")
+  -- Match Android's expected perms so the app can read it.
+  local uid = shell(string.format('su -c "stat -c %%u /data/data/%s"', pkg))
+  if uid ~= "" then
+    shellcode(string.format('su -c "chown %s:%s %s"', uid, uid, prefFile))
+  end
+  shellcode(string.format('su -c "chmod 660 %s"', prefFile))
+end
+
 local function set_window_bounds(pkg, left, top, right, bottom)
   local prefFile = string.format("/data/data/%s/shared_prefs/%s_preferences.xml", pkg, pkg)
   local exists = shellcode(string.format('su -c "test -f %s"', prefFile))
   if not exists then
-    log(C.yellow .. "[" .. ts() .. "] prefs not found: " .. pkg .. C.reset)
-    return false
+    log(C.yellow .. "[" .. ts() .. "] prefs missing -- seeding first-launch bounds for " .. pkg .. C.reset)
+    seed_prefs(pkg, prefFile, left, top, right, bottom)
+    log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " seeded " .. left .. "," .. top .. "," .. right .. "," .. bottom .. " -> " .. C.cyan .. pkg .. C.reset)
+    return true
   end
   for _, prefix in ipairs({"launch", "current", "original"}) do
     for _, side in ipairs({"left", "top", "right", "bottom"}) do
@@ -447,6 +490,19 @@ local function launch_app(pkg, bounds, resize, delay)
   -- only the OS-level page cache that Linux/Android would evict on its
   -- own anyway under pressure.
   shellcode('su -c "sync && echo 3 > /proc/sys/vm/drop_caches"')
+
+  -- Pin oom_score_adj of every currently-running Roblox clone to a very
+  -- low value so Android's LMK does NOT pick them as its first victim
+  -- when a new clone starts allocating memory. Score range is -1000
+  -- (unkillable) to 1000 (kill first); background apps default around
+  -- 200-900. Setting to -800 makes them near-unkillable without touching
+  -- system_server (-1000).
+  local existing_pids = shell('su -c "pgrep -f com.roblox"')
+  if existing_pids ~= "" then
+    for line in existing_pids:gmatch("[^\\n]+") do
+      shellcode(string.format('su -c "echo -800 > /proc/%s/oom_score_adj"', line))
+    end
+  end
 
   if resize and bounds and bounds ~= "" then
     local left, top, right, bottom = bounds:match("(%d+),(%d+),(%d+),(%d+)")
