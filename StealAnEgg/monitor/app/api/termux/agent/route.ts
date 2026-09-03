@@ -423,6 +423,20 @@ local function launch_app(pkg, bounds, resize, delay)
   kill_pkg(pkg)
   sleep(1)
 
+  -- Free up kernel page cache before launch so the OS has more RAM to
+  -- hand to the new clone without evicting an existing clone via LMK.
+  shellcode('su -c "sync"')
+  shellcode('su -c "echo 3 > /proc/sys/vm/drop_caches"')
+  -- Protect all currently-running Roblox clones from LMK by lowering
+  -- their oom_score_adj. Kernel picks victims with the HIGHEST score
+  -- first, so pushing them toward -1000 makes them nearly unkillable.
+  local roblox_pids = shell('su -c "pgrep -f com.roblox"')
+  if roblox_pids ~= "" then
+    for line in roblox_pids:gmatch("[^\\n]+") do
+      shellcode(string.format('su -c "echo -800 > /proc/%s/oom_score_adj"', line))
+    end
+  end
+
   if resize and bounds and bounds ~= "" then
     local left, top, right, bottom = bounds:match("(%d+),(%d+),(%d+),(%d+)")
     if left then
