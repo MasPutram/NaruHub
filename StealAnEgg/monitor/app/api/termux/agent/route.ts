@@ -458,18 +458,35 @@ local function launch_app(pkg, bounds, resize, delay)
   log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset)
   shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
 
+  -- Wait for the app window to actually be drawn on screen, not just for
+  -- the task to be registered in the activity stack. Roblox in particular
+  -- shows a splash + long "Loading..." phase after the task exists; if we
+  -- consider it "ready" the instant the task appears, we'll fire the next
+  -- launch before this one has finished initializing.
   local waited = 0
+  local task_seen = false
   while waited < 60 do
     local stack = shell('su -c "am stack list"')
     if stack:find(pkg .. "/", 1, true) then
-      log(C.green .. "[" .. ts() .. "] " .. pkg .. " ready (" .. waited .. "s)" .. C.reset)
-      break
+      task_seen = true
+      -- Check the app's window is actually visible AND has focus / is
+      -- drawn. mCurrentFocus should point to this pkg once the first
+      -- real activity window is up.
+      local focus = shell('su -c "dumpsys window" | grep -E "mCurrentFocus|mFocusedApp"')
+      if focus:find(pkg, 1, true) then
+        log(C.green .. "[" .. ts() .. "] " .. pkg .. " window up (" .. waited .. "s)" .. C.reset)
+        break
+      end
     end
     sleep(2)
     waited = waited + 2
   end
   if waited >= 60 then
-    log(C.yellow .. "[" .. ts() .. "] timeout: " .. pkg .. C.reset)
+    if task_seen then
+      log(C.yellow .. "[" .. ts() .. "] " .. pkg .. " task alive but no focus (proceeding)" .. C.reset)
+    else
+      log(C.yellow .. "[" .. ts() .. "] timeout: " .. pkg .. C.reset)
+    end
   end
 
   delay = tonumber(delay) or 10
