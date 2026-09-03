@@ -276,23 +276,20 @@ do
 	end
 end
 
--- Drop our GUI + launcher behind Roblox's core menu (Esc / settings) while it's open
+-- Keep our GUI + launcher ABOVE Roblox's core menu (Esc / settings)
 do
-	local GuiService = game:GetService("GuiService")
 	local hui = (gethui and gethui()) or game:GetService("CoreGui")
-	local NORMAL, BEHIND = 100, -1000
-	local function getLauncher()
-		return hui:FindFirstChild("StealAnEggLauncher")
+	if Fluent.GUI then Fluent.GUI.DisplayOrder = 2_000_000_000 end
+	local function bumpLauncher()
+		local lc = hui:FindFirstChild("StealAnEggLauncher")
+		if lc then lc.DisplayOrder = 2_000_000_000 end
 	end
-	GuiService.MenuOpened:Connect(function()
-		if Fluent.GUI then Fluent.GUI.DisplayOrder = BEHIND end
-		local lc = getLauncher()
-		if lc then lc.DisplayOrder = BEHIND end
-	end)
-	GuiService.MenuClosed:Connect(function()
-		if Fluent.GUI then Fluent.GUI.DisplayOrder = NORMAL end
-		local lc = getLauncher()
-		if lc then lc.DisplayOrder = 9999 end
+	bumpLauncher()
+	hui.ChildAdded:Connect(function(c)
+		if c.Name == "StealAnEggLauncher" then
+			task.wait()
+			bumpLauncher()
+		end
 	end)
 end
 
