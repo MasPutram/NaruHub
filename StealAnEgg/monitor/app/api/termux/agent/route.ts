@@ -568,9 +568,10 @@ if config_raw then
   end
 end
 
--- Pick a friendly device name (what Hip shows): prefer the user's custom
+-- Pick a friendly device name (what Hip shows): prefer the user custom
 -- device name from Android settings, then the marketing name, then the raw
--- model. `hostname` is always "localhost" on Android so it's a last resort.
+-- model. The hostname command is always "localhost" on Android so it is a
+-- last resort.
 local function get_device_name()
   local candidates = {
     shell('settings get global device_name'),

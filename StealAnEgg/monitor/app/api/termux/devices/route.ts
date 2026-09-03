@@ -52,7 +52,7 @@ export async function GET(_req: NextRequest) {
     const now = Date.now();
 
     // Live devices first -- compute status from lastSeen.
-    for (const [id, device] of Object.entries(liveByKey)) {
+    for (const device of Object.values(liveByKey)) {
       const elapsed = (now - (device.lastSeen || 0)) / 1000;
       device.status = elapsed < TERMUX_DEVICE_TTL_S ? "online" : "offline";
       devices.push(device);
