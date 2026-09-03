@@ -592,6 +592,18 @@ end
 os.execute("mkdir -p " .. CONFIG_DIR)
 fwrite(LOG_FILE, "")
 
+-- Community trick: shrink Android's logcat buffer + clear it. Heavy
+-- clones (Roblox in particular) spam megabytes of logs per minute; the
+-- default 256KB * 6-buffer setup + logd overhead is a real RAM/IO drain
+-- and shows up as random background force-closes on 4GB devices.
+-- We set the buffer to 64KB (minimum useful), clear existing logs, and
+-- also stop the logd service outright when possible.
+os.execute(ENV_PREFIX .. 'su -c "setprop persist.logd.size 65536" >/dev/null 2>&1')
+os.execute(ENV_PREFIX .. 'su -c "setprop persist.log.tag ASSERT" >/dev/null 2>&1')
+os.execute(ENV_PREFIX .. 'su -c "logcat -b all -c" >/dev/null 2>&1')
+os.execute(ENV_PREFIX .. 'su -c "logcat -G 64K" >/dev/null 2>&1')
+os.execute(ENV_PREFIX .. 'su -c "stop logd" >/dev/null 2>&1')
+
 if shell("websocat --version") == "" then
   log(C.red .. "websocat not found. Run: pkg install websocat" .. C.reset)
   os.exit(1)
