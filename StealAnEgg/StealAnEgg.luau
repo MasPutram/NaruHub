@@ -264,7 +264,7 @@ local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
 	TabWidth = 0,
-	Size = UDim2.fromOffset(380, 360),
+	Size = UDim2.fromOffset(380, 400),
 	AutoStartMinimized = false,
 })
 
@@ -366,6 +366,87 @@ section:AddToggle("AutoPlaceToggle", {
 	Default = false,
 	Callback = function(val)
 		autoPlaceEnabled = val
+	end,
+})
+
+local hopBusy = false
+section:AddButton({
+	Title = "Hop Server (1-3 players)",
+	Callback = function()
+		if hopBusy then return end
+		hopBusy = true
+		task.spawn(function()
+			local TeleportService = game:GetService("TeleportService")
+			local HttpService = game:GetService("HttpService")
+			local placeId = game.PlaceId
+			local currentJobId = game.JobId
+
+			local lastFailReason
+			local failConn = TeleportService.TeleportInitFailed:Connect(function(_, result, err)
+				lastFailReason = tostring(result) .. " " .. tostring(err)
+			end)
+
+			local function fetchCandidates()
+				local cursor
+				local candidates = {}
+				for _ = 1, 5 do
+					local url = "https://games.roblox.com/v1/games/" .. placeId ..
+						"/servers/Public?sortOrder=Asc&limit=100" ..
+						(cursor and ("&cursor=" .. cursor) or "")
+					local ok, body = pcall(function()
+						return game:HttpGet(url)
+					end)
+					if not ok then break end
+					local ok2, data = pcall(function()
+						return HttpService:JSONDecode(body)
+					end)
+					if not ok2 or not data or not data.data then break end
+					for _, s in ipairs(data.data) do
+						if s.id ~= currentJobId and s.playing and s.playing >= 1
+							and s.playing <= 3 and s.playing < (s.maxPlayers or 6) then
+							table.insert(candidates, { id = s.id, playing = s.playing })
+						end
+					end
+					cursor = data.nextPageCursor
+					if not cursor or #candidates >= 40 then break end
+				end
+				table.sort(candidates, function(a, b) return a.playing < b.playing end)
+				return candidates
+			end
+
+			local candidates = fetchCandidates()
+			if #candidates == 0 then
+				monitorPara:SetContent("No 1-3p server found")
+				failConn:Disconnect()
+				hopBusy = false
+				return
+			end
+
+			for i, c in ipairs(candidates) do
+				if i > 10 then break end
+				monitorPara:SetContent("Hop try " .. i .. " (" .. c.playing .. "p)")
+				lastFailReason = nil
+				pcall(function()
+					TeleportService:TeleportToPlaceInstance(placeId, c.id, LocalPlayer)
+				end)
+				-- wait for either successful teleport (script torn down) or TeleportInitFailed
+				local waited = 0
+				while waited < 8 and lastFailReason == nil do
+					task.wait(0.5)
+					waited += 0.5
+				end
+				if lastFailReason == nil then
+					-- teleport in progress or succeeded
+					break
+				end
+			end
+
+			failConn:Disconnect()
+			if lastFailReason then
+				monitorPara:SetContent("Hop failed: " .. lastFailReason:sub(1, 30))
+			end
+			hopBusy = false
+		end)
 	end,
 })
 
