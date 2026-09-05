@@ -1,6 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis, termuxDevicePolicyKey } from "@/lib/redis";
 
+// Scan every termux:pkgpause:<deviceId>:<pkg> key that currently exists (its
+// TTL hasn't expired yet) and return just the package names. Agent uses this
+// to skip auto-rejoin on packages under a temporary pause (e.g. "Siap Jual"
+// flow where the operator is logging an account out).
+async function readPausedPackages(deviceId: string): Promise<string[]> {
+  const prefix = `termux:pkgpause:${deviceId}:`;
+  const paused: string[] = [];
+  let cursor = "0";
+  do {
+    const [next, keys] = await redis.scan(cursor, { match: `${prefix}*`, count: 100 });
+    cursor = next;
+    for (const k of keys) {
+      const pkg = k.slice(prefix.length);
+      if (pkg) paused.push(pkg);
+    }
+  } while (cursor !== "0");
+  return paused;
+}
+
 // Per-device execution policy read/written by the dashboard AND the Termux
 // agent. The agent polls this to know which packages to auto-rejoin, how
 // long to wait between reconnect attempts, and the cap on retry count.
@@ -76,9 +95,10 @@ export async function GET(req: NextRequest) {
     const raw = await redis.get<string>(termuxDevicePolicyKey(deviceId));
     const parsed = raw ? (typeof raw === "string" ? JSON.parse(raw) : raw) : null;
     const policy = normalize(parsed);
-    return NextResponse.json({ ok: true, policy });
+    const pausedPackages = await readPausedPackages(deviceId);
+    return NextResponse.json({ ok: true, policy, pausedPackages });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e.message, policy: DEFAULT_POLICY }, { status: 500 });
+    return NextResponse.json({ ok: false, error: e.message, policy: DEFAULT_POLICY, pausedPackages: [] }, { status: 500 });
   }
 }
 

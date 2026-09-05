@@ -583,6 +583,158 @@ local function http_heartbeat(pkgs, screen, stats)
   end
 end
 
+-- GET helper -- returns response body as string (not just status code).
+-- Used for the policy poll below.
+local function http_get(path)
+  local url = BASE_URL .. path
+  local cmd = string.format(
+    "curl -s -X GET '%s' -H 'X-Access-Key: %s'",
+    url, LICENSE_KEY
+  )
+  return shell(cmd)
+end
+
+-- ─── Auto-rejoin state + helpers ───
+-- Everything auto-rejoin needs to remember lives in these tables, keyed by
+-- package name. The main loop calls maybe_auto_rejoin() every tick; the
+-- policy itself is polled less often (POLICY_POLL_INTERVAL) to avoid
+-- hammering the server.
+local POLICY_POLL_INTERVAL = 15  -- seconds
+local LAST_POLICY_POLL = 0
+local CACHED_POLICY = nil        -- last successful poll result (or nil)
+local WAS_RUNNING = {}           -- pkg -> true if seen in am stack list last check
+local PENDING_REJOIN = {}        -- pkg -> os.time() when we should relaunch
+local RETRY_COUNT = {}           -- pkg -> how many rejoin attempts so far
+local REJOIN_LOG_LAST = {}       -- pkg -> ts of last log line (dedup spam)
+
+local function poll_policy_if_due()
+  if not DEVICE_ID then return end
+  local now = os.time()
+  if now - LAST_POLICY_POLL < POLICY_POLL_INTERVAL then return end
+  LAST_POLICY_POLL = now
+  local body = http_get("/api/device-control/policy?deviceId=" .. DEVICE_ID)
+  if body == "" then return end
+  local ok, parsed = pcall(json.decode, body)
+  if not ok or not parsed or not parsed.ok then return end
+  CACHED_POLICY = {
+    autoRejoinEnabled = parsed.policy and parsed.policy.autoRejoinEnabled or false,
+    rejoinDelay = (parsed.policy and parsed.policy.rejoinDelay) or 10,
+    retryLimit = (parsed.policy and parsed.policy.retryLimit) or 0,
+    autoRejoinPackages = (parsed.policy and parsed.policy.autoRejoinPackages) or {},
+    packageTargets = (parsed.policy and parsed.policy.packageTargets) or {},
+    pausedPackages = parsed.pausedPackages or {},
+  }
+end
+
+local function is_paused(pkg)
+  if not CACHED_POLICY or not CACHED_POLICY.pausedPackages then return false end
+  for _, p in ipairs(CACHED_POLICY.pausedPackages) do
+    if p == pkg then return true end
+  end
+  return false
+end
+
+-- Should this package auto-rejoin? True when auto-rejoin is on globally AND
+-- either the per-package list is empty (all) or the package is in the list.
+local function should_rejoin(pkg)
+  if not CACHED_POLICY or not CACHED_POLICY.autoRejoinEnabled then return false end
+  local list = CACHED_POLICY.autoRejoinPackages
+  if #list == 0 then return true end
+  for _, p in ipairs(list) do
+    if p == pkg then return true end
+  end
+  return false
+end
+
+local function rlog(pkg, msg)
+  -- Dedup: don't log the same package state faster than once per 5s.
+  local now = os.time()
+  if REJOIN_LOG_LAST[pkg] and now - REJOIN_LOG_LAST[pkg] < 5 then return end
+  REJOIN_LOG_LAST[pkg] = now
+  log(msg)
+end
+
+-- Any package the agent has ever seen alive in this session -- kept even
+-- when paused / crashed, so an expiring pause naturally resumes rejoin.
+local TRACKED = {}
+-- Rejoin sweep runs less often than the 1s main-loop tick so we don't
+-- fork `am stack list` every second on a 4GB device.
+local REJOIN_SWEEP_INTERVAL = 5
+local LAST_REJOIN_SWEEP = 0
+
+local function maybe_auto_rejoin()
+  poll_policy_if_due()
+  if not CACHED_POLICY or not CACHED_POLICY.autoRejoinEnabled then return end
+
+  local now_top = os.time()
+  if now_top - LAST_REJOIN_SWEEP < REJOIN_SWEEP_INTERVAL then return end
+  LAST_REJOIN_SWEEP = now_top
+
+  -- One stack snapshot per pass -- cheaper than pgrep per package.
+  local stack = shell('su -c "am stack list"')
+  local now = os.time()
+
+  -- Parse current running set out of the stack listing.
+  local seen_now = {}
+  for line in stack:gmatch("[^\\n]+") do
+    for pkg in line:gmatch("([%w%.]+)/[%w%.$]+") do
+      seen_now[pkg] = true
+    end
+  end
+
+  -- Anything currently alive joins TRACKED; a package that recovered on
+  -- its own (transition NOT_SEEN -> SEEN) also resets its retry counter.
+  for pkg, _ in pairs(seen_now) do
+    if not WAS_RUNNING[pkg] then RETRY_COUNT[pkg] = 0 end
+    WAS_RUNNING[pkg] = true
+    TRACKED[pkg] = true
+  end
+
+  -- For every tracked package (even ones missing for a while), decide if
+  -- we should rejoin. This is what makes pause expiration self-heal: pkg
+  -- stays in TRACKED, so once is_paused() flips back to false we act on
+  -- the next tick.
+  for pkg, _ in pairs(TRACKED) do
+    if not seen_now[pkg] and should_rejoin(pkg) and not PENDING_REJOIN[pkg] then
+      if is_paused(pkg) then
+        rlog(pkg, C.dim .. "[" .. ts() .. "] rejoin skipped (paused): " .. pkg .. C.reset)
+      else
+        local limit = CACHED_POLICY.retryLimit or 0
+        local tries = RETRY_COUNT[pkg] or 0
+        if limit > 0 and tries >= limit then
+          rlog(pkg, C.yellow .. "[" .. ts() .. "] rejoin retry limit hit for " .. pkg .. " (" .. tries .. ")" .. C.reset)
+        else
+          PENDING_REJOIN[pkg] = now + (CACHED_POLICY.rejoinDelay or 10)
+          rlog(pkg, C.yellow .. "[" .. ts() .. "] " .. pkg .. " dropped -- rejoin in " .. (CACHED_POLICY.rejoinDelay or 10) .. "s" .. C.reset)
+        end
+      end
+    end
+  end
+
+  -- Drop packages we know are gone from WAS_RUNNING so the next appearance
+  -- registers as a fresh recovery (resets RETRY_COUNT). TRACKED persists.
+  for pkg, _ in pairs(WAS_RUNNING) do
+    if not seen_now[pkg] then WAS_RUNNING[pkg] = nil end
+  end
+
+  -- Fire any pending rejoins whose delay elapsed.
+  for pkg, when in pairs(PENDING_REJOIN) do
+    if now >= when then
+      PENDING_REJOIN[pkg] = nil
+      if seen_now[pkg] then
+        -- Came back on its own between schedule and now -- no-op.
+      elseif is_paused(pkg) then
+        rlog(pkg, C.dim .. "[" .. ts() .. "] rejoin fired but " .. pkg .. " now paused, aborting" .. C.reset)
+      else
+        RETRY_COUNT[pkg] = (RETRY_COUNT[pkg] or 0) + 1
+        local target = CACHED_POLICY.packageTargets and CACHED_POLICY.packageTargets[pkg] or ""
+        log(C.cyan .. "[" .. ts() .. "] auto-rejoin " .. pkg .. " (attempt " .. RETRY_COUNT[pkg] .. ")" .. C.reset)
+        launch_app(pkg, "", false, 0, target)
+      end
+    end
+  end
+end
+
 -- ─── WebSocket (bidirectional via websocat + named pipe) ───
 local function stop_ws()
   shellcode("pkill -f 'websocat.*ws.naruhub'")
@@ -849,6 +1001,11 @@ while true do
         end
       end
     end
+
+    -- Auto-rejoin sweep: polls policy on its own throttle, detects
+    -- dropped-out packages, schedules and fires relaunches. Safe to call
+    -- every tick -- most calls are near-free.
+    maybe_auto_rejoin()
 
     -- Check websocat alive
     if not ws_alive() then
