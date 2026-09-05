@@ -354,15 +354,23 @@ local function seed_prefs(pkg, prefFile, left, top, right, bottom)
     left, top, right, bottom,
     left, top, right, bottom
   )
-  local escaped = body:gsub("'", "'\\\\''")
-  local cmd = string.format("su -c 'cat > %s' <<'PREF_EOF'\\n%s\\nPREF_EOF", prefFile, escaped)
-  os.execute(ENV_PREFIX .. cmd .. " >/dev/null 2>&1")
+  -- Stage the XML in Termux's own writeable tmp dir, then cp into the
+  -- app's shared_prefs via su. Avoids the heredoc vs redirect clash that
+  -- made the previous seed_prefs silently no-op (heredoc terminator
+  -- PREF_EOF stopped being alone on its line once the shellcode wrapper
+  -- appended > /dev/null 2>&1, so nothing was ever written and fresh
+  -- clones opened at App Cloner's default fullscreen instead of our
+  -- tile bounds).
+  local tmp = CONFIG_DIR .. "/.seed_prefs.xml"
+  fwrite(tmp, body)
+  shellcode("su -c \\"cp '" .. tmp .. "' '" .. prefFile .. "'\\"")
+  os.remove(tmp)
   -- Match Android's expected perms so the app can read it.
   local uid = shell(string.format('su -c "stat -c %%u /data/data/%s"', pkg))
   if uid ~= "" then
-    shellcode(string.format('su -c "chown %s:%s %s"', uid, uid, prefFile))
+    shellcode("su -c \\"chown " .. uid .. ":" .. uid .. " '" .. prefFile .. "'\\"")
   end
-  shellcode(string.format('su -c "chmod 660 %s"', prefFile))
+  shellcode("su -c \\"chmod 660 '" .. prefFile .. "'\\"")
 end
 
 local function set_window_bounds(pkg, left, top, right, bottom)
