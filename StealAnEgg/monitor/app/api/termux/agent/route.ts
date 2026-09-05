@@ -570,13 +570,14 @@ local function batch_launch(cmds)
   end
 
   local stagger = tonumber(cmds[1].launchDelay) or 10
-  log(C.cyan .. "[" .. ts() .. "] batch launch (" .. #cmds .. " packages), " .. stagger .. "s stagger" .. C.reset)
+  log(C.cyan .. "[" .. ts() .. "] opening (" .. #cmds .. " packages)" .. C.reset)
 
   -- Step 1: fully launch the first one so its window is up. All the
   -- others fire on top of this without killing it, so at the end all N
-  -- clones stay open (matches the operator's expectation: click open
-  -- them one by one, don't force-close anything).
+  -- clones stay open. Matches Hip's console: wait for the first to
+  -- actually be visible before triggering the next one.
   local first = cmds[1]
+  log(C.dim .. "[" .. ts() .. "] opening package " .. first.package .. C.reset)
   launch_app(first.package, first.bounds, first.resize, 0, first.target)
 
   -- Step 2: fire am start on the rest one by one, spaced by launchDelay
@@ -588,6 +589,7 @@ local function batch_launch(cmds)
       local l, t, r, b = c.bounds:match("(%d+),(%d+),(%d+),(%d+)")
       if l then set_window_bounds(c.package, tonumber(l), tonumber(t), tonumber(r), tonumber(b)) end
     end
+    log(C.dim .. "[" .. ts() .. "] opening package " .. c.package .. C.reset)
     fire_start(c.package, c.target)
     if stagger > 0 then sleep(stagger) end
   end
