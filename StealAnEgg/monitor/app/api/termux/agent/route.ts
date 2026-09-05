@@ -611,16 +611,27 @@ local function autoexec_write(filename, content)
   local safe = filename:gsub("[/\\\\%z]+", ""):gsub("^%.+", "")
   if safe == "" then return end
   -- Stage content in Termux private tmp, then cp with su into each dir.
-  -- Avoids the pain of quoting a multi-line script through a su -c "...".
+  -- Use single-quoted paths inside su -c "..." so the outer double
+  -- quotes don't collide with %q's double quotes (that was silently
+  -- truncating the cp command before).
   local tmp = CONFIG_DIR .. "/.autoexec_stage.lua"
   fwrite(tmp, content or "")
+  local ok_count = 0
+  local fail_count = 0
   for _, dir in ipairs(AUTOEXEC_PATHS) do
-    shellcode(string.format('su -c "mkdir -p %q"', dir))
-    shellcode(string.format('su -c "cp %q %q"', tmp, dir .. "/" .. safe))
-    shellcode(string.format('su -c "chmod 644 %q"', dir .. "/" .. safe))
+    local dst = dir .. "/" .. safe
+    shellcode("su -c \\"mkdir -p '" .. dir .. "'\\"")
+    local ok = shellcode("su -c \\"cp '" .. tmp .. "' '" .. dst .. "'\\"")
+    if ok then
+      shellcode("su -c \\"chmod 644 '" .. dst .. "'\\"")
+      ok_count = ok_count + 1
+    else
+      fail_count = fail_count + 1
+    end
   end
   os.remove(tmp)
-  log(C.green .. "[" .. ts() .. "] autoexec deployed " .. safe .. C.reset)
+  log(C.green .. "[" .. ts() .. "] autoexec " .. safe ..
+      " -> " .. ok_count .. " paths ok, " .. fail_count .. " failed" .. C.reset)
 end
 
 local function autoexec_remove(filename)
@@ -628,7 +639,7 @@ local function autoexec_remove(filename)
   local safe = filename:gsub("[/\\\\%z]+", ""):gsub("^%.+", "")
   if safe == "" then return end
   for _, dir in ipairs(AUTOEXEC_PATHS) do
-    shellcode(string.format('su -c "rm -f %q"', dir .. "/" .. safe))
+    shellcode("su -c \\"rm -f '" .. dir .. "/" .. safe .. "'\\"")
   end
   log(C.yellow .. "[" .. ts() .. "] autoexec removed " .. safe .. C.reset)
 end
