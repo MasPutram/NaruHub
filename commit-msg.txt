@@ -1,0 +1,33 @@
+Auto-Execute Manager: library + universal deploy to 5 executor paths
+
+Backend:
+- /api/device-control/autoexec/library (GET/POST/DELETE) manages a
+  persistent script library keyed by slug in Redis.
+- /api/device-control/autoexec (GET/POST/DELETE) queues autoexec_write
+  and autoexec_remove commands to the device and tracks which filenames
+  are currently deployed there (Redis set autoexec:deployed:<deviceId>),
+  so the UI can show "deployed on this device" without asking the agent
+  to scan.
+- Filenames are validated: must end with .lua, no path separators
+  allowed, content capped at 200KB.
+
+Agent (Lua):
+- AUTOEXEC_PATHS constant lists the 5 known executor autoexec dirs
+  (Delta / Hydrogen / ArceusX / Fluxus / Vegax).
+- autoexec_write stages content to a Termux tmp file then cp + chmod 644
+  it into every executor dir with `su`. Missing dirs are created with
+  `mkdir -p`. The paths that fail silently (executor not installed) are
+  fine.
+- autoexec_remove rm -f from every executor dir.
+- HTTP command poll and WS command handler now recognize
+  autoexec_write / autoexec_remove alongside launch.
+
+UI (device detail):
+- New "Auto-Execute Manager" button next to Grid Layout Configuration.
+- Modal with a compose form (filename + content textarea + Save to
+  Library), a Library list (Edit / Deploy / Delete per script), and a
+  Deployed-on-this-device list with a Remove button per file.
+- Deployed list is populated from the backend's tracking, not from a
+  device-side scan.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>

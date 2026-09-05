@@ -69,6 +69,20 @@ export function termuxPackageRejoinPauseKey(deviceId: string, pkg: string) {
 }
 export const TERMUX_REJOIN_PAUSE_DEFAULT_S = 600; // 10 minutes -- enough to log out
 
+// Global script library, shared across all devices. Each entry keys by a
+// slug derived from the filename. Persistent (no TTL).
+export function autoexecLibraryKey(slug: string) {
+  return `autoexec:library:${slug}`;
+}
+export const AUTOEXEC_LIBRARY_INDEX = "autoexec:library:_index";
+
+// Which library scripts (by slug) are currently deployed to a device. Set
+// members. Lets the UI show "deployed to this device" without agent scan.
+export function autoexecDeployedKey(deviceId: string) {
+  return `autoexec:deployed:${deviceId}`;
+}
+
+
 type SetOptions = { ex?: number };
 
 function parseMaybeJson<T>(raw: string | null): T | null {
@@ -110,6 +124,20 @@ export const redis = {
   ): Promise<[string, string[]]> {
     const result = await client.scan(cursor, "MATCH", opts.match, "COUNT", opts.count);
     return [String(result[0]), result[1]];
+  },
+
+  // Redis set primitives -- used by the autoexec library index so we can
+  // enumerate saved scripts without SCAN + a match pattern.
+  async sadd(key: string, ...members: string[]): Promise<void> {
+    if (members.length === 0) return;
+    await client.sadd(key, ...members);
+  },
+  async srem(key: string, ...members: string[]): Promise<void> {
+    if (members.length === 0) return;
+    await client.srem(key, ...members);
+  },
+  async smembers(key: string): Promise<string[]> {
+    return (await client.smembers(key)) || [];
   },
 
   // Push a command onto a device's queue (RPUSH), trim it to the last N

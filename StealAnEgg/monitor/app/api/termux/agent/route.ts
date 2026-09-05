@@ -10,9 +10,6 @@ local LOG_FILE = CONFIG_DIR .. "/naruhub_agent.log"
 local BASE_URL = "https://naruhub.my.id"
 local WS_URL = "wss://ws.naruhub.my.id"
 local LICENSE_KEY = "$$LICENSE$$"
-local RAM_TRIM_PCT = 92
-local RAM_TRIM_COOLDOWN = 90  -- seconds between trim cycles
-local LAST_TRIM_TS = 0
 local HEARTBEAT_INTERVAL = 30
 local RECONNECT_DELAY = 5
 
@@ -326,62 +323,6 @@ local function collect_stats()
   return stats
 end
 
--- ─── Auto RAM trim ───
--- Staged trimming: warns background apps early (MODERATE), and only escalates
--- to CRITICAL for apps that are NOT the current foreground. Never trims the
--- foreground process -- CRITICAL on the active app causes ANR/GC storms that
--- can cascade into an LMK-triggered soft reboot.
-local function get_foreground_pkg()
-  local raw = shell('su -c "dumpsys activity activities" | grep -m1 -oE "mResumedActivity: ActivityRecord\\\\{[^ ]+ [^ ]+ [^ /]+/"')
-  if raw ~= "" then
-    local pkg = raw:match("([%w%.]+)/$")
-    if pkg then return pkg end
-  end
-  raw = shell('su -c "dumpsys window" | grep -m1 -oE "mCurrentFocus=Window\\\\{[^ ]+ [^ ]+ [^ /]+/"')
-  if raw ~= "" then
-    local pkg = raw:match("([%w%.]+)/$")
-    if pkg then return pkg end
-  end
-  return nil
-end
-
-local function maybe_trim_ram(pkgs)
-  local meminfo = fread("/proc/meminfo") or ""
-  local total = tonumber(meminfo:match("MemTotal:%s*(%d+)")) or 0
-  local avail = tonumber(meminfo:match("MemAvailable:%s*(%d+)")) or 0
-  if total == 0 then return end
-  local pct = math.floor((total - avail) * 100 / total)
-  if pct < RAM_TRIM_PCT then return end
-
-  local now = os.time()
-  if now - LAST_TRIM_TS < RAM_TRIM_COOLDOWN then return end
-  LAST_TRIM_TS = now
-
-  local fg = get_foreground_pkg()
-  -- Only ever send MODERATE. LOW/CRITICAL push borderline background clones
-  -- over the edge into an LMK kill, which the user sees as a random
-  -- force-close right after they open something else.
-  local level = "RUNNING_MODERATE"
-  log(C.yellow .. "[" .. ts() .. "] RAM " .. pct .. "% -- trim " .. level ..
-      (fg and " (skip fg=" .. fg .. ")" or "") .. C.reset)
-
-  local trimmed = 0
-  for _, p in ipairs(pkgs) do
-    if p.pkg ~= fg then
-      local pid = shell(string.format('su -c "pgrep -x %s"', p.pkg))
-      if pid ~= "" then
-        for line in pid:gmatch("[^\\n]+") do
-          shellcode(string.format('su -c "am send-trim-memory %s %s"', line, level))
-          trimmed = trimmed + 1
-          -- small stagger so all clones don't GC at the same instant
-          os.execute("sleep 0.2")
-        end
-      end
-    end
-  end
-  log(C.green .. "[" .. ts() .. "] trim done (" .. trimmed .. " procs)" .. C.reset)
-end
-
 -- ─── Resize via shared_prefs ───
 -- Seed a minimal preferences XML with the App Cloner window keys so the
 -- FIRST launch of a fresh clone already lands at our tile bounds. Without
@@ -649,6 +590,47 @@ local function http_get(path)
     url, LICENSE_KEY
   )
   return shell(cmd)
+end
+
+-- ─── Autoexec: write / remove Lua scripts in executor autoexec dirs ───
+-- Universal deploy -- writes to ALL known executor autoexec paths so the
+-- operator does not have to know which executor is installed. mkdir -p
+-- creates missing dirs; a path that fails silently is fine (executor not
+-- installed on this device).
+local AUTOEXEC_PATHS = {
+  "/storage/emulated/0/Delta/Autoexecute",
+  "/storage/emulated/0/Hydrogen/AutoExec",
+  "/storage/emulated/0/ArceusX/AutoExec",
+  "/storage/emulated/0/Fluxus/AutoExec",
+  "/storage/emulated/0/Vegax/AutoExec",
+}
+
+local function autoexec_write(filename, content)
+  if not filename or filename == "" then return end
+  -- Path safety: strip anything that looks like a directory separator.
+  local safe = filename:gsub("[/\\\\%z]+", ""):gsub("^%.+", "")
+  if safe == "" then return end
+  -- Stage content in Termux private tmp, then cp with su into each dir.
+  -- Avoids the pain of quoting a multi-line script through a su -c "...".
+  local tmp = CONFIG_DIR .. "/.autoexec_stage.lua"
+  fwrite(tmp, content or "")
+  for _, dir in ipairs(AUTOEXEC_PATHS) do
+    shellcode(string.format('su -c "mkdir -p %q"', dir))
+    shellcode(string.format('su -c "cp %q %q"', tmp, dir .. "/" .. safe))
+    shellcode(string.format('su -c "chmod 644 %q"', dir .. "/" .. safe))
+  end
+  os.remove(tmp)
+  log(C.green .. "[" .. ts() .. "] autoexec deployed " .. safe .. C.reset)
+end
+
+local function autoexec_remove(filename)
+  if not filename or filename == "" then return end
+  local safe = filename:gsub("[/\\\\%z]+", ""):gsub("^%.+", "")
+  if safe == "" then return end
+  for _, dir in ipairs(AUTOEXEC_PATHS) do
+    shellcode(string.format('su -c "rm -f %q"', dir .. "/" .. safe))
+  end
+  log(C.yellow .. "[" .. ts() .. "] autoexec removed " .. safe .. C.reset)
 end
 
 -- ─── Auto-rejoin state + helpers ───
@@ -1028,8 +1010,14 @@ while true do
         -- fire the rest -> kill first to release the init lock).
         local batch = {}
         for _, cmd in ipairs(cmd_data.commands) do
-          if cmd.type == "launch" and not was_seen(cmd.id) then
+          if was_seen(cmd.id) then
+            -- dup
+          elseif cmd.type == "launch" then
             batch[#batch+1] = cmd
+          elseif cmd.type == "autoexec_write" then
+            autoexec_write(cmd.filename, cmd.content)
+          elseif cmd.type == "autoexec_remove" then
+            autoexec_remove(cmd.filename)
           end
         end
         if #batch > 0 then batch_launch(batch) end
@@ -1057,8 +1045,14 @@ while true do
         if msg.commands then
           local batch = {}
           for _, cmd in ipairs(msg.commands) do
-            if cmd.type == "launch" and not was_seen(cmd.id) then
+            if was_seen(cmd.id) then
+              -- dup
+            elseif cmd.type == "launch" then
               batch[#batch+1] = cmd
+            elseif cmd.type == "autoexec_write" then
+              autoexec_write(cmd.filename, cmd.content)
+            elseif cmd.type == "autoexec_remove" then
+              autoexec_remove(cmd.filename)
             end
           end
           if #batch > 0 then batch_launch(batch) end

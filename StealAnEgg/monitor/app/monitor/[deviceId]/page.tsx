@@ -156,6 +156,101 @@ export default function DeviceDetailPage() {
   const [linkDraft, setLinkDraft] = useState("");
   const [linkTargetPkg, setLinkTargetPkg] = useState<string | null>(null); // null = batch (all selected)
 
+  // Auto-Execute Manager state.
+  interface LibScript { slug: string; filename: string; content: string; updatedAt: number; }
+  const [aeOpen, setAeOpen] = useState(false);
+  const [aeLibrary, setAeLibrary] = useState<LibScript[]>([]);
+  const [aeDeployed, setAeDeployed] = useState<string[]>([]);
+  const [aeName, setAeName] = useState("");
+  const [aeContent, setAeContent] = useState("");
+  const [aeEditingSlug, setAeEditingSlug] = useState<string | null>(null);
+  const [aeBusy, setAeBusy] = useState(false);
+
+  const fetchAutoexec = useCallback(async () => {
+    try {
+      const [libRes, depRes] = await Promise.all([
+        fetch("/api/device-control/autoexec/library"),
+        fetch(`/api/device-control/autoexec?deviceId=${encodeURIComponent(deviceId)}`),
+      ]);
+      const lib = await libRes.json();
+      const dep = await depRes.json();
+      if (lib.ok) setAeLibrary(lib.scripts || []);
+      if (dep.ok) setAeDeployed(dep.files || []);
+    } catch {}
+  }, [deviceId]);
+
+  useEffect(() => {
+    if (aeOpen) fetchAutoexec();
+  }, [aeOpen, fetchAutoexec]);
+
+  async function aeSaveLibrary() {
+    if (!aeName.trim()) { setToast("Filename required"); return; }
+    setAeBusy(true);
+    try {
+      const res = await fetch("/api/device-control/autoexec/library", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: aeName, content: aeContent }),
+      });
+      const data = await res.json();
+      setToast(data.ok ? "Saved to library" : `Gagal: ${data.error}`);
+      if (data.ok) {
+        setAeName(""); setAeContent(""); setAeEditingSlug(null);
+        fetchAutoexec();
+      }
+    } catch (e: any) { setToast("Gagal: " + e.message); }
+    setAeBusy(false);
+  }
+
+  async function aeDeploy(script: LibScript) {
+    setAeBusy(true);
+    try {
+      const res = await fetch("/api/device-control/autoexec", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, filename: script.filename, content: script.content }),
+      });
+      const data = await res.json();
+      setToast(data.ok ? `Deployed ${script.filename} to device` : `Gagal: ${data.error}`);
+      if (data.ok) fetchAutoexec();
+    } catch (e: any) { setToast("Gagal: " + e.message); }
+    setAeBusy(false);
+  }
+
+  async function aeUndeploy(filename: string) {
+    if (!window.confirm(`Remove ${filename} from device autoexec dirs?`)) return;
+    setAeBusy(true);
+    try {
+      const res = await fetch(`/api/device-control/autoexec?deviceId=${encodeURIComponent(deviceId)}&filename=${encodeURIComponent(filename)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      setToast(data.ok ? `Removed ${filename} from device` : `Gagal: ${data.error}`);
+      if (data.ok) fetchAutoexec();
+    } catch (e: any) { setToast("Gagal: " + e.message); }
+    setAeBusy(false);
+  }
+
+  async function aeDeleteLibrary(slug: string, filename: string) {
+    if (!window.confirm(`Delete ${filename} from library permanently?`)) return;
+    setAeBusy(true);
+    try {
+      const res = await fetch(`/api/device-control/autoexec/library?slug=${encodeURIComponent(slug)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      setToast(data.ok ? "Deleted from library" : `Gagal: ${data.error}`);
+      if (data.ok) fetchAutoexec();
+    } catch (e: any) { setToast("Gagal: " + e.message); }
+    setAeBusy(false);
+  }
+
+  function aeEdit(script: LibScript) {
+    setAeName(script.filename);
+    setAeContent(script.content);
+    setAeEditingSlug(script.slug);
+  }
+
   const fetchDevice = useCallback(async () => {
     try {
       const [devRes, accRes, logRes] = await Promise.all([
@@ -758,17 +853,20 @@ export default function DeviceDetailPage() {
               ))
             )}
           </div>
-          <div style={{ marginTop: 14 }}>
+          <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               className="btn"
               onClick={() => { setDraftLayout(selectedPkgs.length > 0 ? autoGridDims(selectedPkgs.length) : layout); setGridModalOpen(true); }}
             >
               Grid Layout Configuration
             </button>
-            <div className="disabled-note">
-              Grid only stores window positions -- launching still uses the "Launch selected" button.
-              Test on one device before rolling out.
-            </div>
+            <button className="btn" onClick={() => setAeOpen(true)}>
+              Auto-Execute Manager
+            </button>
+          </div>
+          <div className="disabled-note" style={{ marginTop: 8 }}>
+            Grid only stores window positions -- launching still uses the "Launch selected" button.
+            Auto-Execute deploys .lua scripts to Delta / Hydrogen / ArceusX / Fluxus / Vegax autoexec dirs.
           </div>
         </section>
 
@@ -933,6 +1031,98 @@ export default function DeviceDetailPage() {
               >
                 Apply to device (test)
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {aeOpen && (
+        <div className="modal-overlay" onClick={() => setAeOpen(false)}>
+          <div className="modal" style={{ width: "min(760px, 94vw)", maxHeight: "88vh", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+              <h2 style={{ margin: 0, fontSize: 16 }}>⚡ AUTO-EXECUTE MANAGER</h2>
+              <button className="btn" style={{ padding: "4px 10px" }} onClick={() => setAeOpen(false)}>Close</button>
+            </div>
+            <div className="muted" style={{ marginBottom: 12, fontSize: 11 }}>
+              Universal Deploy: Delta / Hydrogen / ArceusX / Fluxus / Vegax autoexec dirs on device "{displayName(device)}".
+            </div>
+
+            {/* Form */}
+            <div style={{ background: "#0e0e16", border: "1px solid var(--border)", borderRadius: 10, padding: 12, marginBottom: 14 }}>
+              <div style={{ fontSize: 10, letterSpacing: ".08em", color: "var(--dim)", marginBottom: 6, fontWeight: 700 }}>
+                {aeEditingSlug ? "EDIT SCRIPT" : "NEW AUTO-EXECUTE SCRIPT"}
+              </div>
+              <input
+                value={aeName}
+                onChange={(e) => setAeName(e.target.value)}
+                placeholder="custom_script.lua"
+                style={{ width: "100%", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 6, padding: "8px 10px", color: "var(--ink)", fontSize: 13, marginBottom: 8 }}
+              />
+              <textarea
+                value={aeContent}
+                onChange={(e) => setAeContent(e.target.value)}
+                placeholder="-- Lua script that auto-executes when Roblox opens..."
+                rows={8}
+                style={{ width: "100%", background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 6, padding: "8px 10px", color: "var(--ink)", fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace", fontSize: 12, resize: "vertical", outline: "none" }}
+              />
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
+                {aeEditingSlug && (
+                  <button className="btn" onClick={() => { setAeName(""); setAeContent(""); setAeEditingSlug(null); }}>Cancel edit</button>
+                )}
+                <button className="btn primary" onClick={aeSaveLibrary} disabled={aeBusy || !aeName.trim()}>
+                  {aeBusy ? "Saving..." : "Save to Library"}
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable lists */}
+            <div style={{ overflowY: "auto", flex: 1 }}>
+              <div style={{ fontSize: 10, letterSpacing: ".08em", color: "var(--dim)", marginBottom: 8, fontWeight: 700 }}>
+                LIBRARY ({aeLibrary.length})
+              </div>
+              {aeLibrary.length === 0 ? (
+                <div className="muted" style={{ fontSize: 12, padding: 12, textAlign: "center", background: "#0e0e16", borderRadius: 8, marginBottom: 14 }}>
+                  No scripts saved yet. Add one above.
+                </div>
+              ) : (
+                <div style={{ marginBottom: 14 }}>
+                  {aeLibrary.map((s) => {
+                    const deployed = aeDeployed.includes(s.filename);
+                    return (
+                      <div key={s.slug} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#0e0e16", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 6 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, wordBreak: "break-all" }}>{s.filename}</div>
+                          <div style={{ fontSize: 10, color: "var(--dim)" }}>
+                            {s.content.length} chars {deployed ? "· deployed on this device" : ""}
+                          </div>
+                        </div>
+                        <button className="btn" style={{ padding: "4px 8px", fontSize: 11 }} onClick={() => aeEdit(s)}>Edit</button>
+                        <button className="btn primary" style={{ padding: "4px 8px", fontSize: 11 }} onClick={() => aeDeploy(s)} disabled={aeBusy || device.status !== "online"}>
+                          {deployed ? "Redeploy" : "Deploy"}
+                        </button>
+                        <button className="btn" style={{ padding: "4px 8px", fontSize: 11, color: "var(--red)" }} onClick={() => aeDeleteLibrary(s.slug, s.filename)} disabled={aeBusy}>🗑</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={{ fontSize: 10, letterSpacing: ".08em", color: "var(--dim)", marginBottom: 8, fontWeight: 700 }}>
+                DEPLOYED ON THIS DEVICE ({aeDeployed.length})
+              </div>
+              {aeDeployed.length === 0 ? (
+                <div className="muted" style={{ fontSize: 12, padding: 12, textAlign: "center", background: "#0e0e16", borderRadius: 8 }}>
+                  Nothing deployed yet.
+                </div>
+              ) : (
+                aeDeployed.map((filename) => (
+                  <div key={filename} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#0e0e16", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 6 }}>
+                    <div style={{ flex: 1, fontSize: 13, fontWeight: 600, wordBreak: "break-all" }}>{filename}</div>
+                    <span className="badge game" style={{ fontSize: 10 }}>ACTIVE</span>
+                    <button className="btn" style={{ padding: "4px 8px", fontSize: 11, color: "var(--red)" }} onClick={() => aeUndeploy(filename)} disabled={aeBusy || device.status !== "online"}>Remove</button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
