@@ -600,7 +600,7 @@ end
 local AUTOEXEC_PATHS = {
   "/storage/emulated/0/Delta/Autoexecute",
   "/storage/emulated/0/Hydrogen/AutoExec",
-  "/storage/emulated/0/ArceusX/AutoExec",
+  "/storage/emulated/0/Arceus X/Autoexec",
   "/storage/emulated/0/Fluxus/AutoExec",
   "/storage/emulated/0/Vegax/AutoExec",
 }
@@ -611,27 +611,32 @@ local function autoexec_write(filename, content)
   local safe = filename:gsub("[/\\\\%z]+", ""):gsub("^%.+", "")
   if safe == "" then return end
   -- Stage content in Termux private tmp, then cp with su into each dir.
-  -- Use single-quoted paths inside su -c "..." so the outer double
-  -- quotes don't collide with %q's double quotes (that was silently
-  -- truncating the cp command before).
   local tmp = CONFIG_DIR .. "/.autoexec_stage.lua"
   fwrite(tmp, content or "")
   local ok_count = 0
-  local fail_count = 0
+  local skipped = 0
   for _, dir in ipairs(AUTOEXEC_PATHS) do
-    local dst = dir .. "/" .. safe
-    shellcode("su -c \\"mkdir -p '" .. dir .. "'\\"")
-    local ok = shellcode("su -c \\"cp '" .. tmp .. "' '" .. dst .. "'\\"")
-    if ok then
-      shellcode("su -c \\"chmod 644 '" .. dst .. "'\\"")
-      ok_count = ok_count + 1
+    -- Only deploy to executors that are actually installed on this device.
+    -- Parent = /storage/emulated/0/<Executor>. If missing, the executor
+    -- is not there and we should NOT create a stray folder.
+    local parent = dir:match("^(.+)/[^/]+$")
+    local parent_ok = parent and shellcode("su -c \\"test -d '" .. parent .. "'\\"")
+    if not parent_ok then
+      skipped = skipped + 1
     else
-      fail_count = fail_count + 1
+      local dst = dir .. "/" .. safe
+      -- Autoexec subdir may not exist yet even when the executor is
+      -- installed; safe to create just that leaf.
+      shellcode("su -c \\"mkdir -p '" .. dir .. "'\\"")
+      if shellcode("su -c \\"cp '" .. tmp .. "' '" .. dst .. "'\\"") then
+        shellcode("su -c \\"chmod 644 '" .. dst .. "'\\"")
+        ok_count = ok_count + 1
+      end
     end
   end
   os.remove(tmp)
   log(C.green .. "[" .. ts() .. "] autoexec " .. safe ..
-      " -> " .. ok_count .. " paths ok, " .. fail_count .. " failed" .. C.reset)
+      " -> " .. ok_count .. " executor(s) ok, " .. skipped .. " not installed" .. C.reset)
 end
 
 -- Uninstall a single package via pm uninstall. Silently no-op if the
