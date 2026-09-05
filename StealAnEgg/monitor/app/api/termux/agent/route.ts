@@ -713,7 +713,7 @@ end
 -- when paused / crashed, so an expiring pause naturally resumes rejoin.
 local TRACKED = {}
 -- Rejoin sweep runs less often than the 1s main-loop tick so we don't
--- fork `am stack list` every second on a 4GB device.
+-- fork am stack list every second on a 4GB device.
 local REJOIN_SWEEP_INTERVAL = 5
 local LAST_REJOIN_SWEEP = 0
 
