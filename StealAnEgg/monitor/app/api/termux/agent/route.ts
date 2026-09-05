@@ -634,8 +634,8 @@ local function autoexec_write(filename, content)
       " -> " .. ok_count .. " paths ok, " .. fail_count .. " failed" .. C.reset)
 end
 
--- Uninstall a single package via `pm uninstall`. Silently no-op if
--- the package is not installed (pm returns Failure but doesn't crash us).
+-- Uninstall a single package via pm uninstall. Silently no-op if the
+-- package is not installed (pm returns Failure but does not crash us).
 local function uninstall_pkg(pkg)
   if not pkg or pkg == "" then return end
   local safe = pkg:gsub("[^%w%.]", "")
