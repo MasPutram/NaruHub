@@ -37,6 +37,10 @@ export async function POST(req: NextRequest) {
     // on one device before trusting it everywhere.
     const applyResize = body.resize === true;
     const launchDelay = Math.max(0, Number(body.launchDelay) || 10);
+    // Per-package Roblox target: package name -> deep link. When set, the
+    // agent opens that place/private server directly via VIEW intent; when
+    // absent, agent falls back to a plain MAIN launch (Roblox home screen).
+    const targets: Record<string, string> = (body.targets && typeof body.targets === "object") ? body.targets : {};
 
     if (!deviceId || typeof deviceId !== "string") {
       return NextResponse.json({ ok: false, error: "deviceId required" }, { status: 400 });
@@ -80,6 +84,7 @@ export async function POST(req: NextRequest) {
         bounds,
         resize: applyResize,
         launchDelay,
+        target: targets[packageName] || "",
         createdAt: Date.now(),
       };
       commands.push(command);

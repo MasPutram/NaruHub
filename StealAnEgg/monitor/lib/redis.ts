@@ -52,6 +52,23 @@ export function termuxCommandLogKey(deviceId: string) {
 export const TERMUX_COMMAND_LOG_TTL_S = 60 * 60 * 24; // 24 hours
 export const TERMUX_COMMAND_LOG_MAX = 30;
 
+// Persistent execution policy per device: auto-rejoin, per-package opt-in
+// list, launch delay, retry limit. Read by both the dashboard and the
+// Termux agent so the agent can act on disconnected packages autonomously.
+export function termuxDevicePolicyKey(deviceId: string) {
+  return `termux:policy:${deviceId}`;
+}
+
+// Per-package temporary rejoin pause. Set (with TTL) by flows like
+// "Siap Jual" where the operator needs the app to stay on Roblox's home
+// screen for a moment (to log the account out) without auto-rejoin kicking
+// it back into the private server. Agent checks this before firing any
+// auto-rejoin launch.
+export function termuxPackageRejoinPauseKey(deviceId: string, pkg: string) {
+  return `termux:pkgpause:${deviceId}:${pkg}`;
+}
+export const TERMUX_REJOIN_PAUSE_DEFAULT_S = 600; // 10 minutes -- enough to log out
+
 type SetOptions = { ex?: number };
 
 function parseMaybeJson<T>(raw: string | null): T | null {

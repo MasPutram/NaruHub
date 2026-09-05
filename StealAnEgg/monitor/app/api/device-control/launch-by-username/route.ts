@@ -3,10 +3,12 @@ import {
   redis,
   termuxCommandQueueKey,
   termuxCommandLogKey,
+  termuxPackageRejoinPauseKey,
   TERMUX_COMMAND_QUEUE_TTL_S,
   TERMUX_COMMAND_QUEUE_MAX,
   TERMUX_COMMAND_LOG_TTL_S,
   TERMUX_COMMAND_LOG_MAX,
+  TERMUX_REJOIN_PAUSE_DEFAULT_S,
 } from "@/lib/redis";
 
 // Find the live device that hosts a Roblox package logged in as `username`
@@ -66,6 +68,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // "Siap Jual" deliberately IGNORES the per-package target link -- the
+    // whole point of this flow is to open Roblox's home screen so the
+    // operator can log the account out. If we opened the assigned PS link
+    // instead, the account would just re-enter the game and defeat the
+    // purpose. Always launch bare (no target).
     const command = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       type: "launch",
@@ -73,12 +80,23 @@ export async function POST(req: NextRequest) {
       bounds: "",
       resize: false,
       launchDelay: 10,
+      target: "",
       createdAt: Date.now(),
     };
     await redis.queuePush(termuxCommandQueueKey(matchDevice.deviceId), JSON.stringify(command), {
       ttl: TERMUX_COMMAND_QUEUE_TTL_S,
       maxLen: TERMUX_COMMAND_QUEUE_MAX,
     });
+
+    // Pause auto-rejoin on this package so the agent doesn't yank the app
+    // back into the private server while the operator is trying to log the
+    // account out. Auto-clears after TTL, or when the operator (later)
+    // explicitly resumes rejoin.
+    await redis.set(
+      termuxPackageRejoinPauseKey(matchDevice.deviceId, matchPkg),
+      JSON.stringify({ reason: "siap-jual", pausedAt: Date.now() }),
+      { ex: TERMUX_REJOIN_PAUSE_DEFAULT_S }
+    );
 
     const logEntry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,

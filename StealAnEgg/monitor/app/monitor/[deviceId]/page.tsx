@@ -82,6 +82,45 @@ function pctStorageUsed(m?: { totalMB: number; freeMB: number }): number {
   return Math.round(((m.totalMB - m.freeMB) / m.totalMB) * 100);
 }
 
+// Turn whatever the user pasted into a Roblox deep link the Android VIEW
+// intent can act on. Accepts: full https URL, a bare placeId, or an already-
+// formed roblox:// URI. Returns "" if nothing usable was pasted.
+function parseRobloxTarget(input: string): string {
+  const s = (input || "").trim();
+  if (!s) return "";
+  // Already a deep link -- pass through.
+  if (/^roblox:\/\//i.test(s)) return s;
+  // Bare number -> placeId.
+  if (/^\d+$/.test(s)) return `roblox://placeId=${s}`;
+  // Try to parse as URL.
+  try {
+    const u = new URL(s.startsWith("http") ? s : `https://${s}`);
+    // Standard game share: /games/<placeId>/<slug>
+    const m = u.pathname.match(/\/games\/(\d+)/i);
+    const placeId = m ? m[1] : null;
+    const linkCode = u.searchParams.get("privateServerLinkCode");
+    if (placeId && linkCode) {
+      return `roblox://placeId=${placeId}&linkCode=${linkCode}`;
+    }
+    if (placeId) return `roblox://placeId=${placeId}`;
+    // /share?code=... style private-server share links.
+    const shareCode = u.searchParams.get("code");
+    if (u.pathname.startsWith("/share") && shareCode) {
+      return `roblox://navigation/share_links?code=${shareCode}&type=Server`;
+    }
+  } catch {}
+  // Nothing recognizable -- return as-is so the agent can try it anyway.
+  return s;
+}
+
+function shortTarget(t?: string): string {
+  if (!t) return "";
+  const m = t.match(/placeId=(\d+)/);
+  const placeId = m ? m[1] : "?";
+  const hasCode = /linkCode=|share_links\?code=/.test(t);
+  return hasCode ? `PS ${placeId}` : `place ${placeId}`;
+}
+
 export default function DeviceDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -101,6 +140,22 @@ export default function DeviceDetailPage() {
   const [renameDraft, setRenameDraft] = useState("");
   const [toast, setToast] = useState("");
 
+  // Execution policy -- persisted per-device in Redis, shared with the agent
+  // so it can act on disconnected packages autonomously (auto-rejoin) and
+  // respect a user-configured launch delay + retry cap.
+  const [autoRejoinEnabled, setAutoRejoinEnabled] = useState(false);
+  const [rejoinDelay, setRejoinDelay] = useState(10);
+  const [retryLimit, setRetryLimit] = useState(0); // 0 = unlimited
+  const [autoRejoinPkgs, setAutoRejoinPkgs] = useState<Record<string, boolean>>({});
+  const [packageTargets, setPackageTargets] = useState<Record<string, string>>({});
+  const [savingPolicy, setSavingPolicy] = useState(false);
+  const [policyLoaded, setPolicyLoaded] = useState(false);
+
+  // "Link Private Server" modal state.
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkDraft, setLinkDraft] = useState("");
+  const [linkTargetPkg, setLinkTargetPkg] = useState<string | null>(null); // null = batch (all selected)
+
   const fetchDevice = useCallback(async () => {
     try {
       const [devRes, accRes, logRes] = await Promise.all([
@@ -117,8 +172,16 @@ export default function DeviceDetailPage() {
       for (const a of accData.accounts || []) byName[a.sourceAccount] = a;
       setAccounts(byName);
 
-      const logData = await logRes.json();
-      setConsoleLog((logData.entries || []).slice().reverse()); // oldest first, like a real console
+      // Skip loading stale log history for a live device -- once the device
+      // is online the console shows only the current session's events (fed
+      // from newer launches). Offline devices keep showing their last-known
+      // log so operators still have a paper trail.
+      if (found && found.status === "online") {
+        setConsoleLog([]);
+      } else {
+        const logData = await logRes.json();
+        setConsoleLog((logData.entries || []).slice().reverse()); // oldest first, like a real console
+      }
     } catch {}
     setLoading(false);
   }, [deviceId]);
@@ -128,6 +191,59 @@ export default function DeviceDetailPage() {
     const id = setInterval(fetchDevice, 10000);
     return () => clearInterval(id);
   }, [fetchDevice]);
+
+  // Load persisted policy for this device once. Rehydrates UI toggles from
+  // whatever the agent is currently obeying so the two never drift.
+  useEffect(() => {
+    if (!deviceId) return;
+    (async () => {
+      try {
+        const res = await fetch(`/api/device-control/policy?deviceId=${encodeURIComponent(deviceId)}`);
+        const data = await res.json();
+        if (data.ok && data.policy) {
+          setAutoRejoinEnabled(!!data.policy.autoRejoinEnabled);
+          setRejoinDelay(data.policy.rejoinDelay || 10);
+          setRetryLimit(data.policy.retryLimit || 0);
+          setLaunchDelay(data.policy.launchDelay || 10);
+          const map: Record<string, boolean> = {};
+          for (const p of data.policy.autoRejoinPackages || []) map[p] = true;
+          setAutoRejoinPkgs(map);
+          setPackageTargets(data.policy.packageTargets || {});
+        }
+      } catch {}
+      setPolicyLoaded(true);
+    })();
+  }, [deviceId]);
+
+  async function savePolicy() {
+    setSavingPolicy(true);
+    try {
+      // Empty package list means "apply to all packages" -- makes the
+      // common "turn on for everything" case a single toggle instead of
+      // needing to tick every row.
+      const autoRejoinPackages = Object.entries(autoRejoinPkgs)
+        .filter(([, v]) => v)
+        .map(([k]) => k);
+      const res = await fetch("/api/device-control/policy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceId,
+          autoRejoinEnabled,
+          rejoinDelay,
+          retryLimit,
+          autoRejoinPackages,
+          launchDelay,
+          packageTargets,
+        }),
+      });
+      const data = await res.json();
+      setToast(data.ok ? "Execution policy saved" : `Gagal: ${data.error}`);
+    } catch (e: any) {
+      setToast("Gagal: " + e.message);
+    }
+    setSavingPolicy(false);
+  }
 
   useEffect(() => {
     if (!toast) return;
@@ -177,10 +293,15 @@ export default function DeviceDetailPage() {
     setLaunchingBatch(true);
     try {
       const g = gridOverride || layout;
+      // Ship the current per-package target map so each launched clone can
+      // deep-link straight into its assigned place / private server instead
+      // of Roblox's home screen.
+      const targets: Record<string, string> = {};
+      for (const p of list) if (packageTargets[p.pkg]) targets[p.pkg] = packageTargets[p.pkg];
       const res = await fetch("/api/device-control/launch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId, packageNames: list.map((p) => p.pkg), cols: g.cols, rows: g.rows, resize, launchDelay }),
+        body: JSON.stringify({ deviceId, packageNames: list.map((p) => p.pkg), cols: g.cols, rows: g.rows, resize, launchDelay, targets }),
       });
       const data = await res.json();
       setToast(
@@ -247,6 +368,67 @@ export default function DeviceDetailPage() {
     });
   }
 
+  // Open "Link Private Server" for a single package (pkg name given) or for
+  // the current batch of selected packages (pkg = null).
+  function openLinkModal(pkg: string | null) {
+    setLinkTargetPkg(pkg);
+    // Prefill with the existing target if editing a single package.
+    setLinkDraft(pkg ? (packageTargets[pkg] || "") : "");
+    setLinkModalOpen(true);
+  }
+
+  async function confirmLink() {
+    const parsed = parseRobloxTarget(linkDraft);
+    const targets = linkTargetPkg ? [linkTargetPkg] : selectedPkgs.map((p) => p.pkg);
+    if (targets.length === 0) {
+      setToast("Pilih dulu package di tabel");
+      return;
+    }
+    const next = { ...packageTargets };
+    if (parsed) {
+      for (const t of targets) next[t] = parsed;
+    } else {
+      for (const t of targets) delete next[t];
+    }
+    setPackageTargets(next);
+    setLinkModalOpen(false);
+    setLinkDraft("");
+    setLinkTargetPkg(null);
+
+    // Persist immediately so a page refresh doesn't lose the mapping and so
+    // the agent (once auto-rejoin lands) can pick it up on its next poll.
+    setSavingPolicy(true);
+    try {
+      const autoRejoinPackages = Object.entries(autoRejoinPkgs)
+        .filter(([, v]) => v)
+        .map(([k]) => k);
+      const res = await fetch("/api/device-control/policy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceId,
+          autoRejoinEnabled,
+          rejoinDelay,
+          retryLimit,
+          autoRejoinPackages,
+          launchDelay,
+          packageTargets: next,
+        }),
+      });
+      const data = await res.json();
+      setToast(
+        data.ok
+          ? parsed
+            ? `Target set for ${targets.length} package${targets.length > 1 ? "s" : ""}`
+            : `Target cleared for ${targets.length} package${targets.length > 1 ? "s" : ""}`
+          : `Gagal: ${data.error}`
+      );
+    } catch (e: any) {
+      setToast("Gagal: " + e.message);
+    }
+    setSavingPolicy(false);
+  }
+
   const styles = (
     <style>{`
       :root {
@@ -311,6 +493,18 @@ export default function DeviceDetailPage() {
       .log .time { color: #66667c; }
       .log .cmd { color: var(--cyan); }
       .disabled-note { font-size: 11px; color: var(--dim); margin-top: 7px; }
+
+      /* Quick Controls -- execution policy panel */
+      .qc-row { margin-bottom: 14px; }
+      .qc-switch { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+      .qc-switch input { width: 16px; height: 16px; accent-color: var(--accent); }
+      .qc-switch span { font-size: 13px; font-weight: 600; }
+      .qc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .qc-grid label { display: block; }
+      .qc-lbl { font-size: 10px; letter-spacing: .06em; color: var(--dim); margin-bottom: 4px; font-weight: 700; }
+      .qc-inp { display: flex; align-items: center; gap: 6px; background: #0e0e16; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+      .qc-inp input { flex: 1; background: transparent; border: 0; color: var(--ink); font-size: 13px; text-align: center; outline: none; }
+      .qc-inp span { color: var(--dim); font-size: 11px; white-space: nowrap; }
 
       .modal-overlay { position: fixed; inset: 0; background: #000a; display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
       .modal { width: min(700px, 92vw); background: #12121b; border: 1px solid var(--border); border-radius: 14px; padding: 20px; box-shadow: 0 18px 50px #0007; max-height: 90vh; overflow-y: auto; }
@@ -451,13 +645,26 @@ export default function DeviceDetailPage() {
                     <th>ACCOUNT</th>
                     <th>SESSION</th>
                     <th>STATUS</th>
+                    <th title="Auto-rejoin this package when it drops offline">REJOIN</th>
+                    <th title="Roblox place / private server this clone opens into">TARGET</th>
                     <th>ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pkgs.map((p) => {
                     const acc = p.username ? accounts[p.username] : undefined;
-                    const sessionSecs = acc?.online && acc.firstSeen ? Math.max(0, Date.now() / 1000 - acc.firstSeen) : null;
+                    // Session time: live-growing while account is online, but
+                    // FROZEN at (lastSeen - firstSeen) once it goes offline
+                    // instead of collapsing to "—". Lets the operator see how
+                    // long the session lasted before it dropped, even after
+                    // the device stops heartbeating.
+                    const sessionSecs = acc?.firstSeen
+                      ? acc.online
+                        ? Math.max(0, Date.now() / 1000 - acc.firstSeen)
+                        : acc.lastSeen
+                          ? Math.max(0, acc.lastSeen - acc.firstSeen)
+                          : null
+                      : null;
                     return (
                       <tr key={p.pkg}>
                         <td>
@@ -478,6 +685,24 @@ export default function DeviceDetailPage() {
                           )}
                         </td>
                         <td>
+                          <input
+                            type="checkbox"
+                            checked={!!autoRejoinPkgs[p.pkg]}
+                            onChange={(e) => setAutoRejoinPkgs((prev) => ({ ...prev, [p.pkg]: e.target.checked }))}
+                            title={autoRejoinEnabled ? "Auto-rejoin ON for this package" : "Enable global 'Auto rejoin' in Quick Controls first"}
+                          />
+                        </td>
+                        <td>
+                          <button
+                            className="btn"
+                            style={{ padding: "4px 8px", fontSize: 11 }}
+                            onClick={() => openLinkModal(p.pkg)}
+                            title={packageTargets[p.pkg] || "Set Roblox target link"}
+                          >
+                            {packageTargets[p.pkg] ? shortTarget(packageTargets[p.pkg]) : "＋ Link"}
+                          </button>
+                        </td>
+                        <td>
                           <button className="btn" disabled={launchingBatch || device.status !== "online"} onClick={() => launchMany([p])}>
                             Open
                           </button>
@@ -489,6 +714,14 @@ export default function DeviceDetailPage() {
               </table>
               <div className="launchbar">
                 <span className="muted">Multi-select &middot; batch launch</span>
+                <button
+                  className="btn"
+                  disabled={selectedPkgs.length === 0}
+                  onClick={() => openLinkModal(null)}
+                  title="Set the same Roblox place / private server link on every selected package"
+                >
+                  Link Private Server ({selectedPkgs.length})
+                </button>
                 <button
                   className="btn"
                   disabled={selectedPkgs.length === 0 || launchingBatch || device.status !== "online"}
@@ -533,11 +766,86 @@ export default function DeviceDetailPage() {
               Grid Layout Configuration
             </button>
             <div className="disabled-note">
-              "Save preview" is visual only. "Apply to device" inside the modal actually resizes windows on the
-              real device — this relies on the cloud phone's built-in freeform windowing and skips the settings
-              toggle that caused a restart before. Still test on one device first.
+              Grid only stores window positions -- launching still uses the "Launch selected" button.
+              Test on one device before rolling out.
             </div>
           </div>
+        </section>
+
+        <section className="panel" style={{ marginTop: 14 }}>
+          <div className="panelhead">
+            <h3>Quick Controls</h3>
+            <span className={`badge ${autoRejoinEnabled ? "game" : "off"}`}>
+              {autoRejoinEnabled ? "AUTO REJOIN ON" : "AUTO REJOIN OFF"}
+            </span>
+          </div>
+
+          <div className="qc-row">
+            <label className="qc-switch">
+              <input
+                type="checkbox"
+                checked={autoRejoinEnabled}
+                onChange={(e) => setAutoRejoinEnabled(e.target.checked)}
+              />
+              <span>Auto rejoin</span>
+            </label>
+            <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+              Reconnect disconnected instances automatically. Pick which packages in the table
+              (REJOIN column) — none checked means all packages.
+            </div>
+          </div>
+
+          <div className="qc-grid">
+            <label>
+              <div className="qc-lbl">REJOIN DELAY</div>
+              <div className="qc-inp">
+                <input
+                  type="number"
+                  min={1}
+                  max={600}
+                  value={rejoinDelay}
+                  onChange={(e) => setRejoinDelay(Math.max(1, Number(e.target.value) || 1))}
+                />
+                <span>sec</span>
+              </div>
+            </label>
+            <label>
+              <div className="qc-lbl">RETRY LIMIT</div>
+              <div className="qc-inp">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={retryLimit}
+                  onChange={(e) => setRetryLimit(Math.max(0, Number(e.target.value) || 0))}
+                  placeholder="0 = unlimited"
+                />
+                <span>{retryLimit === 0 ? "unlimited" : "tries"}</span>
+              </div>
+            </label>
+            <label>
+              <div className="qc-lbl">LAUNCH DELAY</div>
+              <div className="qc-inp">
+                <input
+                  type="number"
+                  min={0}
+                  max={300}
+                  value={launchDelay}
+                  onChange={(e) => setLaunchDelay(Math.max(0, Number(e.target.value) || 0))}
+                />
+                <span>sec</span>
+              </div>
+            </label>
+          </div>
+
+          <button
+            className="btn primary"
+            style={{ width: "100%", marginTop: 12 }}
+            disabled={savingPolicy || !policyLoaded}
+            onClick={savePolicy}
+          >
+            {savingPolicy ? "Saving..." : "Save execution policy"}
+          </button>
         </section>
       </div>
 
@@ -608,11 +916,9 @@ export default function DeviceDetailPage() {
               <select value={draftLayout.rows} onChange={(e) => setDraftLayout((l) => ({ ...l, rows: Number(e.target.value) }))}>
                 {Array.from({ length: 8 }).map((_, i) => <option key={i + 1} value={i + 1}>{i + 1} rows</option>)}
               </select>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--dim)", fontSize: 13 }}>
-                Launch delay
-                <input type="number" min={0} max={120} value={launchDelay} onChange={(e) => setLaunchDelay(Math.max(0, Number(e.target.value)))} style={{ width: 54, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 8px", color: "var(--ink)", textAlign: "center" }} />
-                sec
-              </label>
+              <span style={{ color: "var(--dim)", fontSize: 11 }}>
+                Launch delay: <b style={{ color: "var(--ink)" }}>{launchDelay}s</b> (set in Quick Controls)
+              </span>
             </div>
             <div className="modalfoot">
               <button className="btn" onClick={() => setGridModalOpen(false)}>Close</button>
@@ -626,6 +932,53 @@ export default function DeviceDetailPage() {
                 title="Launches the checked packages and resizes their windows to this grid on the real device"
               >
                 Apply to device (test)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {linkModalOpen && (
+        <div className="modal-overlay" onClick={() => setLinkModalOpen(false)}>
+          <div className="modal" style={{ width: "min(460px, 92vw)" }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ fontSize: 13, letterSpacing: ".08em", color: "var(--dim)", margin: "0 0 4px" }}>
+              LINK PRIVATE SERVER
+            </h2>
+            <div className="muted" style={{ marginBottom: 14 }}>
+              {linkTargetPkg
+                ? `For package ${linkTargetPkg}`
+                : `For ${selectedPkgs.length} package${selectedPkgs.length !== 1 ? "s" : ""} on device "${displayName(device)}".`}
+            </div>
+            <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>
+              Paste a Roblox place URL, private server URL, `roblox://` deep link, or just a Place ID.
+              Leave empty and Confirm to clear.
+            </div>
+            <input
+              autoFocus
+              value={linkDraft}
+              onChange={(e) => setLinkDraft(e.target.value)}
+              placeholder="Place ID or PS Link URL"
+              style={{
+                width: "100%",
+                background: "#0e0e16",
+                border: "1px solid var(--accent)",
+                borderRadius: 8,
+                padding: "10px 12px",
+                color: "var(--ink)",
+                fontSize: 13,
+                outline: "none",
+              }}
+              onKeyDown={(e) => { if (e.key === "Enter") confirmLink(); }}
+            />
+            {linkDraft.trim() && (
+              <div className="muted" style={{ fontSize: 11, marginTop: 8, wordBreak: "break-all" }}>
+                Will resolve to: <code style={{ color: "var(--cyan)" }}>{parseRobloxTarget(linkDraft) || "(unparseable, sent as-is)"}</code>
+              </div>
+            )}
+            <div className="modalfoot" style={{ marginTop: 16 }}>
+              <button className="btn" onClick={() => setLinkModalOpen(false)}>Cancel</button>
+              <button className="btn primary" onClick={confirmLink} disabled={savingPolicy}>
+                {savingPolicy ? "Saving..." : "Confirm"}
               </button>
             </div>
           </div>

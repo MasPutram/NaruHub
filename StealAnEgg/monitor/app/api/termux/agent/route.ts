@@ -428,9 +428,7 @@ local function set_window_bounds(pkg, left, top, right, bottom)
   local prefFile = string.format("/data/data/%s/shared_prefs/%s_preferences.xml", pkg, pkg)
   local exists = shellcode(string.format('su -c "test -f %s"', prefFile))
   if not exists then
-    log(C.yellow .. "[" .. ts() .. "] prefs missing -- seeding first-launch bounds for " .. pkg .. C.reset)
     seed_prefs(pkg, prefFile, left, top, right, bottom)
-    log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " seeded " .. left .. "," .. top .. "," .. right .. "," .. bottom .. " -> " .. C.cyan .. pkg .. C.reset)
     return true
   end
   for _, prefix in ipairs({"launch", "current", "original"}) do
@@ -443,7 +441,6 @@ local function set_window_bounds(pkg, left, top, right, bottom)
       shellcode(sed)
     end
   end
-  log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " bounds " .. left .. "," .. top .. "," .. right .. "," .. bottom .. " -> " .. C.cyan .. pkg .. C.reset)
   return true
 end
 
@@ -481,7 +478,7 @@ local function kill_pkg(pkg)
   end
 end
 
-local function launch_app(pkg, bounds, resize, delay)
+local function launch_app(pkg, bounds, resize, delay, target)
   kill_pkg(pkg)
   sleep(1)
 
@@ -492,8 +489,26 @@ local function launch_app(pkg, bounds, resize, delay)
     end
   end
 
-  log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset)
-  shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
+  if target and target ~= "" then
+    -- Deep-link launch: opens the specific place / private server directly
+    -- via VIEW intent instead of Roblox's home screen. Falls back to a
+    -- plain MAIN launch if the intent errors out (unregistered scheme,
+    -- broken deep-link handler, etc).
+    log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset .. C.dim .. " -> " .. target .. C.reset)
+    -- Escape any double-quote in the URL for the shell arg.
+    local safe = target:gsub('"', '\\\\"')
+    local ok = shellcode(string.format(
+      'su -c "am start -a android.intent.action.VIEW -d \\\\"%s\\\\" -p %s"',
+      safe, pkg
+    ))
+    if not ok then
+      log(C.yellow .. "[" .. ts() .. "] deep link failed, falling back to home launch" .. C.reset)
+      shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
+    end
+  else
+    log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset)
+    shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
+  end
 
   -- Wait for the app window to actually be drawn on screen, not just for
   -- the task to be registered in the activity stack. Roblox in particular
@@ -510,20 +525,13 @@ local function launch_app(pkg, bounds, resize, delay)
       -- drawn. mCurrentFocus should point to this pkg once the first
       -- real activity window is up.
       local focus = shell('su -c "dumpsys window" | grep -E "mCurrentFocus|mFocusedApp"')
-      if focus:find(pkg, 1, true) then
-        log(C.green .. "[" .. ts() .. "] " .. pkg .. " window up (" .. waited .. "s)" .. C.reset)
-        break
-      end
+      if focus:find(pkg, 1, true) then break end
     end
     sleep(2)
     waited = waited + 2
   end
-  if waited >= 60 then
-    if task_seen then
-      log(C.yellow .. "[" .. ts() .. "] " .. pkg .. " task alive but no focus (proceeding)" .. C.reset)
-    else
-      log(C.yellow .. "[" .. ts() .. "] timeout: " .. pkg .. C.reset)
-    end
+  if waited >= 60 and not task_seen then
+    log(C.yellow .. "[" .. ts() .. "] timeout: " .. pkg .. C.reset)
   end
 
   delay = tonumber(delay) or 10
@@ -733,16 +741,12 @@ log("")
 -- ─── Connection loop (auto-reconnect) ───
 while true do
   stop_ws()
-  log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " connecting to " .. WS_URL .. "...")
-
   local ok = start_ws(DEVICE_ID)
   if not ok then
     log(C.red .. "[" .. ts() .. "] connect failed, retry in " .. RECONNECT_DELAY .. "s" .. C.reset)
     sleep(RECONNECT_DELAY)
     goto continue
   end
-
-  log(C.green .. "[" .. ts() .. "] WS connected" .. C.reset)
 
   -- Auth
   ws_send({
@@ -812,8 +816,7 @@ while true do
       if cmd_data and cmd_data.commands then
         for _, cmd in ipairs(cmd_data.commands) do
           if cmd.type == "launch" and not was_seen(cmd.id) then
-            log(C.cyan .. "[" .. ts() .. "] >> launch " .. cmd.package .. C.reset)
-            launch_app(cmd.package, cmd.bounds, cmd.resize, cmd.launchDelay)
+            launch_app(cmd.package, cmd.bounds, cmd.resize, cmd.launchDelay, cmd.target)
           end
         end
       end
@@ -840,8 +843,7 @@ while true do
         if msg.commands then
           for _, cmd in ipairs(msg.commands) do
             if cmd.type == "launch" and not was_seen(cmd.id) then
-              log(C.cyan .. "[" .. ts() .. "] >> launch " .. cmd.package .. C.reset)
-              launch_app(cmd.package, cmd.bounds, cmd.resize, cmd.launchDelay)
+              launch_app(cmd.package, cmd.bounds, cmd.resize, cmd.launchDelay, cmd.target)
             end
           end
         end
