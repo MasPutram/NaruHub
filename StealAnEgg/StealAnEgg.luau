@@ -264,7 +264,7 @@ local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
 	TabWidth = 0,
-	Size = UDim2.fromOffset(380, 400),
+	Size = UDim2.fromOffset(380, 440),
 	AutoStartMinimized = false,
 })
 
@@ -366,6 +366,16 @@ section:AddToggle("AutoPlaceToggle", {
 	Default = false,
 	Callback = function(val)
 		autoPlaceEnabled = val
+	end,
+})
+
+local AUTO_PLACE_PRIORITY = { Pterodactyl = true, ["Blade Head"] = true, ["Snowy Owl"] = true }
+local autoPlacePriorityEnabled = false
+section:AddToggle("AutoPlacePriorityToggle", {
+	Title = "Auto Place Ptero/Blade/Snowy",
+	Default = false,
+	Callback = function(val)
+		autoPlacePriorityEnabled = val
 	end,
 })
 
@@ -1089,6 +1099,157 @@ task.spawn(function()
 					teleportToPlot(myPlot)
 					task.wait(2)
 					unplaced = getUnplaced()
+					if #unplaced > 0 then
+						tryPlaceAll(buildGrid(), unplaced)
+					end
+				end
+			end)
+		end
+		task.wait(5)
+	end
+end)
+
+------------------------------------------------------------
+-- Auto Place Priority (Pterodactyl / Blade Head / Snowy Owl only)
+------------------------------------------------------------
+task.spawn(function()
+	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+
+	local function findMyPlot()
+		local plots = Workspace:FindFirstChild("Plots")
+		if not plots then return nil end
+		local stats = SaveModule.Get()
+		local myLevel = stats and stats.BaseUpgradeLevel or 0
+		local candidates = {}
+		for _, plot in ipairs(plots:GetChildren()) do
+			if plot:GetAttribute("BaseUpgradeLevel") == myLevel then
+				table.insert(candidates, plot)
+			end
+		end
+		if #candidates == 1 then return candidates[1] end
+		if #candidates == 0 then return nil end
+		for _, plot in ipairs(candidates) do
+			local loc = plot:FindFirstChild("LocalOfflineMoneyClaim")
+			if loc then
+				local area = loc:FindFirstChild("OfflineMoneyClaimArea")
+				if area then
+					local bb = area:FindFirstChild("OfflineMoneyClaimBillboard")
+					if bb and bb.Enabled then return plot end
+				end
+			end
+		end
+		local char = LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			local closest, closestDist = nil, math.huge
+			for _, plot in ipairs(candidates) do
+				local cp = plot:FindFirstChild("CenterPoint")
+				if cp then
+					local dist = (hrp.Position - cp.Position).Magnitude
+					if dist < closestDist then closest, closestDist = plot, dist end
+				end
+			end
+			if closest then return closest end
+		end
+		return candidates[1]
+	end
+
+	local function teleportToPlot(plot)
+		local toUpdate = plot:FindFirstChild("ToUpdate")
+		local target = toUpdate and toUpdate:FindFirstChild("PetArea")
+		if not target then
+			target = plot:FindFirstChild("CenterPoint")
+			if toUpdate then target = toUpdate:FindFirstChild("CenterPoint") or target end
+		end
+		if not target then return end
+		local char = LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hrp then hrp.CFrame = target.CFrame + Vector3.new(0, 3, 0) end
+	end
+
+	local function buildGrid()
+		local spacing = 5
+		local half = 60
+		local positions = {}
+		for z = -half, half, spacing do
+			for x = -half, half, spacing do
+				table.insert(positions, { x, z })
+			end
+		end
+		table.sort(positions, function(a, b)
+			return (a[1]*a[1] + a[2]*a[2]) < (b[1]*b[1] + b[2]*b[2])
+		end)
+		return positions
+	end
+
+	local function getUnplacedPriority()
+		local records = getMyOwnedEggs()
+		local list = {}
+		for uid, rec in pairs(records) do
+			if rec.Placement == nil and AUTO_PLACE_PRIORITY[rec.AssetCategory] then
+				local rate = 0
+				pcall(function()
+					rate = AssetEarnings.RatePerSecond({
+						Category = rec.AssetCategory,
+						Scale = rec.AssetScale or 1,
+						Mutations = rec.Mutations or {},
+					})
+				end)
+				table.insert(list, { uid = uid, rate = rate })
+			end
+		end
+		table.sort(list, function(a, b) return a.rate > b.rate end)
+		return list
+	end
+
+	local function tryPlaceAll(positions, unplaced)
+		local gridIdx = 1
+		local rejectStreak = 0
+		local anyPlaced = false
+		for _, egg in ipairs(unplaced) do
+			if not autoPlacePriorityEnabled then break end
+			local placed = false
+			while gridIdx <= #positions do
+				local pos = positions[gridIdx]
+				gridIdx = gridIdx + 1
+				local localCF = CFrame.new(pos[1], -0.4, pos[2])
+				local ok, result = pcall(function()
+					return Remotes.EggWorld.AskPlaceEgg:InvokeServer({
+						Uid = egg.uid,
+						LocalCFrame = localCF,
+					})
+				end)
+				if ok and result == true then
+					rejectStreak = 0
+					placed = true
+					anyPlaced = true
+					break
+				else
+					rejectStreak = rejectStreak + 1
+					if rejectStreak >= 30 then return anyPlaced end
+				end
+				task.wait(0.1)
+			end
+			if not placed then return anyPlaced end
+			task.wait(0.3)
+		end
+		return anyPlaced
+	end
+
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		if autoPlacePriorityEnabled then
+			pcall(function()
+				local myPlot = findMyPlot()
+				if not myPlot then return end
+				local unplaced = getUnplacedPriority()
+				if #unplaced == 0 then return end
+				teleportToPlot(myPlot)
+				task.wait(1)
+				local ok = tryPlaceAll(buildGrid(), unplaced)
+				if not ok and autoPlacePriorityEnabled then
+					teleportToPlot(myPlot)
+					task.wait(2)
+					unplaced = getUnplacedPriority()
 					if #unplaced > 0 then
 						tryPlaceAll(buildGrid(), unplaced)
 					end
