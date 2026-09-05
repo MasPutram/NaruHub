@@ -156,6 +156,11 @@ export default function DeviceDetailPage() {
   const [linkDraft, setLinkDraft] = useState("");
   const [linkTargetPkg, setLinkTargetPkg] = useState<string | null>(null); // null = batch (all selected)
 
+  // Uninstall picker modal state (separate from the launch checkboxes so
+  // an operator's launch selection isn't accidentally uninstalled).
+  const [uninstOpen, setUninstOpen] = useState(false);
+  const [uninstPicked, setUninstPicked] = useState<Record<string, boolean>>({});
+
   // Auto-Execute Manager state.
   interface LibScript { slug: string; filename: string; content: string; updatedAt: number; }
   const [aeOpen, setAeOpen] = useState(false);
@@ -453,6 +458,35 @@ export default function DeviceDetailPage() {
     setLayout(draftLayout);
     setGridModalOpen(false);
     launchMany(selectedPkgs, true, draftLayout);
+  }
+
+  async function uninstallPackages(list: TermuxPackage[]) {
+    if (list.length === 0) return;
+    const names = list.map((p) => p.pkg);
+    const preview = names.slice(0, 8).join("\n  ");
+    const more = names.length > 8 ? `\n  ...and ${names.length - 8} more` : "";
+    const ok = window.confirm(
+      `Uninstall ${names.length} package${names.length !== 1 ? "s" : ""} on this device?\n\n` +
+        `  ${preview}${more}\n\n` +
+        `This runs pm uninstall via su. App data is gone forever.`
+    );
+    if (!ok) return;
+    try {
+      const res = await fetch("/api/device-control/uninstall", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, packageNames: names }),
+      });
+      const data = await res.json();
+      setToast(
+        data.ok
+          ? `Uninstall queued for ${data.count} package${data.count !== 1 ? "s" : ""}`
+          : `Gagal: ${data.error}`
+      );
+      if (data.ok) fetchDevice();
+    } catch (e: any) {
+      setToast("Gagal: " + e.message);
+    }
   }
 
   function toggleAll(value: boolean) {
@@ -798,9 +832,20 @@ export default function DeviceDetailPage() {
                           </button>
                         </td>
                         <td>
-                          <button className="btn" disabled={launchingBatch || device.status !== "online"} onClick={() => launchMany([p])}>
-                            Open
-                          </button>
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <button className="btn" disabled={launchingBatch || device.status !== "online"} onClick={() => launchMany([p])}>
+                              Open
+                            </button>
+                            <button
+                              className="btn"
+                              style={{ color: "var(--red)" }}
+                              disabled={device.status !== "online"}
+                              onClick={() => uninstallPackages([p])}
+                              title={`Uninstall ${p.pkg} from device`}
+                            >
+                              🗑
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -809,6 +854,15 @@ export default function DeviceDetailPage() {
               </table>
               <div className="launchbar">
                 <span className="muted">Multi-select &middot; batch launch</span>
+                <button
+                  className="btn"
+                  style={{ color: "var(--red)" }}
+                  disabled={device.status !== "online" || pkgs.length === 0}
+                  onClick={() => { setUninstPicked({}); setUninstOpen(true); }}
+                  title="Pick packages to uninstall (independent of the launch checkboxes)"
+                >
+                  Uninstall...
+                </button>
                 <button
                   className="btn"
                   disabled={selectedPkgs.length === 0}
@@ -1174,6 +1228,76 @@ export default function DeviceDetailPage() {
           </div>
         </div>
       )}
+
+      {uninstOpen && (() => {
+        const pickedCount = Object.values(uninstPicked).filter(Boolean).length;
+        const allPicked = pickedCount === pkgs.length && pkgs.length > 0;
+        return (
+        <div className="modal-overlay" onClick={() => setUninstOpen(false)}>
+          <div className="modal" style={{ width: "min(560px, 94vw)", maxHeight: "88vh", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+              <h2 style={{ margin: 0, fontSize: 16, color: "var(--red)" }}>🗑 UNINSTALL PACKAGES</h2>
+              <button className="btn" style={{ padding: "4px 10px" }} onClick={() => setUninstOpen(false)}>Cancel</button>
+            </div>
+            <div className="muted" style={{ marginBottom: 10, fontSize: 12 }}>
+              Pick the packages to remove from "{displayName(device)}". Data is gone forever.
+            </div>
+
+            <label style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#0e0e16", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 10, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={allPicked}
+                onChange={(e) => {
+                  const next: Record<string, boolean> = {};
+                  if (e.target.checked) for (const p of pkgs) next[p.pkg] = true;
+                  setUninstPicked(next);
+                }}
+              />
+              <span style={{ fontSize: 12, fontWeight: 600 }}>Select all ({pkgs.length})</span>
+            </label>
+
+            <div style={{ overflowY: "auto", flex: 1, marginBottom: 12 }}>
+              {pkgs.length === 0 ? (
+                <div className="muted" style={{ fontSize: 12, padding: 12, textAlign: "center" }}>No packages on this device.</div>
+              ) : (
+                pkgs.map((p) => {
+                  const acc = p.username ? accounts[p.username] : undefined;
+                  return (
+                    <label key={p.pkg} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderBottom: "1px solid #20202d", cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={!!uninstPicked[p.pkg]}
+                        onChange={(e) => setUninstPicked((prev) => ({ ...prev, [p.pkg]: e.target.checked }))}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, wordBreak: "break-all" }}>{p.pkg}</div>
+                        {p.username && <div style={{ fontSize: 10, color: "var(--dim)" }}>{p.username}{acc?.online ? " · IN GAME" : ""}</div>}
+                      </div>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="modalfoot">
+              <button className="btn" onClick={() => setUninstOpen(false)}>Cancel</button>
+              <button
+                className="btn"
+                style={{ background: "var(--red)", borderColor: "var(--red)", color: "#100d19", fontWeight: 700 }}
+                disabled={pickedCount === 0}
+                onClick={async () => {
+                  const list = pkgs.filter((p) => uninstPicked[p.pkg]);
+                  setUninstOpen(false);
+                  await uninstallPackages(list);
+                }}
+              >
+                Uninstall {pickedCount > 0 ? `(${pickedCount})` : ""}
+              </button>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
 
       {toast && <div className="toast">{toast}</div>}
     </>

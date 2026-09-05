@@ -634,6 +634,19 @@ local function autoexec_write(filename, content)
       " -> " .. ok_count .. " paths ok, " .. fail_count .. " failed" .. C.reset)
 end
 
+-- Uninstall a single package via `pm uninstall`. Silently no-op if
+-- the package is not installed (pm returns Failure but doesn't crash us).
+local function uninstall_pkg(pkg)
+  if not pkg or pkg == "" then return end
+  local safe = pkg:gsub("[^%w%.]", "")
+  if safe == "" then return end
+  local ok = shellcode("su -c \\"pm uninstall '" .. safe .. "'\\"")
+  if not ok then
+    shellcode("su -c \\"cmd package uninstall '" .. safe .. "'\\"")
+  end
+  log(C.yellow .. "[" .. ts() .. "] uninstall " .. safe .. C.reset)
+end
+
 local function autoexec_remove(filename)
   if not filename or filename == "" then return end
   local safe = filename:gsub("[/\\\\%z]+", ""):gsub("^%.+", "")
@@ -1029,6 +1042,8 @@ while true do
             autoexec_write(cmd.filename, cmd.content)
           elseif cmd.type == "autoexec_remove" then
             autoexec_remove(cmd.filename)
+          elseif cmd.type == "uninstall" then
+            uninstall_pkg(cmd.package)
           end
         end
         if #batch > 0 then batch_launch(batch) end
@@ -1064,6 +1079,8 @@ while true do
               autoexec_write(cmd.filename, cmd.content)
             elseif cmd.type == "autoexec_remove" then
               autoexec_remove(cmd.filename)
+            elseif cmd.type == "uninstall" then
+              uninstall_pkg(cmd.package)
             end
           end
           if #batch > 0 then batch_launch(batch) end
