@@ -538,6 +538,61 @@ local function launch_app(pkg, bounds, resize, delay, target)
   if delay > 0 then sleep(delay) end
 end
 
+-- Rapid-fire an am start for one package WITHOUT waiting for it to finish
+-- initializing. Used by the batch-launch trick below.
+local function fire_start(pkg, target)
+  if target and target ~= "" then
+    local safe = target:gsub('"', '\\\\"')
+    local ok = shellcode(string.format(
+      'su -c "am start -a android.intent.action.VIEW -d \\\\"%s\\\\" -p %s"',
+      safe, pkg
+    ))
+    if not ok then
+      shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
+    end
+  else
+    shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
+  end
+end
+
+-- Batch launch multiple packages using the Roblox-multi-open trick the
+-- operator discovered manually: open the first clone fully, rapid-fire
+-- am start on the rest so they queue behind Roblox's init lock, then
+-- kill the first to release the lock -- all queued clones then proceed
+-- to open at once. Falls back to plain sequential launch if only one
+-- package is in the batch.
+local function batch_launch(cmds)
+  if #cmds == 0 then return end
+  if #cmds == 1 then
+    local c = cmds[1]
+    launch_app(c.package, c.bounds, c.resize, c.launchDelay, c.target)
+    return
+  end
+
+  local stagger = tonumber(cmds[1].launchDelay) or 10
+  log(C.cyan .. "[" .. ts() .. "] batch launch (" .. #cmds .. " packages), " .. stagger .. "s stagger" .. C.reset)
+
+  -- Step 1: fully launch the first one so its window is up. All the
+  -- others fire on top of this without killing it, so at the end all N
+  -- clones stay open (matches the operator's expectation: click open
+  -- them one by one, don't force-close anything).
+  local first = cmds[1]
+  launch_app(first.package, first.bounds, first.resize, 0, first.target)
+
+  -- Step 2: fire am start on the rest one by one, spaced by launchDelay
+  -- so they open at a controlled pace. Set bounds via shared_prefs
+  -- beforehand so each lands in the right tile.
+  for i = 2, #cmds do
+    local c = cmds[i]
+    if c.resize and c.bounds and c.bounds ~= "" then
+      local l, t, r, b = c.bounds:match("(%d+),(%d+),(%d+),(%d+)")
+      if l then set_window_bounds(c.package, tonumber(l), tonumber(t), tonumber(r), tonumber(b)) end
+    end
+    fire_start(c.package, c.target)
+    if stagger > 0 then sleep(stagger) end
+  end
+end
+
 -- ─── HTTP helpers (writes to Redis so dashboard can read) ───
 local function http_post(path, body_table)
   local body = json.encode(body_table)
@@ -966,11 +1021,16 @@ while true do
     if cmd_raw ~= "" then
       local cmd_data = json.decode(cmd_raw)
       if cmd_data and cmd_data.commands then
+        -- Collect all launch commands in this poll into one batch so we
+        -- can apply the Roblox multi-open trick (open first fully -> rapid-
+        -- fire the rest -> kill first to release the init lock).
+        local batch = {}
         for _, cmd in ipairs(cmd_data.commands) do
           if cmd.type == "launch" and not was_seen(cmd.id) then
-            launch_app(cmd.package, cmd.bounds, cmd.resize, cmd.launchDelay, cmd.target)
+            batch[#batch+1] = cmd
           end
         end
+        if #batch > 0 then batch_launch(batch) end
       end
     end
 
@@ -993,11 +1053,13 @@ while true do
         end
       elseif msg.type == "command" then
         if msg.commands then
+          local batch = {}
           for _, cmd in ipairs(msg.commands) do
             if cmd.type == "launch" and not was_seen(cmd.id) then
-              launch_app(cmd.package, cmd.bounds, cmd.resize, cmd.launchDelay, cmd.target)
+              batch[#batch+1] = cmd
             end
           end
+          if #batch > 0 then batch_launch(batch) end
         end
       end
     end
