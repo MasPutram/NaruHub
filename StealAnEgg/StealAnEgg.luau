@@ -315,11 +315,12 @@ do
 	end)
 end
 
--- Scrub any "Rayfield" branding text that Rayfield renders (loading
--- subtitle, footer, etc). Runs in the background because these show
--- up over the first few frames after CreateWindow.
+-- Post-load tweaks to the Rayfield GUI: scrub "Rayfield" branding text
+-- and shrink the whole window (~70%) so it fits inside small App Cloner
+-- panes on multi-instance mobile setups.
 task.spawn(function()
 	local hui = (gethui and gethui()) or game:GetService("CoreGui")
+	local scaled = false
 	for _ = 1, 30 do
 		local rf = hui:FindFirstChild("Rayfield")
 		if rf then
@@ -329,6 +330,20 @@ task.spawn(function()
 					if ok and txt and string.find(string.lower(txt), "rayfield") then
 						pcall(function() d.Text = "" end)
 					end
+				end
+			end
+			if not scaled then
+				local main = rf:FindFirstChild("Main")
+				if main then
+					local existing = main:FindFirstChildOfClass("UIScale")
+					if not existing then
+						local sc = Instance.new("UIScale")
+						sc.Scale = 0.7
+						sc.Parent = main
+					else
+						existing.Scale = 0.7
+					end
+					scaled = true
 				end
 			end
 		end
