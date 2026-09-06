@@ -5,6 +5,8 @@
 ------------------------------------------------------------
 -- Cleanup dari run sebelumnya
 ------------------------------------------------------------
+_G.__NaruHubStopped__ = true -- kill any surviving loops from prior exec
+task.wait(0.5)
 do
 	local containers = {}
 	local ok, hui = pcall(function()
@@ -21,7 +23,9 @@ do
 	end
 	for _, container in ipairs(containers) do
 		for _, child in ipairs(container:GetChildren()) do
-			if child.Name == "StealAnEggGUI" or child.Name == "StealAnEggDropdown" or child.Name == "NaruHubMonitor" then
+			if child.Name == "StealAnEggGUI" or child.Name == "StealAnEggDropdown"
+				or child.Name == "NaruHubMonitor" or child.Name == "StealAnEggLauncher"
+				or child.Name == "StealAnEggMinBtn" or child.Name == "Rayfield" then
 				child:Destroy()
 			end
 		end
@@ -214,15 +218,14 @@ if not GRANTED_VIA_GLOBAL then
 end
 
 ------------------------------------------------------------
--- NaruUI (loaded from GitHub)
+-- Rayfield UI library (loaded from official CDN)
 ------------------------------------------------------------
-local httpGet = game.HttpGet or HttpGet
-local _naruSrc = httpGet(game, "https://raw.githubusercontent.com/MasPutram/NaruHub/main/StealAnEgg/NaruUI.luau?v=" .. tostring(tick()))
-local _naruFn, _naruErr = loadstring(_naruSrc)
-if not _naruFn then
-	error("NaruUI loadstring failed: " .. tostring(_naruErr))
-end
-local NaruUI = _naruFn()
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+
+-- Runtime kill switch for our background loops (replaces the old
+-- Fluent.GUI/Fluent.Unloaded checks). Any prior instance flips its
+-- own copy to true when the new instance runs cleanup at the top.
+_G.__NaruHubStopped__ = false
 
 ------------------------------------------------------------
 -- Game data access
@@ -253,102 +256,28 @@ local function getMyOwnedEggs()
 end
 
 ------------------------------------------------------------
--- NaruUI Window (clean, status only -- no tabs visible)
+-- Rayfield Window
 ------------------------------------------------------------
-local Fluent = NaruUI.New({
-	BrandColor = Color3.fromRGB(255, 214, 10),
-	ConfigPrefix = "StealAnEgg",
+local Window = Rayfield:CreateWindow({
+	Name = "NaruHub | StealAnEgg",
+	LoadingTitle = "NaruHub",
+	LoadingSubtitle = "PREMIUM",
+	Theme = "Default",
+	DisableRayfieldPrompts = true,
+	DisableBuildWarnings = true,
+	ConfigurationSaving = {
+		Enabled = true,
+		FolderName = "NaruHub",
+		FileName = "StealAnEgg",
+	},
+	KeySystem = false,
 })
 
-local Window = Fluent:CreateWindow({
-	Title = "NaruHub | StealAnEgg",
-	Badge = "PREMIUM",
-	TabWidth = 0,
-	Size = UDim2.fromOffset(380, 400),
-	AutoStartMinimized = false,
-})
+local MainTab = Window:CreateTab("Main", nil)
 
--- Force NaruUI launcher circle to be ALWAYS visible and act as a
--- min/restore toggle (fixes the case where the built-in "−" is
--- covered by an App Cloner / Zetsu window header). Also cleans up
--- any stale floating N from older script versions.
-do
-	local hui = (gethui and gethui()) or game:GetService("CoreGui")
-	for _, o in ipairs(hui:GetChildren()) do
-		if o.Name == "StealAnEggMinBtn" then pcall(function() o:Destroy() end) end
-	end
-
-	task.spawn(function()
-		local wiredLogo
-		while Fluent.GUI and Fluent.GUI.Parent do
-			local lc = hui:FindFirstChild("StealAnEggLauncher")
-			if lc then
-				if not lc.Enabled then lc.Enabled = true end
-				local logo = lc:FindFirstChild("Logo")
-				if logo then
-					-- Force logo below the Roblox topbar (default 20,20 lands on
-					-- the menu/chat/backpack icons that steal our taps)
-					if logo.Position ~= UDim2.fromOffset(4, 88) then
-						logo.Position = UDim2.fromOffset(4, 88)
-					end
-				end
-				if logo and logo ~= wiredLogo then
-					wiredLogo = logo
-					-- Disconnect NaruUI's existing MouseButton1Click handlers so
-					-- our toggle isn't racing against them (they'd flip state
-					-- right back).
-					if getconnections then
-						local ok, conns = pcall(function()
-							return getconnections(logo.MouseButton1Click)
-						end)
-						if ok and conns then
-							for _, c in ipairs(conns) do
-								pcall(function()
-									if c.Disable then c:Disable()
-									elseif c.Disconnect then c:Disconnect() end
-								end)
-							end
-						end
-					end
-					logo.MouseButton1Click:Connect(function()
-						if Fluent.GUI and Fluent.GUI.Enabled then
-							if Window.Minimize then Window.Minimize() end
-						else
-							if Window.Restore then Window.Restore() end
-						end
-					end)
-				end
-			end
-			task.wait(0.3)
-		end
-	end)
-end
-
--- Keep our GUI + launcher BELOW Roblox's core menu (Esc / settings) so it doesn't cover it
-do
-	local hui = (gethui and gethui()) or game:GetService("CoreGui")
-	if Fluent.GUI then Fluent.GUI.DisplayOrder = -1000 end
-	local function pushLauncher()
-		local lc = hui:FindFirstChild("StealAnEggLauncher")
-		if lc then lc.DisplayOrder = -999 end
-	end
-	pushLauncher()
-	hui.ChildAdded:Connect(function(c)
-		if c.Name == "StealAnEggLauncher" then
-			task.wait()
-			pushLauncher()
-		end
-	end)
-end
-
-local StatusTab = Window:AddTab({ Title = "" })
-local section = StatusTab:AddSection(LocalPlayer.Name, { NoCollapse = true })
-
-local usernamePara = section:AddParagraph({
+local usernamePara = MainTab:CreateParagraph({
 	Title = "Username",
 	Content = LocalPlayer.Name,
-	ContentSize = 14,
-	Center = true,
 })
 
 do
@@ -358,7 +287,7 @@ do
 
 	local function refreshUsernameList()
 		if not myPrefix then
-			usernamePara:SetContent(myName)
+			usernamePara:Set({ Title = "Username", Content = myName })
 			return
 		end
 		local matches = {}
@@ -369,13 +298,13 @@ do
 			end
 		end
 		if #matches <= 1 then
-			usernamePara:SetContent(myName)
+			usernamePara:Set({ Title = "Username", Content = myName })
 			return
 		end
 		table.sort(matches, function(a, b) return a.num < b.num end)
 		local names = {}
 		for _, m in ipairs(matches) do names[#names+1] = m.name end
-		usernamePara:SetContent(table.concat(names, "\n"))
+		usernamePara:Set({ Title = "Username", Content = table.concat(names, "\n") })
 	end
 
 	Players.PlayerAdded:Connect(function() task.wait(0.5) refreshUsernameList() end)
@@ -383,20 +312,19 @@ do
 	task.spawn(refreshUsernameList)
 end
 
-local monitorPara = section:AddParagraph({
+local monitorPara = MainTab:CreateParagraph({
 	Title = "Status",
 	Content = "Starting...",
-	ContentSize = 14,
-	Center = true,
 })
 
 local AUTO_SELL_MIN_RATE = 300_000_000
 local AUTO_SELL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Mythic", "Legendary", "Cosmic" }
 local AUTO_SELL_NEVER = { Eternal = true, Divine = true, Titan = true }
 local autoSellEnabled = false
-section:AddToggle("AutoSellToggle", {
-	Title = "Auto Sell (< 300M/s)",
-	Default = false,
+MainTab:CreateToggle({
+	Name = "Auto Sell (< 300M/s)",
+	CurrentValue = false,
+	Flag = "AutoSellToggle",
 	Callback = function(val)
 		autoSellEnabled = val
 		task.spawn(function()
@@ -413,9 +341,11 @@ section:AddToggle("AutoSellToggle", {
 --   OFF -> stop rest state, next ON will fire another pass
 local autoPlaceEnabled = false
 local autoPlaceTrigger = 0
-section:AddToggle("AutoPlaceToggle", {
-	Title = "Auto Place Eggs (1x)",
-	Default = false,
+local autoPlaceToggleRef
+autoPlaceToggleRef = MainTab:CreateToggle({
+	Name = "Auto Place Eggs (1x)",
+	CurrentValue = false,
+	Flag = "AutoPlaceToggle",
 	Callback = function(val)
 		autoPlaceEnabled = val
 		if val then
@@ -425,8 +355,8 @@ section:AddToggle("AutoPlaceToggle", {
 })
 
 local hopBusy = false
-section:AddButton({
-	Title = "Hop Server (1-3 players)",
+MainTab:CreateButton({
+	Name = "Hop Server (1-3 players)",
 	Callback = function()
 		if hopBusy then return end
 		hopBusy = true
@@ -471,7 +401,7 @@ section:AddButton({
 
 			local candidates = fetchCandidates()
 			if #candidates == 0 then
-				monitorPara:SetContent("No 1-3p server found")
+				monitorPara:Set({ Title = "Status", Content = "No 1-3p server found" })
 				failConn:Disconnect()
 				hopBusy = false
 				return
@@ -479,7 +409,7 @@ section:AddButton({
 
 			for i, c in ipairs(candidates) do
 				if i > 10 then break end
-				monitorPara:SetContent("Hop try " .. i .. " (" .. c.playing .. "p)")
+				monitorPara:Set({ Title = "Status", Content = "Hop try " .. i .. " (" .. c.playing .. "p)" })
 				lastFailReason = nil
 				pcall(function()
 					TeleportService:TeleportToPlaceInstance(placeId, c.id, LocalPlayer)
@@ -498,7 +428,7 @@ section:AddButton({
 
 			failConn:Disconnect()
 			if lastFailReason then
-				monitorPara:SetContent("Hop failed: " .. lastFailReason:sub(1, 30))
+				monitorPara:Set({ Title = "Status", Content = "Hop failed: " .. lastFailReason:sub(1, 30) })
 			end
 			hopBusy = false
 		end)
@@ -896,7 +826,7 @@ task.spawn(function()
 	local BaseUpgrade = require(ReplicatedStorage.Client.BaseUpgrade)
 	local TreadmillClient = require(LocalPlayer.PlayerScripts.GUI.TreadmillUpgrade.Client)
 
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+	while not _G.__NaruHubStopped__ do
 		local treadmillBusy = false
 		pcall(function()
 			local stats = SaveModule.Get()
@@ -939,7 +869,7 @@ task.spawn(function()
 		return Trails.Directory[a].Price < Trails.Directory[b].Price
 	end)
 
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+	while not _G.__NaruHubStopped__ do
 		pcall(function()
 			local data = SaveModule.Get()
 			for _, key in ipairs(sortedKeys) do
@@ -964,7 +894,7 @@ end)
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+	while not _G.__NaruHubStopped__ do
 		if autoSellEnabled then
 			pcall(function()
 				local records = getMyOwnedEggs()
@@ -1145,7 +1075,7 @@ task.spawn(function()
 	end
 
 	local lastConsumedTrigger = 0
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+	while not _G.__NaruHubStopped__ do
 		task.wait(1)
 		if autoPlaceEnabled and autoPlaceTrigger > lastConsumedTrigger then
 			lastConsumedTrigger = autoPlaceTrigger
@@ -1226,8 +1156,9 @@ task.spawn(function()
 			end)
 			-- Auto turn OFF the toggle so UI matches the "done" state
 			pcall(function()
-				local t = Fluent.Options and Fluent.Options["AutoPlaceToggle"]
-				if t and t.SetValue then t:SetValue(false) end
+				if autoPlaceToggleRef and autoPlaceToggleRef.Set then
+					autoPlaceToggleRef:Set(false)
+				end
 			end)
 		end
 	end
@@ -1235,7 +1166,7 @@ end)
 
 -- If toggle was persisted ON, seed one trigger so it runs after re-exec
 task.spawn(function()
-	task.wait(1) -- let NaruUI restore config
+	task.wait(1) -- let Rayfield restore config
 	if autoPlaceEnabled then
 		autoPlaceTrigger = autoPlaceTrigger + 1
 	end
@@ -1246,7 +1177,7 @@ end)
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+	while not _G.__NaruHubStopped__ do
 		pcall(function()
 			local records = getMyOwnedEggs()
 			local now = Workspace:GetServerTimeNow()
@@ -1290,12 +1221,12 @@ end)
 -- Auto-start monitoring loop
 ------------------------------------------------------------
 task.spawn(function()
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+	while not _G.__NaruHubStopped__ do
 		local ok, err = reportToMonitor()
 		if ok then
-			monitorPara:SetContent("OK")
+			monitorPara:Set({ Title = "Status", Content = "OK" })
 		else
-			monitorPara:SetContent("Gagal")
+			monitorPara:Set({ Title = "Status", Content = "Gagal" })
 		end
 		task.wait(15)
 	end
