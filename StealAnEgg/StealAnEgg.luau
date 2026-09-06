@@ -287,6 +287,22 @@ do
 				local logo = lc:FindFirstChild("Logo")
 				if logo and logo ~= wiredLogo then
 					wiredLogo = logo
+					-- Disconnect NaruUI's existing MouseButton1Click handlers so
+					-- our toggle isn't racing against them (they'd flip state
+					-- right back).
+					if getconnections then
+						local ok, conns = pcall(function()
+							return getconnections(logo.MouseButton1Click)
+						end)
+						if ok and conns then
+							for _, c in ipairs(conns) do
+								pcall(function()
+									if c.Disable then c:Disable()
+									elseif c.Disconnect then c:Disconnect() end
+								end)
+							end
+						end
+					end
 					logo.MouseButton1Click:Connect(function()
 						if Fluent.GUI and Fluent.GUI.Enabled then
 							if Window.Minimize then Window.Minimize() end
