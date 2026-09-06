@@ -363,7 +363,7 @@ task.spawn(function()
 				local main = rf:FindFirstChild("Main")
 				if main then
 					-- Just narrow the window — keep native font size
-					pcall(function() main.Size = UDim2.fromOffset(320, 400) end)
+					pcall(function() main.Size = UDim2.fromOffset(320, 520) end)
 					local existing = main:FindFirstChildOfClass("UIScale")
 					if existing then existing.Scale = 1 end
 					scaled = true
