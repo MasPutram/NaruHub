@@ -1132,8 +1132,17 @@ task.spawn(function()
 					end
 				end
 
-				if hipWasOn and firesignal and hipBtn and not hipToggleIsOn(hipBtn) then
-					pcall(function() firesignal(hipBtn.MouseButton1Click) end)
+				-- Re-enable HIP AutoTreadmill (re-lookup btn in case HIP re-rendered)
+				if hipWasOn and firesignal then
+					local hipBtn2 = findHipToggle()
+					if hipBtn2 and not hipToggleIsOn(hipBtn2) then
+						pcall(function() firesignal(hipBtn2.MouseButton1Click) end)
+						task.wait(0.5)
+						-- Retry once if it didn't flip
+						if not hipToggleIsOn(hipBtn2) then
+							pcall(function() firesignal(hipBtn2.MouseButton1Click) end)
+						end
+					end
 				end
 
 				-- Hatch anything that's already ready + equip best
