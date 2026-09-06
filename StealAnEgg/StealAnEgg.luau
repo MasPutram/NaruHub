@@ -1135,6 +1135,38 @@ task.spawn(function()
 				if hipWasOn and firesignal and hipBtn and not hipToggleIsOn(hipBtn) then
 					pcall(function() firesignal(hipBtn.MouseButton1Click) end)
 				end
+
+				-- Hatch anything that's already ready + equip best
+				local now = Workspace:GetServerTimeNow()
+				local hatched = 0
+				for uid, rec in pairs(getMyOwnedEggs()) do
+					if rec.Placement ~= nil then
+						local speed = rec.GrowthSpeedMultiplier or 1
+						local nightCredit = 0
+						pcall(function()
+							nightCredit = EggRecords.CurrentNightCredit(rec, now, speed)
+						end)
+						local remaining = 0
+						pcall(function()
+							remaining = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer)
+						end)
+						if remaining <= 0 then
+							local h1, r1 = pcall(function()
+								return Remotes.EggWorld.AskHatch:InvokeServer(uid)
+							end)
+							if h1 and r1 == true then
+								pcall(function()
+									Remotes.EggWorld.AskFinishHatch:InvokeServer(uid)
+								end)
+								hatched = hatched + 1
+							end
+							task.wait(0.2)
+						end
+					end
+				end
+				pcall(function()
+					Remotes.Haul.WearBest:InvokeServer()
+				end)
 			end)
 			-- Auto turn OFF the toggle so UI matches the "done" state
 			pcall(function()
