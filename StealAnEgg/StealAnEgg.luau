@@ -346,12 +346,24 @@ task.spawn(function()
 					local existing = main:FindFirstChildOfClass("UIScale")
 					if not existing then
 						local sc = Instance.new("UIScale")
-						sc.Scale = 0.7
+						sc.Scale = 0.55
 						sc.Parent = main
 					else
-						existing.Scale = 0.7
+						existing.Scale = 0.55
 					end
 					scaled = true
+				end
+			end
+			-- Tighten spacing: shrink UIListLayout padding and UIPadding
+			-- on every Rayfield section so rows sit closer together.
+			for _, d in ipairs(rf:GetDescendants()) do
+				if d:IsA("UIListLayout") then
+					pcall(function() d.Padding = UDim.new(0, 3) end)
+				elseif d:IsA("UIPadding") then
+					pcall(function()
+						d.PaddingTop = UDim.new(0, 3)
+						d.PaddingBottom = UDim.new(0, 3)
+					end)
 				end
 			end
 		end
