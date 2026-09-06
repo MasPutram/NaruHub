@@ -356,21 +356,22 @@ task.spawn(function()
 			if not scaled then
 				local main = rf:FindFirstChild("Main")
 				if main then
-					-- Narrow compact size for mobile App Cloner panes
-					pcall(function() main.Size = UDim2.fromOffset(300, 360) end)
+					-- Just narrow the window — keep native font size
+					pcall(function() main.Size = UDim2.fromOffset(320, 400) end)
 					local existing = main:FindFirstChildOfClass("UIScale")
-					if not existing then
-						local sc = Instance.new("UIScale")
-						sc.Scale = 0.75
-						sc.Parent = main
-					else
-						existing.Scale = 0.75
-					end
+					if existing then existing.Scale = 1 end
 					scaled = true
+				end
+				-- Hide topbar clutter: Settings gear, Search, ChangeSize, Icon
+				local topbar = rf.Main and rf.Main:FindFirstChild("Topbar")
+				if topbar then
+					for _, name in ipairs({ "Settings", "Search", "ChangeSize", "Icon" }) do
+						local b = topbar:FindFirstChild(name)
+						if b then b.Visible = false end
+					end
 				end
 			end
 			-- Tighten spacing: shrink UIListLayout padding and UIPadding
-			-- on every Rayfield section so rows sit closer together.
 			for _, d in ipairs(rf:GetDescendants()) do
 				if d:IsA("UIListLayout") then
 					pcall(function() d.Padding = UDim.new(0, 3) end)
@@ -400,7 +401,7 @@ do
 
 	local function refreshUsernameList()
 		if not myPrefix then
-			usernamePara:Set({ Title = "Username", Content = myName })
+			usernamePara:Set({ Content = myName })
 			return
 		end
 		local matches = {}
@@ -411,13 +412,13 @@ do
 			end
 		end
 		if #matches <= 1 then
-			usernamePara:Set({ Title = "Username", Content = myName })
+			usernamePara:Set({ Content = myName })
 			return
 		end
 		table.sort(matches, function(a, b) return a.num < b.num end)
 		local names = {}
 		for _, m in ipairs(matches) do names[#names+1] = m.name end
-		usernamePara:Set({ Title = "Username", Content = table.concat(names, "\n") })
+		usernamePara:Set({ Content = table.concat(names, "\n") })
 	end
 
 	Players.PlayerAdded:Connect(function() task.wait(0.5) refreshUsernameList() end)
@@ -514,7 +515,7 @@ MainTab:CreateButton({
 
 			local candidates = fetchCandidates()
 			if #candidates == 0 then
-				monitorPara:Set({ Title = "Status", Content = "No 1-3p server found" })
+				monitorPara:Set({ Content = "No 1-3p server found" })
 				failConn:Disconnect()
 				hopBusy = false
 				return
@@ -522,7 +523,7 @@ MainTab:CreateButton({
 
 			for i, c in ipairs(candidates) do
 				if i > 10 then break end
-				monitorPara:Set({ Title = "Status", Content = "Hop try " .. i .. " (" .. c.playing .. "p)" })
+				monitorPara:Set({ Content = "Hop try " .. i .. " (" .. c.playing .. "p)" })
 				lastFailReason = nil
 				pcall(function()
 					TeleportService:TeleportToPlaceInstance(placeId, c.id, LocalPlayer)
@@ -541,7 +542,7 @@ MainTab:CreateButton({
 
 			failConn:Disconnect()
 			if lastFailReason then
-				monitorPara:Set({ Title = "Status", Content = "Hop failed: " .. lastFailReason:sub(1, 30) })
+				monitorPara:Set({ Content = "Hop failed: " .. lastFailReason:sub(1, 30) })
 			end
 			hopBusy = false
 		end)
@@ -1337,9 +1338,9 @@ task.spawn(function()
 	while not _G.__NaruHubStopped__ do
 		local ok, err = reportToMonitor()
 		if ok then
-			monitorPara:Set({ Title = "Status", Content = "OK" })
+			monitorPara:Set({ Content = "OK" })
 		else
-			monitorPara:Set({ Title = "Status", Content = "Gagal" })
+			monitorPara:Set({ Content = "Gagal" })
 		end
 		task.wait(15)
 	end
