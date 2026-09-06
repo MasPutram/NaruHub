@@ -342,7 +342,13 @@ task.spawn(function()
 	end
 	for _ = 1, 30 do
 		local rf = hui:FindFirstChild("Rayfield")
-		if rf then scrubText(rf) end
+		if rf then
+			-- Force our UI above Roblox core menu (People/Settings/etc)
+			if rf.DisplayOrder ~= 2_000_000_000 then
+				pcall(function() rf.DisplayOrder = 2_000_000_000 end)
+			end
+			scrubText(rf)
+		end
 		-- Notifications live in a separate ScreenGui — sweep any
 		-- Rayfield-related root in both hui and CoreGui.
 		for _, container in ipairs({ hui, coreGui }) do
