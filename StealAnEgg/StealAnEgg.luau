@@ -435,7 +435,7 @@ MainTab:CreateButton({
 	end,
 })
 
-Window:SelectTab(1)
+-- (only one tab; Rayfield picks it by default)
 
 
 ------------------------------------------------------------
