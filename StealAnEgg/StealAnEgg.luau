@@ -408,7 +408,7 @@ do
 
 	local function refreshUsernameList()
 		if not myPrefix then
-			usernamePara:Set({ Content = myName })
+			usernamePara:Set({ Title = "Username", Content = myName })
 			return
 		end
 		local matches = {}
@@ -419,13 +419,13 @@ do
 			end
 		end
 		if #matches <= 1 then
-			usernamePara:Set({ Content = myName })
+			usernamePara:Set({ Title = "Username", Content = myName })
 			return
 		end
 		table.sort(matches, function(a, b) return a.num < b.num end)
 		local names = {}
 		for _, m in ipairs(matches) do names[#names+1] = m.name end
-		usernamePara:Set({ Content = table.concat(names, "\n") })
+		usernamePara:Set({ Title = "Username", Content = table.concat(names, "\n") })
 	end
 
 	Players.PlayerAdded:Connect(function() task.wait(0.5) refreshUsernameList() end)
@@ -481,7 +481,7 @@ MainTab:CreateButton({
 	Callback = function()
 		if hopBusy then return end
 		hopBusy = true
-		monitorPara:Set({ Content = "Hop: fetching servers..." })
+		monitorPara:Set({ Title = "Status", Content = "Hop: fetching servers..." })
 		task.spawn(function()
 			local TeleportService = game:GetService("TeleportService")
 			local HttpService = game:GetService("HttpService")
@@ -504,14 +504,14 @@ MainTab:CreateButton({
 						return game:HttpGet(url)
 					end)
 					if not ok then
-						monitorPara:Set({ Content = "Hop: HttpGet err p" .. page })
+						monitorPara:Set({ Title = "Status", Content = "Hop: HttpGet err p" .. page })
 						break
 					end
 					local ok2, data = pcall(function()
 						return HttpService:JSONDecode(body)
 					end)
 					if not ok2 or not data or not data.data then
-						monitorPara:Set({ Content = "Hop: JSON err p" .. page })
+						monitorPara:Set({ Title = "Status", Content = "Hop: JSON err p" .. page })
 						break
 					end
 					for _, s in ipairs(data.data) do
@@ -529,13 +529,13 @@ MainTab:CreateButton({
 
 			local ok, candidates = pcall(fetchCandidates)
 			if not ok then
-				monitorPara:Set({ Content = "Hop err: " .. tostring(candidates):sub(1, 40) })
+				monitorPara:Set({ Title = "Status", Content = "Hop err: " .. tostring(candidates):sub(1, 40) })
 				failConn:Disconnect()
 				hopBusy = false
 				return
 			end
 			if #candidates == 0 then
-				monitorPara:Set({ Content = "No 1-3p server found" })
+				monitorPara:Set({ Title = "Status", Content = "No 1-3p server found" })
 				failConn:Disconnect()
 				hopBusy = false
 				return
@@ -543,7 +543,7 @@ MainTab:CreateButton({
 
 			for i, c in ipairs(candidates) do
 				if i > 10 then break end
-				monitorPara:Set({ Content = "Hop try " .. i .. " (" .. c.playing .. "p)" })
+				monitorPara:Set({ Title = "Status", Content = "Hop try " .. i .. " (" .. c.playing .. "p)" })
 				lastFailReason = nil
 				pcall(function()
 					TeleportService:TeleportToPlaceInstance(placeId, c.id, LocalPlayer)
@@ -560,7 +560,7 @@ MainTab:CreateButton({
 
 			failConn:Disconnect()
 			if lastFailReason then
-				monitorPara:Set({ Content = "Hop failed: " .. tostring(lastFailReason):sub(1, 30) })
+				monitorPara:Set({ Title = "Status", Content = "Hop failed: " .. tostring(lastFailReason):sub(1, 30) })
 			end
 			hopBusy = false
 		end)
@@ -1356,9 +1356,9 @@ task.spawn(function()
 	while not _G.__NaruHubStopped__ do
 		local ok, err = reportToMonitor()
 		if ok then
-			monitorPara:Set({ Content = "OK" })
+			monitorPara:Set({ Title = "Status", Content = "OK" })
 		else
-			monitorPara:Set({ Content = "Gagal" })
+			monitorPara:Set({ Title = "Status", Content = "Gagal" })
 		end
 		task.wait(15)
 	end
