@@ -324,22 +324,35 @@ do
 end
 
 -- Post-load tweaks to the Rayfield GUI: scrub "Rayfield" branding text
--- and shrink the whole window (~70%) so it fits inside small App Cloner
--- panes on multi-instance mobile setups.
+-- (main window + notification toasts) and shrink the whole window so it
+-- fits inside small App Cloner panes on multi-instance mobile setups.
 task.spawn(function()
 	local hui = (gethui and gethui()) or game:GetService("CoreGui")
+	local coreGui = game:GetService("CoreGui")
 	local scaled = false
-	for _ = 1, 30 do
-		local rf = hui:FindFirstChild("Rayfield")
-		if rf then
-			for _, d in ipairs(rf:GetDescendants()) do
-				if d:IsA("TextLabel") or d:IsA("TextButton") then
-					local ok, txt = pcall(function() return d.Text end)
-					if ok and txt and string.find(string.lower(txt), "rayfield") then
-						pcall(function() d.Text = "" end)
-					end
+	local function scrubText(root)
+		for _, d in ipairs(root:GetDescendants()) do
+			if d:IsA("TextLabel") or d:IsA("TextButton") then
+				local ok, txt = pcall(function() return d.Text end)
+				if ok and txt and string.find(string.lower(txt), "rayfield") then
+					pcall(function() d.Text = "" end)
 				end
 			end
+		end
+	end
+	for _ = 1, 30 do
+		local rf = hui:FindFirstChild("Rayfield")
+		if rf then scrubText(rf) end
+		-- Notifications live in a separate ScreenGui — sweep any
+		-- Rayfield-related root in both hui and CoreGui.
+		for _, container in ipairs({ hui, coreGui }) do
+			for _, child in ipairs(container:GetChildren()) do
+				if child:IsA("ScreenGui") and (child.Name:lower():find("rayfield") or child.Name:lower():find("notif")) then
+					scrubText(child)
+				end
+			end
+		end
+		if rf then
 			if not scaled then
 				local main = rf:FindFirstChild("Main")
 				if main then
