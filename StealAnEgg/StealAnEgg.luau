@@ -279,7 +279,11 @@ local Window = Rayfield:CreateWindow({
 -- bar on multi-instance mobile setups; this button lives in CoreGui with
 -- max DisplayOrder so nothing can cover it.
 do
-	local hui = (gethui and gethui()) or game:GetService("CoreGui")
+	-- Parent to CoreGui directly (not gethui). Some executors (Arceus X)
+	-- return CoreGui.RobloxGui from gethui() and hide custom ScreenGuis
+	-- rendered under RobloxGui — CoreGui root escapes that.
+	local coreGui = game:GetService("CoreGui")
+	local hui = coreGui
 	for _, o in ipairs(hui:GetChildren()) do
 		if o.Name == "NaruHubToggleBtn" then pcall(function() o:Destroy() end) end
 	end
@@ -288,7 +292,11 @@ do
 	sg.ResetOnSpawn = false
 	sg.IgnoreGuiInset = true
 	sg.DisplayOrder = 2_000_000_000
-	sg.Parent = hui
+	pcall(function() sg.Parent = hui end)
+	if not sg.Parent then
+		-- Fallback if CoreGui write is blocked
+		sg.Parent = (gethui and gethui()) or game.Players.LocalPlayer:WaitForChild("PlayerGui")
+	end
 
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.fromOffset(36, 36)
