@@ -268,48 +268,35 @@ local Window = Fluent:CreateWindow({
 	AutoStartMinimized = false,
 })
 
--- Floating "N" minimize button (always visible) — for cases where the
--- built-in "−" is covered by an App Cloner / Zetsu window header
+-- Force NaruUI launcher circle to be ALWAYS visible and act as a
+-- min/restore toggle (fixes the case where the built-in "−" is
+-- covered by an App Cloner / Zetsu window header). Also cleans up
+-- any stale floating N from older script versions.
 do
 	local hui = (gethui and gethui()) or game:GetService("CoreGui")
 	for _, o in ipairs(hui:GetChildren()) do
 		if o.Name == "StealAnEggMinBtn" then pcall(function() o:Destroy() end) end
 	end
 
-	local sg = Instance.new("ScreenGui")
-	sg.Name = "StealAnEggMinBtn"
-	sg.ResetOnSpawn = false
-	sg.DisplayOrder = 2_000_000_000
-	sg.IgnoreGuiInset = true
-	sg.Parent = hui
-
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.fromOffset(38, 38)
-	btn.Position = UDim2.fromOffset(4, 100)
-	btn.BackgroundColor3 = Color3.fromRGB(6, 6, 7)
-	btn.BackgroundTransparency = 0.1
-	btn.Text = "N"
-	btn.TextColor3 = Color3.fromRGB(255, 214, 10)
-	btn.TextSize = 20
-	btn.Font = Enum.Font.GothamBold
-	btn.AutoButtonColor = false
-	btn.Active = true
-	btn.Draggable = true
-	btn.Parent = sg
-	local c = Instance.new("UICorner") c.CornerRadius = UDim.new(1, 0) c.Parent = btn
-	local s = Instance.new("UIStroke") s.Color = Color3.fromRGB(255, 214, 10) s.Thickness = 1.5 s.Parent = btn
-
-	btn.MouseButton1Click:Connect(function()
-		if Window.Minimize then Window.Minimize() end
-	end)
-
-	-- Only show floating N while the window is visible (i.e. minimize button
-	-- is meaningful). When minimized, hide it — NaruUI's built-in launcher
-	-- circle takes over as the restore button.
 	task.spawn(function()
-		while sg.Parent do
-			btn.Visible = Fluent.GUI and Fluent.GUI.Enabled or false
-			task.wait(0.2)
+		local wiredLogo
+		while Fluent.GUI and Fluent.GUI.Parent do
+			local lc = hui:FindFirstChild("StealAnEggLauncher")
+			if lc then
+				if not lc.Enabled then lc.Enabled = true end
+				local logo = lc:FindFirstChild("Logo")
+				if logo and logo ~= wiredLogo then
+					wiredLogo = logo
+					logo.MouseButton1Click:Connect(function()
+						if Fluent.GUI and Fluent.GUI.Enabled then
+							if Window.Minimize then Window.Minimize() end
+						else
+							if Window.Restore then Window.Restore() end
+						end
+					end)
+				end
+			end
+			task.wait(0.3)
 		end
 	end)
 end
