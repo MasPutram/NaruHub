@@ -268,12 +268,44 @@ local Window = Fluent:CreateWindow({
 	AutoStartMinimized = false,
 })
 
--- Also remove any leftover custom floating minimize from previous versions
+-- Floating "N" minimize button (always visible) — for cases where the
+-- built-in "−" is covered by an App Cloner / Zetsu window header
 do
 	local hui = (gethui and gethui()) or game:GetService("CoreGui")
 	for _, o in ipairs(hui:GetChildren()) do
 		if o.Name == "StealAnEggMinBtn" then pcall(function() o:Destroy() end) end
 	end
+
+	local sg = Instance.new("ScreenGui")
+	sg.Name = "StealAnEggMinBtn"
+	sg.ResetOnSpawn = false
+	sg.DisplayOrder = 2_000_000_000
+	sg.IgnoreGuiInset = true
+	sg.Parent = hui
+
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.fromOffset(38, 38)
+	btn.Position = UDim2.fromOffset(4, 100)
+	btn.BackgroundColor3 = Color3.fromRGB(6, 6, 7)
+	btn.BackgroundTransparency = 0.1
+	btn.Text = "N"
+	btn.TextColor3 = Color3.fromRGB(255, 214, 10)
+	btn.TextSize = 20
+	btn.Font = Enum.Font.GothamBold
+	btn.AutoButtonColor = false
+	btn.Active = true
+	btn.Draggable = true
+	btn.Parent = sg
+	local c = Instance.new("UICorner") c.CornerRadius = UDim.new(1, 0) c.Parent = btn
+	local s = Instance.new("UIStroke") s.Color = Color3.fromRGB(255, 214, 10) s.Thickness = 1.5 s.Parent = btn
+
+	btn.MouseButton1Click:Connect(function()
+		if Fluent.GUI and Fluent.GUI.Enabled and Window.Minimize then
+			Window.Minimize()
+		elseif Window.Restore then
+			Window.Restore()
+		end
+	end)
 end
 
 -- Keep our GUI + launcher BELOW Roblox's core menu (Esc / settings) so it doesn't cover it
