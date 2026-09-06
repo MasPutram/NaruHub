@@ -1075,6 +1075,23 @@ task.spawn(function()
 		return anyPlaced
 	end
 
+	-- Locate HIP "Auto Treadmill On Return" toggle so we can pause it while placing
+	local function findHipToggle()
+		local pg = LocalPlayer:FindFirstChild("PlayerGui")
+		local hip = pg and pg:FindFirstChild("HipHub")
+		if not hip then return nil end
+		for _, d in ipairs(hip:GetDescendants()) do
+			if d:IsA("TextLabel") and d.Text == "Auto Treadmill On Return" then
+				return d.Parent and d.Parent:FindFirstChild("TextButton") or nil
+			end
+		end
+		return nil
+	end
+	local function hipToggleIsOn(btn)
+		local inner = btn and btn:FindFirstChild("Frame")
+		return inner and inner.Position.X.Scale >= 0.5
+	end
+
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoPlaceEnabled then
 			pcall(function()
@@ -1082,6 +1099,14 @@ task.spawn(function()
 				if not myPlot then return end
 				local unplaced = getUnplaced()
 				if #unplaced == 0 then return end
+
+				local hipBtn = findHipToggle()
+				local hipWasOn = hipBtn and hipToggleIsOn(hipBtn)
+				if hipWasOn and firesignal then
+					pcall(function() firesignal(hipBtn.MouseButton1Click) end)
+					task.wait(0.3)
+				end
+
 				teleportToPlot(myPlot)
 				task.wait(1)
 				local ok = tryPlaceAll(buildGrid(), unplaced)
@@ -1092,6 +1117,10 @@ task.spawn(function()
 					if #unplaced > 0 then
 						tryPlaceAll(buildGrid(), unplaced)
 					end
+				end
+
+				if hipWasOn and firesignal and hipBtn and not hipToggleIsOn(hipBtn) then
+					pcall(function() firesignal(hipBtn.MouseButton1Click) end)
 				end
 			end)
 		end
