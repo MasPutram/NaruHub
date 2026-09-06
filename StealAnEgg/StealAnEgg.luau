@@ -25,7 +25,8 @@ do
 		for _, child in ipairs(container:GetChildren()) do
 			if child.Name == "StealAnEggGUI" or child.Name == "StealAnEggDropdown"
 				or child.Name == "NaruHubMonitor" or child.Name == "StealAnEggLauncher"
-				or child.Name == "StealAnEggMinBtn" or child.Name == "Rayfield" then
+				or child.Name == "StealAnEggMinBtn" or child.Name == "Rayfield"
+				or child.Name == "NaruHubToggleBtn" then
 				child:Destroy()
 			end
 		end
@@ -272,6 +273,47 @@ local Window = Rayfield:CreateWindow({
 	},
 	KeySystem = false,
 })
+
+-- Floating "N" toggle button — always visible, click = show/hide window.
+-- Rayfield's built-in "−" is often hidden under App Cloner / Zetsu title
+-- bar on multi-instance mobile setups; this button lives in CoreGui with
+-- max DisplayOrder so nothing can cover it.
+do
+	local hui = (gethui and gethui()) or game:GetService("CoreGui")
+	for _, o in ipairs(hui:GetChildren()) do
+		if o.Name == "NaruHubToggleBtn" then pcall(function() o:Destroy() end) end
+	end
+	local sg = Instance.new("ScreenGui")
+	sg.Name = "NaruHubToggleBtn"
+	sg.ResetOnSpawn = false
+	sg.IgnoreGuiInset = true
+	sg.DisplayOrder = 2_000_000_000
+	sg.Parent = hui
+
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.fromOffset(36, 36)
+	btn.Position = UDim2.fromOffset(4, 140)
+	btn.BackgroundColor3 = Color3.fromRGB(6, 6, 7)
+	btn.BackgroundTransparency = 0.15
+	btn.Text = "N"
+	btn.TextColor3 = Color3.fromRGB(255, 214, 10)
+	btn.TextSize = 18
+	btn.Font = Enum.Font.GothamBold
+	btn.AutoButtonColor = false
+	btn.Active = true
+	btn.Draggable = true
+	btn.Parent = sg
+	local c = Instance.new("UICorner") c.CornerRadius = UDim.new(1, 0) c.Parent = btn
+	local s = Instance.new("UIStroke") s.Color = Color3.fromRGB(255, 214, 10) s.Thickness = 1.5 s.Parent = btn
+
+	local visible = true
+	btn.MouseButton1Click:Connect(function()
+		visible = not visible
+		pcall(function()
+			if Rayfield.SetVisibility then Rayfield:SetVisibility(visible) end
+		end)
+	end)
+end
 
 -- Scrub any "Rayfield" branding text that Rayfield renders (loading
 -- subtitle, footer, etc). Runs in the background because these show
