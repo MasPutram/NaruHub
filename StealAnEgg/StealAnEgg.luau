@@ -1136,6 +1136,11 @@ task.spawn(function()
 					pcall(function() firesignal(hipBtn.MouseButton1Click) end)
 				end
 			end)
+			-- Auto turn OFF the toggle so UI matches the "done" state
+			pcall(function()
+				local t = Fluent.Options and Fluent.Options["AutoPlaceToggle"]
+				if t and t.SetValue then t:SetValue(false) end
+			end)
 		end
 	end
 end)
