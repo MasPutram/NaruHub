@@ -223,6 +223,30 @@ end
 ------------------------------------------------------------
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
+-- Silence Rayfield's built-in intro notify (big star + "Rayfield" splash
+-- that pops in the middle of the screen on first exec).
+pcall(function() Rayfield.Notify = function() end end)
+-- Also destroy any Notifications ScreenGui the library creates
+task.spawn(function()
+	local hui = (gethui and gethui()) or game:GetService("CoreGui")
+	local coreGui = game:GetService("CoreGui")
+	for _ = 1, 20 do
+		for _, container in ipairs({ hui, coreGui }) do
+			for _, child in ipairs(container:GetChildren()) do
+				if child:IsA("ScreenGui") and (child.Name:lower():find("notif") or child.Name == "Rayfield") then
+					-- Sniff for the splash: hide any full-screen ImageLabel with "rayfield" branding
+					for _, d in ipairs(child:GetDescendants()) do
+						if d:IsA("ImageLabel") and d.AbsoluteSize.Y > 100 then
+							pcall(function() d.Visible = false end)
+						end
+					end
+				end
+			end
+		end
+		task.wait(0.15)
+	end
+end)
+
 -- Runtime kill switch for our background loops (replaces the old
 -- Fluent.GUI/Fluent.Unloaded checks). Any prior instance flips its
 -- own copy to true when the new instance runs cleanup at the top.
