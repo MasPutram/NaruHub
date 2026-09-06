@@ -849,20 +849,27 @@ task.spawn(function()
 	local TreadmillClient = require(LocalPlayer.PlayerScripts.GUI.TreadmillUpgrade.Client)
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		pcall(function()
-			local stats = SaveModule.Get()
-			local nextLevel, config = BaseUpgrade.ResolveNextTier(stats)
-			if nextLevel and config and BaseUpgrade.IsNextTierAffordable(stats) then
-				BaseUpgrade.PurchaseNextTier()
-			end
-		end)
+		local treadmillBusy = false
 		pcall(function()
 			local stats = SaveModule.Get()
 			local nextLevel, config = TreadmillClient.GetNextConfig(stats)
-			if nextLevel and config and TreadmillClient.CanAffordNext(stats) then
-				TreadmillClient.RequestCashUpgrade()
+			if nextLevel and config then
+				if TreadmillClient.CanAffordNext(stats) then
+					TreadmillClient.RequestCashUpgrade()
+				end
+				-- Treadmill still has tiers left → hold pen upgrades, priority is treadmill
+				treadmillBusy = true
 			end
 		end)
+		if not treadmillBusy then
+			pcall(function()
+				local stats = SaveModule.Get()
+				local nextLevel, config = BaseUpgrade.ResolveNextTier(stats)
+				if nextLevel and config and BaseUpgrade.IsNextTierAffordable(stats) then
+					BaseUpgrade.PurchaseNextTier()
+				end
+			end)
+		end
 		task.wait(5)
 	end
 end)
