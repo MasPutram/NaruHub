@@ -360,12 +360,19 @@ section:AddToggle("AutoSellToggle", {
 	end,
 })
 
+-- Auto Place is one-shot per toggle activation:
+--   ON  -> wait 10s (let HIP settle) then run ONE pass, then rest
+--   OFF -> stop rest state, next ON will fire another pass
 local autoPlaceEnabled = false
+local autoPlaceTrigger = 0
 section:AddToggle("AutoPlaceToggle", {
-	Title = "Auto Place Eggs",
+	Title = "Auto Place Eggs (1x)",
 	Default = false,
 	Callback = function(val)
 		autoPlaceEnabled = val
+		if val then
+			autoPlaceTrigger = autoPlaceTrigger + 1
+		end
 	end,
 })
 
@@ -1092,8 +1099,14 @@ task.spawn(function()
 		return inner and inner.Position.X.Scale >= 0.5
 	end
 
+	local lastConsumedTrigger = 0
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		if autoPlaceEnabled then
+		task.wait(1)
+		if autoPlaceEnabled and autoPlaceTrigger > lastConsumedTrigger then
+			lastConsumedTrigger = autoPlaceTrigger
+			-- Let script HIP / other autoexec scripts settle first
+			task.wait(10)
+			if not autoPlaceEnabled then continue end
 			pcall(function()
 				local myPlot = findMyPlot()
 				if not myPlot then return end
@@ -1110,7 +1123,7 @@ task.spawn(function()
 				teleportToPlot(myPlot)
 				task.wait(1)
 				local ok = tryPlaceAll(buildGrid(), unplaced)
-				if not ok and autoPlaceEnabled then
+				if not ok then
 					teleportToPlot(myPlot)
 					task.wait(2)
 					unplaced = getUnplaced()
@@ -1124,7 +1137,14 @@ task.spawn(function()
 				end
 			end)
 		end
-		task.wait(5)
+	end
+end)
+
+-- If toggle was persisted ON, seed one trigger so it runs after re-exec
+task.spawn(function()
+	task.wait(1) -- let NaruUI restore config
+	if autoPlaceEnabled then
+		autoPlaceTrigger = autoPlaceTrigger + 1
 	end
 end)
 
