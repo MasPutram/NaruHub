@@ -285,6 +285,13 @@ do
 			if lc then
 				if not lc.Enabled then lc.Enabled = true end
 				local logo = lc:FindFirstChild("Logo")
+				if logo then
+					-- Force logo below the Roblox topbar (default 20,20 lands on
+					-- the menu/chat/backpack icons that steal our taps)
+					if logo.Position ~= UDim2.fromOffset(4, 88) then
+						logo.Position = UDim2.fromOffset(4, 88)
+					end
+				end
 				if logo and logo ~= wiredLogo then
 					wiredLogo = logo
 					-- Disconnect NaruUI's existing MouseButton1Click handlers so
