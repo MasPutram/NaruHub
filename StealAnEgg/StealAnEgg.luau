@@ -343,13 +343,15 @@ task.spawn(function()
 			if not scaled then
 				local main = rf:FindFirstChild("Main")
 				if main then
+					-- Narrow compact size for mobile App Cloner panes
+					pcall(function() main.Size = UDim2.fromOffset(300, 360) end)
 					local existing = main:FindFirstChildOfClass("UIScale")
 					if not existing then
 						local sc = Instance.new("UIScale")
-						sc.Scale = 0.55
+						sc.Scale = 0.75
 						sc.Parent = main
 					else
-						existing.Scale = 0.55
+						existing.Scale = 0.75
 					end
 					scaled = true
 				end
