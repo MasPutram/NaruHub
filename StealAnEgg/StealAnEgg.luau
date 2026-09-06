@@ -273,6 +273,27 @@ local Window = Rayfield:CreateWindow({
 	KeySystem = false,
 })
 
+-- Scrub any "Rayfield" branding text that Rayfield renders (loading
+-- subtitle, footer, etc). Runs in the background because these show
+-- up over the first few frames after CreateWindow.
+task.spawn(function()
+	local hui = (gethui and gethui()) or game:GetService("CoreGui")
+	for _ = 1, 30 do
+		local rf = hui:FindFirstChild("Rayfield")
+		if rf then
+			for _, d in ipairs(rf:GetDescendants()) do
+				if d:IsA("TextLabel") or d:IsA("TextButton") then
+					local ok, txt = pcall(function() return d.Text end)
+					if ok and txt and string.find(string.lower(txt), "rayfield") then
+						pcall(function() d.Text = "" end)
+					end
+				end
+			end
+		end
+		task.wait(0.2)
+	end
+end)
+
 local MainTab = Window:CreateTab("Main", nil)
 
 local usernamePara = MainTab:CreateParagraph({
