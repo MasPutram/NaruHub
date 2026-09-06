@@ -402,7 +402,7 @@ task.spawn(function()
 					end
 				end
 			end
-			-- Tighten spacing: shrink UIListLayout padding and UIPadding
+			-- Tighten spacing + shrink text sizes a little
 			for _, d in ipairs(rf:GetDescendants()) do
 				if d:IsA("UIListLayout") then
 					pcall(function() d.Padding = UDim.new(0, 3) end)
@@ -410,6 +410,12 @@ task.spawn(function()
 					pcall(function()
 						d.PaddingTop = UDim.new(0, 3)
 						d.PaddingBottom = UDim.new(0, 3)
+					end)
+				elseif d:IsA("TextLabel") or d:IsA("TextButton") then
+					pcall(function()
+						if d.TextSize and d.TextSize > 10 then
+							d.TextSize = math.max(10, d.TextSize - 3)
+						end
 					end)
 				end
 			end
