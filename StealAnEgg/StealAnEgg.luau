@@ -481,6 +481,7 @@ MainTab:CreateButton({
 	Callback = function()
 		if hopBusy then return end
 		hopBusy = true
+		monitorPara:Set({ Content = "Hop: fetching servers..." })
 		task.spawn(function()
 			local TeleportService = game:GetService("TeleportService")
 			local HttpService = game:GetService("HttpService")
@@ -495,18 +496,24 @@ MainTab:CreateButton({
 			local function fetchCandidates()
 				local cursor
 				local candidates = {}
-				for _ = 1, 5 do
+				for page = 1, 5 do
 					local url = "https://games.roblox.com/v1/games/" .. placeId ..
 						"/servers/Public?sortOrder=Asc&limit=100" ..
 						(cursor and ("&cursor=" .. cursor) or "")
 					local ok, body = pcall(function()
 						return game:HttpGet(url)
 					end)
-					if not ok then break end
+					if not ok then
+						monitorPara:Set({ Content = "Hop: HttpGet err p" .. page })
+						break
+					end
 					local ok2, data = pcall(function()
 						return HttpService:JSONDecode(body)
 					end)
-					if not ok2 or not data or not data.data then break end
+					if not ok2 or not data or not data.data then
+						monitorPara:Set({ Content = "Hop: JSON err p" .. page })
+						break
+					end
 					for _, s in ipairs(data.data) do
 						if s.id ~= currentJobId and s.playing and s.playing >= 1
 							and s.playing <= 3 and s.playing < (s.maxPlayers or 6) then
@@ -520,7 +527,13 @@ MainTab:CreateButton({
 				return candidates
 			end
 
-			local candidates = fetchCandidates()
+			local ok, candidates = pcall(fetchCandidates)
+			if not ok then
+				monitorPara:Set({ Content = "Hop err: " .. tostring(candidates):sub(1, 40) })
+				failConn:Disconnect()
+				hopBusy = false
+				return
+			end
 			if #candidates == 0 then
 				monitorPara:Set({ Content = "No 1-3p server found" })
 				failConn:Disconnect()
@@ -535,21 +548,19 @@ MainTab:CreateButton({
 				pcall(function()
 					TeleportService:TeleportToPlaceInstance(placeId, c.id, LocalPlayer)
 				end)
-				-- wait for either successful teleport (script torn down) or TeleportInitFailed
 				local waited = 0
 				while waited < 8 and lastFailReason == nil do
 					task.wait(0.5)
-					waited += 0.5
+					waited = waited + 0.5
 				end
 				if lastFailReason == nil then
-					-- teleport in progress or succeeded
 					break
 				end
 			end
 
 			failConn:Disconnect()
 			if lastFailReason then
-				monitorPara:Set({ Content = "Hop failed: " .. lastFailReason:sub(1, 30) })
+				monitorPara:Set({ Content = "Hop failed: " .. tostring(lastFailReason):sub(1, 30) })
 			end
 			hopBusy = false
 		end)
