@@ -306,6 +306,16 @@ do
 			Window.Restore()
 		end
 	end)
+
+	-- Suppress the NaruUI launcher (built-in round "N") — our floating N
+	-- already handles restore, no need for a second circle on the screen
+	task.spawn(function()
+		while sg.Parent do
+			local lc = hui:FindFirstChild("StealAnEggLauncher")
+			if lc and lc.Enabled then lc.Enabled = false end
+			task.wait(0.2)
+		end
+	end)
 end
 
 -- Keep our GUI + launcher BELOW Roblox's core menu (Esc / settings) so it doesn't cover it
