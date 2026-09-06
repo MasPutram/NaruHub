@@ -300,19 +300,15 @@ do
 	local s = Instance.new("UIStroke") s.Color = Color3.fromRGB(255, 214, 10) s.Thickness = 1.5 s.Parent = btn
 
 	btn.MouseButton1Click:Connect(function()
-		if Fluent.GUI and Fluent.GUI.Enabled and Window.Minimize then
-			Window.Minimize()
-		elseif Window.Restore then
-			Window.Restore()
-		end
+		if Window.Minimize then Window.Minimize() end
 	end)
 
-	-- Suppress the NaruUI launcher (built-in round "N") — our floating N
-	-- already handles restore, no need for a second circle on the screen
+	-- Only show floating N while the window is visible (i.e. minimize button
+	-- is meaningful). When minimized, hide it — NaruUI's built-in launcher
+	-- circle takes over as the restore button.
 	task.spawn(function()
 		while sg.Parent do
-			local lc = hui:FindFirstChild("StealAnEggLauncher")
-			if lc and lc.Enabled then lc.Enabled = false end
+			btn.Visible = Fluent.GUI and Fluent.GUI.Enabled or false
 			task.wait(0.2)
 		end
 	end)
