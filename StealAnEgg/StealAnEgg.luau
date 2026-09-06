@@ -1112,8 +1112,10 @@ task.spawn(function()
 
 				local hipBtn = findHipToggle()
 				local hipWasOn = hipBtn and hipToggleIsOn(hipBtn)
+				local weFiredOff = false
 				if hipWasOn and firesignal then
 					pcall(function() firesignal(hipBtn.MouseButton1Click) end)
+					weFiredOff = true
 					task.wait(0.3)
 				end
 
@@ -1129,16 +1131,16 @@ task.spawn(function()
 					end
 				end
 
-				-- Re-enable HIP AutoTreadmill (re-lookup btn in case HIP re-rendered)
-				if hipWasOn and firesignal then
-					local hipBtn2 = findHipToggle()
-					if hipBtn2 and not hipToggleIsOn(hipBtn2) then
-						pcall(function() firesignal(hipBtn2.MouseButton1Click) end)
-						task.wait(0.5)
-						-- Retry once if it didn't flip
-						if not hipToggleIsOn(hipBtn2) then
-							pcall(function() firesignal(hipBtn2.MouseButton1Click) end)
-						end
+				-- Re-enable HIP AutoTreadmill: we fired 1 OFF earlier, so fire N ONs
+				-- until state comes back to ON (or up to 3 attempts). Re-lookup btn
+				-- in case HIP re-rendered its GUI mid-pass.
+				if weFiredOff and firesignal then
+					for attempt = 1, 3 do
+						local b = findHipToggle()
+						if not b then break end
+						if hipToggleIsOn(b) then break end
+						pcall(function() firesignal(b.MouseButton1Click) end)
+						task.wait(0.4)
 					end
 				end
 
