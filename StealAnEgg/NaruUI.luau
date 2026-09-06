@@ -310,14 +310,27 @@ return (function()
 			end)
 
 			--==============================================================
-			-- Minimize: klik "-" -> window sembunyi, badge logo bulat ngambang
-			-- muncul di pojok kiri atas (bisa di-drag, klik logo = restore).
+			-- Minimize: single always-visible circle button. Click toggles
+			-- show/hide of the window. Parented to CoreGui directly (NOT
+			-- gethui/RobloxGui) so Arceus X can't strip it; DisplayOrder
+			-- maxed so nothing covers it; positioned below Roblox topbar
+			-- so mobile menu/chat/backpack icons don't steal taps.
 			--==============================================================
 			do
-				local hui = (gethui and gethui()) or game:GetService("CoreGui")
+				local coreGui = game:GetService("CoreGui")
+				local hui = coreGui
 				for _, o in ipairs(hui:GetChildren()) do
 					if o.Name == (configPrefix .. "Launcher") then
 						pcall(function() o:Destroy() end)
+					end
+				end
+				-- Also clean stale copies under gethui() (older versions)
+				local altHui = (gethui and gethui()) or nil
+				if altHui and altHui ~= coreGui then
+					for _, o in ipairs(altHui:GetChildren()) do
+						if o.Name == (configPrefix .. "Launcher") then
+							pcall(function() o:Destroy() end)
+						end
 					end
 				end
 
@@ -325,14 +338,18 @@ return (function()
 				launcher.Name = configPrefix .. "Launcher"
 				launcher.ResetOnSpawn = false
 				launcher.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-				launcher.DisplayOrder = 9999
-				launcher.Enabled = false -- tampil hanya saat minimize
-				launcher.Parent = hui
+				launcher.IgnoreGuiInset = true
+				launcher.DisplayOrder = 2_000_000_000
+				launcher.Enabled = true -- ALWAYS visible now (both min & restore)
+				pcall(function() launcher.Parent = hui end)
+				if not launcher.Parent then
+					launcher.Parent = altHui or game.Players.LocalPlayer:WaitForChild("PlayerGui")
+				end
 
 				local logoBtn = Instance.new("ImageButton")
 				logoBtn.Name = "Logo"
-				logoBtn.Size = UDim2.fromOffset(48, 48)
-				logoBtn.Position = UDim2.new(0, 20, 0, 20)
+				logoBtn.Size = UDim2.fromOffset(42, 42)
+				logoBtn.Position = UDim2.fromOffset(4, 100)
 				logoBtn.BackgroundColor3 = Color3.fromRGB(6, 6, 7)
 				logoBtn.BackgroundTransparency = 0.02
 				logoBtn.AutoButtonColor = false
@@ -373,7 +390,7 @@ return (function()
 					pcall(function()
 						Fluent.GUI.Enabled = not state
 					end)
-					launcher.Enabled = state
+					-- launcher stays visible always so user can restore
 				end
 
 				pcall(function()
@@ -422,7 +439,9 @@ return (function()
 					if input.UserInputType == Enum.UserInputType.MouseButton1
 						or input.UserInputType == Enum.UserInputType.Touch then
 						if dragging and not movedFar then
-							setMinimized(false)
+							-- Toggle: minimize if visible, restore if hidden
+							local visible = Fluent.GUI and Fluent.GUI.Enabled
+							setMinimized(visible)
 						end
 						dragging = false
 					end
