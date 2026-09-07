@@ -262,6 +262,10 @@ export default function DashboardPage() {
       case "egg_desc":
         sorted.sort((a, b) => (Number(b.stolenCount) || 0) - (Number(a.stolenCount) || 0));
         break;
+      case "akun_baru":
+        return sorted
+          .filter((a) => (a.kandangLevel ?? -1) === 0)
+          .sort((a, b) => (Number(b.incomeAktif) || 0) - (Number(a.incomeAktif) || 0));
       default:
         sorted.sort((a, b) => {
           const na = accountNumber(a.sourceAccount);
@@ -492,6 +496,7 @@ export default function DashboardPage() {
           <option value="income_aktif_desc">Income Potensi Pet Aktif (Tertinggi)</option>
           <option value="income_pasif_desc">Income Pasif (Tertinggi)</option>
           <option value="egg_desc">Egg Terbanyak</option>
+          <option value="akun_baru">Akun Baru (Kandang 0)</option>
         </select>
         <label>Device:</label>
         <input
