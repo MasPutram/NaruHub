@@ -36,18 +36,13 @@ export default function LoginPage() {
   }
 
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-      `}</style>
-      <div style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "#09090b",
-        fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
-      }}>
+    <div style={{
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "#09090b",
+    }}>
         <form onSubmit={handleSubmit} style={{
           background: "#0f0f11",
           border: "1px solid #27272a",
@@ -152,6 +147,5 @@ export default function LoginPage() {
           </button>
         </form>
       </div>
-    </>
   );
 }
