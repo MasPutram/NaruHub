@@ -310,10 +310,10 @@ function mutBadgeStyle(mut: string): BadgeStyle {
   }
   if (m === "boss" || m.includes("fractured")) {
     return {
-      background: "linear-gradient(90deg,#581c87,#7c3aed,#a855f7,#7c3aed,#581c87)",
+      background: "linear-gradient(90deg,#0f0a1a,#2e1065,#7c3aed,#2e1065,#0f0a1a)",
       color: "#ffffff",
-      borderColor: "#581c87",
-      textShadow: "0 1px 2px rgba(0,0,0,0.4)",
+      borderColor: "#2e1065",
+      textShadow: "0 1px 2px rgba(0,0,0,0.5)",
     };
   }
   return { background: "#dbeafe", color: "#1d4ed8", borderColor: "#2563eb" };
@@ -332,7 +332,7 @@ function mutTextStyle(mut: string): BadgeStyle {
   }
   if (m === "boss" || m.includes("fractured")) {
     return {
-      background: "linear-gradient(90deg,#581c87,#7c3aed,#a855f7,#7c3aed,#581c87)",
+      background: "linear-gradient(90deg,#0f0a1a,#2e1065,#7c3aed,#2e1065,#0f0a1a)",
       WebkitBackgroundClip: "text",
       backgroundClip: "text",
       WebkitTextFillColor: "transparent",
