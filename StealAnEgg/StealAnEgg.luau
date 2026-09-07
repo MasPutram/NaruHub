@@ -945,18 +945,13 @@ task.spawn(function()
 	local BaseUpgrade = require(ReplicatedStorage.Client.BaseUpgrade)
 	local TreadmillClient = require(LocalPlayer.PlayerScripts.GUI.TreadmillUpgrade.Client)
 
-	-- Keep TM 2 levels ahead of Pen:
-	--   TM_level - Pen_level < 2 -> upgrade TM (if affordable)
-	--   TM_level - Pen_level >= 2 -> upgrade Pen (if affordable)
-	local LEVEL_GAP = 2
+	-- Strict priority: pen only fires after treadmill is fully maxed.
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		pcall(function()
 			local stats = SaveModule.Get()
-			local penLevel = stats.BaseUpgradeLevel or 0
-			local tmLevel = stats.TreadmillUpgradeLevel or 0
 			local tmMaxed = TreadmillClient.GetNextConfig(stats) == nil
 
-			if not tmMaxed and (tmLevel - penLevel) < LEVEL_GAP then
+			if not tmMaxed then
 				if TreadmillClient.CanAffordNext(stats) then
 					TreadmillClient.RequestCashUpgrade()
 				end
