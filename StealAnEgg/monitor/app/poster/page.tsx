@@ -198,17 +198,16 @@ function petRarity(category: string, index: Record<string, string>): string | nu
 const DIVINE_RARITIES = new Set(["Divine", "Eternal"]);
 
 const RARITY_RANK: Record<string, number> = {
-  prismatic: 0, rainbow: 0,
+  divine: 0,
   eternal: 1,
-  divine: 2,
-  secret: 3,
-  mythicgod: 4, god: 4, godly: 4,
-  mythical: 5, mythic: 5,
-  legendary: 6,
-  epic: 7,
-  rare: 8,
-  uncommon: 9,
-  common: 10,
+  secret: 2,
+  mythicgod: 3, god: 3, godly: 3,
+  mythical: 4, mythic: 4,
+  legendary: 5,
+  epic: 6,
+  rare: 7,
+  uncommon: 8,
+  common: 9,
 };
 
 function rarityRank(category: string, index: Record<string, string>): number {
