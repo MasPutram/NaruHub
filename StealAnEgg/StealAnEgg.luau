@@ -1134,7 +1134,12 @@ task.spawn(function()
 		if not hip then return nil end
 		for _, d in ipairs(hip:GetDescendants()) do
 			if d:IsA("TextLabel") and d.Text == "Auto Treadmill On Return" then
-				return d.Parent and d.Parent:FindFirstChild("TextButton") or nil
+				-- HipHub layout: label parent is a row (outer TextButton or
+				-- Row frame); the actual toggle switch is a TextButton child
+				-- that carries a small Frame "knob" whose Position.X.Scale
+				-- flips between 0 (OFF) and 1 (ON).
+				local p = d.Parent
+				return p and p:FindFirstChildOfClass("TextButton") or nil
 			end
 		end
 		return nil
