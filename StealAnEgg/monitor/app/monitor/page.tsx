@@ -327,7 +327,8 @@ export default function MonitorListPage() {
           {visible.map((d) => {
             const ram = pctUsed(d.stats?.ram);
             const storage = pctStorageUsed(d.stats?.storage);
-            const cpu = d.stats?.load ? Math.min(100, Math.round((d.stats.load["1m"] / 8) * 100)) : 0;
+            const cores = d.stats?.cpuCores || 4;
+            const cpu = d.stats?.load ? Math.min(100, Math.round((d.stats.load["1m"] / cores) * 100)) : 0;
             const isRenaming = renamingId === d.deviceId;
 
             return (

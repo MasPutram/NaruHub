@@ -320,6 +320,11 @@ local function collect_stats()
     df_free = tonumber(parts[4]) or 0
   end
   stats.storage = { totalMB = math.floor(df_total / 1024), freeMB = math.floor(df_free / 1024) }
+  local cpuinfo = fread("/proc/cpuinfo") or ""
+  local cores = 0
+  for _ in cpuinfo:gmatch("processor%s*:") do cores = cores + 1 end
+  if cores == 0 then cores = 4 end
+  stats.cpuCores = cores
   return stats
 end
 
