@@ -264,7 +264,7 @@ export default function DashboardPage() {
         break;
       case "akun_baru":
         return sorted
-          .filter((a) => (a.treadmillLevel ?? -1) <= 1)
+          .filter((a) => (a.treadmillLevel ?? -1) === 1)
           .sort((a, b) => (Number(b.incomeAktif) || 0) - (Number(a.incomeAktif) || 0));
       default:
         sorted.sort((a, b) => {

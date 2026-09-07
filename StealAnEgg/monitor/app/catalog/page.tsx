@@ -245,7 +245,7 @@ export default function CatalogPage() {
         list.sort((a, b) => potensi18(b) - potensi18(a));
         break;
       case "akun_baru":
-        list = list.filter((a) => (a.treadmillLevel ?? -1) <= 1);
+        list = list.filter((a) => (a.treadmillLevel ?? -1) === 1);
         list.sort((a, b) => potensi18(b) - potensi18(a));
         break;
       default:
