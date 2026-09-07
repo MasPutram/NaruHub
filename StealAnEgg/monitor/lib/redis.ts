@@ -20,6 +20,10 @@ export function forSaleKey(name: string) {
   return `forsale:${name}`;
 }
 
+export function soldKey(name: string) {
+  return `sold:${name}`;
+}
+
 export function termuxDeviceKey(deviceId: string) {
   return `termux:device:${deviceId}`;
 }
