@@ -46,10 +46,10 @@ export async function POST(req: NextRequest) {
     };
 
     const pipeline = redis.pipeline();
-    pipeline.set(accountKey(name), JSON.stringify(summary), { ex: ACCOUNT_TTL_S });
+    pipeline.set(accountKey(name), JSON.stringify(summary));
 
     if (data.fullData) {
-      pipeline.set(detailKey(name), JSON.stringify(data.fullData), { ex: ACCOUNT_TTL_S });
+      pipeline.set(detailKey(name), JSON.stringify(data.fullData));
     }
 
     const allPets = [

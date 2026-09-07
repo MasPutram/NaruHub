@@ -194,6 +194,18 @@ function fmtLevel(v: number | null | undefined): string {
   return "Lv. " + v;
 }
 
+function fmtLastSeen(lastSeen?: number): string {
+  if (!lastSeen) return "Unknown";
+  const s = Math.max(0, Math.floor(Date.now() / 1000 - lastSeen));
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ${m % 60}m ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ${h % 24}h ago`;
+}
+
 function accountNumber(name: string): number | null {
   const m = name.match(/\d+/);
   return m ? parseInt(m[0], 10) : null;
@@ -223,8 +235,8 @@ export default function DashboardPage() {
     try {
       const res = await fetch("/api/accounts");
       const data = await res.json();
-      const active = (data.accounts || []).filter((a: Account) => a.online && !a.forSale);
-      setAccounts(active);
+      const all = (data.accounts || []).filter((a: Account) => !a.forSale);
+      setAccounts(all);
     } catch {}
   }, []);
 
@@ -278,11 +290,13 @@ export default function DashboardPage() {
   }
 
   const visible = sortAccounts(filterByDevice(accounts));
+  const onlineAccounts = visible.filter((a) => a.online);
+  const offlineAccounts = visible.filter((a) => !a.online);
 
-  const totalMoney = visible.reduce((s, a) => s + (Number(a.money) || 0), 0);
-  const totalSpeed = visible.reduce((s, a) => s + (Number(a.speed) || 0), 0);
-  const totalPets = visible.reduce((s, a) => s + (Number(a.petsCount) || 0), 0);
-  const totalStolen = visible.reduce((s, a) => s + (Number(a.stolenCount) || 0), 0);
+  const totalMoney = onlineAccounts.reduce((s, a) => s + (Number(a.money) || 0), 0);
+  const totalSpeed = onlineAccounts.reduce((s, a) => s + (Number(a.speed) || 0), 0);
+  const totalPets = onlineAccounts.reduce((s, a) => s + (Number(a.petsCount) || 0), 0);
+  const totalStolen = onlineAccounts.reduce((s, a) => s + (Number(a.stolenCount) || 0), 0);
 
   async function openDetail(name: string) {
     setDetail({ name, data: null, loading: true });
@@ -368,13 +382,13 @@ export default function DashboardPage() {
   }
 
   async function generateAll() {
-    if (genAllRunning || visible.length === 0) return;
+    if (genAllRunning || onlineAccounts.length === 0) return;
     setGenAllRunning(true);
     let ok = 0,
       fail = 0;
-    for (let i = 0; i < visible.length; i++) {
-      const acc = visible[i].sourceAccount;
-      setGenAllStatus(`Generate ${i + 1}/${visible.length}: ${acc}...`);
+    for (let i = 0; i < onlineAccounts.length; i++) {
+      const acc = onlineAccounts[i].sourceAccount;
+      setGenAllStatus(`Generate ${i + 1}/${onlineAccounts.length}: ${acc}...`);
       try {
         const res = await fetch("/api/generate-poster", {
           method: "POST",
@@ -387,7 +401,7 @@ export default function DashboardPage() {
       } catch {
         fail++;
       }
-      if (i < visible.length - 1) await new Promise((r) => setTimeout(r, 700));
+      if (i < onlineAccounts.length - 1) await new Promise((r) => setTimeout(r, 700));
     }
     setGenAllStatus(`Selesai: ${ok} berhasil${fail ? `, ${fail} gagal` : ""}.`);
     setGenAllRunning(false);
@@ -467,6 +481,15 @@ export default function DashboardPage() {
         .genmsg { font-size: 11px; margin-top: 6px; min-height: 14px; }
         .empty { color: var(--dim); text-align: center; padding: 60px 0; }
 
+        .offline-section { margin-top: 40px; }
+        .offline-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+        .offline-header h2 { font-size: 16px; color: var(--dim); margin: 0; font-weight: 800; }
+        .offline-badge { background: #ef4444; color: #fff; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 6px; }
+        .card.offline { opacity: 0.55; border-color: #3f3f5050; }
+        .card.offline:hover { border-color: var(--dim); opacity: 0.75; }
+        .dot.off { background: #ef4444; box-shadow: 0 0 6px #ef444466; }
+        .offline-time { color: #ef4444; font-size: 10px; font-weight: 700; }
+
         .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; z-index: 50; }
         .modal { background: var(--card); border: 1px solid var(--card-border); border-radius: 16px; padding: 24px; width: 100%; max-width: 720px; }
         .modal-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
@@ -505,7 +528,7 @@ export default function DashboardPage() {
           value={deviceFilter}
           onChange={(e) => setDeviceFilter(e.target.value)}
         />
-        <button className="genallbtn" disabled={genAllRunning || visible.length === 0} onClick={generateAll}>
+        <button className="genallbtn" disabled={genAllRunning || onlineAccounts.length === 0} onClick={generateAll}>
           Generate All Poster
         </button>
         <span className="genallstatus">{genAllStatus}</span>
@@ -513,8 +536,8 @@ export default function DashboardPage() {
 
       <div className="summary">
         <div className="sumcard">
-          <div className="label">ACTIVE ACCOUNTS</div>
-          <div className="value">{visible.length}</div>
+          <div className="label">ONLINE / OFFLINE</div>
+          <div className="value">{onlineAccounts.length} <span style={{ color: "var(--dim)", fontSize: 16 }}>/ {offlineAccounts.length}</span></div>
         </div>
         <div className="sumcard">
           <div className="label">TOTAL MONEY</div>
@@ -541,73 +564,153 @@ export default function DashboardPage() {
             : 'Belum ada akun yang lapor. Nyalain "Auto Report ke Dashboard" di GUI game.'}
         </div>
       ) : (
-        <div className="grid">
-          {visible.map((a) => (
-            <div key={a.sourceAccount} className="card" onClick={() => openDetail(a.sourceAccount)}>
-              <div className="card-head">
-                <span className={`dot ${a.online ? "online" : ""}`} />
-                <span className="name">{a.sourceAccount}</span>
-                <span className="devicetag">{deviceLabel(a.sourceAccount) || ""}</span>
-                <span className="status">{a.online ? fmtUptime(a.firstSeen) || "Active" : "Offline"}</span>
+        <>
+          {onlineAccounts.length > 0 && (
+            <div className="grid">
+              {onlineAccounts.map((a) => (
+                <div key={a.sourceAccount} className="card" onClick={() => openDetail(a.sourceAccount)}>
+                  <div className="card-head">
+                    <span className="dot online" />
+                    <span className="name">{a.sourceAccount}</span>
+                    <span className="devicetag">{deviceLabel(a.sourceAccount) || ""}</span>
+                    <span className="status">{fmtUptime(a.firstSeen) || "Active"}</span>
+                  </div>
+                  <div className="stats">
+                    <div className="stat speed">
+                      <div className="label">SPEED</div>
+                      <div className="val">{fmtCompactNum(a.speed)}</div>
+                    </div>
+                    <div className="stat money">
+                      <div className="label">CASH</div>
+                      <div className="val">{fmtMoney(a.money)}</div>
+                    </div>
+                    <div className="stat">
+                      <div className="label">INCOME POTENSI PET AKTIF</div>
+                      <div className="val">{fmtRate(a.incomeAktif)}</div>
+                    </div>
+                    <div className="stat">
+                      <div className="label">POTENSI 18 PET AKTIF</div>
+                      <div className="val">{fmtRate(a.highValuePetTotal)}</div>
+                    </div>
+                    <div className="stat">
+                      <div className="label">KANDANG LEVEL</div>
+                      <div className="val">{fmtLevel(a.kandangLevel)}</div>
+                    </div>
+                    <div className="stat">
+                      <div className="label">TREADMILL LEVEL</div>
+                      <div className="val">{fmtLevel(a.treadmillLevel)}</div>
+                    </div>
+                    <div className="stat">
+                      <div className="label">PETS</div>
+                      <div className="val">{fmtNum(a.petsCount)} pets</div>
+                    </div>
+                    <div className="stat">
+                      <div className="label">STOLEN</div>
+                      <div className="val">{fmtNum(a.stolenCount)} eggs</div>
+                    </div>
+                  </div>
+                  <PetCards pets={a.topPets || []} />
+                  <a
+                    className="genbtn"
+                    href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ display: "block", textAlign: "center", textDecoration: "none" }}
+                  >
+                    Generate Poster
+                  </a>
+                  <button
+                    className="restartbtn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      markForSale(a.sourceAccount);
+                    }}
+                  >
+                    Siap Jual
+                  </button>
+                  <div className="genmsg" style={{ color: genMsgs.current[a.sourceAccount]?.color || "var(--dim)" }}>
+                    {genMsgs.current[a.sourceAccount]?.text || ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {offlineAccounts.length > 0 && (
+            <div className="offline-section">
+              <div className="offline-header">
+                <h2>Offline Accounts</h2>
+                <span className="offline-badge">{offlineAccounts.length}</span>
               </div>
-              <div className="stats">
-                <div className="stat speed">
-                  <div className="label">SPEED</div>
-                  <div className="val">{fmtCompactNum(a.speed)}</div>
-                </div>
-                <div className="stat money">
-                  <div className="label">CASH</div>
-                  <div className="val">{fmtMoney(a.money)}</div>
-                </div>
-                <div className="stat">
-                  <div className="label">INCOME POTENSI PET AKTIF</div>
-                  <div className="val">{fmtRate(a.incomeAktif)}</div>
-                </div>
-                <div className="stat">
-                  <div className="label">POTENSI 18 PET AKTIF</div>
-                  <div className="val">{fmtRate(a.highValuePetTotal)}</div>
-                </div>
-                <div className="stat">
-                  <div className="label">KANDANG LEVEL</div>
-                  <div className="val">{fmtLevel(a.kandangLevel)}</div>
-                </div>
-                <div className="stat">
-                  <div className="label">TREADMILL LEVEL</div>
-                  <div className="val">{fmtLevel(a.treadmillLevel)}</div>
-                </div>
-                <div className="stat">
-                  <div className="label">PETS</div>
-                  <div className="val">{fmtNum(a.petsCount)} pets</div>
-                </div>
-                <div className="stat">
-                  <div className="label">STOLEN</div>
-                  <div className="val">{fmtNum(a.stolenCount)} eggs</div>
-                </div>
-              </div>
-              <PetCards pets={a.topPets || []} />
-              <a
-                className="genbtn"
-                href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`}
-                onClick={(e) => e.stopPropagation()}
-                style={{ display: "block", textAlign: "center", textDecoration: "none" }}
-              >
-                Generate Poster
-              </a>
-              <button
-                className="restartbtn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  markForSale(a.sourceAccount);
-                }}
-              >
-                Siap Jual
-              </button>
-              <div className="genmsg" style={{ color: genMsgs.current[a.sourceAccount]?.color || "var(--dim)" }}>
-                {genMsgs.current[a.sourceAccount]?.text || ""}
+              <div className="grid">
+                {offlineAccounts.map((a) => (
+                  <div key={a.sourceAccount} className="card offline" onClick={() => openDetail(a.sourceAccount)}>
+                    <div className="card-head">
+                      <span className="dot off" />
+                      <span className="name">{a.sourceAccount}</span>
+                      <span className="devicetag">{deviceLabel(a.sourceAccount) || ""}</span>
+                      <span className="offline-time">{fmtLastSeen(a.lastSeen)}</span>
+                    </div>
+                    <div className="stats">
+                      <div className="stat speed">
+                        <div className="label">SPEED</div>
+                        <div className="val">{fmtCompactNum(a.speed)}</div>
+                      </div>
+                      <div className="stat money">
+                        <div className="label">CASH</div>
+                        <div className="val">{fmtMoney(a.money)}</div>
+                      </div>
+                      <div className="stat">
+                        <div className="label">INCOME POTENSI PET AKTIF</div>
+                        <div className="val">{fmtRate(a.incomeAktif)}</div>
+                      </div>
+                      <div className="stat">
+                        <div className="label">POTENSI 18 PET AKTIF</div>
+                        <div className="val">{fmtRate(a.highValuePetTotal)}</div>
+                      </div>
+                      <div className="stat">
+                        <div className="label">KANDANG LEVEL</div>
+                        <div className="val">{fmtLevel(a.kandangLevel)}</div>
+                      </div>
+                      <div className="stat">
+                        <div className="label">TREADMILL LEVEL</div>
+                        <div className="val">{fmtLevel(a.treadmillLevel)}</div>
+                      </div>
+                      <div className="stat">
+                        <div className="label">PETS</div>
+                        <div className="val">{fmtNum(a.petsCount)} pets</div>
+                      </div>
+                      <div className="stat">
+                        <div className="label">STOLEN</div>
+                        <div className="val">{fmtNum(a.stolenCount)} eggs</div>
+                      </div>
+                    </div>
+                    <PetCards pets={a.topPets || []} />
+                    <a
+                      className="genbtn"
+                      href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ display: "block", textAlign: "center", textDecoration: "none" }}
+                    >
+                      Generate Poster
+                    </a>
+                    <button
+                      className="restartbtn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markForSale(a.sourceAccount);
+                      }}
+                    >
+                      Siap Jual
+                    </button>
+                    <div className="genmsg" style={{ color: genMsgs.current[a.sourceAccount]?.color || "var(--dim)" }}>
+                      {genMsgs.current[a.sourceAccount]?.text || ""}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
 
       {detail && (
