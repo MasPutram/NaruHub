@@ -263,11 +263,20 @@ function PetIcon({ pet, size = 48 }: { pet: Pet; size?: number }) {
   );
 }
 
+const MUTATION_DISPLAY_NAME: Record<string, string> = {
+  boss: "FRACTURED",
+};
+
+function mutDisplayName(mut: string): string {
+  return MUTATION_DISPLAY_NAME[mut.toLowerCase()] || mut.toUpperCase();
+}
+
 function mutColor(mut: string): string {
   const m = mut.toLowerCase();
   if (m.includes("rainbow")) return "#9333ea";
   if (m.includes("golden")) return "#ca8a04";
   if (m.includes("silver")) return "#64748b";
+  if (m === "boss" || m.includes("fractured")) return "#7c3aed";
   return "#2563eb";
 }
 
@@ -299,11 +308,16 @@ function mutBadgeStyle(mut: string): BadgeStyle {
       borderColor: "#64748b",
     };
   }
+  if (m === "boss" || m.includes("fractured")) {
+    return {
+      background: "linear-gradient(90deg,#ede9fe,#c4b5fd,#a78bfa)",
+      color: "#4c1d95",
+      borderColor: "#7c3aed",
+    };
+  }
   return { background: "#dbeafe", color: "#1d4ed8", borderColor: "#2563eb" };
 }
 
-// Text-only style (for inline mutation labels like "MUTASI: RAINBOW" that
-// aren't badges). Rainbow uses gradient text via background-clip.
 function mutTextStyle(mut: string): BadgeStyle {
   const m = mut.toLowerCase();
   if (m.includes("rainbow")) {
@@ -317,6 +331,7 @@ function mutTextStyle(mut: string): BadgeStyle {
   }
   if (m.includes("golden")) return { color: "#b45309" };
   if (m.includes("silver")) return { color: "#475569" };
+  if (m === "boss" || m.includes("fractured")) return { color: "#7c3aed" };
   return { color: "#2563eb" };
 }
 
@@ -380,7 +395,7 @@ function groupByMutation(pets: Pet[]): [string, Pet[]][] {
   const groups: Record<string, Pet[]> = {};
   for (const p of pets) {
     if (!p.mutations || p.mutations.length === 0) continue;
-    const key = p.mutations.map((m) => m.toUpperCase()).sort().join(" + ");
+    const key = p.mutations.map((m) => mutDisplayName(m)).sort().join(" + ");
     if (!groups[key]) groups[key] = [];
     groups[key].push(p);
   }
@@ -968,7 +983,7 @@ function PosterPage() {
                       {p.weight ? <div className="pweight">{fmtWeight(p.weight)}</div> : null}
                       {p.mutations && p.mutations.length > 0 && (
                         <div className="pmut" style={mutTextStyle(p.mutations[0])}>
-                          MUTASI: {p.mutations.map((m) => m.toUpperCase()).join(" + ")}
+                          MUTASI: {p.mutations.map((m) => mutDisplayName(m)).join(" + ")}
                         </div>
                       )}
                     </div>
@@ -998,7 +1013,7 @@ function PosterPage() {
                   <div className="featured-text">
                     {featured.mutations && featured.mutations.length > 0 && (
                       <div className="featured-mut" style={mutTextStyle(featured.mutations[0])}>
-                        {featured.mutations.map((m) => m.toUpperCase()).join(" + ")}
+                        {featured.mutations.map((m) => mutDisplayName(m)).join(" + ")}
                       </div>
                     )}
                     <div className="featured-name">{(featured.name || displayName(featured.category)).toUpperCase()}</div>
@@ -1049,7 +1064,7 @@ function PosterPage() {
                       <div style={{ minWidth: 0, overflow: "hidden" }}>
                         <div className="ename">
                           {e.mutations && e.mutations.length > 0
-                            ? e.mutations.map((m) => m.toUpperCase()).join(" + ") + " " + displayName(e.category)
+                            ? e.mutations.map((m) => mutDisplayName(m)).join(" + ") + " " + displayName(e.category)
                             : displayName(e.category)}
                         </div>
                         {e.ready ? (
@@ -1076,7 +1091,7 @@ function PosterPage() {
                       <div style={{ minWidth: 0, overflow: "hidden" }}>
                         <div className="ename">
                           {e.mutations && e.mutations.length > 0
-                            ? e.mutations.map((m) => m.toUpperCase()).join(" + ") + " " + displayName(e.category)
+                            ? e.mutations.map((m) => mutDisplayName(m)).join(" + ") + " " + displayName(e.category)
                             : displayName(e.category)}
                         </div>
                         {e.rate ? <div className="erate">{fmtRate(e.rate)}</div> : null}
@@ -1118,7 +1133,7 @@ function PosterPage() {
                         className="mut-tag"
                         style={mutBadgeStyle(p.mutations[0])}
                       >
-                        {p.mutations.map((m) => m.toUpperCase()).join(" + ")}
+                        {p.mutations.map((m) => mutDisplayName(m)).join(" + ")}
                       </div>
                     )}
                   </div>
