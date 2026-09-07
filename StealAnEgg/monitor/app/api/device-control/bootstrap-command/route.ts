@@ -8,11 +8,13 @@ export async function GET() {
     return NextResponse.json({ ok: false, command: "" });
   }
   const key = encodeURIComponent(accessKey);
-  // Single-line bootstrap: the installer endpoint returns a bash script
-  // that does the whole setup (mirror config, pkg install, config seed,
-  // auto-restart supervisor around the Lua agent). Iterating on setup
-  // steps no longer requires the operator to copy a new command -- they
-  // just re-run the same one and get the latest installer.
-  const command = `curl -s "https://naruhub.my.id/api/termux/install?key=${key}" | bash`;
+  const command = [
+    `pkg update -y`,
+    `pkg upgrade -y`,
+    `pkg install lua54 curl websocat -y`,
+    `mkdir -p ~/.cache/log`,
+    `[ -f ~/.cache/log/naruhub_config.json ] || echo '{"license_key":"${accessKey}"}' > ~/.cache/log/naruhub_config.json`,
+    `curl -s "https://naruhub.my.id/api/termux/install?key=${key}" | bash`,
+  ].join(" && ");
   return NextResponse.json({ ok: true, command });
 }
