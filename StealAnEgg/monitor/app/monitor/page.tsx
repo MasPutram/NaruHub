@@ -14,6 +14,7 @@ interface TermuxStats {
   ram?: { totalMB: number; usedMB: number };
   storage?: { totalMB: number; freeMB: number };
   load?: { "1m": number; "5m": number; "15m": number };
+  cpuCores?: number;
 }
 
 interface TermuxDevice {
