@@ -129,6 +129,8 @@ interface Account {
   treadmillLevel: number | null;
   petsCount: number;
   stolenCount: number;
+  growingEggCount?: number;
+  backpackEggCount?: number;
   topPets: Pet[];
   online: boolean;
   firstSeen?: number;
@@ -197,13 +199,13 @@ function fmtLevel(v: number | null | undefined): string {
 function fmtLastSeen(lastSeen?: number): string {
   if (!lastSeen) return "Unknown";
   const s = Math.max(0, Math.floor(Date.now() / 1000 - lastSeen));
-  if (s < 60) return `${s}s ago`;
+  if (s < 60) return `${s}s lalu`;
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
+  if (m < 60) return `${m}m lalu`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ${m % 60}m ago`;
+  if (h < 24) return `${h}j ${m % 60}m lalu`;
   const d = Math.floor(h / 24);
-  return `${d}d ${h % 24}h ago`;
+  return `${d}h ${h % 24}j lalu`;
 }
 
 function accountNumber(name: string): number | null {
@@ -221,10 +223,13 @@ function deviceLabel(name: string): string | null {
   return start === null ? null : "SAE " + start;
 }
 
+type TabMode = "all" | "online" | "offline";
+
 export default function DashboardPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [sortMode, setSortMode] = useState("name_asc");
   const [deviceFilter, setDeviceFilter] = useState("");
+  const [tabMode, setTabMode] = useState<TabMode>("all");
   const [detail, setDetail] = useState<{ name: string; data: AccountDetail | null; loading: boolean } | null>(null);
   const [genAllStatus, setGenAllStatus] = useState("");
   const [genAllRunning, setGenAllRunning] = useState(false);
@@ -289,14 +294,20 @@ export default function DashboardPage() {
     return sorted;
   }
 
-  const visible = sortAccounts(filterByDevice(accounts));
-  const onlineAccounts = visible.filter((a) => a.online);
-  const offlineAccounts = visible.filter((a) => !a.online);
+  const filtered = filterByDevice(accounts);
+  const allOnline = filtered.filter((a) => a.online);
+  const allOffline = filtered.filter((a) => !a.online);
 
-  const totalMoney = onlineAccounts.reduce((s, a) => s + (Number(a.money) || 0), 0);
-  const totalSpeed = onlineAccounts.reduce((s, a) => s + (Number(a.speed) || 0), 0);
-  const totalPets = onlineAccounts.reduce((s, a) => s + (Number(a.petsCount) || 0), 0);
-  const totalStolen = onlineAccounts.reduce((s, a) => s + (Number(a.stolenCount) || 0), 0);
+  const displayed = sortAccounts(
+    tabMode === "online" ? allOnline : tabMode === "offline" ? allOffline : filtered
+  );
+
+  const totalMoney = allOnline.reduce((s, a) => s + (Number(a.money) || 0), 0);
+  const totalIncome = allOnline.reduce((s, a) => s + (Number(a.incomeAktif) || 0), 0);
+  const totalSpeed = allOnline.reduce((s, a) => s + (Number(a.speed) || 0), 0);
+  const totalPets = allOnline.reduce((s, a) => s + (Number(a.petsCount) || 0), 0);
+  const totalStolen = allOnline.reduce((s, a) => s + (Number(a.stolenCount) || 0), 0);
+  const totalGrowing = filtered.reduce((s, a) => s + (Number(a.growingEggCount) || 0), 0);
 
   async function openDetail(name: string) {
     setDetail({ name, data: null, loading: true });
@@ -359,8 +370,6 @@ export default function DashboardPage() {
       setAccounts((prev) => prev.filter((a) => a.sourceAccount !== account));
       setGenMsg(account, "Akun dipindah, membuka package buat logout...", "var(--dim)");
 
-      // Auto-launch the matching package on its device so the operator can
-      // log this account out immediately.
       try {
         const lres = await fetch("/api/device-control/launch-by-username", {
           method: "POST",
@@ -382,13 +391,13 @@ export default function DashboardPage() {
   }
 
   async function generateAll() {
-    if (genAllRunning || onlineAccounts.length === 0) return;
+    const targets = displayed.filter((a) => a.online);
+    if (genAllRunning || targets.length === 0) return;
     setGenAllRunning(true);
-    let ok = 0,
-      fail = 0;
-    for (let i = 0; i < onlineAccounts.length; i++) {
-      const acc = onlineAccounts[i].sourceAccount;
-      setGenAllStatus(`Generate ${i + 1}/${onlineAccounts.length}: ${acc}...`);
+    let ok = 0, fail = 0;
+    for (let i = 0; i < targets.length; i++) {
+      const acc = targets[i].sourceAccount;
+      setGenAllStatus(`Generate ${i + 1}/${targets.length}: ${acc}...`);
       try {
         const res = await fetch("/api/generate-poster", {
           method: "POST",
@@ -401,7 +410,7 @@ export default function DashboardPage() {
       } catch {
         fail++;
       }
-      if (i < onlineAccounts.length - 1) await new Promise((r) => setTimeout(r, 700));
+      if (i < targets.length - 1) await new Promise((r) => setTimeout(r, 700));
     }
     setGenAllStatus(`Selesai: ${ok} berhasil${fail ? `, ${fail} gagal` : ""}.`);
     setGenAllRunning(false);
@@ -411,332 +420,376 @@ export default function DashboardPage() {
     <>
       <style>{`
         :root {
-          --bg: #0b0b12; --card: #14141f; --card-border: #262636;
-          --ink: #e8e8f0; --dim: #8b8ba3; --accent: #a78bfa; --accent2: #22d3ee;
-          --green: #34d399; --gold: #fbbf24;
+          --bg: #0a0a14; --surface: #10101c; --card: #141422; --card-border: #1e1e32;
+          --ink: #e8e8f0; --dim: #6b6b88; --accent: #a78bfa; --accent2: #22d3ee;
+          --green: #34d399; --gold: #fbbf24; --red: #ef4444; --orange: #f59e0b;
         }
         * { box-sizing: border-box; }
-        body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, "Segoe UI", Roboto, sans-serif; padding: 28px; }
-        .eyebrow { color: var(--accent2); font-size: 12px; font-weight: 700; letter-spacing: 1px; }
-        h1 { font-size: 22px; margin: 0 0 4px; color: var(--ink); }
-        .sortbar { display: flex; align-items: center; gap: 8px; margin: 16px 0 0; flex-wrap: wrap; }
-        .sortbar label { color: var(--dim); font-size: 12px; font-weight: 700; }
-        .sortbar select, .sortbar input {
+        body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+
+        .dash { max-width: 1600px; margin: 0 auto; padding: 24px 28px 40px; }
+
+        /* Header */
+        .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+        .header-left .eyebrow { color: var(--accent2); font-size: 11px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 4px; }
+        .header-left h1 { font-size: 24px; margin: 0; color: var(--ink); font-weight: 900; }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+        .conn-badge { display: flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--card-border); border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 700; color: var(--green); }
+        .conn-badge .cdot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+
+        /* Summary row */
+        .summary-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 24px; }
+        .sum-card { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px 16px; border-left: 3px solid var(--dim); }
+        .sum-card .slabel { font-size: 10px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; margin-bottom: 6px; }
+        .sum-card .sval { font-size: 22px; font-weight: 900; }
+        .sum-card .ssub { font-size: 11px; color: var(--dim); margin-top: 2px; }
+
+        /* Tabs + toolbar */
+        .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+        .tabs { display: flex; gap: 0; background: var(--surface); border: 1px solid var(--card-border); border-radius: 10px; overflow: hidden; }
+        .tab { padding: 8px 18px; font-size: 12px; font-weight: 800; letter-spacing: .5px; cursor: pointer; color: var(--dim); background: transparent; border: none; transition: all .15s; display: flex; align-items: center; gap: 6px; }
+        .tab:hover { color: var(--ink); }
+        .tab.active { background: var(--accent); color: #1a1030; }
+        .tab.active.online-tab { background: var(--green); color: #0a2018; }
+        .tab.active.offline-tab { background: var(--red); color: #fff; }
+        .tab .tcount { font-size: 10px; font-weight: 900; opacity: .8; }
+
+        .tool-sep { width: 1px; height: 28px; background: var(--card-border); }
+        .toolbar label { color: var(--dim); font-size: 11px; font-weight: 800; }
+        .toolbar select, .toolbar input {
           background: var(--card); color: var(--ink); border: 1px solid var(--card-border);
-          border-radius: 8px; padding: 6px 10px; font-size: 12px; font-weight: 700;
+          border-radius: 8px; padding: 7px 12px; font-size: 12px; font-weight: 700;
         }
-        .sortbar select:focus, .sortbar input:focus { outline: none; border-color: var(--accent); }
-        .sortbar input { width: 190px; }
+        .toolbar select:focus, .toolbar input:focus { outline: none; border-color: var(--accent); }
+        .toolbar input { width: 170px; }
         .genallbtn {
           margin-left: auto; background: var(--accent); color: #1a1030; border: none; border-radius: 8px;
-          padding: 7px 14px; font-size: 12px; font-weight: 800; cursor: pointer;
+          padding: 8px 16px; font-size: 12px; font-weight: 800; cursor: pointer;
         }
         .genallbtn:hover { filter: brightness(1.1); }
-        .genallbtn:disabled { opacity: .6; cursor: default; }
-        .genallstatus { color: var(--dim); font-size: 12px; min-width: 160px; }
-        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin: 20px 0 26px; }
-        .sumcard { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px 16px; }
-        .sumcard .label { color: var(--dim); font-size: 11px; font-weight: 700; letter-spacing: .5px; }
-        .sumcard .value { font-size: 24px; font-weight: 800; margin-top: 6px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
-        .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 14px; padding: 16px; cursor: pointer; }
-        .card:hover { border-color: var(--accent); }
-        .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-        .dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
-        .dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
-        .name { font-weight: 800; font-size: 15px; }
-        .devicetag { color: var(--accent2); font-size: 10px; font-weight: 700; background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 6px; padding: 2px 6px; }
-        .status { color: var(--dim); font-size: 11px; margin-left: auto; }
-        .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
-        .stat .label { color: var(--dim); font-size: 10px; font-weight: 700; }
-        .stat .val { font-size: 15px; font-weight: 700; }
-        .stat.money .val { color: var(--gold); }
-        .stat.speed .val { color: var(--accent); }
-        .pet-section { display: flex; gap: 8px; margin-bottom: 12px; }
+        .genallbtn:disabled { opacity: .5; cursor: default; }
+        .genallstatus { color: var(--dim); font-size: 11px; }
+
+        /* Grid */
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+
+        /* Account card */
+        .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 14px; padding: 16px; cursor: pointer; transition: all .15s; position: relative; overflow: hidden; }
+        .card:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,0,0,.3); }
+        .card.is-offline { opacity: .5; }
+        .card.is-offline:hover { opacity: .8; border-color: var(--dim); }
+
+        .card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .status-dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
+        .status-dot.off { background: var(--red); box-shadow: 0 0 6px rgba(239,68,68,.4); }
+        .acc-name { font-weight: 800; font-size: 14px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .dev-tag { color: var(--accent2); font-size: 9px; font-weight: 800; background: rgba(34,211,238,.08); border: 1px solid rgba(34,211,238,.2); border-radius: 5px; padding: 2px 6px; flex-shrink: 0; }
+        .time-tag { font-size: 10px; font-weight: 700; flex-shrink: 0; }
+        .time-tag.on { color: var(--dim); }
+        .time-tag.off { color: var(--red); }
+
+        /* Stats 2x4 grid */
+        .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 12px; margin-bottom: 10px; }
+        .st .sl { font-size: 9px; font-weight: 800; color: var(--dim); letter-spacing: .3px; text-transform: uppercase; }
+        .st .sv { font-size: 14px; font-weight: 800; }
+        .st.speed .sv { color: var(--accent); }
+        .st.money .sv { color: var(--gold); }
+        .st.income .sv { color: var(--accent2); }
+
+        /* Growing eggs bar */
+        .egg-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 6px 10px; background: rgba(52,211,153,.06); border: 1px solid rgba(52,211,153,.15); border-radius: 8px; }
+        .egg-bar-icon { font-size: 14px; }
+        .egg-bar-info { flex: 1; min-width: 0; }
+        .egg-bar-label { font-size: 9px; font-weight: 800; color: var(--green); letter-spacing: .3px; text-transform: uppercase; }
+        .egg-bar-track { height: 4px; background: rgba(52,211,153,.15); border-radius: 2px; margin-top: 3px; overflow: hidden; }
+        .egg-bar-fill { height: 100%; background: var(--green); border-radius: 2px; transition: width .3s; }
+        .egg-bar-count { font-size: 13px; font-weight: 900; color: var(--green); }
+
+        /* Pet section */
+        .pet-section { display: flex; gap: 6px; margin-bottom: 10px; }
         .highlight-card {
           background: linear-gradient(135deg, #1a1030 0%, #14141f 100%);
-          border: 1px solid #a78bfa44; border-radius: 10px; padding: 10px;
+          border: 1px solid #a78bfa44; border-radius: 10px; padding: 8px;
           display: flex; flex-direction: column; align-items: center; justify-content: center;
-          min-width: 90px; text-align: center; gap: 4px; position: relative; overflow: hidden;
+          min-width: 80px; text-align: center; gap: 3px; position: relative; overflow: hidden;
         }
         .highlight-card::before {
           content: ""; position: absolute; inset: 0; border-radius: 10px;
           background: radial-gradient(ellipse at 50% 0%, rgba(167,139,250,.12) 0%, transparent 70%);
           pointer-events: none;
         }
-        .highlight-badge {
-          font-size: 8px; font-weight: 800; letter-spacing: .5px; padding: 1px 6px;
-          border-radius: 4px; text-transform: uppercase;
-        }
-        .highlight-card .pname { font-size: 10px; color: var(--ink); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; }
-        .highlight-card .prate { font-size: 11px; font-weight: 800; }
-        .toppets { display: flex; gap: 6px; overflow-x: auto; flex: 1; }
-        .pet { background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 8px; padding: 6px 8px; text-align: center; min-width: 72px; display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
-        .pet .pname { font-size: 9px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 62px; }
+        .highlight-badge { font-size: 7px; font-weight: 800; letter-spacing: .5px; padding: 1px 5px; border-radius: 3px; text-transform: uppercase; }
+        .highlight-card .pname { font-size: 9px; color: var(--ink); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 72px; }
+        .highlight-card .prate { font-size: 10px; font-weight: 800; }
+        .toppets { display: flex; gap: 5px; overflow-x: auto; flex: 1; }
+        .pet { background: #1a1a2e; border: 1px solid var(--card-border); border-radius: 7px; padding: 5px 6px; text-align: center; min-width: 64px; display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 1; }
+        .pet .pname { font-size: 8px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 56px; }
         .pet .prate { font-size: 9px; color: var(--gold); font-weight: 700; }
-        .genbtn { margin-top: 12px; width: 100%; background: var(--accent); color: #1a1030; border: none; border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 800; cursor: pointer; }
-        .genbtn:hover { filter: brightness(1.1); }
-        .restartbtn { margin-top: 6px; width: 100%; background: #262636; color: var(--ink); border: 1px solid var(--card-border); border-radius: 8px; padding: 8px 10px; font-size: 12px; font-weight: 800; cursor: pointer; }
-        .restartbtn:hover { border-color: var(--accent2); }
-        .genmsg { font-size: 11px; margin-top: 6px; min-height: 14px; }
-        .empty { color: var(--dim); text-align: center; padding: 60px 0; }
 
-        .offline-section { margin-top: 40px; }
-        .offline-header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
-        .offline-header h2 { font-size: 16px; color: var(--dim); margin: 0; font-weight: 800; }
-        .offline-badge { background: #ef4444; color: #fff; font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 6px; }
-        .card.offline { opacity: 0.55; border-color: #3f3f5050; }
-        .card.offline:hover { border-color: var(--dim); opacity: 0.75; }
-        .dot.off { background: #ef4444; box-shadow: 0 0 6px #ef444466; }
-        .offline-time { color: #ef4444; font-size: 10px; font-weight: 700; }
+        /* Action buttons */
+        .card-actions { display: flex; gap: 6px; margin-top: 10px; }
+        .act-btn { flex: 1; border: none; border-radius: 8px; padding: 7px 8px; font-size: 11px; font-weight: 800; cursor: pointer; text-align: center; text-decoration: none; display: block; }
+        .act-btn:hover { filter: brightness(1.15); }
+        .act-poster { background: var(--accent); color: #1a1030; }
+        .act-sell { background: var(--surface); color: var(--ink); border: 1px solid var(--card-border) !important; }
+        .act-sell:hover { border-color: var(--accent2) !important; }
+        .genmsg { font-size: 10px; margin-top: 4px; min-height: 12px; }
 
-        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; z-index: 50; }
+        .empty { color: var(--dim); text-align: center; padding: 60px 0; font-size: 14px; }
+
+        /* Modal */
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; z-index: 50; backdrop-filter: blur(4px); }
         .modal { background: var(--card); border: 1px solid var(--card-border); border-radius: 16px; padding: 24px; width: 100%; max-width: 720px; }
         .modal-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
-        .modal-head .name { font-size: 20px; }
+        .modal-head .acc-name { font-size: 20px; }
         .modal-close { margin-left: auto; background: none; border: none; color: var(--dim); font-size: 22px; cursor: pointer; line-height: 1; }
         .modal-close:hover { color: var(--ink); }
         .modal-sub { color: var(--dim); font-size: 12px; margin-bottom: 18px; }
         .section-title { color: var(--accent2); font-size: 12px; font-weight: 800; letter-spacing: .5px; margin: 18px 0 8px; }
         .detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
-        .dpet { background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 8px; padding: 6px 8px; display: flex; align-items: center; gap: 8px; }
+        .dpet { background: #1a1a2e; border: 1px solid var(--card-border); border-radius: 8px; padding: 6px 8px; display: flex; align-items: center; gap: 8px; }
         .dpet .dinfo { min-width: 0; }
         .dpet .dname { font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .dpet .drate { font-size: 11px; color: var(--gold); font-weight: 700; }
         .detail-empty { color: var(--dim); font-size: 12px; }
       `}</style>
 
-      <div style={{ marginBottom: 4 }}>
-        <div className="eyebrow">STEAL AN EGG</div>
-        <h1>Monitor — Akun & Pet</h1>
-      </div>
-
-      <div className="sortbar">
-        <label>Urutkan:</label>
-        <select value={sortMode} onChange={(e) => setSortMode(e.target.value)}>
-          <option value="name_asc">Nama Akun (Nomor)</option>
-          <option value="speed_desc">Speed (Tertinggi)</option>
-          <option value="income_aktif_desc">Income Potensi Pet Aktif (Tertinggi)</option>
-          <option value="income_pasif_desc">Income Pasif (Tertinggi)</option>
-          <option value="egg_desc">Egg Terbanyak</option>
-          <option value="akun_baru">Akun Baru (Kandang 0)</option>
-        </select>
-        <label>Device:</label>
-        <input
-          type="text"
-          placeholder="mis: SAE 21 (isi 21-30)"
-          value={deviceFilter}
-          onChange={(e) => setDeviceFilter(e.target.value)}
-        />
-        <button className="genallbtn" disabled={genAllRunning || onlineAccounts.length === 0} onClick={generateAll}>
-          Generate All Poster
-        </button>
-        <span className="genallstatus">{genAllStatus}</span>
-      </div>
-
-      <div className="summary">
-        <div className="sumcard">
-          <div className="label">ONLINE / OFFLINE</div>
-          <div className="value">{onlineAccounts.length} <span style={{ color: "var(--dim)", fontSize: 16 }}>/ {offlineAccounts.length}</span></div>
-        </div>
-        <div className="sumcard">
-          <div className="label">TOTAL MONEY</div>
-          <div className="value">{fmtMoney(totalMoney)}</div>
-        </div>
-        <div className="sumcard">
-          <div className="label">TOTAL SPEED</div>
-          <div className="value">{fmtCompactNum(totalSpeed)}</div>
-        </div>
-        <div className="sumcard">
-          <div className="label">TOTAL PETS</div>
-          <div className="value">{fmtNum(totalPets)}</div>
-        </div>
-        <div className="sumcard">
-          <div className="label">TOTAL EGGS STOLEN</div>
-          <div className="value">{fmtNum(totalStolen)}</div>
-        </div>
-      </div>
-
-      {visible.length === 0 ? (
-        <div className="empty">
-          {accounts.length > 0
-            ? "Ga ada akun yang cocok sama filter device itu."
-            : 'Belum ada akun yang lapor. Nyalain "Auto Report ke Dashboard" di GUI game.'}
-        </div>
-      ) : (
-        <>
-          {onlineAccounts.length > 0 && (
-            <div className="grid">
-              {onlineAccounts.map((a) => (
-                <div key={a.sourceAccount} className="card" onClick={() => openDetail(a.sourceAccount)}>
-                  <div className="card-head">
-                    <span className="dot online" />
-                    <span className="name">{a.sourceAccount}</span>
-                    <span className="devicetag">{deviceLabel(a.sourceAccount) || ""}</span>
-                    <span className="status">{fmtUptime(a.firstSeen) || "Active"}</span>
-                  </div>
-                  <div className="stats">
-                    <div className="stat speed">
-                      <div className="label">SPEED</div>
-                      <div className="val">{fmtCompactNum(a.speed)}</div>
-                    </div>
-                    <div className="stat money">
-                      <div className="label">CASH</div>
-                      <div className="val">{fmtMoney(a.money)}</div>
-                    </div>
-                    <div className="stat">
-                      <div className="label">INCOME POTENSI PET AKTIF</div>
-                      <div className="val">{fmtRate(a.incomeAktif)}</div>
-                    </div>
-                    <div className="stat">
-                      <div className="label">POTENSI 18 PET AKTIF</div>
-                      <div className="val">{fmtRate(a.highValuePetTotal)}</div>
-                    </div>
-                    <div className="stat">
-                      <div className="label">KANDANG LEVEL</div>
-                      <div className="val">{fmtLevel(a.kandangLevel)}</div>
-                    </div>
-                    <div className="stat">
-                      <div className="label">TREADMILL LEVEL</div>
-                      <div className="val">{fmtLevel(a.treadmillLevel)}</div>
-                    </div>
-                    <div className="stat">
-                      <div className="label">PETS</div>
-                      <div className="val">{fmtNum(a.petsCount)} pets</div>
-                    </div>
-                    <div className="stat">
-                      <div className="label">STOLEN</div>
-                      <div className="val">{fmtNum(a.stolenCount)} eggs</div>
-                    </div>
-                  </div>
-                  <PetCards pets={a.topPets || []} />
-                  <a
-                    className="genbtn"
-                    href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`}
-                    onClick={(e) => e.stopPropagation()}
-                    style={{ display: "block", textAlign: "center", textDecoration: "none" }}
-                  >
-                    Generate Poster
-                  </a>
-                  <button
-                    className="restartbtn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      markForSale(a.sourceAccount);
-                    }}
-                  >
-                    Siap Jual
-                  </button>
-                  <div className="genmsg" style={{ color: genMsgs.current[a.sourceAccount]?.color || "var(--dim)" }}>
-                    {genMsgs.current[a.sourceAccount]?.text || ""}
-                  </div>
-                </div>
-              ))}
+      <div className="dash">
+        {/* Header */}
+        <div className="header">
+          <div className="header-left">
+            <div className="eyebrow">STEAL AN EGG</div>
+            <h1>Monitor Dashboard</h1>
+          </div>
+          <div className="header-right">
+            <div className="conn-badge">
+              <span className="cdot" />
+              {allOnline.length} / {filtered.length} Online
             </div>
-          )}
-
-          {offlineAccounts.length > 0 && (
-            <div className="offline-section">
-              <div className="offline-header">
-                <h2>Offline Accounts</h2>
-                <span className="offline-badge">{offlineAccounts.length}</span>
-              </div>
-              <div className="grid">
-                {offlineAccounts.map((a) => (
-                  <div key={a.sourceAccount} className="card offline" onClick={() => openDetail(a.sourceAccount)}>
-                    <div className="card-head">
-                      <span className="dot off" />
-                      <span className="name">{a.sourceAccount}</span>
-                      <span className="devicetag">{deviceLabel(a.sourceAccount) || ""}</span>
-                      <span className="offline-time">{fmtLastSeen(a.lastSeen)}</span>
-                    </div>
-                    <div className="stats">
-                      <div className="stat speed">
-                        <div className="label">SPEED</div>
-                        <div className="val">{fmtCompactNum(a.speed)}</div>
-                      </div>
-                      <div className="stat money">
-                        <div className="label">CASH</div>
-                        <div className="val">{fmtMoney(a.money)}</div>
-                      </div>
-                      <div className="stat">
-                        <div className="label">INCOME POTENSI PET AKTIF</div>
-                        <div className="val">{fmtRate(a.incomeAktif)}</div>
-                      </div>
-                      <div className="stat">
-                        <div className="label">POTENSI 18 PET AKTIF</div>
-                        <div className="val">{fmtRate(a.highValuePetTotal)}</div>
-                      </div>
-                      <div className="stat">
-                        <div className="label">KANDANG LEVEL</div>
-                        <div className="val">{fmtLevel(a.kandangLevel)}</div>
-                      </div>
-                      <div className="stat">
-                        <div className="label">TREADMILL LEVEL</div>
-                        <div className="val">{fmtLevel(a.treadmillLevel)}</div>
-                      </div>
-                      <div className="stat">
-                        <div className="label">PETS</div>
-                        <div className="val">{fmtNum(a.petsCount)} pets</div>
-                      </div>
-                      <div className="stat">
-                        <div className="label">STOLEN</div>
-                        <div className="val">{fmtNum(a.stolenCount)} eggs</div>
-                      </div>
-                    </div>
-                    <PetCards pets={a.topPets || []} />
-                    <a
-                      className="genbtn"
-                      href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`}
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ display: "block", textAlign: "center", textDecoration: "none" }}
-                    >
-                      Generate Poster
-                    </a>
-                    <button
-                      className="restartbtn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        markForSale(a.sourceAccount);
-                      }}
-                    >
-                      Siap Jual
-                    </button>
-                    <div className="genmsg" style={{ color: genMsgs.current[a.sourceAccount]?.color || "var(--dim)" }}>
-                      {genMsgs.current[a.sourceAccount]?.text || ""}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {detail && (
-        <div className="overlay" onClick={(e) => { if ((e.target as HTMLElement).classList.contains("overlay")) setDetail(null); }}>
-          <div className="modal">
-            <div className="modal-head">
-              <span className="name">{detail.name}</span>
-              <button className="modal-close" onClick={() => setDetail(null)}>&times;</button>
-            </div>
-            {detail.loading ? (
-              <div className="modal-sub">Memuat...</div>
-            ) : !detail.data ? (
-              <div className="modal-sub">Belum ada data lengkap buat akun ini.</div>
-            ) : (
-              <>
-                <div className="modal-sub">Active Limit: {detail.data.activeLimit ?? "-"}</div>
-                <PetSection title="Pet Aktif" pets={detail.data.activePets} />
-                <PetSection title="Isi Tas (Semua Pet)" pets={detail.data.allPets} />
-                <PetSection title="Telur Sedang Tumbuh" pets={detail.data.growingEggs} />
-                <PetSection title="Telur di Tas" pets={detail.data.backpackEggs} />
-              </>
-            )}
           </div>
         </div>
-      )}
+
+        {/* Summary cards */}
+        <div className="summary-row">
+          <div className="sum-card" style={{ borderLeftColor: "var(--green)" }}>
+            <div className="slabel" style={{ color: "var(--green)" }}>ACTIVE ACCOUNTS</div>
+            <div className="sval">{allOnline.length} <span style={{ color: "var(--dim)", fontSize: 14, fontWeight: 700 }}>/ {filtered.length}</span></div>
+            <div className="ssub">{allOffline.length} offline</div>
+          </div>
+          <div className="sum-card" style={{ borderLeftColor: "var(--gold)" }}>
+            <div className="slabel" style={{ color: "var(--gold)" }}>TOTAL MONEY</div>
+            <div className="sval" style={{ color: "var(--gold)" }}>{fmtMoney(totalMoney)}</div>
+          </div>
+          <div className="sum-card" style={{ borderLeftColor: "var(--accent2)" }}>
+            <div className="slabel" style={{ color: "var(--accent2)" }}>TOTAL INCOME</div>
+            <div className="sval" style={{ color: "var(--accent2)" }}>{fmtRate(totalIncome)}</div>
+          </div>
+          <div className="sum-card" style={{ borderLeftColor: "var(--accent)" }}>
+            <div className="slabel" style={{ color: "var(--accent)" }}>TOTAL SPEED</div>
+            <div className="sval">{fmtCompactNum(totalSpeed)}</div>
+          </div>
+          <div className="sum-card" style={{ borderLeftColor: "#818cf8" }}>
+            <div className="slabel" style={{ color: "#818cf8" }}>TOTAL PETS</div>
+            <div className="sval">{fmtNum(totalPets)}</div>
+          </div>
+          <div className="sum-card" style={{ borderLeftColor: "var(--green)" }}>
+            <div className="slabel" style={{ color: "var(--green)" }}>GROWING EGGS</div>
+            <div className="sval" style={{ color: "var(--green)" }}>{fmtNum(totalGrowing)}</div>
+            <div className="ssub">{fmtNum(totalStolen)} stolen total</div>
+          </div>
+        </div>
+
+        {/* Toolbar: tabs + sort + filter */}
+        <div className="toolbar">
+          <div className="tabs">
+            <button className={`tab ${tabMode === "all" ? "active" : ""}`} onClick={() => setTabMode("all")}>
+              ALL <span className="tcount">{filtered.length}</span>
+            </button>
+            <button className={`tab online-tab ${tabMode === "online" ? "active" : ""}`} onClick={() => setTabMode("online")}>
+              ONLINE <span className="tcount">{allOnline.length}</span>
+            </button>
+            <button className={`tab offline-tab ${tabMode === "offline" ? "active" : ""}`} onClick={() => setTabMode("offline")}>
+              OFFLINE <span className="tcount">{allOffline.length}</span>
+            </button>
+          </div>
+
+          <div className="tool-sep" />
+
+          <label>Sort:</label>
+          <select value={sortMode} onChange={(e) => setSortMode(e.target.value)}>
+            <option value="name_asc">Nama (Nomor)</option>
+            <option value="speed_desc">Speed Tertinggi</option>
+            <option value="income_aktif_desc">Income Aktif Tertinggi</option>
+            <option value="income_pasif_desc">Income Pasif Tertinggi</option>
+            <option value="egg_desc">Egg Terbanyak</option>
+            <option value="akun_baru">Akun Baru (TM Lv.1)</option>
+          </select>
+
+          <label>Device:</label>
+          <input
+            type="text"
+            placeholder="cth: 21 (SAE 21-30)"
+            value={deviceFilter}
+            onChange={(e) => setDeviceFilter(e.target.value)}
+          />
+
+          <button className="genallbtn" disabled={genAllRunning || allOnline.length === 0} onClick={generateAll}>
+            Generate All Poster
+          </button>
+          {genAllStatus && <span className="genallstatus">{genAllStatus}</span>}
+        </div>
+
+        {/* Cards grid */}
+        {displayed.length === 0 ? (
+          <div className="empty">
+            {accounts.length > 0
+              ? tabMode === "offline"
+                ? "Tidak ada akun offline saat ini."
+                : tabMode === "online"
+                ? "Tidak ada akun online saat ini."
+                : "Ga ada akun yang cocok sama filter itu."
+              : 'Belum ada akun yang lapor. Nyalain "Auto Report ke Dashboard" di GUI game.'}
+          </div>
+        ) : (
+          <div className="grid">
+            {displayed.map((a) => (
+              <AccountCard
+                key={a.sourceAccount}
+                account={a}
+                onOpen={openDetail}
+                onSell={markForSale}
+                genMsg={genMsgs.current[a.sourceAccount]}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Detail modal */}
+        {detail && (
+          <div className="overlay" onClick={(e) => { if ((e.target as HTMLElement).classList.contains("overlay")) setDetail(null); }}>
+            <div className="modal">
+              <div className="modal-head">
+                <span className="acc-name">{detail.name}</span>
+                <button className="modal-close" onClick={() => setDetail(null)}>&times;</button>
+              </div>
+              {detail.loading ? (
+                <div className="modal-sub">Memuat...</div>
+              ) : !detail.data ? (
+                <div className="modal-sub">Belum ada data lengkap buat akun ini.</div>
+              ) : (
+                <>
+                  <div className="modal-sub">Active Limit: {detail.data.activeLimit ?? "-"}</div>
+                  <PetSection title="Pet Aktif" pets={detail.data.activePets} />
+                  <PetSection title="Isi Tas (Semua Pet)" pets={detail.data.allPets} />
+                  <PetSection title="Telur Sedang Tumbuh" pets={detail.data.growingEggs} />
+                  <PetSection title="Telur di Tas" pets={detail.data.backpackEggs} />
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </>
+  );
+}
+
+function AccountCard({ account: a, onOpen, onSell, genMsg }: {
+  account: Account;
+  onOpen: (name: string) => void;
+  onSell: (name: string) => void;
+  genMsg?: { text: string; color: string };
+}) {
+  const isOff = !a.online;
+  const eggCount = a.growingEggCount || 0;
+  const eggCap = 20;
+  const eggPct = Math.min(100, Math.round((eggCount / eggCap) * 100));
+
+  return (
+    <div className={`card ${isOff ? "is-offline" : ""}`} onClick={() => onOpen(a.sourceAccount)}>
+      {/* Header row */}
+      <div className="card-top">
+        <span className={`status-dot ${isOff ? "off" : "on"}`} />
+        <span className="acc-name">{a.sourceAccount}</span>
+        {deviceLabel(a.sourceAccount) && <span className="dev-tag">{deviceLabel(a.sourceAccount)}</span>}
+        <span className={`time-tag ${isOff ? "off" : "on"}`}>
+          {isOff ? fmtLastSeen(a.lastSeen) : fmtUptime(a.firstSeen) || "Active"}
+        </span>
+      </div>
+
+      {/* Stats grid */}
+      <div className="stats">
+        <div className="st speed">
+          <div className="sl">SPEED</div>
+          <div className="sv">{fmtCompactNum(a.speed)}</div>
+        </div>
+        <div className="st money">
+          <div className="sl">CASH</div>
+          <div className="sv">{fmtMoney(a.money)}</div>
+        </div>
+        <div className="st income">
+          <div className="sl">INCOME AKTIF</div>
+          <div className="sv">{fmtRate(a.incomeAktif)}</div>
+        </div>
+        <div className="st">
+          <div className="sl">POTENSI 18 PET</div>
+          <div className="sv">{fmtRate(a.highValuePetTotal)}</div>
+        </div>
+        <div className="st">
+          <div className="sl">KANDANG</div>
+          <div className="sv">{fmtLevel(a.kandangLevel)}</div>
+        </div>
+        <div className="st">
+          <div className="sl">TREADMILL</div>
+          <div className="sv">{fmtLevel(a.treadmillLevel)}</div>
+        </div>
+        <div className="st">
+          <div className="sl">PETS</div>
+          <div className="sv">{fmtNum(a.petsCount)}</div>
+        </div>
+        <div className="st">
+          <div className="sl">STOLEN</div>
+          <div className="sv">{fmtNum(a.stolenCount)}</div>
+        </div>
+      </div>
+
+      {/* Growing eggs bar */}
+      {eggCount > 0 && (
+        <div className="egg-bar">
+          <span className="egg-bar-icon">&#x1F95A;</span>
+          <div className="egg-bar-info">
+            <div className="egg-bar-label">GROWING EGGS</div>
+            <div className="egg-bar-track">
+              <div className="egg-bar-fill" style={{ width: eggPct + "%" }} />
+            </div>
+          </div>
+          <span className="egg-bar-count">{eggCount}</span>
+        </div>
+      )}
+
+      {/* Top pets */}
+      <PetCards pets={a.topPets || []} />
+
+      {/* Action buttons */}
+      <div className="card-actions">
+        <a
+          className="act-btn act-poster"
+          href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          Poster
+        </a>
+        <button
+          className="act-btn act-sell"
+          onClick={(e) => { e.stopPropagation(); onSell(a.sourceAccount); }}
+        >
+          Siap Jual
+        </button>
+      </div>
+      <div className="genmsg" style={{ color: genMsg?.color || "var(--dim)" }}>
+        {genMsg?.text || ""}
+      </div>
+    </div>
   );
 }
 
@@ -757,7 +810,7 @@ function PetCards({ pets }: { pets: Pet[] }) {
           <span className="highlight-badge" style={{ background: hlColor + "22", color: hlColor }}>
             {hlRarity || "TOP"}
           </span>
-          <PetIcon category={highlight.category} name={highlight.name || highlight.category} size={40} />
+          <PetIcon category={highlight.category} name={highlight.name || highlight.category} size={36} />
           <div className="pname">{highlight.name || highlight.category}</div>
           <div className="prate" style={{ color: hlColor }}>{fmtRate(highlight.rate)}</div>
         </div>
@@ -765,7 +818,7 @@ function PetCards({ pets }: { pets: Pet[] }) {
       <div className="toppets">
         {main.map((p, i) => (
           <div key={i} className="pet">
-            <PetIcon category={p.category} name={p.name || p.category} />
+            <PetIcon category={p.category} name={p.name || p.category} size={28} />
             <div className="pname">{p.name || p.category}</div>
             <div className="prate">{fmtRate(p.rate)}</div>
           </div>

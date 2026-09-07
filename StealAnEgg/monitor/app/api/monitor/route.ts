@@ -39,6 +39,8 @@ export async function POST(req: NextRequest) {
       treadmillLevel: data.treadmillLevel ?? null,
       petsCount: data.petsCount ?? 0,
       stolenCount: data.stolenCount ?? 0,
+      growingEggCount: data.fullData?.growingEggs?.length ?? 0,
+      backpackEggCount: data.fullData?.backpackEggs?.length ?? 0,
       topPets: data.topPets || [],
       firstSeen,
       lastSeen: now,
