@@ -27,6 +27,12 @@ interface Account {
   sold?: boolean;
   soldPrice?: number;
   soldAt?: number;
+  detail?: {
+    activePets?: Pet[];
+    allPets?: Pet[];
+    growingEggs?: Pet[];
+    backpackEggs?: Pet[];
+  };
 }
 
 function fmtMoney(v: number | null | undefined): string {
@@ -91,7 +97,28 @@ function mutColor(mut: string): string {
   return "#6366f1";
 }
 
-type SortMode = "name" | "speed" | "income" | "money" | "pets" | "eggs";
+function potensi18(a: Account): number {
+  const d = a.detail;
+  if (!d) return 0;
+  const all = [
+    ...(d.activePets || []),
+    ...(d.allPets || []),
+    ...(d.growingEggs || []),
+    ...(d.backpackEggs || []),
+  ];
+  const seen = new Set<string>();
+  const deduped: Pet[] = [];
+  for (const p of all) {
+    const k = `${p.category}|${(p.mutations || []).sort().join("+")}|${p.rate}`;
+    if (!seen.has(k)) { seen.add(k); deduped.push(p); }
+  }
+  deduped.sort((a, b) => (b.rate || 0) - (a.rate || 0));
+  let total = 0;
+  for (let i = 0; i < Math.min(18, deduped.length); i++) total += deduped[i].rate || 0;
+  return total;
+}
+
+type SortMode = "name" | "speed" | "income" | "money" | "pets" | "eggs" | "potensi" | "akun_baru";
 type TabMode = "catalog" | "sold";
 
 export default function CatalogPage() {
@@ -213,6 +240,13 @@ export default function CatalogPage() {
         break;
       case "eggs":
         list.sort((a, b) => (b.stolenCount || 0) - (a.stolenCount || 0));
+        break;
+      case "potensi":
+        list.sort((a, b) => potensi18(b) - potensi18(a));
+        break;
+      case "akun_baru":
+        list = list.filter((a) => (a.kandangLevel ?? -1) === 0);
+        list.sort((a, b) => potensi18(b) - potensi18(a));
         break;
       default:
         list.sort((a, b) => {
@@ -448,6 +482,8 @@ export default function CatalogPage() {
               <option value="money">Cash Terbanyak</option>
               <option value="pets">Pet Terbanyak</option>
               <option value="eggs">Egg Stolen Terbanyak</option>
+              <option value="potensi">Potensi 18 Pet</option>
+              <option value="akun_baru">Akun Baru (Kandang 0)</option>
             </select>
           </>
         )}
