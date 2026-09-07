@@ -957,12 +957,10 @@ task.spawn(function()
 			local tmMaxed = TreadmillClient.GetNextConfig(stats) == nil
 
 			if not tmMaxed and (tmLevel - penLevel) < LEVEL_GAP then
-				-- TM needs to catch up (or stay ahead by gap). Buy TM only.
 				if TreadmillClient.CanAffordNext(stats) then
 					TreadmillClient.RequestCashUpgrade()
 				end
 			else
-				-- TM already gap ahead (or maxed) -> spend on Pen.
 				local nextLevel, config = BaseUpgrade.ResolveNextTier(stats)
 				if nextLevel and config and BaseUpgrade.IsNextTierAffordable(stats) then
 					BaseUpgrade.PurchaseNextTier()
