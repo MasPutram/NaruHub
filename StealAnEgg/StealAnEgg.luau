@@ -253,6 +253,55 @@ local function getMyOwnedEggs()
 end
 
 ------------------------------------------------------------
+-- HipHub "Auto Treadmill On Return" toggle helpers
+-- Shared between Auto Place and Auto Sell (both need to pause HIP
+-- so the character doesn't get snapped back to the treadmill
+-- mid-action).
+------------------------------------------------------------
+local function findHipToggle()
+	local pg = LocalPlayer:FindFirstChild("PlayerGui")
+	local hip = pg and pg:FindFirstChild("HipHub")
+	if not hip then return nil end
+	for _, d in ipairs(hip:GetDescendants()) do
+		if d:IsA("TextLabel") and d.Text == "Auto Treadmill On Return" then
+			local p = d.Parent
+			return p and p:FindFirstChildOfClass("TextButton") or nil
+		end
+	end
+	return nil
+end
+
+local function hipToggleIsOn(btn)
+	local inner = btn and btn:FindFirstChild("Frame")
+	return inner and inner.Position.X.Scale >= 0.5
+end
+
+-- Wrap a callback with HIP off/on. Returns whatever `fn` returns.
+local function withHipPaused(fn)
+	local hipBtn = findHipToggle()
+	local hipWasOn = hipBtn and hipToggleIsOn(hipBtn)
+	local weFiredOff = false
+	if hipWasOn and firesignal then
+		pcall(function() firesignal(hipBtn.MouseButton1Click) end)
+		weFiredOff = true
+		task.wait(0.3)
+	end
+
+	local ok, result = pcall(fn)
+
+	if weFiredOff and firesignal then
+		for _ = 1, 3 do
+			local b = findHipToggle()
+			if not b then break end
+			if hipToggleIsOn(b) then break end
+			pcall(function() firesignal(b.MouseButton1Click) end)
+			task.wait(0.4)
+		end
+	end
+	return ok, result
+end
+
+------------------------------------------------------------
 -- NaruUI Window (clean, status only -- no tabs visible)
 ------------------------------------------------------------
 local Fluent = NaruUI.New({
@@ -966,10 +1015,12 @@ task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoSellEnabled then
+			-- Collect matching UIDs FIRST (cheap), then only bother with HIP
+			-- pause if there is actually something to sell this tick.
+			local toSell = {}
 			pcall(function()
 				local records = getMyOwnedEggs()
 				for uid, rec in pairs(records) do
-					if not autoSellEnabled then break end
 					if rec.Placement == nil then
 						local rarity = getRarity(rec.AssetCategory)
 						local rate = 0
@@ -981,18 +1032,27 @@ task.spawn(function()
 							})
 						end)
 						if not AUTO_SELL_NEVER[rarity] and rate > 0 and rate < AUTO_SELL_MIN_RATE then
-							pcall(function()
-								Remotes.EggWorld.AskWearTool:InvokeServer(uid)
-							end)
-							task.wait(0.3)
-							pcall(function()
-								Remotes.PetSatchel.SellPet:FireServer({ uid })
-							end)
-							task.wait(0.5)
+							toSell[#toSell + 1] = uid
 						end
 					end
 				end
 			end)
+
+			if #toSell > 0 then
+				withHipPaused(function()
+					for _, uid in ipairs(toSell) do
+						if not autoSellEnabled then break end
+						pcall(function()
+							Remotes.EggWorld.AskWearTool:InvokeServer(uid)
+						end)
+						task.wait(0.3)
+						pcall(function()
+							Remotes.PetSatchel.SellPet:FireServer({ uid })
+						end)
+						task.wait(0.5)
+					end
+				end)
+			end
 		end
 		task.wait(3)
 	end
@@ -1125,28 +1185,6 @@ task.spawn(function()
 			task.wait(0.3)
 		end
 		return anyPlaced
-	end
-
-	-- Locate HIP "Auto Treadmill On Return" toggle so we can pause it while placing
-	local function findHipToggle()
-		local pg = LocalPlayer:FindFirstChild("PlayerGui")
-		local hip = pg and pg:FindFirstChild("HipHub")
-		if not hip then return nil end
-		for _, d in ipairs(hip:GetDescendants()) do
-			if d:IsA("TextLabel") and d.Text == "Auto Treadmill On Return" then
-				-- HipHub layout: label parent is a row (outer TextButton or
-				-- Row frame); the actual toggle switch is a TextButton child
-				-- that carries a small Frame "knob" whose Position.X.Scale
-				-- flips between 0 (OFF) and 1 (ON).
-				local p = d.Parent
-				return p and p:FindFirstChildOfClass("TextButton") or nil
-			end
-		end
-		return nil
-	end
-	local function hipToggleIsOn(btn)
-		local inner = btn and btn:FindFirstChild("Frame")
-		return inner and inner.Position.X.Scale >= 0.5
 	end
 
 	local lastConsumedTrigger = 0
