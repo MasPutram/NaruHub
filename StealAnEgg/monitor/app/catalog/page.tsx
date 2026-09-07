@@ -593,32 +593,34 @@ export default function CatalogPage() {
                 </div>
               )}
 
-              {!a.sold && (
-                <div className="cc-actions">
-                  <a
-                    className="btn-poster"
-                    href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`}
-                  >
-                    Generate Poster
-                  </a>
-                  <button
-                    className="btn-sold"
-                    onClick={() => {
-                      setSoldModal(a.sourceAccount);
-                      setSoldPrice("");
-                      setSoldError("");
-                    }}
-                  >
-                    Terjual
-                  </button>
-                  <button
-                    className="btn-detail"
-                    onClick={() => unmarkForSale(a.sourceAccount)}
-                  >
-                    Kembalikan
-                  </button>
-                </div>
-              )}
+              <div className="cc-actions" style={{ position: "relative", zIndex: 15 }}>
+                <a
+                  className="btn-poster"
+                  href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`}
+                >
+                  {a.sold ? "Poster Terjual" : "Generate Poster"}
+                </a>
+                {!a.sold && (
+                  <>
+                    <button
+                      className="btn-sold"
+                      onClick={() => {
+                        setSoldModal(a.sourceAccount);
+                        setSoldPrice("");
+                        setSoldError("");
+                      }}
+                    >
+                      Terjual
+                    </button>
+                    <button
+                      className="btn-detail"
+                      onClick={() => unmarkForSale(a.sourceAccount)}
+                    >
+                      Kembalikan
+                    </button>
+                  </>
+                )}
+              </div>
               {actionMsg[a.sourceAccount] && (
                 <div style={{ fontSize: 11, color: "#f87171", marginTop: 6 }}>{actionMsg[a.sourceAccount]}</div>
               )}
@@ -683,7 +685,7 @@ export default function CatalogPage() {
                 )}
                 <td style={{ display: "flex", gap: 8 }}>
                   {a.sold ? (
-                    <span style={{ color: "var(--dim)", fontSize: 11 }}>-</span>
+                    <a href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`}>Poster</a>
                   ) : (
                     <>
                       <a href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`}>Poster</a>

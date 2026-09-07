@@ -397,6 +397,8 @@ function PosterPage() {
   const [summary, setSummary] = useState<AccountSummary | null>(null);
   const [detail, setDetail] = useState<AccountDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSold, setIsSold] = useState(false);
+  const [soldPrice, setSoldPrice] = useState(0);
   const [price, setPrice] = useState("");
   const [ratePerB, setRatePerB] = useState("");
   const [rateHvPerB, setRateHvPerB] = useState("");
@@ -430,6 +432,21 @@ function PosterPage() {
           found = (catData.accounts || []).find(
             (a: AccountSummary) => a.sourceAccount === accountName
           );
+        } catch {}
+      }
+
+      if (!found) {
+        try {
+          const soldRes = await fetch("/api/sold-accounts");
+          const soldData = await soldRes.json();
+          const soldFound = (soldData.accounts || []).find(
+            (a: any) => a.sourceAccount === accountName
+          );
+          if (soldFound) {
+            found = soldFound;
+            setIsSold(true);
+            setSoldPrice(soldFound.soldPrice || 0);
+          }
         } catch {}
       }
 
@@ -858,6 +875,27 @@ function PosterPage() {
         }
         .detail-check svg { width: 10px; height: 10px; }
         .detail-label { font-size: 15px; color: #1e293b; }
+
+        .poster.poster-sold { filter: grayscale(1); }
+        .poster-sold-overlay {
+          position: absolute; inset: 0; z-index: 20;
+          display: flex; align-items: center; justify-content: center;
+          pointer-events: none;
+        }
+        .poster-sold-stamp {
+          border: 8px solid #dc2626; border-radius: 20px; padding: 20px 60px;
+          transform: rotate(-18deg);
+          background: rgba(255, 255, 255, 0.15);
+        }
+        .poster-sold-stamp span {
+          font-size: 80px; font-weight: 900; color: #dc2626; letter-spacing: 12px;
+          text-transform: uppercase;
+        }
+        .poster-sold-price {
+          position: absolute; top: 24px; right: 32px; z-index: 25;
+          background: #dc2626; color: #fff; font-size: 24px; font-weight: 900;
+          padding: 10px 28px; border-radius: 12px;
+        }
       `}</style>
 
       <div className="controls">
@@ -883,7 +921,17 @@ function PosterPage() {
       </div>
 
       <div className="poster-wrap">
-        <div className="poster" ref={posterRef} style={{ position: "relative" }}>
+        <div className={`poster ${isSold ? "poster-sold" : ""}`} ref={posterRef} style={{ position: "relative" }}>
+          {isSold && (
+            <>
+              <div className="poster-sold-overlay">
+                <div className="poster-sold-stamp">
+                  <span>TERJUAL</span>
+                </div>
+              </div>
+              <div className="poster-sold-price">{formatRupiah(soldPrice)}</div>
+            </>
+          )}
           {/* LEFT COLUMN */}
           <div className="left">
             <div className="poster-title">{title}</div>
