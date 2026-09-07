@@ -162,9 +162,24 @@ function fmtRate(v: number | null | undefined): string {
   return fmtMoney(v) + "/s";
 }
 
+const MAX_KANDANG = 11;
+const MAX_TREADMILL = 10;
+
 function fmtLevel(v: number | null | undefined): string {
   if (v == null) return "-";
   return "Lv. " + v;
+}
+
+function fmtKandang(v: number | null | undefined): { text: string; isMax: boolean } {
+  if (v == null) return { text: "-", isMax: false };
+  const isMax = v >= MAX_KANDANG;
+  return { text: isMax ? `Lv. ${v} MAX` : `Lv. ${v}`, isMax };
+}
+
+function fmtTreadmill(v: number | null | undefined): { text: string; isMax: boolean } {
+  if (v == null) return { text: "-", isMax: false };
+  const isMax = v >= MAX_TREADMILL;
+  return { text: isMax ? `Lv. ${v} MAX` : `Lv. ${v}`, isMax };
 }
 
 function fmtLastSeen(lastSeen?: number): string {
@@ -464,6 +479,7 @@ export default function DashboardPage() {
         .act-sell:hover { border-color: var(--accent2) !important; }
         .act-del { background: transparent; color: var(--red); border: 1px solid rgba(239,68,68,.3) !important; flex: 0; padding: 7px 10px; }
         .act-del:hover { background: rgba(239,68,68,.1); border-color: var(--red) !important; }
+        .max-tag { font-size: 9px; font-weight: 900; color: #1a1030; background: linear-gradient(135deg, var(--gold), #f59e0b); padding: 1px 6px; border-radius: 4px; letter-spacing: .5px; vertical-align: middle; margin-left: 4px; display: inline-block; line-height: 1.4; }
         .genmsg { font-size: 10px; margin-top: 4px; min-height: 12px; }
         .empty { color: var(--dim); text-align: center; padding: 60px 0; font-size: 14px; }
 
@@ -678,8 +694,8 @@ function AccountCard({ account: a, onOpen, onSell, onDelete, deleteConfirm, onDe
         <div className="st money"><div className="sl">CASH</div><div className="sv">{fmtMoney(a.money)}</div></div>
         <div className="st income"><div className="sl">INCOME AKTIF</div><div className="sv">{fmtRate(a.incomeAktif)}</div></div>
         <div className="st"><div className="sl">POTENSI 18 PET</div><div className="sv">{fmtRate(a.highValuePetTotal)}</div></div>
-        <div className="st"><div className="sl">KANDANG</div><div className="sv">{fmtLevel(a.kandangLevel)}</div></div>
-        <div className="st"><div className="sl">TREADMILL</div><div className="sv">{fmtLevel(a.treadmillLevel)}</div></div>
+        <div className="st"><div className="sl">KANDANG</div><div className="sv">{(() => { const k = fmtKandang(a.kandangLevel); return k.isMax ? <>{fmtLevel(a.kandangLevel)} <span className="max-tag">MAX</span></> : fmtLevel(a.kandangLevel); })()}</div></div>
+        <div className="st"><div className="sl">TREADMILL</div><div className="sv">{(() => { const t = fmtTreadmill(a.treadmillLevel); return t.isMax ? <>{fmtLevel(a.treadmillLevel)} <span className="max-tag">MAX</span></> : fmtLevel(a.treadmillLevel); })()}</div></div>
         <div className="st"><div className="sl">PETS</div><div className="sv">{fmtNum(a.petsCount)}</div></div>
         <div className="st"><div className="sl">STOLEN</div><div className="sv">{fmtNum(a.stolenCount)}</div></div>
       </div>
@@ -753,8 +769,12 @@ function DetailModal({ detail, detailTab, setDetailTab, onClose }: {
                 <div className="msval" style={{ color: "var(--accent)" }}>{fmtCompactNum(acc.speed)}</div>
               </div>
               <div className="ms-card">
-                <div className="mslabel">KANDANG / TM</div>
-                <div className="msval">{fmtLevel(acc.kandangLevel)} / {fmtLevel(acc.treadmillLevel)}</div>
+                <div className="mslabel">KANDANG</div>
+                <div className="msval">{fmtKandang(acc.kandangLevel).isMax ? <>{fmtLevel(acc.kandangLevel)} <span className="max-tag">MAX</span></> : fmtLevel(acc.kandangLevel)}</div>
+              </div>
+              <div className="ms-card">
+                <div className="mslabel">TREADMILL</div>
+                <div className="msval">{fmtTreadmill(acc.treadmillLevel).isMax ? <>{fmtLevel(acc.treadmillLevel)} <span className="max-tag">MAX</span></> : fmtLevel(acc.treadmillLevel)}</div>
               </div>
               <div className="ms-card">
                 <div className="mslabel">ACTIVE LIMIT</div>
