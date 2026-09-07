@@ -197,6 +197,26 @@ function petRarity(category: string, index: Record<string, string>): string | nu
 
 const DIVINE_RARITIES = new Set(["Divine", "Eternal"]);
 
+const RARITY_RANK: Record<string, number> = {
+  prismatic: 0, rainbow: 0,
+  eternal: 1,
+  divine: 2,
+  secret: 3,
+  mythicgod: 4, god: 4, godly: 4,
+  mythical: 5, mythic: 5,
+  legendary: 6,
+  epic: 7,
+  rare: 8,
+  uncommon: 9,
+  common: 10,
+};
+
+function rarityRank(category: string, index: Record<string, string>): number {
+  const r = petRarity(category, index);
+  if (!r) return 99;
+  return RARITY_RANK[r.toLowerCase()] ?? 50;
+}
+
 function petIconUrl(p: Pet, index: Record<string, string>): string | null {
   const filename = index[p.category];
   if (filename) {
@@ -665,7 +685,12 @@ function PosterPage() {
       rightPanelPets.push(p);
     }
   }
-  rightPanelPets.sort((a, b) => (b.rate || 0) - (a.rate || 0));
+  rightPanelPets.sort((a, b) => {
+    const ra = rarityRank(a.category, iconIdx);
+    const rb = rarityRank(b.category, iconIdx);
+    if (ra !== rb) return ra - rb;
+    return (b.rate || 0) - (a.rate || 0);
+  });
   const rightPanelShown = rightPanelPets.slice(0, 8);
   const shownInActiveKeys = new Set(rightPanelShown.map(petKey));
 
