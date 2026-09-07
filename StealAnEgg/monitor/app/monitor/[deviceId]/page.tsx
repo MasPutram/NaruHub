@@ -351,7 +351,7 @@ export default function DeviceDetailPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const pkgs = (device?.packages || []).map(normalizePackage);
+  const pkgs = (Array.isArray(device?.packages) ? device.packages : []).map(normalizePackage);
   const selectedPkgs = pkgs.filter((p) => selected[p.pkg] !== false);
 
   useEffect(() => {
