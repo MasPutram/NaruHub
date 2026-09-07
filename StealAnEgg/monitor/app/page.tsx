@@ -222,6 +222,7 @@ type TabMode = "all" | "online" | "offline";
 type DetailTab = "active" | "all" | "growing" | "backpack";
 
 export default function DashboardPage() {
+  const [mounted, setMounted] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [sortMode, setSortMode] = useState("name_asc");
   const [deviceFilter, setDeviceFilter] = useState("");
@@ -244,6 +245,7 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    setMounted(true);
     fetchAccounts();
     const id = setInterval(fetchAccounts, 5000);
     return () => clearInterval(id);
@@ -387,6 +389,8 @@ export default function DashboardPage() {
     setGenAllStatus(`Selesai: ${ok} berhasil${fail ? `, ${fail} gagal` : ""}.`);
     setGenAllRunning(false);
   }
+
+  if (!mounted) return null;
 
   return (
     <>
@@ -830,7 +834,7 @@ function PetGrid({ pets, idx }: { pets: Pet[]; idx: Record<string, string> }) {
               <div className="pg-meta">
                 <span className="pg-rate">{fmtRate(p.rate)}</span>
                 {rar && <span className="pg-rarity" style={{ background: rc + "18", color: rc, border: `1px solid ${rc}33` }}>{rar}</span>}
-                {(p.mutations || []).map((m, j) => <span key={j} className="pg-mutation">{m}</span>)}
+                {(Array.isArray(p.mutations) ? p.mutations : []).map((m, j) => <span key={j} className="pg-mutation">{m}</span>)}
               </div>
               {p.weight != null && <div className="pg-weight">{Number(p.weight).toLocaleString()} Kg</div>}
             </div>
