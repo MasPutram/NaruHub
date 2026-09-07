@@ -598,6 +598,8 @@ function PosterPage() {
   const allSorted = allDeduped.sort((a, b) => (b.rate || 0) - (a.rate || 0));
   const growingEggsSorted = [...growingEggs].sort((a, b) => (b.rate || 0) - (a.rate || 0));
   const backpackEggsSorted = [...backpackEggs].sort((a, b) => (b.rate || 0) - (a.rate || 0));
+  const growingEggKeys = new Set(growingEggsSorted.map(petKey));
+  const backpackEggKeys = new Set(backpackEggsSorted.map(petKey));
   const eggKeys = new Set([...growingEggsSorted, ...backpackEggsSorted].map(petKey));
 
   // "Aktif" -- MAX_EQUIP rate TERTINGGI dari gabungan pet aktif + isi tas +
@@ -776,6 +778,11 @@ function PosterPage() {
           background: #fff4d6; border: 1px solid #ca8a04; border-radius: 10px;
           padding: 3px 10px; font-size: 11px; font-weight: 700; color: #ca8a04;
         }
+        .pick-growing-badge {
+          position: absolute; top: 10px; left: 10px;
+          background: #d1fae5; border: 1px solid #16a34a; border-radius: 10px;
+          padding: 3px 10px; font-size: 11px; font-weight: 700; color: #16a34a;
+        }
         .pick-rarity-badge {
           position: absolute; top: 36px; left: 10px;
           background: #ede9fe; border: 1px solid #7c3aed; border-radius: 10px;
@@ -809,6 +816,10 @@ function PosterPage() {
         .egg-badge {
           display: inline-block; background: #fff4d6; border: 1px solid #ca8a04;
           border-radius: 10px; padding: 2px 8px; font-size: 10px; font-weight: 700; color: #ca8a04;
+        }
+        .growing-badge {
+          display: inline-block; background: #d1fae5; border: 1px solid #16a34a;
+          border-radius: 10px; padding: 2px 8px; font-size: 10px; font-weight: 700; color: #16a34a;
         }
 
         .featured-box {
@@ -1030,11 +1041,12 @@ function PosterPage() {
             {topPicks.length > 0 && (
               <div className="top3">
                 {topPicks.map((p, i) => {
+                  const isGrowing = growingEggKeys.has(petKey(p));
                   const isEgg = eggKeys.has(petKey(p));
                   const rarity = petRarity(p.category, iconIdx);
                   return (
                     <div key={i} className="pick-card">
-                      {isEgg && <span className="pick-egg-badge">TELUR</span>}
+                      {isGrowing ? <span className="pick-growing-badge">GROWING</span> : isEgg && <span className="pick-egg-badge">TELUR</span>}
                       {rarity && (
                         <span
                           className={`pick-rarity-badge ${isEgg ? "" : "pick-rarity-solo"}`}
@@ -1059,12 +1071,15 @@ function PosterPage() {
             )}
 
             {featured && (() => {
+              const isFeaturedGrowing = growingEggKeys.has(petKey(featured));
               const isFeaturedEgg = eggKeys.has(petKey(featured));
               const featuredRarity = petRarity(featured.category, iconIdx);
               return (
               <div className="featured-box">
                 <div className="featured-ribbon">PALING GACOR!</div>
-                {isFeaturedEgg && (
+                {isFeaturedGrowing ? (
+                  <span className="growing-badge featured-egg-badge">GROWING</span>
+                ) : isFeaturedEgg && (
                   <span className="egg-badge featured-egg-badge">TELUR</span>
                 )}
                 {featuredRarity && (
@@ -1190,7 +1205,7 @@ function PosterPage() {
                       <div className="pirate">{fmtRate(p.rate)}</div>
                       {p.weight ? <div className="piweight">{fmtWeight(p.weight)}</div> : null}
                     </div>
-                    {eggKeys.has(petKey(p)) && <span className="egg-badge">TELUR</span>}
+                    {growingEggKeys.has(petKey(p)) ? <span className="growing-badge">GROWING</span> : eggKeys.has(petKey(p)) && <span className="egg-badge">TELUR</span>}
                     {rowRarity && (
                       <span className="rarity-badge" style={rarityBadgeStyle(rowRarity)}>{rowRarity}</span>
                     )}
