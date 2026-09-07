@@ -929,21 +929,30 @@ end
 -- device name from Android settings, then the marketing name, then the raw
 -- model. The hostname command is always "localhost" on Android so it is a
 -- last resort.
+local function is_valid_name(s)
+  if not s or s == "" or s == "null" or s == "unknown" or s == "localhost" then return false end
+  if #s > 60 then return false end
+  if s:lower():find("no su program") then return false end
+  if s:lower():find("not found") then return false end
+  if s:lower():find("permission denied") then return false end
+  if s:lower():find("error") then return false end
+  if s:lower():find("termux does not") then return false end
+  return true
+end
+
 local function get_device_name()
   local candidates = {
     shell('settings get global device_name'),
-    shell('su -c "settings get global device_name"'),
     shell('settings get secure bluetooth_name'),
-    shell('su -c "settings get secure bluetooth_name"'),
     shell("getprop ro.product.marketing_name"),
     shell("getprop ro.product.vendor.marketing_name"),
     shell("getprop ro.config.marketing_name"),
     shell("getprop ro.product.model"),
+    shell('su -c "settings get global device_name"'),
+    shell('su -c "settings get secure bluetooth_name"'),
   }
   for _, c in ipairs(candidates) do
-    if c and c ~= "" and c ~= "null" and c ~= "unknown" and c ~= "localhost" then
-      return c
-    end
+    if is_valid_name(c) then return c end
   end
   return shell("hostname")
 end
