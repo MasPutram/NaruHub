@@ -946,19 +946,18 @@ task.spawn(function()
 	local TreadmillClient = require(LocalPlayer.PlayerScripts.GUI.TreadmillUpgrade.Client)
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		local treadmillBusy = false
+		local boughtTreadmill = false
 		pcall(function()
 			local stats = SaveModule.Get()
 			local nextLevel, config = TreadmillClient.GetNextConfig(stats)
-			if nextLevel and config then
-				if TreadmillClient.CanAffordNext(stats) then
-					TreadmillClient.RequestCashUpgrade()
-				end
-				-- Treadmill still has tiers left → hold pen upgrades, priority is treadmill
-				treadmillBusy = true
+			if nextLevel and config and TreadmillClient.CanAffordNext(stats) then
+				TreadmillClient.RequestCashUpgrade()
+				boughtTreadmill = true
 			end
 		end)
-		if not treadmillBusy then
+		-- Pen only pauses when we JUST spent money on treadmill this tick.
+		-- If treadmill isn't affordable (or is maxed), let pen use the cash.
+		if not boughtTreadmill then
 			pcall(function()
 				local stats = SaveModule.Get()
 				local nextLevel, config = BaseUpgrade.ResolveNextTier(stats)
