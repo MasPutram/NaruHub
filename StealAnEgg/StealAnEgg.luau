@@ -945,31 +945,30 @@ task.spawn(function()
 	local BaseUpgrade = require(ReplicatedStorage.Client.BaseUpgrade)
 	local TreadmillClient = require(LocalPlayer.PlayerScripts.GUI.TreadmillUpgrade.Client)
 
+	-- Keep TM 2 levels ahead of Pen:
+	--   TM_level - Pen_level < 2 -> upgrade TM (if affordable)
+	--   TM_level - Pen_level >= 2 -> upgrade Pen (if affordable)
+	local LEVEL_GAP = 2
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		local treadmillHasNext = false
 		pcall(function()
 			local stats = SaveModule.Get()
-			local nextLevel, config = TreadmillClient.GetNextConfig(stats)
-			if nextLevel and config then
-				treadmillHasNext = true
+			local penLevel = stats.BaseUpgradeLevel or 0
+			local tmLevel = stats.TreadmillUpgradeLevel or 0
+			local tmMaxed = TreadmillClient.GetNextConfig(stats) == nil
+
+			if not tmMaxed and (tmLevel - penLevel) < LEVEL_GAP then
+				-- TM needs to catch up (or stay ahead by gap). Buy TM only.
 				if TreadmillClient.CanAffordNext(stats) then
 					TreadmillClient.RequestCashUpgrade()
 				end
-				-- if not affordable, DO NOTHING — let cash pile up for TM
-			end
-		end)
-		-- Pen only allowed once treadmill is fully maxed (no next tier left).
-		-- Late-game TM tiers cost more than pen, so pen must never drain
-		-- money reserved for the next TM tier.
-		if not treadmillHasNext then
-			pcall(function()
-				local stats = SaveModule.Get()
+			else
+				-- TM already gap ahead (or maxed) -> spend on Pen.
 				local nextLevel, config = BaseUpgrade.ResolveNextTier(stats)
 				if nextLevel and config and BaseUpgrade.IsNextTierAffordable(stats) then
 					BaseUpgrade.PurchaseNextTier()
 				end
-			end)
-		end
+			end
+		end)
 		task.wait(5)
 	end
 end)
