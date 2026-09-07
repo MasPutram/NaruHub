@@ -427,9 +427,31 @@ local function kill_pkg(pkg)
   end
 end
 
-local function launch_app(pkg, bounds, resize, delay, target)
+-- Is this package currently in the activity stack? Uses am stack list
+-- (reliable for long Android package names -- pgrep -x fails because
+-- /proc/<pid>/comm is truncated to 15 chars).
+local function is_pkg_running(pkg)
+  local stack = shell('su -c "am stack list"')
+  return stack:find(pkg .. "/", 1, true) ~= nil
+end
+
+-- Smart-kill: only tear the app down when we ACTUALLY need a fresh
+-- launch (to apply a new target link or new window bounds). If the app
+-- is already running and neither has changed, skip the kill so the user
+-- doesn't see the window flicker (close -> reopen). If the app isn't
+-- running at all, the kill would be a no-op anyway so skip it and save
+-- the 1-second sleep too.
+local function smart_kill_if_needed(pkg, target, resize, bounds)
+  local need_fresh = (target and target ~= "") or (resize and bounds and bounds ~= "")
+  if not need_fresh then return false end
+  if not is_pkg_running(pkg) then return false end
   kill_pkg(pkg)
   sleep(1)
+  return true
+end
+
+local function launch_app(pkg, bounds, resize, delay, target)
+  local killed = smart_kill_if_needed(pkg, target, resize, bounds)
 
   if resize and bounds and bounds ~= "" then
     local left, top, right, bottom = bounds:match("(%d+),(%d+),(%d+),(%d+)")
@@ -443,7 +465,7 @@ local function launch_app(pkg, bounds, resize, delay, target)
     -- via VIEW intent instead of Roblox's home screen. Falls back to a
     -- plain MAIN launch if the intent errors out (unregistered scheme,
     -- broken deep-link handler, etc).
-    log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset .. C.dim .. " -> " .. target .. C.reset)
+    log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset .. C.dim .. " -> " .. target .. (killed and " (relaunched)" or " (fresh)") .. C.reset)
     -- Escape any double-quote in the URL for the shell arg.
     local safe = target:gsub('"', '\\\\"')
     local ok = shellcode(string.format(
@@ -455,7 +477,7 @@ local function launch_app(pkg, bounds, resize, delay, target)
       shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
     end
   else
-    log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset)
+    log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset .. (killed and C.dim .. " (relaunched)" .. C.reset or ""))
     shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
   end
 
@@ -490,13 +512,12 @@ end
 -- Rapid-fire an am start for one package WITHOUT waiting for it to finish
 -- initializing. Used by the batch-launch trick below.
 local function fire_start(pkg, target)
+  -- Smart-kill: only tear down if we have a target link AND the app is
+  -- already running (need fresh start so VIEW intent actually processes
+  -- the URL). Non-running apps + no-target running apps just get a plain
+  -- am start -- no flicker.
+  smart_kill_if_needed(pkg, target, false, nil)
   if target and target ~= "" then
-    -- Kill first when we have a target link, otherwise am start VIEW on an
-    -- already-running clone just brings the existing task to front WITHOUT
-    -- re-processing the URL -- so the operator would see Roblox home
-    -- instead of the assigned place / private server. Force-stop + fresh
-    -- start guarantees the VIEW intent actually gets consumed.
-    kill_pkg(pkg)
     local safe = target:gsub('"', '\\\\"')
     local ok = shellcode(string.format(
       'su -c "am start -a android.intent.action.VIEW -d \\\\"%s\\\\" -p %s"',
