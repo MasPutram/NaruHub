@@ -310,9 +310,10 @@ function mutBadgeStyle(mut: string): BadgeStyle {
   }
   if (m === "boss" || m.includes("fractured")) {
     return {
-      background: "linear-gradient(90deg,#ede9fe,#c4b5fd,#a78bfa)",
-      color: "#4c1d95",
-      borderColor: "#7c3aed",
+      background: "linear-gradient(90deg,#581c87,#7c3aed,#a855f7,#7c3aed,#581c87)",
+      color: "#ffffff",
+      borderColor: "#581c87",
+      textShadow: "0 1px 2px rgba(0,0,0,0.4)",
     };
   }
   return { background: "#dbeafe", color: "#1d4ed8", borderColor: "#2563eb" };
@@ -329,9 +330,17 @@ function mutTextStyle(mut: string): BadgeStyle {
       color: "transparent",
     };
   }
+  if (m === "boss" || m.includes("fractured")) {
+    return {
+      background: "linear-gradient(90deg,#581c87,#7c3aed,#a855f7,#7c3aed,#581c87)",
+      WebkitBackgroundClip: "text",
+      backgroundClip: "text",
+      WebkitTextFillColor: "transparent",
+      color: "transparent",
+    };
+  }
   if (m.includes("golden")) return { color: "#b45309" };
   if (m.includes("silver")) return { color: "#475569" };
-  if (m === "boss" || m.includes("fractured")) return { color: "#7c3aed" };
   return { color: "#2563eb" };
 }
 
@@ -1159,8 +1168,10 @@ function PosterPage() {
             )}
 
             <div className="price-box">
-              <div className="price-label">PRICE ACC</div>
-              {(price || computeAutoPrice(detail, summary, ratePerB, rateHvPerB, rateSpeedPerB)) ? (
+              <div className="price-label">{isSold ? "TERJUAL" : "PRICE ACC"}</div>
+              {isSold && soldPrice > 0 ? (
+                <div className="price-value">{formatRupiah(soldPrice)}</div>
+              ) : (price || computeAutoPrice(detail, summary, ratePerB, rateHvPerB, rateSpeedPerB)) ? (
                 <div className="price-value">{price || computeAutoPrice(detail, summary, ratePerB, rateHvPerB, rateSpeedPerB)}</div>
               ) : (
                 <div className="price-empty">Isi harga atau rate di controls atas</div>

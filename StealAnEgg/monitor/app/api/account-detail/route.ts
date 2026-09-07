@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, detailKey, forSaleKey } from "@/lib/redis";
+import { redis, detailKey, forSaleKey, soldKey } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +20,14 @@ export async function GET(req: NextRequest) {
       if (fsRaw) {
         const fs = typeof fsRaw === "string" ? JSON.parse(fsRaw) : fsRaw;
         data = fs.detail || null;
+      }
+    }
+
+    if (!data) {
+      const soldRaw = await redis.get<string>(soldKey(account));
+      if (soldRaw) {
+        const sold = typeof soldRaw === "string" ? JSON.parse(soldRaw) : soldRaw;
+        data = sold.snapshotDetail || sold.detail || null;
       }
     }
 

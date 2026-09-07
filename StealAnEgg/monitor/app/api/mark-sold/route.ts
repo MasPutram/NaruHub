@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, forSaleKey, soldKey } from "@/lib/redis";
+import { redis, forSaleKey, soldKey, detailKey } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
 
@@ -23,12 +23,17 @@ export async function POST(req: NextRequest) {
     }
 
     const acc = typeof raw === "string" ? JSON.parse(raw) : raw;
+
+    const detRaw = await redis.get<string>(detailKey(account));
+    const detail = detRaw ? (typeof detRaw === "string" ? JSON.parse(detRaw) : detRaw) : null;
+
     const sKey = soldKey(account);
     await redis.set(sKey, JSON.stringify({
       ...acc,
       sourceAccount: account,
       soldAt: Date.now(),
       soldPrice: Number(price),
+      ...(detail ? { snapshotDetail: detail } : {}),
     }));
     await redis.del(fsKey);
 
