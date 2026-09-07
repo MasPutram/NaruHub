@@ -433,6 +433,10 @@ function PosterPage() {
   const [checklist, setChecklist] = useState("Data Polos, No Topi, No Sum");
   const [downloading, setDownloading] = useState(false);
   const [iconIdx, setIconIdx] = useState<Record<string, string>>({});
+  const [editPriceOpen, setEditPriceOpen] = useState(false);
+  const [editPriceVal, setEditPriceVal] = useState("");
+  const [editPriceLoading, setEditPriceLoading] = useState(false);
+  const [unsoldLoading, setUnsoldLoading] = useState(false);
   const posterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { loadIconIndex().then(setIconIdx); }, []);
@@ -513,6 +517,43 @@ function PosterPage() {
       alert("Gagal download: " + (e as Error).message);
     }
     setDownloading(false);
+  }
+
+  async function updateSoldPrice() {
+    const newPrice = Number(editPriceVal);
+    if (isNaN(newPrice) || newPrice <= 0) return;
+    setEditPriceLoading(true);
+    try {
+      const res = await fetch("/api/update-sold-price", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account: accountName, price: newPrice }),
+      });
+      const body = await res.json();
+      if (res.ok && body.ok) {
+        setSoldPrice(newPrice);
+        setEditPriceOpen(false);
+      }
+    } catch {}
+    setEditPriceLoading(false);
+  }
+
+  async function unsoldAccount() {
+    if (!confirm("Kembalikan akun ini ke katalog?")) return;
+    setUnsoldLoading(true);
+    try {
+      const res = await fetch("/api/unsold", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account: accountName }),
+      });
+      const body = await res.json();
+      if (res.ok && body.ok) {
+        setIsSold(false);
+        setSoldPrice(0);
+      }
+    } catch {}
+    setUnsoldLoading(false);
   }
 
   if (!accountName) {
@@ -942,19 +983,35 @@ function PosterPage() {
         <button className="dlbtn" onClick={downloadPoster} disabled={downloading}>
           {downloading ? "Downloading..." : "Download PNG"}
         </button>
+        {isSold && (
+          <>
+            <button
+              className="dlbtn"
+              style={{ background: "#f59e0b", color: "#1a1030" }}
+              onClick={() => { setEditPriceVal(String(soldPrice)); setEditPriceOpen(true); }}
+            >
+              Edit Harga
+            </button>
+            <button
+              className="dlbtn"
+              style={{ background: "#ef4444", color: "#fff" }}
+              onClick={unsoldAccount}
+              disabled={unsoldLoading}
+            >
+              {unsoldLoading ? "..." : "Kembalikan ke Katalog"}
+            </button>
+          </>
+        )}
       </div>
 
       <div className="poster-wrap">
         <div className={`poster ${isSold ? "poster-sold" : ""}`} ref={posterRef} style={{ position: "relative" }}>
           {isSold && (
-            <>
-              <div className="poster-sold-overlay">
-                <div className="poster-sold-stamp">
-                  <span>TERJUAL</span>
-                </div>
+            <div className="poster-sold-overlay">
+              <div className="poster-sold-stamp">
+                <span>TERJUAL</span>
               </div>
-              <div className="poster-sold-price">{formatRupiah(soldPrice)}</div>
-            </>
+            </div>
           )}
           {/* LEFT COLUMN */}
           <div className="left">
@@ -1208,6 +1265,45 @@ function PosterPage() {
           {initials && <div className="account-tag">{initials}</div>}
         </div>
       </div>
+
+      {editPriceOpen && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 200,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }} onClick={() => !editPriceLoading && setEditPriceOpen(false)}>
+          <div style={{
+            background: "#14141f", border: "1px solid #262636", borderRadius: 16,
+            padding: 28, width: 380, maxWidth: "90vw",
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#e8e8f0", marginBottom: 6 }}>Edit Harga Terjual</div>
+            <div style={{ color: "#8b8ba3", fontSize: 12, marginBottom: 20 }}>Akun: <strong>{accountName}</strong></div>
+            <div style={{ color: "#8b8ba3", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Harga (Rupiah)</div>
+            <input
+              type="number"
+              value={editPriceVal}
+              onChange={(e) => setEditPriceVal(e.target.value)}
+              autoFocus
+              onKeyDown={(e) => { if (e.key === "Enter") updateSoldPrice(); }}
+              style={{
+                width: "100%", background: "#0b0b12", color: "#e8e8f0", border: "1px solid #262636",
+                borderRadius: 8, padding: "10px 14px", fontSize: 16, fontWeight: 700, marginBottom: 16,
+              }}
+            />
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setEditPriceOpen(false)}
+                disabled={editPriceLoading}
+                style={{ flex: 1, padding: 10, borderRadius: 8, fontSize: 13, fontWeight: 800, cursor: "pointer", border: "none", background: "#262636", color: "#e8e8f0" }}
+              >Batal</button>
+              <button
+                onClick={updateSoldPrice}
+                disabled={editPriceLoading}
+                style={{ flex: 1, padding: 10, borderRadius: 8, fontSize: 13, fontWeight: 800, cursor: "pointer", border: "none", background: "#f59e0b", color: "#1a1030" }}
+              >{editPriceLoading ? "..." : "Simpan"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
