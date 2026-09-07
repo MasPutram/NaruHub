@@ -491,6 +491,12 @@ end
 -- initializing. Used by the batch-launch trick below.
 local function fire_start(pkg, target)
   if target and target ~= "" then
+    -- Kill first when we have a target link, otherwise am start VIEW on an
+    -- already-running clone just brings the existing task to front WITHOUT
+    -- re-processing the URL -- so the operator would see Roblox home
+    -- instead of the assigned place / private server. Force-stop + fresh
+    -- start guarantees the VIEW intent actually gets consumed.
+    kill_pkg(pkg)
     local safe = target:gsub('"', '\\\\"')
     local ok = shellcode(string.format(
       'su -c "am start -a android.intent.action.VIEW -d \\\\"%s\\\\" -p %s"',
