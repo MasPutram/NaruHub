@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 interface NavItem {
   label: string;
@@ -44,8 +44,12 @@ function SvgIcon({ d, size = 18 }: { d: string; size?: number }) {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Termux: true });
+
+  useEffect(() => { setMounted(true); }, []);
 
   function toggleGroup(label: string) {
     setOpenGroups((prev) => ({ ...prev, [label]: !prev[label] }));
@@ -59,6 +63,14 @@ export default function Sidebar() {
   function isGroupActive(group: NavGroup) {
     return group.items.some((item) => isActive(item.href));
   }
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  }
+
+  if (!mounted) return null;
 
   return (
     <>
@@ -247,6 +259,16 @@ export default function Sidebar() {
               </div>
             )}
           </div>
+          <button
+            onClick={handleLogout}
+            className="sb-item"
+            style={{ marginTop: 12, color: "#ef4444" }}
+          >
+            <span className="sb-icon">
+              <SvgIcon d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </span>
+            {!collapsed && <span className="sb-text">Logout</span>}
+          </button>
         </div>
       </nav>
     </>
