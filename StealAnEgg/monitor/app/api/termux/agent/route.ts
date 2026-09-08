@@ -486,8 +486,22 @@ local function kill_if_forced(pkg, forceKill)
   return true
 end
 
+-- Free reclaimable RAM WITHOUT killing anything, right before a launch.
+-- Android's low-memory killer counts page cache as pressure; when a new
+-- clone opens and RAM is tight it culls a backgrounded in-game clone, which
+-- the operator sees as a random force-close of the OTHER accounts. Dropping
+-- caches (+ asking background apps to release memory) hands that headroom
+-- back so the LMK leaves the running clones alone. This is the "trim per-
+-- launch" HipHub does -- caches only, never a kill, so unlike the old
+-- every-heartbeat trim it can't nuke a clone that just went to background.
+local function trim_ram()
+  shellcode('su -c "sync"')
+  shellcode('su -c "echo 3 > /proc/sys/vm/drop_caches"')
+end
+
 local function launch_app(pkg, bounds, resize, delay, target, forceKill)
   kill_if_forced(pkg, forceKill)
+  trim_ram()
 
   if resize and bounds and bounds ~= "" then
     local left, top, right, bottom = bounds:match("(%d+),(%d+),(%d+),(%d+)")
@@ -1048,11 +1062,20 @@ while true do
     -- Heartbeat via WS
     if now - last_heartbeat >= HEARTBEAT_INTERVAL then
       local pkgs = collect_packages()
-      -- No periodic trim -- Hip only trims per-launch. Doing it every
-      -- heartbeat can nuke a clone that just went to background during a
-      -- batch launch, which the user sees as a random force-close.
       local screen = collect_screen()
       local stats = collect_stats()
+      -- Auto-trim when RAM is genuinely tight. Unlike the old per-heartbeat
+      -- trim (which KILLED background clones and caused random force-closes),
+      -- this only drops reclaimable page cache -- it never touches a running
+      -- app -- so it gives the low-memory killer headroom without culling a
+      -- clone. Gated behind a high-usage threshold so it's a rare, cheap op.
+      if stats.ram and stats.ram.totalMB and stats.ram.totalMB > 0 then
+        local pct = (stats.ram.usedMB / stats.ram.totalMB) * 100
+        if pct >= 88 then
+          log(C.yellow .. "[" .. ts() .. "] RAM " .. math.floor(pct) .. "% -- trim cache" .. C.reset)
+          trim_ram()
+        end
+      end
       ws_send({
         type = "heartbeat",
         deviceId = DEVICE_ID,
