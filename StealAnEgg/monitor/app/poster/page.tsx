@@ -471,7 +471,7 @@ function PosterPage() {
 
   useEffect(() => {
     QRCode.toDataURL("https://www.facebook.com/naruaho", {
-      width: 120,
+      width: 200,
       margin: 1,
       color: { dark: "#1e293b", light: "#ffffff" },
     }).then(setQrDataUrl).catch(() => {});
@@ -1038,10 +1038,12 @@ function PosterPage() {
         .watermark-text {
           font-size: 120px; font-weight: 800; color: rgba(30, 41, 59, 0.14);
           white-space: nowrap; line-height: 1.4; text-align: center;
+          letter-spacing: 18px;
         }
         .watermark-sub {
           font-size: 40px; font-weight: 800; color: rgba(30, 41, 59, 0.10);
           white-space: nowrap; text-align: center;
+          letter-spacing: 12px;
         }
 
         .detail-box {
@@ -1059,27 +1061,29 @@ function PosterPage() {
 
         .qr-box {
           background: #fff; border: 1px solid #cbd5e1; border-radius: 16px;
-          padding: 16px 20px; margin-bottom: 12px;
-          display: flex; align-items: center; gap: 14px;
+          padding: 20px; margin-bottom: 12px;
+          display: flex; align-items: center; gap: 16px;
         }
         .qr-box img { border-radius: 8px; flex-shrink: 0; }
         .qr-box .qr-info { min-width: 0; }
-        .qr-box .qr-owner { font-size: 16px; font-weight: 800; color: #1e293b; margin-bottom: 4px; }
-        .qr-box .qr-label { font-size: 12px; font-weight: 700; color: #64748b; }
-        .qr-box .qr-url { font-size: 11px; color: #2563eb; font-weight: 700; margin-top: 2px; }
+        .qr-box .qr-owner { font-size: 20px; font-weight: 800; color: #1e293b; margin-bottom: 6px; }
+        .qr-box .qr-label { font-size: 14px; font-weight: 700; color: #64748b; }
+        .qr-box .qr-url { font-size: 13px; color: #2563eb; font-weight: 700; margin-top: 4px; }
 
         .poster.poster-sold { filter: grayscale(1); }
         .poster-sold-overlay {
-          position: absolute; top: 24px; left: 24px; z-index: 20;
+          position: absolute; inset: 0; z-index: 20;
+          display: flex; align-items: flex-start; justify-content: center;
+          padding-top: 160px;
           pointer-events: none;
         }
         .poster-sold-stamp {
-          border: 6px solid #dc2626; border-radius: 14px; padding: 12px 32px;
+          border: 8px solid #dc2626; border-radius: 20px; padding: 20px 60px;
           transform: rotate(-12deg);
           background: rgba(255, 255, 255, 0.2);
         }
         .poster-sold-stamp span {
-          font-size: 48px; font-weight: 900; color: #dc2626; letter-spacing: 8px;
+          font-size: 72px; font-weight: 900; color: #dc2626; letter-spacing: 12px;
           text-transform: uppercase;
         }
         .poster-sold-price {
@@ -1396,7 +1400,7 @@ function PosterPage() {
 
             {qrDataUrl && (
               <div className="qr-box">
-                <img src={qrDataUrl} width={80} height={80} alt="QR" />
+                <img src={qrDataUrl} width={110} height={110} alt="QR" />
                 <div className="qr-info">
                   <div className="qr-owner">{owner || "Penjual"}</div>
                   <div className="qr-label">Scan untuk hubungi</div>
