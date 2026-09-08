@@ -432,13 +432,20 @@ local function kill_pkg(pkg)
   end
 end
 
--- PID-only kill: does NOT use am force-stop (which kills all clones
--- sharing the same UID). Uses pidof for exact package match, then
--- kill -9 only those PIDs. Safe for App Cloner setups.
+-- Reliable per-package kill for the Siap Jual force-relaunch. am force-stop
+-- targets EXACTLY the named package -- App Cloner clones have independent
+-- UIDs, so force-stopping one never touches sibling clones. pidof/pgrep -x
+-- alone proved unreliable (clone process names don't always equal the
+-- package name, so pidof returns nothing and the kill silently no-ops,
+-- which is why Siap Jual only reopened to home sometimes). We force-stop
+-- first, then sweep leftover PIDs by EXACT name match only -- never
+-- pgrep -f, whose substring match could catch sibling clones that share a
+-- name prefix (that fallback is what risked closing the wrong clients).
 local function kill_pkg_pidonly(pkg)
+  shellcode(string.format('su -c "am force-stop %s"', pkg))
   local pids = shell(string.format('su -c "pidof %s"', pkg))
   if pids == "" then
-    pids = shell(string.format('su -c "pgrep -f %s"', pkg))
+    pids = shell(string.format('su -c "pgrep -x %s"', pkg))
   end
   if pids ~= "" then
     for pid in pids:gmatch("%S+") do
@@ -459,9 +466,23 @@ end
 -- never kill — just am start like first time opening.
 local function kill_if_forced(pkg, forceKill)
   if not forceKill then return false end
-  if not is_pkg_running(pkg) then return false end
+  if not is_pkg_running(pkg) then
+    log(C.dim .. "[" .. ts() .. "] siap-jual: " .. pkg .. " not running, skip kill" .. C.reset)
+    return false
+  end
+  log(C.yellow .. "[" .. ts() .. "] siap-jual: force-stop " .. pkg .. C.reset)
   kill_pkg_pidonly(pkg)
-  sleep(1)
+  sleep(2)
+  -- Verify it actually died. If the app is still in the activity stack the
+  -- first force-stop didn't take (timing / race), so hit it once more before
+  -- we relaunch -- otherwise am start just refocuses the still-in-game
+  -- window and it never returns to Roblox home.
+  if is_pkg_running(pkg) then
+    log(C.red .. "[" .. ts() .. "] siap-jual: " .. pkg .. " still up, retry force-stop" .. C.reset)
+    kill_pkg_pidonly(pkg)
+    sleep(2)
+  end
+  log(C.green .. "[" .. ts() .. "] siap-jual: " .. pkg .. " stopped, relaunching to home" .. C.reset)
   return true
 end
 

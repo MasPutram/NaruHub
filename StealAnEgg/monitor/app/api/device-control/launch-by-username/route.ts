@@ -3,6 +3,7 @@ import {
   redis,
   termuxCommandQueueKey,
   termuxCommandLogKey,
+  termuxDevicePolicyKey,
   termuxPackageRejoinPauseKey,
   TERMUX_COMMAND_QUEUE_TTL_S,
   TERMUX_COMMAND_QUEUE_MAX,
@@ -68,6 +69,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Reuse the saved window bounds for this package so the force-relaunch
+    // reopens as a FLOATING window, not fullscreen. A fullscreen reopen
+    // collapses the other floating clones (looks like they got force-
+    // closed), which is exactly the failure the operator hit.
+    let sjBounds = "";
+    try {
+      const polRaw = await redis.get<string>(termuxDevicePolicyKey(matchDevice.deviceId));
+      if (polRaw) {
+        const pol = typeof polRaw === "string" ? JSON.parse(polRaw) : polRaw;
+        if (pol.packageBounds && typeof pol.packageBounds === "object" && pol.packageBounds[matchPkg]) {
+          sjBounds = pol.packageBounds[matchPkg];
+        }
+      }
+    } catch {}
+
     // "Siap Jual" deliberately IGNORES the per-package target link -- the
     // whole point of this flow is to open Roblox's home screen so the
     // operator can log the account out. If we opened the assigned PS link
@@ -77,8 +93,8 @@ export async function POST(req: NextRequest) {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       type: "launch",
       package: matchPkg,
-      bounds: "",
-      resize: false,
+      bounds: sjBounds,
+      resize: sjBounds !== "",
       launchDelay: 10,
       target: "",
       forceKill: true,
