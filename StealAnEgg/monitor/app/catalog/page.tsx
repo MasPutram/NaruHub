@@ -567,7 +567,7 @@ export default function CatalogPage() {
           onChange={(e) => setSearchQuery(e.target.value)}
           style={{ width: 200 }}
         />
-        <label>Harga &ge;:</label>
+        <label>Harga {"≥"}:</label>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <span style={{ color: "var(--dim)", fontSize: 12, fontWeight: 700 }}>Rp</span>
           <input
@@ -579,7 +579,7 @@ export default function CatalogPage() {
           />
           <span style={{ color: "var(--dim)", fontSize: 11 }}>.000</span>
         </div>
-        <label>Harga &le;:</label>
+        <label>Harga {"≤"}:</label>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <span style={{ color: "var(--dim)", fontSize: 12, fontWeight: 700 }}>Rp</span>
           <input
@@ -632,16 +632,6 @@ export default function CatalogPage() {
             <div className="sval" style={{ color: "var(--accent)" }}>{accounts.filter((a) => a.catalogPrice && a.catalogPrice > 0).length}</div>
           </div>
         </div>
-        {visible.some((a) => a.catalogPrice && a.catalogPrice > 0) && (
-          <div style={{ padding: "0 28px 12px", display: "flex", gap: 10, alignItems: "center" }}>
-            <button
-              className="btn-download-all"
-              onClick={downloadAllPosters}
-            >
-              {`Download All Poster (${visible.filter((a) => a.catalogPrice && a.catalogPrice > 0).length} akun)`}
-            </button>
-          </div>
-        )}
       ) : (
         <div className="summary">
           <div className="scard">
@@ -658,6 +648,17 @@ export default function CatalogPage() {
               {soldAccounts.length > 0 ? fmtRupiah(Math.round(totalSoldRevenue / soldAccounts.length)) : "Rp 0"}
             </div>
           </div>
+        </div>
+      )}
+
+      {tabMode === "catalog" && visible.some((a) => a.catalogPrice && a.catalogPrice > 0) && (
+        <div style={{ padding: "0 28px 12px", display: "flex", gap: 10, alignItems: "center" }}>
+          <button
+            className="btn-download-all"
+            onClick={downloadAllPosters}
+          >
+            {`Download All Poster (${visible.filter((a) => a.catalogPrice && a.catalogPrice > 0).length} akun)`}
+          </button>
         </div>
       )}
 
