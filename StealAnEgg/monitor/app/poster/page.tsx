@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import QRCode from "qrcode";
 
 export default function PosterPageWrapper() {
   return (
@@ -451,8 +452,8 @@ function PosterPage() {
   const [rateHvPerB, setRateHvPerB] = useState("");
   const [rateSpeedPerB, setRateSpeedPerB] = useState("");
   const [title, setTitle] = useState("Jual Akun GACOR");
-  const [badge, setBadge] = useState("");
-  const [owner, setOwner] = useState("Putra Ramadhan");
+  const [badge, setBadge] = useState(accountInitials(accountName));
+  const [owner, setOwner] = useState("Mas Naru");
   const [checklist, setChecklist] = useState("Data Polos, No Topi, No Sum");
   const [downloading, setDownloading] = useState(false);
   const [iconIdx, setIconIdx] = useState<Record<string, string>>({});
@@ -464,8 +465,17 @@ function PosterPage() {
   const [savedPrice, setSavedPrice] = useState(false);
   const posterRef = useRef<HTMLDivElement>(null);
   const autoDownload = params.get("autoDownload") === "1";
+  const [qrDataUrl, setQrDataUrl] = useState("");
 
   useEffect(() => { loadIconIndex().then(setIconIdx); }, []);
+
+  useEffect(() => {
+    QRCode.toDataURL("https://www.facebook.com/naruaho", {
+      width: 120,
+      margin: 1,
+      color: { dark: "#1e293b", light: "#ffffff" },
+    }).then(setQrDataUrl).catch(() => {});
+  }, []);
 
   const fetchData = useCallback(async () => {
     if (!accountName) return;
@@ -1026,11 +1036,11 @@ function PosterPage() {
           overflow: visible;
         }
         .watermark-text {
-          font-size: 120px; font-weight: 800; color: rgba(30, 41, 59, 0.06);
+          font-size: 120px; font-weight: 800; color: rgba(30, 41, 59, 0.14);
           white-space: nowrap; line-height: 1.4; text-align: center;
         }
         .watermark-sub {
-          font-size: 40px; font-weight: 800; color: rgba(30, 41, 59, 0.045);
+          font-size: 40px; font-weight: 800; color: rgba(30, 41, 59, 0.10);
           white-space: nowrap; text-align: center;
         }
 
@@ -1047,19 +1057,29 @@ function PosterPage() {
         .detail-check svg { width: 10px; height: 10px; }
         .detail-label { font-size: 15px; color: #1e293b; }
 
+        .qr-box {
+          background: #fff; border: 1px solid #cbd5e1; border-radius: 16px;
+          padding: 16px 20px; margin-bottom: 12px;
+          display: flex; align-items: center; gap: 14px;
+        }
+        .qr-box img { border-radius: 8px; flex-shrink: 0; }
+        .qr-box .qr-info { min-width: 0; }
+        .qr-box .qr-owner { font-size: 16px; font-weight: 800; color: #1e293b; margin-bottom: 4px; }
+        .qr-box .qr-label { font-size: 12px; font-weight: 700; color: #64748b; }
+        .qr-box .qr-url { font-size: 11px; color: #2563eb; font-weight: 700; margin-top: 2px; }
+
         .poster.poster-sold { filter: grayscale(1); }
         .poster-sold-overlay {
-          position: absolute; inset: 0; z-index: 20;
-          display: flex; align-items: center; justify-content: center;
+          position: absolute; top: 24px; left: 24px; z-index: 20;
           pointer-events: none;
         }
         .poster-sold-stamp {
-          border: 8px solid #dc2626; border-radius: 20px; padding: 20px 60px;
-          transform: rotate(-18deg);
-          background: rgba(255, 255, 255, 0.15);
+          border: 6px solid #dc2626; border-radius: 14px; padding: 12px 32px;
+          transform: rotate(-12deg);
+          background: rgba(255, 255, 255, 0.2);
         }
         .poster-sold-stamp span {
-          font-size: 80px; font-weight: 900; color: #dc2626; letter-spacing: 12px;
+          font-size: 48px; font-weight: 900; color: #dc2626; letter-spacing: 8px;
           text-transform: uppercase;
         }
         .poster-sold-price {
@@ -1373,6 +1393,17 @@ function PosterPage() {
                 </div>
               ) : null;
             })()}
+
+            {qrDataUrl && (
+              <div className="qr-box">
+                <img src={qrDataUrl} width={80} height={80} alt="QR" />
+                <div className="qr-info">
+                  <div className="qr-owner">{owner || "Penjual"}</div>
+                  <div className="qr-label">Scan untuk hubungi</div>
+                  <div className="qr-url">facebook.com/naruaho</div>
+                </div>
+              </div>
+            )}
           </div>
 
           {owner.trim() && (
