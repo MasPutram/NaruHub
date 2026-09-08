@@ -165,7 +165,7 @@ export default function CatalogPage() {
     if (withPrice.length === 0) return;
     if (!confirm(`Buka ${withPrice.length} poster di tab baru?`)) return;
     for (const a of withPrice) {
-      window.open(`/poster?account=${encodeURIComponent(a.sourceAccount)}`, "_blank");
+      window.open(`/poster?account=${encodeURIComponent(a.sourceAccount)}${a.catalogPrice ? `&catalogPrice=${a.catalogPrice}` : ""}`, "_blank");
     }
   }
 
