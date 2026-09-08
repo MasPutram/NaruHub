@@ -552,43 +552,13 @@ local function fire_start(pkg, target)
   end
 end
 
--- Batch launch multiple packages using the Roblox-multi-open trick the
--- operator discovered manually: open the first clone fully, rapid-fire
--- am start on the rest so they queue behind Roblox's init lock, then
--- kill the first to release the lock -- all queued clones then proceed
--- to open at once. Falls back to plain sequential launch if only one
--- package is in the batch.
+-- Batch launch: opens packages one by one, each waiting for focus +
+-- launchDelay before proceeding to the next. Sequential, not rapid-fire.
 local function batch_launch(cmds)
   if #cmds == 0 then return end
-  if #cmds == 1 then
-    local c = cmds[1]
+  log(C.cyan .. "[" .. ts() .. "] launching (" .. #cmds .. " packages sequentially)" .. C.reset)
+  for i, c in ipairs(cmds) do
     launch_app(c.package, c.bounds, c.resize, c.launchDelay, c.target, c.forceKill)
-    return
-  end
-
-  local stagger = tonumber(cmds[1].launchDelay) or 10
-  log(C.cyan .. "[" .. ts() .. "] opening (" .. #cmds .. " packages)" .. C.reset)
-
-  -- Step 1: fully launch the first one so its window is up. All the
-  -- others fire on top of this without killing it, so at the end all N
-  -- clones stay open. Matches Hip's console: wait for the first to
-  -- actually be visible before triggering the next one.
-  local first = cmds[1]
-  log(C.dim .. "[" .. ts() .. "] opening package " .. first.package .. C.reset)
-  launch_app(first.package, first.bounds, first.resize, 0, first.target)
-
-  -- Step 2: fire am start on the rest one by one, spaced by launchDelay
-  -- so they open at a controlled pace. Set bounds via shared_prefs
-  -- beforehand so each lands in the right tile.
-  for i = 2, #cmds do
-    local c = cmds[i]
-    if c.resize and c.bounds and c.bounds ~= "" then
-      local l, t, r, b = c.bounds:match("(%d+),(%d+),(%d+),(%d+)")
-      if l then set_window_bounds(c.package, tonumber(l), tonumber(t), tonumber(r), tonumber(b)) end
-    end
-    log(C.dim .. "[" .. ts() .. "] opening package " .. c.package .. C.reset)
-    fire_start(c.package, c.target)
-    if stagger > 0 then sleep(stagger) end
   end
 end
 
