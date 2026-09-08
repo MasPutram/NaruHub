@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 
 export default function PosterPageWrapper() {
   return (
@@ -436,15 +436,17 @@ function groupByMutation(pets: Pet[]): [string, Pet[]][] {
 
 function PosterPage() {
   const params = useSearchParams();
+  const router = useRouter();
   const accountName = params.get("account") || "";
   const paramSold = params.get("sold") === "1";
   const paramSoldPrice = Number(params.get("soldPrice")) || 0;
+  const paramCatalogPrice = Number(params.get("catalogPrice")) || 0;
   const [summary, setSummary] = useState<AccountSummary | null>(null);
   const [detail, setDetail] = useState<AccountDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSold, setIsSold] = useState(paramSold);
   const [soldPrice, setSoldPrice] = useState(paramSoldPrice);
-  const [price, setPrice] = useState("");
+  const [price, setPrice] = useState(paramCatalogPrice ? formatRupiah(paramCatalogPrice) : "");
   const [ratePerB, setRatePerB] = useState("");
   const [rateHvPerB, setRateHvPerB] = useState("");
   const [rateSpeedPerB, setRateSpeedPerB] = useState("");
@@ -566,7 +568,7 @@ function PosterPage() {
       const body = await res.json();
       if (res.ok && body.ok) {
         setSavedPrice(true);
-        setTimeout(() => setSavedPrice(false), 3000);
+        setTimeout(() => router.push("/catalog"), 1000);
       } else {
         alert(body.error || "Gagal simpan harga");
       }

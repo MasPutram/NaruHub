@@ -781,7 +781,7 @@ export default function CatalogPage() {
               <div className="cc-actions" style={{ position: "relative", zIndex: 15 }}>
                 <a
                   className="btn-poster"
-                  href={`/poster?account=${encodeURIComponent(a.sourceAccount)}${a.sold ? `&sold=1&soldPrice=${a.soldPrice || 0}` : ""}`}
+                  href={`/poster?account=${encodeURIComponent(a.sourceAccount)}${a.sold ? `&sold=1&soldPrice=${a.soldPrice || 0}` : ""}${a.catalogPrice ? `&catalogPrice=${a.catalogPrice}` : ""}`}
                 >
                   {a.sold ? "Poster Terjual" : "Generate Poster"}
                 </a>
@@ -870,10 +870,10 @@ export default function CatalogPage() {
                 )}
                 <td style={{ display: "flex", gap: 8 }}>
                   {a.sold ? (
-                    <a href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`}>Poster</a>
+                    <a href={`/poster?account=${encodeURIComponent(a.sourceAccount)}&sold=1&soldPrice=${a.soldPrice || 0}`}>Poster</a>
                   ) : (
                     <>
-                      <a href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`}>Poster</a>
+                      <a href={`/poster?account=${encodeURIComponent(a.sourceAccount)}${a.catalogPrice ? `&catalogPrice=${a.catalogPrice}` : ""}`}>Poster</a>
                       <button
                         onClick={() => {
                           setSoldModal(a.sourceAccount);
