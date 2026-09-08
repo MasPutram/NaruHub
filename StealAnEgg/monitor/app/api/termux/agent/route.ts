@@ -461,16 +461,12 @@ end
 -- doesn't see the window flicker (close -> reopen). If the app isn't
 -- running at all, the kill would be a no-op anyway so skip it and save
 -- the 1-second sleep too.
--- forceKill uses PID-only kill to avoid am force-stop nuking all clones.
+-- Always uses PID-only kill to avoid am force-stop nuking all clones.
 local function smart_kill_if_needed(pkg, target, resize, bounds, forceKill)
   local need_fresh = forceKill or (target and target ~= "") or (resize and bounds and bounds ~= "")
   if not need_fresh then return false end
   if not is_pkg_running(pkg) then return false end
-  if forceKill then
-    kill_pkg_pidonly(pkg)
-  else
-    kill_pkg(pkg)
-  end
+  kill_pkg_pidonly(pkg)
   sleep(1)
   return true
 end
