@@ -455,16 +455,10 @@ local function is_pkg_running(pkg)
   return stack:find(pkg .. "/", 1, true) ~= nil
 end
 
--- Smart-kill: only tear the app down when we ACTUALLY need a fresh
--- launch (to apply a new target link or new window bounds). If the app
--- is already running and neither has changed, skip the kill so the user
--- doesn't see the window flicker (close -> reopen). If the app isn't
--- running at all, the kill would be a no-op anyway so skip it and save
--- the 1-second sleep too.
--- Always uses PID-only kill to avoid am force-stop nuking all clones.
-local function smart_kill_if_needed(pkg, target, resize, bounds, forceKill)
-  local need_fresh = forceKill or (target and target ~= "") or (resize and bounds and bounds ~= "")
-  if not need_fresh then return false end
+-- Kill only when forceKill is set (Siap Jual flow). Normal launches
+-- never kill — just am start like first time opening.
+local function kill_if_forced(pkg, forceKill)
+  if not forceKill then return false end
   if not is_pkg_running(pkg) then return false end
   kill_pkg_pidonly(pkg)
   sleep(1)
@@ -472,7 +466,7 @@ local function smart_kill_if_needed(pkg, target, resize, bounds, forceKill)
 end
 
 local function launch_app(pkg, bounds, resize, delay, target, forceKill)
-  local killed = smart_kill_if_needed(pkg, target, resize, bounds, forceKill)
+  kill_if_forced(pkg, forceKill)
 
   if resize and bounds and bounds ~= "" then
     local left, top, right, bottom = bounds:match("(%d+),(%d+),(%d+),(%d+)")
@@ -482,23 +476,17 @@ local function launch_app(pkg, bounds, resize, delay, target, forceKill)
   end
 
   if target and target ~= "" then
-    -- Deep-link launch: opens the specific place / private server directly
-    -- via VIEW intent instead of Roblox's home screen. Falls back to a
-    -- plain MAIN launch if the intent errors out (unregistered scheme,
-    -- broken deep-link handler, etc).
-    log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset .. C.dim .. " -> " .. target .. (killed and " (relaunched)" or " (fresh)") .. C.reset)
-    -- Escape any double-quote in the URL for the shell arg.
+    log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset .. C.dim .. " -> " .. target .. C.reset)
     local safe = target:gsub('"', '\\\\"')
     local ok = shellcode(string.format(
       'su -c "am start -a android.intent.action.VIEW -d \\\\"%s\\\\" -p %s"',
       safe, pkg
     ))
     if not ok then
-      log(C.yellow .. "[" .. ts() .. "] deep link failed, falling back to home launch" .. C.reset)
       shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
     end
   else
-    log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset .. (killed and C.dim .. " (relaunched)" .. C.reset or ""))
+    log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset)
     shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
   end
 
@@ -531,13 +519,8 @@ local function launch_app(pkg, bounds, resize, delay, target, forceKill)
 end
 
 -- Rapid-fire an am start for one package WITHOUT waiting for it to finish
--- initializing. Used by the batch-launch trick below.
+-- initializing. No kill — just am start.
 local function fire_start(pkg, target)
-  -- Smart-kill: only tear down if we have a target link AND the app is
-  -- already running (need fresh start so VIEW intent actually processes
-  -- the URL). Non-running apps + no-target running apps just get a plain
-  -- am start -- no flicker.
-  smart_kill_if_needed(pkg, target, false, nil)
   if target and target ~= "" then
     local safe = target:gsub('"', '\\\\"')
     local ok = shellcode(string.format(
