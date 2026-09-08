@@ -432,6 +432,21 @@ local function kill_pkg(pkg)
   end
 end
 
+-- PID-only kill: does NOT use am force-stop (which kills all clones
+-- sharing the same UID). Uses pidof for exact package match, then
+-- kill -9 only those PIDs. Safe for App Cloner setups.
+local function kill_pkg_pidonly(pkg)
+  local pids = shell(string.format('su -c "pidof %s"', pkg))
+  if pids == "" then
+    pids = shell(string.format('su -c "pgrep -f %s"', pkg))
+  end
+  if pids ~= "" then
+    for pid in pids:gmatch("%S+") do
+      shellcode(string.format('su -c "kill -9 %s"', pid))
+    end
+  end
+end
+
 -- Is this package currently in the activity stack? Uses am stack list
 -- (reliable for long Android package names -- pgrep -x fails because
 -- /proc/<pid>/comm is truncated to 15 chars).
@@ -446,11 +461,16 @@ end
 -- doesn't see the window flicker (close -> reopen). If the app isn't
 -- running at all, the kill would be a no-op anyway so skip it and save
 -- the 1-second sleep too.
+-- forceKill uses PID-only kill to avoid am force-stop nuking all clones.
 local function smart_kill_if_needed(pkg, target, resize, bounds, forceKill)
   local need_fresh = forceKill or (target and target ~= "") or (resize and bounds and bounds ~= "")
   if not need_fresh then return false end
   if not is_pkg_running(pkg) then return false end
-  kill_pkg(pkg)
+  if forceKill then
+    kill_pkg_pidonly(pkg)
+  else
+    kill_pkg(pkg)
+  end
   sleep(1)
   return true
 end
