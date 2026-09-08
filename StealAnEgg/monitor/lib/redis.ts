@@ -56,6 +56,15 @@ export function termuxCommandLogKey(deviceId: string) {
 export const TERMUX_COMMAND_LOG_TTL_S = 60 * 60 * 24; // 24 hours
 export const TERMUX_COMMAND_LOG_MAX = 30;
 
+// Live runtime log streamed by the agent itself (force-stop, trim, launch,
+// rejoin, RAM warnings...) so the dashboard's console shows what's actually
+// happening on-device -- separate from the admin-action command log above.
+export function termuxAgentLogKey(deviceId: string) {
+  return `termux:agentlog:${deviceId}`;
+}
+export const TERMUX_AGENT_LOG_TTL_S = 60 * 60 * 6; // 6 hours
+export const TERMUX_AGENT_LOG_MAX = 300; // keep the last 300 lines per device
+
 // Persistent execution policy per device: auto-rejoin, per-package opt-in
 // list, launch delay, retry limit. Read by both the dashboard and the
 // Termux agent so the agent can act on disconnected packages autonomously.

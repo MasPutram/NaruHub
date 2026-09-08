@@ -129,6 +129,7 @@ export default function DeviceDetailPage() {
   const [device, setDevice] = useState<TermuxDevice | null>(null);
   const [accounts, setAccounts] = useState<Record<string, AccountInfo>>({});
   const [consoleLog, setConsoleLog] = useState<LogEntry[]>([]);
+  const [agentLogs, setAgentLogs] = useState<{ ts: number; line: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [layout, setLayout] = useState<{ cols: number; rows: number }>({ cols: 4, rows: 3 });
   const [draftLayout, setDraftLayout] = useState<{ cols: number; rows: number }>({ cols: 4, rows: 3 });
@@ -302,6 +303,23 @@ export default function DeviceDetailPage() {
     const id = setInterval(fetchDevice, 10000);
     return () => clearInterval(id);
   }, [fetchDevice]);
+
+  // Poll the agent's live runtime log (force-stop, trim, launch, rejoin...)
+  // on a faster cadence than the device fetch so the console feels live.
+  useEffect(() => {
+    if (!deviceId) return;
+    let alive = true;
+    const load = async () => {
+      try {
+        const res = await fetch(`/api/device-control/agent-logs?deviceId=${encodeURIComponent(deviceId)}`);
+        const data = await res.json();
+        if (alive && data.ok) setAgentLogs(data.entries || []);
+      } catch {}
+    };
+    load();
+    const id = setInterval(load, 4000);
+    return () => { alive = false; clearInterval(id); };
+  }, [deviceId]);
 
   // Load persisted policy for this device once. Rehydrates UI toggles from
   // whatever the agent is currently obeying so the two never drift.
@@ -979,11 +997,15 @@ export default function DeviceDetailPage() {
         <section className="panel">
           <div className="panelhead">
             <h3>Command Console</h3>
-            <span className="muted">launch history</span>
+            <span className="muted">{agentLogs.length > 0 ? "live agent log" : "launch history"}</span>
           </div>
           <div className="console">
-            {consoleLog.length === 0 ? (
-              <div className="log muted">Belum ada command yang dikirim.</div>
+            {agentLogs.length > 0 ? (
+              [...agentLogs].reverse().map((e, i) => (
+                <div key={i} className="log">{e.line}</div>
+              ))
+            ) : consoleLog.length === 0 ? (
+              <div className="log muted">Belum ada aktivitas agent. (Restart agent di device biar log live muncul di sini.)</div>
             ) : (
               consoleLog.map((entry) => (
                 <div key={entry.id} className="log">

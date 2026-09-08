@@ -40,15 +40,23 @@ local function ts()
   return os.date("%H:%M:%S")
 end
 
+-- Buffer of recent log lines (ANSI stripped) waiting to be shipped to the
+-- dashboard console via the /api/termux/logs webhook. Capped so a server
+-- outage can't grow it without bound.
+local LOG_BUFFER = {}
+local LOG_BUFFER_MAX = 200
+
 local function log(msg)
   io.write(msg .. "\\n")
   io.flush()
+  local clean = msg:gsub("\\27%[[%d;]*m", "")
   local f = io.open(LOG_FILE, "a")
   if f then
-    local clean = msg:gsub("\\27%[[%d;]*m", "")
     f:write(os.date("%Y-%m-%d %H:%M:%S") .. " " .. clean .. "\\n")
     f:close()
   end
+  LOG_BUFFER[#LOG_BUFFER+1] = os.date("%H:%M:%S") .. " " .. clean
+  if #LOG_BUFFER > LOG_BUFFER_MAX then table.remove(LOG_BUFFER, 1) end
 end
 
 local function shell(cmd)
@@ -636,6 +644,23 @@ local function http_get(path)
   return shell(cmd)
 end
 
+-- Ship buffered log lines to the dashboard console (webhook). Deliberately
+-- SILENT -- it must never call log() itself, or it would refill the very
+-- buffer it drains. On failure it puts the lines back (respecting the cap)
+-- so a brief server blip doesn't lose them.
+local LAST_LOG_FLUSH = 0
+local LOG_FLUSH_INTERVAL = 3
+local function flush_logs()
+  if not DEVICE_ID or #LOG_BUFFER == 0 then return end
+  local lines = LOG_BUFFER
+  LOG_BUFFER = {}
+  local code = http_post("/api/termux/logs", { deviceId = DEVICE_ID, lines = lines })
+  if code ~= "200" then
+    for i = #lines, 1, -1 do table.insert(LOG_BUFFER, 1, lines[i]) end
+    while #LOG_BUFFER > LOG_BUFFER_MAX do table.remove(LOG_BUFFER, 1) end
+  end
+end
+
 -- ─── Autoexec: write / remove Lua scripts in executor autoexec dirs ───
 -- Universal deploy -- writes to ALL known executor autoexec paths so the
 -- operator does not have to know which executor is installed. mkdir -p
@@ -1159,6 +1184,12 @@ while true do
     -- dropped-out packages, schedules and fires relaunches. Safe to call
     -- every tick -- most calls are near-free.
     maybe_auto_rejoin()
+
+    -- Stream buffered log lines to the dashboard console.
+    if now - LAST_LOG_FLUSH >= LOG_FLUSH_INTERVAL then
+      flush_logs()
+      LAST_LOG_FLUSH = now
+    end
 
     -- Check websocat alive
     if not ws_alive() then
