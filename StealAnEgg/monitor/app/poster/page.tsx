@@ -458,6 +458,8 @@ function PosterPage() {
   const [editPriceVal, setEditPriceVal] = useState("");
   const [editPriceLoading, setEditPriceLoading] = useState(false);
   const [unsoldLoading, setUnsoldLoading] = useState(false);
+  const [savingPrice, setSavingPrice] = useState(false);
+  const [savedPrice, setSavedPrice] = useState(false);
   const posterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { loadIconIndex().then(setIconIdx); }, []);
@@ -536,6 +538,42 @@ function PosterPage() {
       alert("Gagal download: " + (e as Error).message);
     }
     setDownloading(false);
+  }
+
+  function getCurrentPrice(): number {
+    if (price) {
+      const num = Number(price.replace(/[^\d]/g, ""));
+      return isNaN(num) ? 0 : num;
+    }
+    const auto = computeAutoPrice(detail, summary, ratePerB, rateHvPerB, rateSpeedPerB);
+    if (auto) {
+      const num = Number(auto.replace(/[^\d]/g, ""));
+      return isNaN(num) ? 0 : num;
+    }
+    return 0;
+  }
+
+  async function savePriceToCatalog() {
+    const priceVal = getCurrentPrice();
+    if (priceVal <= 0) { alert("Set rate atau harga dulu!"); return; }
+    setSavingPrice(true);
+    try {
+      const res = await fetch("/api/set-catalog-price", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account: accountName, price: priceVal }),
+      });
+      const body = await res.json();
+      if (res.ok && body.ok) {
+        setSavedPrice(true);
+        setTimeout(() => setSavedPrice(false), 3000);
+      } else {
+        alert(body.error || "Gagal simpan harga");
+      }
+    } catch (e: any) {
+      alert("Error: " + e.message);
+    }
+    setSavingPrice(false);
   }
 
   async function updateSoldPrice() {
@@ -1018,6 +1056,16 @@ function PosterPage() {
         <button className="dlbtn" onClick={downloadPoster} disabled={downloading}>
           {downloading ? "Downloading..." : "Download PNG"}
         </button>
+        {!isSold && (
+          <button
+            className="dlbtn"
+            style={{ background: savedPrice ? "#22c55e" : "#8b5cf6", color: "#fff" }}
+            onClick={savePriceToCatalog}
+            disabled={savingPrice || savedPrice}
+          >
+            {savingPrice ? "Menyimpan..." : savedPrice ? "Tersimpan!" : "Set Harga ke Katalog"}
+          </button>
+        )}
         {isSold && (
           <>
             <button

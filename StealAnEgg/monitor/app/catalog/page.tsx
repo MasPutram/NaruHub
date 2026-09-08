@@ -132,10 +132,10 @@ export default function CatalogPage() {
   const [actionMsg, setActionMsg] = useState<Record<string, string>>({});
 
   const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
   const [priceEditing, setPriceEditing] = useState<string | null>(null);
   const [priceInput, setPriceInput] = useState("");
   const [priceSaving, setPriceSaving] = useState(false);
-
   const [soldModal, setSoldModal] = useState<string | null>(null);
   const [soldPrice, setSoldPrice] = useState("");
   const [soldLoading, setSoldLoading] = useState(false);
@@ -157,6 +157,15 @@ export default function CatalogPage() {
       }
     } catch (e: any) {
       setActionMsg((prev) => ({ ...prev, [account]: "Gagal: " + e.message }));
+    }
+  }
+
+  function downloadAllPosters() {
+    const withPrice = visible.filter((a) => a.catalogPrice && a.catalogPrice > 0);
+    if (withPrice.length === 0) return;
+    if (!confirm(`Buka ${withPrice.length} poster di tab baru?`)) return;
+    for (const a of withPrice) {
+      window.open(`/poster?account=${encodeURIComponent(a.sourceAccount)}`, "_blank");
     }
   }
 
@@ -253,6 +262,14 @@ export default function CatalogPage() {
         list = list.filter((a) => (a.catalogPrice || 0) >= minP);
       } else {
         list = list.filter((a) => (a.soldPrice || 0) >= minP);
+      }
+    }
+    const maxP = Number(maxPrice) * 1000;
+    if (maxP > 0) {
+      if (tabMode === "catalog") {
+        list = list.filter((a) => (a.catalogPrice || 0) > 0 && (a.catalogPrice || 0) <= maxP);
+      } else {
+        list = list.filter((a) => (a.soldPrice || 0) > 0 && (a.soldPrice || 0) <= maxP);
       }
     }
     if (tabMode === "sold") {
@@ -409,6 +426,13 @@ export default function CatalogPage() {
         .cc-pet .cprate { font-size: 10px; color: var(--gold); font-weight: 700; }
         .cc-pet .cpmut { font-size: 8px; font-weight: 700; }
 
+        .btn-download-all {
+          background: #8b5cf6; color: #fff; border: none; border-radius: 10px;
+          padding: 10px 24px; font-size: 13px; font-weight: 800; cursor: pointer;
+        }
+        .btn-download-all:hover { filter: brightness(1.1); }
+        .btn-download-all:disabled { opacity: .6; cursor: not-allowed; }
+
         .cc-price-row {
           padding: 0 16px 8px;
         }
@@ -555,6 +579,18 @@ export default function CatalogPage() {
           />
           <span style={{ color: "var(--dim)", fontSize: 11 }}>.000</span>
         </div>
+        <label>Harga &le;:</label>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={{ color: "var(--dim)", fontSize: 12, fontWeight: 700 }}>Rp</span>
+          <input
+            type="number"
+            placeholder="0"
+            value={maxPrice}
+            onChange={(e) => setMaxPrice(e.target.value)}
+            style={{ width: 80 }}
+          />
+          <span style={{ color: "var(--dim)", fontSize: 11 }}>.000</span>
+        </div>
         <div className="viewtoggle">
           <button className={viewMode === "grid" ? "active" : ""} onClick={() => setViewMode("grid")}>
             Grid
@@ -591,7 +627,21 @@ export default function CatalogPage() {
             <div className="slabel">TOTAL STOLEN</div>
             <div className="sval">{totalStolen.toLocaleString()}</div>
           </div>
+          <div className="scard">
+            <div className="slabel">SUDAH ADA HARGA</div>
+            <div className="sval" style={{ color: "var(--accent)" }}>{accounts.filter((a) => a.catalogPrice && a.catalogPrice > 0).length}</div>
+          </div>
         </div>
+        {visible.some((a) => a.catalogPrice && a.catalogPrice > 0) && (
+          <div style={{ padding: "0 28px 12px", display: "flex", gap: 10, alignItems: "center" }}>
+            <button
+              className="btn-download-all"
+              onClick={downloadAllPosters}
+            >
+              {`Download All Poster (${visible.filter((a) => a.catalogPrice && a.catalogPrice > 0).length} akun)`}
+            </button>
+          </div>
+        )}
       ) : (
         <div className="summary">
           <div className="scard">
