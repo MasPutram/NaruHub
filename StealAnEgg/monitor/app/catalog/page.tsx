@@ -632,7 +632,7 @@ export default function CatalogPage() {
               <div className="cc-actions" style={{ position: "relative", zIndex: 15 }}>
                 <a
                   className="btn-poster"
-                  href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`}
+                  href={`/poster?account=${encodeURIComponent(a.sourceAccount)}${a.sold ? `&sold=1&soldPrice=${a.soldPrice || 0}` : ""}`}
                 >
                   {a.sold ? "Poster Terjual" : "Generate Poster"}
                 </a>

@@ -437,11 +437,13 @@ function groupByMutation(pets: Pet[]): [string, Pet[]][] {
 function PosterPage() {
   const params = useSearchParams();
   const accountName = params.get("account") || "";
+  const paramSold = params.get("sold") === "1";
+  const paramSoldPrice = Number(params.get("soldPrice")) || 0;
   const [summary, setSummary] = useState<AccountSummary | null>(null);
   const [detail, setDetail] = useState<AccountDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isSold, setIsSold] = useState(false);
-  const [soldPrice, setSoldPrice] = useState(0);
+  const [isSold, setIsSold] = useState(paramSold);
+  const [soldPrice, setSoldPrice] = useState(paramSoldPrice);
   const [price, setPrice] = useState("");
   const [ratePerB, setRatePerB] = useState("");
   const [rateHvPerB, setRateHvPerB] = useState("");
