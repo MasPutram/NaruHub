@@ -967,7 +967,7 @@ export default function DeviceDetailPage() {
                   className="btn primary"
                   disabled={selectedPkgs.length === 0 || launchingBatch || device.status !== "online"}
                   onClick={() => launchMany(selectedPkgs, false)}
-                  title="Launches selected packages — use Auto Grid & Apply first to set window positions"
+                  title="Launch selected packages — uses saved grid positions from Auto Grid"
                 >
                   {launchingBatch ? "Mengirim..." : `Launch selected (${selectedPkgs.length})`}
                 </button>
@@ -1092,8 +1092,7 @@ export default function DeviceDetailPage() {
             <h2>Grid Layout Configuration</h2>
             <div className="muted">
               Cols/rows auto-suggested from your checked packages ({selectedPkgs.length}) — override below if you
-              want a different shape. Save preview (visual only) or Apply to device (test) to actually resize
-              windows on the real device.
+              want a different shape. Save Grid menyimpan posisi window, lalu Launch selected untuk apply.
             </div>
             <div className="gridpreviewhead">
               <span>LAYOUT PREVIEW</span>
@@ -1164,11 +1163,11 @@ export default function DeviceDetailPage() {
               </button>
               <button
                 className="btn primary"
-                disabled={launchingBatch || device.status !== "online"}
+                disabled={savingPolicy}
                 onClick={applyGridToDevice}
-                title="Launches the checked packages and resizes their windows to this grid on the real device"
+                title="Simpan posisi window ke server — Launch selected akan apply posisi ini"
               >
-                Apply to device (test)
+                {savingPolicy ? "Saving..." : "Save Grid"}
               </button>
             </div>
           </div>
