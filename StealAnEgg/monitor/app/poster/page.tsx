@@ -482,20 +482,18 @@ function PosterPage() {
         } catch {}
       }
 
-      if (!found) {
-        try {
-          const soldRes = await fetch("/api/sold-accounts");
-          const soldData = await soldRes.json();
-          const soldFound = (soldData.accounts || []).find(
-            (a: any) => a.sourceAccount === accountName
-          );
-          if (soldFound) {
-            found = soldFound;
-            setIsSold(true);
-            setSoldPrice(soldFound.soldPrice || 0);
-          }
-        } catch {}
-      }
+      try {
+        const soldRes = await fetch("/api/sold-accounts");
+        const soldData = await soldRes.json();
+        const soldFound = (soldData.accounts || []).find(
+          (a: any) => a.sourceAccount === accountName
+        );
+        if (soldFound) {
+          if (!found) found = soldFound;
+          setIsSold(true);
+          setSoldPrice(soldFound.soldPrice || 0);
+        }
+      } catch {}
 
       if (found) setSummary(found);
 
