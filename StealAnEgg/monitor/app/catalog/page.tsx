@@ -24,6 +24,7 @@ interface Account {
   topPets: Pet[];
   online: boolean;
   forSale?: boolean;
+  catalogPrice?: number;
   sold?: boolean;
   soldPrice?: number;
   soldAt?: number;
@@ -118,7 +119,7 @@ function potensi18(a: Account): number {
   return total;
 }
 
-type SortMode = "name" | "speed" | "income" | "money" | "pets" | "eggs" | "potensi" | "akun_baru";
+type SortMode = "name" | "speed" | "income" | "money" | "pets" | "eggs" | "potensi" | "akun_baru" | "harga";
 type TabMode = "catalog" | "sold";
 
 export default function CatalogPage() {
@@ -129,6 +130,11 @@ export default function CatalogPage() {
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [tabMode, setTabMode] = useState<TabMode>("catalog");
   const [actionMsg, setActionMsg] = useState<Record<string, string>>({});
+
+  const [minPrice, setMinPrice] = useState("");
+  const [priceEditing, setPriceEditing] = useState<string | null>(null);
+  const [priceInput, setPriceInput] = useState("");
+  const [priceSaving, setPriceSaving] = useState(false);
 
   const [soldModal, setSoldModal] = useState<string | null>(null);
   const [soldPrice, setSoldPrice] = useState("");
@@ -152,6 +158,26 @@ export default function CatalogPage() {
     } catch (e: any) {
       setActionMsg((prev) => ({ ...prev, [account]: "Gagal: " + e.message }));
     }
+  }
+
+  async function saveCatalogPrice(account: string) {
+    const val = Number(priceInput);
+    if (isNaN(val) || val < 0) return;
+    setPriceSaving(true);
+    try {
+      const res = await fetch("/api/set-catalog-price", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account, price: val }),
+      });
+      if (res.ok) {
+        setAccounts((prev) =>
+          prev.map((a) => a.sourceAccount === account ? { ...a, catalogPrice: val } : a)
+        );
+        setPriceEditing(null);
+      }
+    } catch {}
+    setPriceSaving(false);
   }
 
   async function markSold() {
@@ -221,6 +247,14 @@ export default function CatalogPage() {
           (deviceLabel(a.sourceAccount) || "").toLowerCase().includes(q)
       );
     }
+    const minP = Number(minPrice) * 1000;
+    if (minP > 0) {
+      if (tabMode === "catalog") {
+        list = list.filter((a) => (a.catalogPrice || 0) >= minP);
+      } else {
+        list = list.filter((a) => (a.soldPrice || 0) >= minP);
+      }
+    }
     if (tabMode === "sold") {
       list.sort((a, b) => (b.soldAt || 0) - (a.soldAt || 0));
       return list;
@@ -247,6 +281,9 @@ export default function CatalogPage() {
       case "akun_baru":
         list = list.filter((a) => (a.treadmillLevel ?? -1) === 1);
         list.sort((a, b) => potensi18(b) - potensi18(a));
+        break;
+      case "harga":
+        list.sort((a, b) => (b.catalogPrice || 0) - (a.catalogPrice || 0));
         break;
       default:
         list.sort((a, b) => {
@@ -372,6 +409,16 @@ export default function CatalogPage() {
         .cc-pet .cprate { font-size: 10px; color: var(--gold); font-weight: 700; }
         .cc-pet .cpmut { font-size: 8px; font-weight: 700; }
 
+        .cc-price-row {
+          padding: 0 16px 8px;
+        }
+        .cc-price-btn {
+          background: none; border: 1px dashed var(--card-border); border-radius: 8px;
+          color: var(--accent); font-size: 13px; font-weight: 800; padding: 6px 12px;
+          cursor: pointer; width: 100%; text-align: center;
+        }
+        .cc-price-btn:hover { border-color: var(--accent); background: rgba(250,204,21,0.05); }
+
         .cc-actions { display: flex; gap: 8px; }
         .cc-actions a, .cc-actions button {
           flex: 1; text-align: center; padding: 8px; border-radius: 8px;
@@ -484,6 +531,7 @@ export default function CatalogPage() {
               <option value="eggs">Egg Stolen Terbanyak</option>
               <option value="potensi">Potensi 18 Pet</option>
               <option value="akun_baru">Akun Baru (Kandang 0)</option>
+              <option value="harga">Harga Tertinggi</option>
             </select>
           </>
         )}
@@ -495,6 +543,18 @@ export default function CatalogPage() {
           onChange={(e) => setSearchQuery(e.target.value)}
           style={{ width: 200 }}
         />
+        <label>Harga &ge;:</label>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={{ color: "var(--dim)", fontSize: 12, fontWeight: 700 }}>Rp</span>
+          <input
+            type="number"
+            placeholder="0"
+            value={minPrice}
+            onChange={(e) => setMinPrice(e.target.value)}
+            style={{ width: 80 }}
+          />
+          <span style={{ color: "var(--dim)", fontSize: 11 }}>.000</span>
+        </div>
         <div className="viewtoggle">
           <button className={viewMode === "grid" ? "active" : ""} onClick={() => setViewMode("grid")}>
             Grid
@@ -629,6 +689,44 @@ export default function CatalogPage() {
                 </div>
               )}
 
+              {!a.sold && (
+                <div className="cc-price-row">
+                  {priceEditing === a.sourceAccount ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%" }}>
+                      <span style={{ color: "var(--dim)", fontSize: 12, fontWeight: 700 }}>Rp</span>
+                      <input
+                        type="number"
+                        value={priceInput}
+                        onChange={(e) => setPriceInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") saveCatalogPrice(a.sourceAccount); if (e.key === "Escape") setPriceEditing(null); }}
+                        autoFocus
+                        style={{ flex: 1, background: "var(--bg)", color: "var(--ink)", border: "1px solid var(--card-border)", borderRadius: 6, padding: "4px 8px", fontSize: 13, fontWeight: 700 }}
+                      />
+                      <button
+                        onClick={() => saveCatalogPrice(a.sourceAccount)}
+                        disabled={priceSaving}
+                        style={{ background: "var(--accent)", color: "#000", border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}
+                      >
+                        {priceSaving ? "..." : "OK"}
+                      </button>
+                      <button
+                        onClick={() => setPriceEditing(null)}
+                        style={{ background: "#262636", color: "var(--ink)", border: "none", borderRadius: 6, padding: "4px 8px", fontSize: 11, cursor: "pointer" }}
+                      >
+                        X
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="cc-price-btn"
+                      onClick={() => { setPriceEditing(a.sourceAccount); setPriceInput(String(a.catalogPrice || "")); }}
+                    >
+                      {a.catalogPrice ? fmtRupiah(a.catalogPrice) : "Set Harga"}
+                    </button>
+                  )}
+                </div>
+              )}
+
               <div className="cc-actions" style={{ position: "relative", zIndex: 15 }}>
                 <a
                   className="btn-poster"
@@ -642,7 +740,7 @@ export default function CatalogPage() {
                       className="btn-sold"
                       onClick={() => {
                         setSoldModal(a.sourceAccount);
-                        setSoldPrice("");
+                        setSoldPrice(String(a.catalogPrice || ""));
                         setSoldError("");
                       }}
                     >
@@ -677,7 +775,7 @@ export default function CatalogPage() {
               <th>Pets</th>
               <th>Stolen</th>
               <th>Top Pet</th>
-              {tabMode === "sold" && <th>Harga</th>}
+              <th>Harga</th>
               {tabMode === "sold" && <th>Tanggal</th>}
               <th>Aksi</th>
             </tr>
@@ -709,11 +807,11 @@ export default function CatalogPage() {
                     ? `${a.topPets[0].name || a.topPets[0].category} (${fmtRate(a.topPets[0].rate)})`
                     : "-"}
                 </td>
-                {tabMode === "sold" && (
-                  <td style={{ color: "var(--red)", fontWeight: 700 }}>
-                    {fmtRupiah(a.soldPrice || 0)}
-                  </td>
-                )}
+                <td style={{ color: tabMode === "sold" ? "var(--red)" : "var(--accent)", fontWeight: 700, fontSize: 12 }}>
+                  {tabMode === "sold"
+                    ? fmtRupiah(a.soldPrice || 0)
+                    : a.catalogPrice ? fmtRupiah(a.catalogPrice) : "-"}
+                </td>
                 {tabMode === "sold" && (
                   <td style={{ color: "var(--dim)", fontSize: 11 }}>
                     {a.soldAt ? fmtDate(a.soldAt) : "-"}
@@ -728,7 +826,7 @@ export default function CatalogPage() {
                       <button
                         onClick={() => {
                           setSoldModal(a.sourceAccount);
-                          setSoldPrice("");
+                          setSoldPrice(String(a.catalogPrice || ""));
                           setSoldError("");
                         }}
                         style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", fontSize: 13, fontWeight: 700 }}
