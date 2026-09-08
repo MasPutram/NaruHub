@@ -435,19 +435,68 @@ function groupByMutation(pets: Pet[]): [string, Pet[]][] {
   });
 }
 
+function makeDummyData(): { summary: AccountSummary; detail: AccountDetail } {
+  const dummyPets: Pet[] = [
+    { category: "Shark", name: "Mutant Shark", rate: 8_500_000_000, mutations: ["rainbow"], weight: 12.5, rarity: "Divine" },
+    { category: "Dragon", name: "Dragon", rate: 5_200_000_000, mutations: ["golden"], weight: 8.2, rarity: "Eternal" },
+    { category: "Phoenix", name: "Phoenix", rate: 3_800_000_000, mutations: ["silver"], weight: 6.1, rarity: "Secret" },
+    { category: "Unicorn", name: "Unicorn", rate: 2_100_000_000, mutations: [], weight: 4.5, rarity: "Mythical" },
+    { category: "Tiger", name: "Tiger", rate: 1_500_000_000, mutations: ["golden"], weight: 3.2, rarity: "Legendary" },
+    { category: "Wolf", name: "Wolf", rate: 950_000_000, mutations: [], weight: 2.8, rarity: "Epic" },
+    { category: "Bear", name: "Bear", rate: 720_000_000, mutations: ["rainbow"], weight: 5.4, rarity: "Rare" },
+    { category: "Eagle", name: "Eagle", rate: 580_000_000, mutations: [], weight: 1.9, rarity: "Rare" },
+    { category: "Lion", name: "Lion", rate: 450_000_000, mutations: ["golden"], weight: 7.1, rarity: "Epic" },
+    { category: "Hawk", name: "Hawk", rate: 320_000_000, mutations: [], weight: 1.2, rarity: "Uncommon" },
+    { category: "Fox", name: "Fox", rate: 280_000_000, mutations: [], weight: 2.1, rarity: "Uncommon" },
+    { category: "Cat", name: "Cat", rate: 150_000_000, mutations: [], weight: 1.5, rarity: "Common" },
+  ];
+  const growingEggs: Pet[] = [
+    { category: "Phoenix", name: "Phoenix Egg", rate: 4_000_000_000, mutations: ["rainbow"], weight: 0, remainingSeconds: 3600, ready: false, rarity: "Divine" },
+    { category: "Dragon", name: "Dragon Egg", rate: 2_500_000_000, mutations: [], weight: 0, remainingSeconds: 7200, ready: false, rarity: "Eternal" },
+  ];
+  const backpackEggs: Pet[] = [
+    { category: "Tiger", name: "Tiger Egg", rate: 1_200_000_000, mutations: ["golden"], weight: 0, rarity: "Legendary" },
+  ];
+  return {
+    summary: {
+      sourceAccount: "BlekokGong99",
+      money: 15_800_000_000,
+      speed: 42_500_000_000,
+      incomeAktif: 24_300_000_000,
+      incomeEggBackpack: 1_200_000_000,
+      incomeEggSedangTumbuh: 6_500_000_000,
+      highValuePetTotal: 21_100_000_000,
+      kandangLevel: 45,
+      treadmillLevel: 38,
+      petsCount: 156,
+      stolenCount: 0,
+      topPets: dummyPets.slice(0, 3),
+      online: true,
+    },
+    detail: {
+      activePets: dummyPets.slice(0, 8),
+      activeLimit: 18,
+      allPets: dummyPets,
+      growingEggs,
+      backpackEggs,
+    },
+  };
+}
+
 function PosterPage() {
   const params = useSearchParams();
   const router = useRouter();
-  const accountName = params.get("account") || "";
+  const isTemplate = params.get("template") === "1";
+  const accountName = isTemplate ? "BlekokGong99" : (params.get("account") || "");
   const paramSold = params.get("sold") === "1";
   const paramSoldPrice = Number(params.get("soldPrice")) || 0;
   const paramCatalogPrice = Number(params.get("catalogPrice")) || 0;
-  const [summary, setSummary] = useState<AccountSummary | null>(null);
-  const [detail, setDetail] = useState<AccountDetail | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState<AccountSummary | null>(isTemplate ? makeDummyData().summary : null);
+  const [detail, setDetail] = useState<AccountDetail | null>(isTemplate ? makeDummyData().detail : null);
+  const [loading, setLoading] = useState(!isTemplate);
   const [isSold, setIsSold] = useState(paramSold);
   const [soldPrice, setSoldPrice] = useState(paramSoldPrice);
-  const [price, setPrice] = useState(paramCatalogPrice ? formatRupiah(paramCatalogPrice) : "");
+  const [price, setPrice] = useState(isTemplate ? "Rp 25.000" : (paramCatalogPrice ? formatRupiah(paramCatalogPrice) : ""));
   const [ratePerB, setRatePerB] = useState("");
   const [rateHvPerB, setRateHvPerB] = useState("");
   const [rateSpeedPerB, setRateSpeedPerB] = useState("");
@@ -478,7 +527,7 @@ function PosterPage() {
   }, []);
 
   const fetchData = useCallback(async () => {
-    if (!accountName) return;
+    if (!accountName || isTemplate) return;
     try {
       const [accRes, detRes] = await Promise.all([
         fetch("/api/accounts"),
@@ -526,7 +575,7 @@ function PosterPage() {
       }
     } catch {}
     setLoading(false);
-  }, [accountName]);
+  }, [accountName, isTemplate]);
 
   useEffect(() => {
     fetchData();
@@ -574,7 +623,7 @@ function PosterPage() {
       const digits = accountName.match(/(\d+)$/)?.[1] || "";
       const cp = getCurrentPrice();
       const priceSuffix = cp > 0 ? `-${Math.round(cp / 1000)}k` : "";
-      link.download = `Blekok-${digits}${priceSuffix}.png`;
+      link.download = isTemplate ? "Poster-Template-MasNaru.png" : `Blekok-${digits}${priceSuffix}.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
     } catch (e) {
@@ -656,7 +705,7 @@ function PosterPage() {
     setUnsoldLoading(false);
   }
 
-  if (!accountName) {
+  if (!accountName && !isTemplate) {
     return (
       <div style={{ padding: 40, color: "#8b8ba3", fontFamily: "sans-serif" }}>
         <p>Parameter <code>?account=NamaAkun</code> diperlukan.</p>

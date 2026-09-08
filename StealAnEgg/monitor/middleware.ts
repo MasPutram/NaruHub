@@ -6,9 +6,12 @@ const PUBLIC_PATHS = [
   "/api/monitor",
   "/api/check-access",
   "/api/termux",
+  "/api/pet-icon",
+  "/api/save-temp-image",
 ];
 
 function isPublic(pathname: string): boolean {
+  if (pathname === "/poster") return true;
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
