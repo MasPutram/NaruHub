@@ -160,13 +160,48 @@ export default function CatalogPage() {
     }
   }
 
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; account: string } | null>(null);
+
   function downloadAllPosters() {
     const withPrice = visible.filter((a) => a.catalogPrice && a.catalogPrice > 0);
     if (withPrice.length === 0) return;
-    if (!confirm(`Buka ${withPrice.length} poster di tab baru?`)) return;
-    for (const a of withPrice) {
-      window.open(`/poster?account=${encodeURIComponent(a.sourceAccount)}${a.catalogPrice ? `&catalogPrice=${a.catalogPrice}` : ""}`, "_blank");
+    if (batchProgress) return;
+    setBatchProgress({ current: 0, total: withPrice.length, account: "" });
+
+    let idx = 0;
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:1200px;height:2000px;border:none;opacity:0;pointer-events:none;";
+    document.body.appendChild(iframe);
+
+    function onMessage(ev: MessageEvent) {
+      if (ev.data?.type === "poster-ready" || ev.data?.type === "poster-error") {
+        if (ev.data.type === "poster-ready" && ev.data.dataUrl) {
+          const link = document.createElement("a");
+          const digits = (ev.data.account as string).match(/(\d+)$/)?.[1] || "";
+          const price = Number(ev.data.price) || 0;
+          const priceSuffix = price > 0 ? `-${Math.round(price / 1000)}k` : "";
+          link.download = `Blekok-${digits}${priceSuffix}.png`;
+          link.href = ev.data.dataUrl;
+          link.click();
+        }
+        idx++;
+        if (idx < withPrice.length) {
+          loadNext();
+        } else {
+          window.removeEventListener("message", onMessage);
+          document.body.removeChild(iframe);
+          setBatchProgress(null);
+        }
+      }
     }
+    window.addEventListener("message", onMessage);
+
+    function loadNext() {
+      const a = withPrice[idx];
+      setBatchProgress({ current: idx + 1, total: withPrice.length, account: a.sourceAccount });
+      iframe.src = `/poster?account=${encodeURIComponent(a.sourceAccount)}&catalogPrice=${a.catalogPrice || 0}&autoDownload=1`;
+    }
+    loadNext();
   }
 
   async function saveCatalogPrice(account: string) {
@@ -641,9 +676,17 @@ export default function CatalogPage() {
           <button
             className="btn-download-all"
             onClick={downloadAllPosters}
+            disabled={!!batchProgress}
           >
-            {`Download All Poster (${visible.filter((a) => a.catalogPrice && a.catalogPrice > 0).length} akun)`}
+            {batchProgress
+              ? `Generating ${batchProgress.current}/${batchProgress.total} — ${batchProgress.account}`
+              : `Download All Poster (${visible.filter((a) => a.catalogPrice && a.catalogPrice > 0).length} akun)`}
           </button>
+          {batchProgress && (
+            <div style={{ flex: 1, maxWidth: 200, height: 6, background: "#262636", borderRadius: 3, overflow: "hidden" }}>
+              <div style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%`, height: "100%", background: "#8b5cf6", borderRadius: 3, transition: "width .3s" }} />
+            </div>
+          )}
         </div>
       )}
 

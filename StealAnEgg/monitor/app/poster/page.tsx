@@ -463,6 +463,7 @@ function PosterPage() {
   const [savingPrice, setSavingPrice] = useState(false);
   const [savedPrice, setSavedPrice] = useState(false);
   const posterRef = useRef<HTMLDivElement>(null);
+  const autoDownload = params.get("autoDownload") === "1";
 
   useEffect(() => { loadIconIndex().then(setIconIdx); }, []);
 
@@ -521,6 +522,34 @@ function PosterPage() {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    if (!autoDownload || loading || !summary || !posterRef.current) return;
+    const timer = setTimeout(async () => {
+      try {
+        const { default: html2canvas } = await import("html2canvas-pro");
+        const canvas = await html2canvas(posterRef.current!, {
+          scale: 2,
+          backgroundColor: "#DFE7F0",
+          useCORS: true,
+        });
+        const dataUrl = canvas.toDataURL("image/png");
+        window.parent.postMessage({
+          type: "poster-ready",
+          account: accountName,
+          dataUrl,
+          price: paramCatalogPrice,
+        }, "*");
+      } catch (e) {
+        window.parent.postMessage({
+          type: "poster-error",
+          account: accountName,
+          error: (e as Error).message,
+        }, "*");
+      }
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [autoDownload, loading, summary, accountName, paramCatalogPrice]);
+
   async function downloadPoster() {
     if (!posterRef.current) return;
     setDownloading(true);
@@ -533,7 +562,9 @@ function PosterPage() {
       });
       const link = document.createElement("a");
       const digits = accountName.match(/(\d+)$/)?.[1] || "";
-      link.download = `Blekok-${digits}.png`;
+      const cp = getCurrentPrice();
+      const priceSuffix = cp > 0 ? `-${Math.round(cp / 1000)}k` : "";
+      link.download = `Blekok-${digits}${priceSuffix}.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
     } catch (e) {
