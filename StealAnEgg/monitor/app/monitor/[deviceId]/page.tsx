@@ -156,6 +156,16 @@ export default function DeviceDetailPage() {
   const [linkDraft, setLinkDraft] = useState("");
   const [linkTargetPkg, setLinkTargetPkg] = useState<string | null>(null); // null = batch (all selected)
 
+  // Job ID Server Finder (inside link modal).
+  interface RobloxServer { id: string; maxPlayers: number; playing: number; playerTokens: string[]; fps: number; ping: number; }
+  const [sfOpen, setSfOpen] = useState(false);
+  const [sfPlaceId, setSfPlaceId] = useState("");
+  const [sfServers, setSfServers] = useState<RobloxServer[]>([]);
+  const [sfLoading, setSfLoading] = useState(false);
+  const [sfCursor, setSfCursor] = useState<string | null>(null);
+  const [sfError, setSfError] = useState("");
+  const [sfFilter, setSfFilter] = useState("");
+
   // Uninstall picker modal state (separate from the launch checkboxes so
   // an operator's launch selection isn't accidentally uninstalled).
   const [uninstOpen, setUninstOpen] = useState(false);
@@ -504,6 +514,35 @@ export default function DeviceDetailPage() {
     // Prefill with the existing target if editing a single package.
     setLinkDraft(pkg ? (packageTargets[pkg] || "") : "");
     setLinkModalOpen(true);
+  }
+
+  async function sfFetch(placeId: string, cursor?: string) {
+    if (!placeId || !/^\d+$/.test(placeId)) { setSfError("Place ID harus angka"); return; }
+    setSfLoading(true);
+    setSfError("");
+    try {
+      const params = new URLSearchParams({ placeId, sortOrder: "Asc", limit: "100" });
+      if (cursor) params.set("cursor", cursor);
+      const res = await fetch(`/api/roblox-servers?${params}`);
+      const data = await res.json();
+      if (!data.ok) { setSfError(data.error || "Gagal fetch"); setSfLoading(false); return; }
+      const servers: RobloxServer[] = data.data || [];
+      if (cursor) {
+        setSfServers((prev) => [...prev, ...servers]);
+      } else {
+        setSfServers(servers);
+      }
+      setSfCursor(data.nextPageCursor || null);
+    } catch (e: any) {
+      setSfError(e.message);
+    }
+    setSfLoading(false);
+  }
+
+  function sfSelectServer(jobId: string) {
+    const deep = `roblox://placeId=${sfPlaceId}&gameInstanceId=${jobId}`;
+    setLinkDraft(deep);
+    setSfOpen(false);
   }
 
   async function confirmLink() {
@@ -1185,7 +1224,7 @@ export default function DeviceDetailPage() {
 
       {linkModalOpen && (
         <div className="modal-overlay" onClick={() => setLinkModalOpen(false)}>
-          <div className="modal" style={{ width: "min(460px, 92vw)" }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal" style={{ width: sfOpen ? "min(580px, 96vw)" : "min(460px, 92vw)", maxHeight: "90vh", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
             <h2 style={{ fontSize: 13, letterSpacing: ".08em", color: "var(--dim)", margin: "0 0 4px" }}>
               LINK PRIVATE SERVER
             </h2>
@@ -1220,6 +1259,82 @@ export default function DeviceDetailPage() {
                 Will resolve to: <code style={{ color: "var(--cyan)" }}>{parseRobloxTarget(linkDraft) || "(unparseable, sent as-is)"}</code>
               </div>
             )}
+
+            {/* Server Finder toggle */}
+            <button
+              className="btn"
+              style={{ marginTop: 12, fontSize: 11, padding: "5px 10px", color: "var(--cyan)", border: "1px solid var(--cyan)", background: "transparent" }}
+              onClick={() => { setSfOpen(!sfOpen); if (!sfOpen && sfServers.length === 0) setSfPlaceId(""); }}
+            >
+              {sfOpen ? "▾ Tutup Server Finder" : "▸ Job ID Server Finder"}
+            </button>
+
+            {sfOpen && (
+              <div style={{ marginTop: 10, borderTop: "1px solid var(--border)", paddingTop: 10, flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                  <input
+                    value={sfPlaceId}
+                    onChange={(e) => setSfPlaceId(e.target.value.replace(/\D/g, ""))}
+                    placeholder="Place ID"
+                    style={{ flex: 1, background: "#0e0e16", border: "1px solid var(--border)", borderRadius: 6, padding: "7px 10px", color: "var(--ink)", fontSize: 12, outline: "none" }}
+                    onKeyDown={(e) => { if (e.key === "Enter") sfFetch(sfPlaceId); }}
+                  />
+                  <button className="btn primary" style={{ fontSize: 11, padding: "6px 14px" }} onClick={() => sfFetch(sfPlaceId)} disabled={sfLoading || !sfPlaceId}>
+                    {sfLoading && sfServers.length === 0 ? "Loading..." : "Refresh"}
+                  </button>
+                </div>
+                {sfError && <div style={{ color: "var(--red)", fontSize: 11, marginBottom: 6 }}>{sfError}</div>}
+                {sfServers.length > 0 && (
+                  <>
+                    <input
+                      value={sfFilter}
+                      onChange={(e) => setSfFilter(e.target.value)}
+                      placeholder="Filter by Job ID or player count..."
+                      style={{ width: "100%", background: "#0e0e16", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", color: "var(--ink)", fontSize: 11, outline: "none", marginBottom: 8 }}
+                    />
+                    <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 }}>
+                      {sfServers
+                        .filter((s) => {
+                          if (!sfFilter) return true;
+                          const q = sfFilter.toLowerCase();
+                          return s.id.toLowerCase().includes(q) || `${s.playing}/${s.maxPlayers}`.includes(q);
+                        })
+                        .map((s) => (
+                          <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#0e0e16", border: "1px solid var(--border)", borderRadius: 8 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                                <span className="badge game" style={{ fontSize: 10 }}>{s.playing} / {s.maxPlayers} Players</span>
+                                <span style={{ fontSize: 10, color: "var(--dim)" }}>{"⚡"} {s.ping}ms {"•"} {s.fps} FPS</span>
+                              </div>
+                              <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 3, wordBreak: "break-all", fontFamily: "monospace" }}>{s.id}</div>
+                            </div>
+                            <button
+                              className="btn"
+                              style={{ padding: "4px 8px", fontSize: 10 }}
+                              title="Copy Job ID"
+                              onClick={() => { navigator.clipboard.writeText(s.id); setToast("Job ID copied"); }}
+                            >{"📋"}</button>
+                            <button
+                              className="btn primary"
+                              style={{ padding: "5px 12px", fontSize: 11, whiteSpace: "nowrap" }}
+                              onClick={() => sfSelectServer(s.id)}
+                            >{"⚡"} Select</button>
+                          </div>
+                        ))}
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, fontSize: 11, color: "var(--dim)" }}>
+                      <span>Loaded {sfServers.length} server(s)</span>
+                      {sfCursor && (
+                        <button className="btn" style={{ fontSize: 11, padding: "4px 12px" }} onClick={() => sfFetch(sfPlaceId, sfCursor)} disabled={sfLoading}>
+                          {sfLoading ? "Loading..." : "Load More"}
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             <div className="modalfoot" style={{ marginTop: 16 }}>
               <button className="btn" onClick={() => setLinkModalOpen(false)}>Cancel</button>
               <button className="btn primary" onClick={confirmLink} disabled={savingPolicy}>
