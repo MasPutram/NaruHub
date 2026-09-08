@@ -321,6 +321,7 @@ export default function CatalogPage() {
   const totalPets = activeList.reduce((s, a) => s + (a.petsCount || 0), 0);
   const totalStolen = activeList.reduce((s, a) => s + (a.stolenCount || 0), 0);
   const totalSoldRevenue = soldAccounts.reduce((s, a) => s + (a.soldPrice || 0), 0);
+  const estimasiPendapatan = accounts.reduce((s, a) => s + (a.catalogPrice || 0), 0);
 
   return (
     <>
@@ -608,24 +609,8 @@ export default function CatalogPage() {
             <div className="sval">{visible.length}</div>
           </div>
           <div className="scard">
-            <div className="slabel">ONLINE</div>
-            <div className="sval" style={{ color: "var(--green)" }}>{onlineCount}</div>
-          </div>
-          <div className="scard">
-            <div className="slabel">TOTAL MONEY</div>
-            <div className="sval" style={{ color: "var(--gold)" }}>{fmtMoney(totalMoney)}</div>
-          </div>
-          <div className="scard">
-            <div className="slabel">TOTAL SPEED</div>
-            <div className="sval" style={{ color: "var(--accent)" }}>{fmtCompact(totalSpeed)}</div>
-          </div>
-          <div className="scard">
-            <div className="slabel">TOTAL PETS</div>
-            <div className="sval">{totalPets.toLocaleString()}</div>
-          </div>
-          <div className="scard">
-            <div className="slabel">TOTAL STOLEN</div>
-            <div className="sval">{totalStolen.toLocaleString()}</div>
+            <div className="slabel">ESTIMASI PENDAPATAN</div>
+            <div className="sval" style={{ color: "var(--green)" }}>{fmtRupiah(estimasiPendapatan)}</div>
           </div>
           <div className="scard">
             <div className="slabel">SUDAH ADA HARGA</div>
