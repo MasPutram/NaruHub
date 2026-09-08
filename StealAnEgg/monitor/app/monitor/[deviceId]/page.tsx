@@ -148,6 +148,7 @@ export default function DeviceDetailPage() {
   const [retryLimit, setRetryLimit] = useState(0); // 0 = unlimited
   const [autoRejoinPkgs, setAutoRejoinPkgs] = useState<Record<string, boolean>>({});
   const [packageTargets, setPackageTargets] = useState<Record<string, string>>({});
+  const [packageBounds, setPackageBounds] = useState<Record<string, string>>({});
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [policyLoaded, setPolicyLoaded] = useState(false);
 
@@ -319,6 +320,7 @@ export default function DeviceDetailPage() {
           for (const p of data.policy.autoRejoinPackages || []) map[p] = true;
           setAutoRejoinPkgs(map);
           setPackageTargets(data.policy.packageTargets || {});
+          setPackageBounds(data.policy.packageBounds || {});
         }
       } catch {}
       setPolicyLoaded(true);
@@ -345,6 +347,7 @@ export default function DeviceDetailPage() {
           autoRejoinPackages,
           launchDelay,
           packageTargets,
+          packageBounds,
         }),
       });
       const data = await res.json();
@@ -416,9 +419,7 @@ export default function DeviceDetailPage() {
       const data = await res.json();
       setToast(
         data.ok
-          ? resize
-            ? `Grid applied: resize queued for ${list.length} package${list.length !== 1 ? "s" : ""}`
-            : `Launch queued for ${list.length} package${list.length !== 1 ? "s" : ""}`
+          ? `Launch queued for ${list.length} package${list.length !== 1 ? "s" : ""}`
           : `Gagal: ${data.error}`
       );
       if (data.ok) fetchDevice();
@@ -438,36 +439,79 @@ export default function DeviceDetailPage() {
     return { cols, rows };
   }
 
-  function autoGridAndApply() {
+  async function autoGridAndApply() {
     if (selectedPkgs.length === 0) {
       setToast("Pilih dulu package yang mau di-grid (checkbox di tabel)");
       return;
     }
     const dims = autoGridDims(selectedPkgs.length);
-    const ok = window.confirm(
-      `Auto grid ${dims.cols}x${dims.rows} untuk ${selectedPkgs.length} package yang dipilih.\n\n` +
-        `Langsung launch + resize di device SUNGGUHAN. Lanjut?`
-    );
-    if (!ok) return;
     setLayout(dims);
     setDraftLayout(dims);
-    launchMany(selectedPkgs, true, dims);
+
+    const sw = device!.screen?.width || 1920;
+    const sh = device!.screen?.height || 1080;
+    const gap = 16;
+    const topPad = 50;
+    const cellW = Math.floor((sw - gap * (dims.cols + 1)) / dims.cols);
+    const cellH = Math.floor((sh - topPad - gap * dims.rows) / dims.rows);
+    const newBounds: Record<string, string> = { ...packageBounds };
+    for (let i = 0; i < selectedPkgs.length; i++) {
+      const col = i % dims.cols;
+      const row = Math.floor(i / dims.cols);
+      const left = gap + col * (cellW + gap);
+      const top = topPad + row * (cellH + gap);
+      newBounds[selectedPkgs[i].pkg] = `${left},${top},${left + cellW},${top + cellH}`;
+    }
+    setPackageBounds(newBounds);
+
+    setSavingPolicy(true);
+    try {
+      const autoRejoinPackages = Object.entries(autoRejoinPkgs).filter(([, v]) => v).map(([k]) => k);
+      await fetch("/api/device-control/policy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, autoRejoinEnabled, rejoinDelay, retryLimit, autoRejoinPackages, launchDelay, packageTargets, packageBounds: newBounds }),
+      });
+    } catch {}
+    setSavingPolicy(false);
+    setToast(`Grid ${dims.cols}x${dims.rows} saved for ${selectedPkgs.length} package(s) — use Launch selected to apply`);
   }
 
-  function applyGridToDevice() {
+  async function applyGridToDevice() {
     if (selectedPkgs.length === 0) {
       setToast("Pilih dulu package yang mau di-grid (checkbox di tabel)");
       return;
     }
-    const ok = window.confirm(
-      `Terapkan grid ${draftLayout.cols}x${draftLayout.rows} ke device ini sekarang?\n\n` +
-        `${selectedPkgs.length} package akan di-launch + resize di device SUNGGUHAN. ` +
-        `Uji dulu di 1 device sebelum dipakai luas.`
-    );
-    if (!ok) return;
     setLayout(draftLayout);
     setGridModalOpen(false);
-    launchMany(selectedPkgs, true, draftLayout);
+
+    const sw = device!.screen?.width || 1920;
+    const sh = device!.screen?.height || 1080;
+    const gap = 16;
+    const topPad = 50;
+    const cellW = Math.floor((sw - gap * (draftLayout.cols + 1)) / draftLayout.cols);
+    const cellH = Math.floor((sh - topPad - gap * draftLayout.rows) / draftLayout.rows);
+    const newBounds: Record<string, string> = { ...packageBounds };
+    for (let i = 0; i < selectedPkgs.length; i++) {
+      const col = i % draftLayout.cols;
+      const row = Math.floor(i / draftLayout.cols);
+      const left = gap + col * (cellW + gap);
+      const top = topPad + row * (cellH + gap);
+      newBounds[selectedPkgs[i].pkg] = `${left},${top},${left + cellW},${top + cellH}`;
+    }
+    setPackageBounds(newBounds);
+
+    setSavingPolicy(true);
+    try {
+      const autoRejoinPackages = Object.entries(autoRejoinPkgs).filter(([, v]) => v).map(([k]) => k);
+      await fetch("/api/device-control/policy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, autoRejoinEnabled, rejoinDelay, retryLimit, autoRejoinPackages, launchDelay, packageTargets, packageBounds: newBounds }),
+      });
+    } catch {}
+    setSavingPolicy(false);
+    setToast(`Grid ${draftLayout.cols}x${draftLayout.rows} saved — use Launch selected to apply`);
   }
 
   async function uninstallPackages(list: TermuxPackage[]) {
@@ -581,6 +625,7 @@ export default function DeviceDetailPage() {
           autoRejoinPackages,
           launchDelay,
           packageTargets: next,
+          packageBounds,
         }),
       });
       const data = await res.json();
@@ -916,13 +961,13 @@ export default function DeviceDetailPage() {
                   onClick={autoGridAndApply}
                   title="Computes a near-square grid for the selected packages and applies it immediately"
                 >
-                  {launchingBatch ? "Mengirim..." : `Auto Grid & Apply (${selectedPkgs.length})`}
+                  {savingPolicy ? "Saving..." : `Auto Grid (${selectedPkgs.length})`}
                 </button>
                 <button
                   className="btn primary"
                   disabled={selectedPkgs.length === 0 || launchingBatch || device.status !== "online"}
                   onClick={() => launchMany(selectedPkgs, false)}
-                  title="Launches selected packages without resizing — use Auto Grid & Apply to set window bounds first"
+                  title="Launches selected packages — use Auto Grid & Apply first to set window positions"
                 >
                   {launchingBatch ? "Mengirim..." : `Launch selected (${selectedPkgs.length})`}
                 </button>

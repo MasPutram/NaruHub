@@ -39,6 +39,8 @@ interface DevicePolicy {
   // http(s) URL. When set, both manual launches and auto-rejoin open this
   // exact place/private server instead of Roblox's home screen.
   packageTargets: Record<string, string>;
+  // Per-package saved window bounds from Auto Grid: package -> "left,top,right,bottom"
+  packageBounds: Record<string, string>;
   updatedAt: number;
 }
 
@@ -49,6 +51,7 @@ const DEFAULT_POLICY: DevicePolicy = {
   autoRejoinPackages: [],
   launchDelay: 10,
   packageTargets: {},
+  packageBounds: {},
   updatedAt: 0,
 };
 
@@ -59,6 +62,11 @@ function normalize(raw: any): DevicePolicy {
   for (const [k, v] of Object.entries(rawTargets)) {
     if (typeof v === "string" && v.trim().length > 0) packageTargets[k] = String(v).trim();
   }
+  const rawBounds = (p.packageBounds && typeof p.packageBounds === "object") ? p.packageBounds : {};
+  const packageBounds: Record<string, string> = {};
+  for (const [k, v] of Object.entries(rawBounds)) {
+    if (typeof v === "string" && /^\d+,\d+,\d+,\d+$/.test(v.trim())) packageBounds[k] = v.trim();
+  }
   return {
     autoRejoinEnabled: !!p.autoRejoinEnabled,
     rejoinDelay: Math.max(1, Math.min(600, Number(p.rejoinDelay) || DEFAULT_POLICY.rejoinDelay)),
@@ -68,6 +76,7 @@ function normalize(raw: any): DevicePolicy {
       : [],
     launchDelay: Math.max(0, Math.min(300, Number(p.launchDelay) || DEFAULT_POLICY.launchDelay)),
     packageTargets,
+    packageBounds,
     updatedAt: Number(p.updatedAt) || 0,
   };
 }

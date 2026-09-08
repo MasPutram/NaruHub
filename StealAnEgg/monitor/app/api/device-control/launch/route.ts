@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   redis,
   termuxDeviceKey,
+  termuxDevicePolicyKey,
   termuxCommandQueueKey,
   termuxCommandLogKey,
   TERMUX_COMMAND_QUEUE_TTL_S,
@@ -58,12 +59,26 @@ export async function POST(req: NextRequest) {
     const device = typeof deviceRaw === "string" ? JSON.parse(deviceRaw) : deviceRaw;
     const screen = device.screen;
 
+    // Read saved bounds from policy (set by Auto Grid).
+    let savedBounds: Record<string, string> = {};
+    if (!applyResize) {
+      try {
+        const policyRaw = await redis.get<string>(termuxDevicePolicyKey(deviceId));
+        if (policyRaw) {
+          const pol = typeof policyRaw === "string" ? JSON.parse(policyRaw) : policyRaw;
+          if (pol.packageBounds && typeof pol.packageBounds === "object") savedBounds = pol.packageBounds;
+        }
+      } catch {}
+    }
+
     const queueKey = termuxCommandQueueKey(deviceId);
     const commands: any[] = [];
     for (let i = 0; i < packageNames.length; i++) {
       const packageName = packageNames[i];
       let bounds = "";
-      if (screen && screen.width && screen.height) {
+      let useResize = applyResize;
+
+      if (applyResize && screen && screen.width && screen.height) {
         const gap = 16;
         const topPad = 50;
         const cellW = Math.floor((screen.width - gap * (c + 1)) / c);
@@ -75,6 +90,9 @@ export async function POST(req: NextRequest) {
         const right = left + cellW;
         const bottom = top + cellH;
         bounds = `${left},${top},${right},${bottom}`;
+      } else if (!applyResize && savedBounds[packageName]) {
+        bounds = savedBounds[packageName];
+        useResize = true;
       }
 
       const command = {
@@ -82,7 +100,7 @@ export async function POST(req: NextRequest) {
         type: "launch",
         package: packageName,
         bounds,
-        resize: applyResize,
+        resize: useResize,
         launchDelay,
         target: targets[packageName] || "",
         createdAt: Date.now(),
