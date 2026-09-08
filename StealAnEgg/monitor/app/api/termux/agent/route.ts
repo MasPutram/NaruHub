@@ -475,19 +475,20 @@ local function launch_app(pkg, bounds, resize, delay, target, forceKill)
     end
   end
 
+  local flags = "--activity-clear-top --activity-new-task"
   if target and target ~= "" then
     log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset .. C.dim .. " -> " .. target .. C.reset)
     local safe = target:gsub('"', '\\\\"')
     local ok = shellcode(string.format(
-      'su -c "am start -a android.intent.action.VIEW -d \\\\"%s\\\\" -p %s"',
-      safe, pkg
+      'su -c "am start %s -a android.intent.action.VIEW -d \\\\"%s\\\\" -p %s"',
+      flags, safe, pkg
     ))
     if not ok then
-      shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
+      shellcode(string.format('su -c "am start %s -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', flags, pkg))
     end
   else
     log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset)
-    shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
+    shellcode(string.format('su -c "am start %s -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', flags, pkg))
   end
 
   -- Wait for the app window to actually be drawn on screen, not just for
@@ -521,17 +522,18 @@ end
 -- Rapid-fire an am start for one package WITHOUT waiting for it to finish
 -- initializing. No kill — just am start.
 local function fire_start(pkg, target)
+  local flags = "--activity-clear-top --activity-new-task"
   if target and target ~= "" then
     local safe = target:gsub('"', '\\\\"')
     local ok = shellcode(string.format(
-      'su -c "am start -a android.intent.action.VIEW -d \\\\"%s\\\\" -p %s"',
-      safe, pkg
+      'su -c "am start %s -a android.intent.action.VIEW -d \\\\"%s\\\\" -p %s"',
+      flags, safe, pkg
     ))
     if not ok then
-      shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
+      shellcode(string.format('su -c "am start %s -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', flags, pkg))
     end
   else
-    shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
+    shellcode(string.format('su -c "am start %s -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', flags, pkg))
   end
 end
 
