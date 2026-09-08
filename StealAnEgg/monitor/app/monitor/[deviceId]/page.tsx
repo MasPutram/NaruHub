@@ -872,7 +872,7 @@ export default function DeviceDetailPage() {
                         </td>
                         <td>
                           <div style={{ display: "flex", gap: 4 }}>
-                            <button className="btn" disabled={launchingBatch || device.status !== "online"} onClick={() => launchMany([p], true)}>
+                            <button className="btn" disabled={launchingBatch || device.status !== "online"} onClick={() => launchMany([p], false)}>
                               Open
                             </button>
                             <button
@@ -921,8 +921,8 @@ export default function DeviceDetailPage() {
                 <button
                   className="btn primary"
                   disabled={selectedPkgs.length === 0 || launchingBatch || device.status !== "online"}
-                  onClick={() => launchMany(selectedPkgs, true)}
-                  title="Launches selected packages AND applies the current grid layout so window bounds match the latest config"
+                  onClick={() => launchMany(selectedPkgs, false)}
+                  title="Launches selected packages without resizing — use Auto Grid & Apply to set window bounds first"
                 >
                   {launchingBatch ? "Mengirim..." : `Launch selected (${selectedPkgs.length})`}
                 </button>
