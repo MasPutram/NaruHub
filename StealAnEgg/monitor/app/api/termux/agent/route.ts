@@ -446,8 +446,8 @@ end
 -- doesn't see the window flicker (close -> reopen). If the app isn't
 -- running at all, the kill would be a no-op anyway so skip it and save
 -- the 1-second sleep too.
-local function smart_kill_if_needed(pkg, target, resize, bounds)
-  local need_fresh = (target and target ~= "") or (resize and bounds and bounds ~= "")
+local function smart_kill_if_needed(pkg, target, resize, bounds, forceKill)
+  local need_fresh = forceKill or (target and target ~= "") or (resize and bounds and bounds ~= "")
   if not need_fresh then return false end
   if not is_pkg_running(pkg) then return false end
   kill_pkg(pkg)
@@ -455,8 +455,8 @@ local function smart_kill_if_needed(pkg, target, resize, bounds)
   return true
 end
 
-local function launch_app(pkg, bounds, resize, delay, target)
-  local killed = smart_kill_if_needed(pkg, target, resize, bounds)
+local function launch_app(pkg, bounds, resize, delay, target, forceKill)
+  local killed = smart_kill_if_needed(pkg, target, resize, bounds, forceKill)
 
   if resize and bounds and bounds ~= "" then
     local left, top, right, bottom = bounds:match("(%d+),(%d+),(%d+),(%d+)")
@@ -546,7 +546,7 @@ local function batch_launch(cmds)
   if #cmds == 0 then return end
   if #cmds == 1 then
     local c = cmds[1]
-    launch_app(c.package, c.bounds, c.resize, c.launchDelay, c.target)
+    launch_app(c.package, c.bounds, c.resize, c.launchDelay, c.target, c.forceKill)
     return
   end
 

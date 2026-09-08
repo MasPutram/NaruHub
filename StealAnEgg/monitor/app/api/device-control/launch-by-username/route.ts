@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
       resize: false,
       launchDelay: 10,
       target: "",
+      forceKill: true,
       createdAt: Date.now(),
     };
     await redis.queuePush(termuxCommandQueueKey(matchDevice.deviceId), JSON.stringify(command), {
