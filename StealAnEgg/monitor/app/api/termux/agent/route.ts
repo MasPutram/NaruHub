@@ -475,22 +475,22 @@ end
 local function kill_if_forced(pkg, forceKill)
   if not forceKill then return false end
   if not is_pkg_running(pkg) then
-    log(C.dim .. "[" .. ts() .. "] siap-jual: " .. pkg .. " not running, skip kill" .. C.reset)
+    log(C.dim .. "[" .. ts() .. "] force-stop skip (" .. pkg .. " not running)" .. C.reset)
     return false
   end
-  log(C.yellow .. "[" .. ts() .. "] siap-jual: force-stop " .. pkg .. C.reset)
+  log(C.yellow .. "[" .. ts() .. "] force-stop " .. pkg .. C.reset)
   kill_pkg_pidonly(pkg)
   sleep(2)
   -- Verify it actually died. If the app is still in the activity stack the
   -- first force-stop didn't take (timing / race), so hit it once more before
-  -- we relaunch -- otherwise am start just refocuses the still-in-game
-  -- window and it never returns to Roblox home.
+  -- we relaunch -- otherwise am start just refocuses the stuck window (Siap
+  -- Jual: still in-game; deep-link: stuck on error screen, never joins).
   if is_pkg_running(pkg) then
-    log(C.red .. "[" .. ts() .. "] siap-jual: " .. pkg .. " still up, retry force-stop" .. C.reset)
+    log(C.red .. "[" .. ts() .. "] " .. pkg .. " still up, retry force-stop" .. C.reset)
     kill_pkg_pidonly(pkg)
     sleep(2)
   end
-  log(C.green .. "[" .. ts() .. "] siap-jual: " .. pkg .. " stopped, relaunching to home" .. C.reset)
+  log(C.green .. "[" .. ts() .. "] " .. pkg .. " stopped, relaunching" .. C.reset)
   return true
 end
 
@@ -508,7 +508,15 @@ local function trim_ram()
 end
 
 local function launch_app(pkg, bounds, resize, delay, target, forceKill)
-  kill_if_forced(pkg, forceKill)
+  -- A targeted (deep-link) launch must cold-start: Roblox only acts on a
+  -- roblox://placeId join from a FRESH process. If the app is already up --
+  -- e.g. stuck on an error/reconnect screen after a failed launch -- then
+  -- am start VIEW just refocuses it and never joins the place. So force-stop
+  -- first whenever there's a target, not only for the Siap Jual flow.
+  -- (kill_if_forced no-ops when the package isn't running, so a normal cold
+  -- launch pays nothing.)
+  local wantKill = forceKill or (target ~= nil and target ~= "")
+  kill_if_forced(pkg, wantKill)
   trim_ram()
 
   if resize and bounds and bounds ~= "" then
