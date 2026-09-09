@@ -100,6 +100,7 @@ interface Account {
   treadmillLevel: number | null;
   petsCount: number;
   stolenCount: number;
+  bossToken?: number | null;
   growingEggCount?: number;
   backpackEggCount?: number;
   topPets: Pet[];
@@ -446,6 +447,7 @@ export default function DashboardPage() {
         .status-dot.off { background: var(--red); box-shadow: 0 0 6px rgba(239,68,68,.4); }
         .acc-name { font-weight: 800; font-size: 14px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .dev-tag { color: var(--accent2); font-size: 9px; font-weight: 800; background: rgba(34,211,238,.08); border: 1px solid rgba(34,211,238,.2); border-radius: 5px; padding: 2px 6px; flex-shrink: 0; }
+        .boss-tag { font-size: 9px; font-weight: 900; color: #1a1030; background: linear-gradient(135deg, #a78bfa, #7c3aed); border-radius: 5px; padding: 2px 6px; flex-shrink: 0; letter-spacing: .3px; white-space: nowrap; }
         .time-tag { font-size: 10px; font-weight: 700; flex-shrink: 0; }
         .time-tag.on { color: var(--dim); }
         .time-tag.off { color: var(--red); }
@@ -689,6 +691,9 @@ function AccountCard({ account: a, onOpen, onSell, onDelete, deleteConfirm, onDe
         <span className={`status-dot ${isOff ? "off" : "on"}`} />
         <span className="acc-name">{a.sourceAccount}</span>
         {deviceLabel(a.sourceAccount) && <span className="dev-tag">{deviceLabel(a.sourceAccount)}</span>}
+        {(a.bossToken ?? 0) > 0 && (
+          <span className="boss-tag" title={`${a.bossToken} Boss Token (event)`}>&#x1F451; {a.bossToken}</span>
+        )}
         <span className={`time-tag ${isOff ? "off" : "on"}`}>
           {isOff ? fmtLastSeen(a.lastSeen) : fmtUptime(a.firstSeen) || "Active"}
         </span>

@@ -39,6 +39,10 @@ export async function POST(req: NextRequest) {
       treadmillLevel: data.treadmillLevel ?? null,
       petsCount: data.petsCount ?? 0,
       stolenCount: data.stolenCount ?? 0,
+      // Limited-time event item. Lua sends `bossToken` as a count; the field
+      // is whitelisted here (this endpoint only persists listed fields), so
+      // it survives into the account record the dashboard reads.
+      bossToken: data.bossToken ?? null,
       growingEggCount: data.fullData?.growingEggs?.length ?? 0,
       backpackEggCount: data.fullData?.backpackEggs?.length ?? 0,
       topPets: data.topPets || [],
