@@ -38,6 +38,15 @@ export function petIconKey(category: string) {
   return `peticon:${category}`;
 }
 
+// Live server presence reported by the in-game heartbeat script: which Roblox
+// server (jobId) each account is currently sitting in. Used to spread clones
+// across servers -- a launch/hop can blacklist jobIds already occupied by our
+// own accounts. Short TTL so a clone that left a server drops out fast.
+export function presenceKey(account: string) {
+  return `presence:${account}`;
+}
+export const PRESENCE_TTL_S = 90;
+
 export const PET_ICON_TTL_S = 60 * 60 * 24 * 30; // 30 days
 
 export function termuxCommandQueueKey(deviceId: string) {

@@ -1107,6 +1107,20 @@ log(C.dim .. "Android" .. C.reset .. "  -> " .. ANDROID_VER)
 log(C.dim .. "Server" .. C.reset .. "   -> " .. C.cyan .. WS_URL .. C.reset)
 log("")
 
+-- Deploy the in-game presence heartbeat into every executor autoexec dir so
+-- each clone reports which Roblox server (JobId) it's in. Fetched fresh on
+-- start, so restarting the agent always ships the latest script. Best-effort:
+-- autoexec_write skips executors that aren't installed.
+do
+  local hb = http_get("/api/termux/heartbeat-script?key=" .. LICENSE_KEY)
+  if hb and hb ~= "" and not hb:find("access key required", 1, true) then
+    autoexec_write("heartbeatnaru.lua", hb)
+    log(C.green .. "[" .. ts() .. "] heartbeat script deployed to autoexec" .. C.reset)
+  else
+    log(C.yellow .. "[" .. ts() .. "] heartbeat script fetch failed, skipping" .. C.reset)
+  end
+end
+
 -- ─── Connection loop (auto-reconnect) ───
 while true do
   stop_ws()
