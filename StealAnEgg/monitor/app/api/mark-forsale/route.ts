@@ -27,6 +27,14 @@ export async function POST(req: NextRequest) {
         markedAt: Date.now(),
         ...(detail ? { detail } : {}),
       }));
+      // Drop the active monitoring record so a Siap-Jual account disappears
+      // from the dashboard immediately, instead of lingering ~2 min as
+      // "offline" until its TTL expires (and reappearing if the forSale flag
+      // is later cleared). The catalog copy above -- which embeds `detail` --
+      // preserves everything the catalog/poster needs. Once the account is
+      // logged out (the Siap Jual force-stop), nothing recreates these keys.
+      await redis.del(accountKey(account));
+      await redis.del(detailKey(account));
     } else {
       await redis.del(fsKey);
     }
