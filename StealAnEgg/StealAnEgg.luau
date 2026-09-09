@@ -473,6 +473,10 @@ section:AddToggle("AutoPlaceToggle", {
 	end,
 })
 
+-- Per-exec Hop blacklist. Every server this session hops FROM is added
+-- so we don't bounce back into it. Empty on script (re-)exec, so a fresh
+-- run doesn't inherit blacklists from earlier sessions.
+local hopBlacklist = {}
 local hopBusy = false
 section:AddButton({
 	Title = "Hop Server (1-3 players)",
@@ -484,6 +488,11 @@ section:AddButton({
 			local HttpService = game:GetService("HttpService")
 			local placeId = game.PlaceId
 			local currentJobId = game.JobId
+
+			-- Blacklist the server we're leaving so we don't hop back in
+			if currentJobId and currentJobId ~= "" then
+				hopBlacklist[currentJobId] = true
+			end
 
 			local lastFailReason
 			local failConn = TeleportService.TeleportInitFailed:Connect(function(_, result, err)
@@ -506,7 +515,7 @@ section:AddButton({
 					end)
 					if not ok2 or not data or not data.data then break end
 					for _, s in ipairs(data.data) do
-						if s.id ~= currentJobId and s.playing and s.playing >= 1
+						if s.id and not hopBlacklist[s.id] and s.playing and s.playing >= 1
 							and s.playing <= 3 and s.playing < (s.maxPlayers or 6) then
 							table.insert(candidates, { id = s.id, playing = s.playing })
 						end
@@ -543,6 +552,8 @@ section:AddButton({
 					-- teleport in progress or succeeded
 					break
 				end
+				-- failed on this candidate too — blacklist it for the rest of this exec
+				hopBlacklist[c.id] = true
 			end
 
 			failConn:Disconnect()
