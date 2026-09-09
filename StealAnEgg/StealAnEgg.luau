@@ -514,16 +514,27 @@ section:AddButton({
 						return HttpService:JSONDecode(body)
 					end)
 					if not ok2 or not data or not data.data then break end
+					local MAX_PING = 100 -- cap: skip laggy servers
 					for _, s in ipairs(data.data) do
+						local ping = tonumber(s.ping) or 9999
 						if s.id and not hopBlacklist[s.id] and s.playing and s.playing >= 1
-							and s.playing <= 3 and s.playing < (s.maxPlayers or 6) then
-							table.insert(candidates, { id = s.id, playing = s.playing })
+							and s.playing <= 3 and s.playing < (s.maxPlayers or 6)
+							and ping <= MAX_PING then
+							table.insert(candidates, {
+								id = s.id,
+								playing = s.playing,
+								ping = ping,
+							})
 						end
 					end
 					cursor = data.nextPageCursor
 					if not cursor or #candidates >= 40 then break end
 				end
-				table.sort(candidates, function(a, b) return a.playing < b.playing end)
+				-- Sort by ping ascending (best ping first); tie-break by fewer players
+				table.sort(candidates, function(a, b)
+					if a.ping ~= b.ping then return a.ping < b.ping end
+					return a.playing < b.playing
+				end)
 				return candidates
 			end
 
@@ -537,7 +548,7 @@ section:AddButton({
 
 			for i, c in ipairs(candidates) do
 				if i > 10 then break end
-				monitorPara:SetContent("Hop try " .. i .. " (" .. c.playing .. "p)")
+				monitorPara:SetContent(string.format("Hop try %d (%dp, %dms)", i, c.playing, c.ping))
 				lastFailReason = nil
 				pcall(function()
 					TeleportService:TeleportToPlaceInstance(placeId, c.id, LocalPlayer)
