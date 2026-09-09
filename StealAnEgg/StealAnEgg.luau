@@ -877,6 +877,12 @@ local function reportToMonitor()
 		pcall(function() activeLimit = AssetRoster.ReadWearLimit() end)
 		local autoPrice = computeAutoPrice(petPool)
 
+		local bossToken = 0
+		pcall(function()
+			local s = SaveModule.Get()
+			bossToken = tonumber(s and s.BossTokens) or 0
+		end)
+
 		local fullData = {
 			title = "Jual Akun GACOR",
 			badge = "AKUN DATPOL",
@@ -911,6 +917,7 @@ local function reportToMonitor()
 			treadmillLevel = treadmillLevel,
 			petsCount = #allPets + #activePets,
 			stolenCount = #backpackEggs,
+			bossToken = bossToken,
 			topPets = topPets,
 			fullData = fullData,
 		}
