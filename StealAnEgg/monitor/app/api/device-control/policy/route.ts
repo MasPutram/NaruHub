@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, termuxDevicePolicyKey } from "@/lib/redis";
+import { redis, termuxDevicePolicyKey, termuxDeviceKey, accountKey, ONLINE_TIMEOUT_S } from "@/lib/redis";
 
 // Scan every termux:pkgpause:<deviceId>:<pkg> key that currently exists (its
 // TTL hasn't expired yet) and return just the package names. Agent uses this
@@ -18,6 +18,44 @@ async function readPausedPackages(deviceId: string): Promise<string[]> {
     }
   } while (cursor !== "0");
   return paused;
+}
+
+// Packages on this device that have a target set but whose logged-in account
+// is NOT currently online (not heartbeating in-game). The agent cross-checks
+// this against its own "is the package still running?" view: running + account
+// offline = wedged on an error/reconnect screen (a stuck join), which the
+// drop-based auto-rejoin can't see because the process is technically alive.
+// Only packages with a target are considered (rejoin needs somewhere to go).
+async function readOfflineTargetPackages(
+  deviceId: string,
+  packageTargets: Record<string, string>
+): Promise<string[]> {
+  const targetPkgs = Object.keys(packageTargets);
+  if (targetPkgs.length === 0) return [];
+  const raw = await redis.get<string>(termuxDeviceKey(deviceId));
+  if (!raw) return [];
+  let device: any;
+  try { device = typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return []; }
+  const packages = Array.isArray(device.packages) ? device.packages : [];
+  const withUser = packages.filter(
+    (p: any) => p && typeof p === "object" && p.username && packageTargets[p.pkg]
+  );
+  if (withUser.length === 0) return [];
+  const vals = await redis.mget(...withUser.map((p: any) => accountKey(p.username)));
+  const now = Date.now() / 1000;
+  const offline: string[] = [];
+  for (let i = 0; i < withUser.length; i++) {
+    const v = vals[i];
+    let online = false;
+    if (v) {
+      try {
+        const a = typeof v === "string" ? JSON.parse(v) : v;
+        online = now - (a.lastSeen || 0) <= ONLINE_TIMEOUT_S;
+      } catch {}
+    }
+    if (!online) offline.push(withUser[i].pkg);
+  }
+  return offline;
 }
 
 // Per-device execution policy read/written by the dashboard AND the Termux
@@ -105,9 +143,10 @@ export async function GET(req: NextRequest) {
     const parsed = raw ? (typeof raw === "string" ? JSON.parse(raw) : raw) : null;
     const policy = normalize(parsed);
     const pausedPackages = await readPausedPackages(deviceId);
-    return NextResponse.json({ ok: true, policy, pausedPackages });
+    const offlinePackages = await readOfflineTargetPackages(deviceId, policy.packageTargets);
+    return NextResponse.json({ ok: true, policy, pausedPackages, offlinePackages });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e.message, policy: DEFAULT_POLICY, pausedPackages: [] }, { status: 500 });
+    return NextResponse.json({ ok: false, error: e.message, policy: DEFAULT_POLICY, pausedPackages: [], offlinePackages: [] }, { status: 500 });
   }
 }
 

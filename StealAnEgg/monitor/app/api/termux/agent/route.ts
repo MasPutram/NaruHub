@@ -751,6 +751,14 @@ local WAS_RUNNING = {}           -- pkg -> true if seen in am stack list last ch
 local PENDING_REJOIN = {}        -- pkg -> os.time() when we should relaunch
 local RETRY_COUNT = {}           -- pkg -> how many rejoin attempts so far
 local REJOIN_LOG_LAST = {}       -- pkg -> ts of last log line (dedup spam)
+-- Stuck detection: pkg -> os.time() we first saw it running-but-account-offline.
+-- Cleared the moment its account comes online (joined) or the pkg drops.
+local STUCK_SINCE = {}
+-- How long a clone may sit running-but-offline before we treat it as wedged
+-- on an error screen and force a rejoin. Must exceed a normal join's load
+-- time (Roblox splash + loading can be ~60s on cloud phones) so we never nuke
+-- a clone that's still on its way into the game.
+local STUCK_GRACE = 120
 
 local function poll_policy_if_due()
   if not DEVICE_ID then return end
@@ -767,7 +775,12 @@ local function poll_policy_if_due()
     retryLimit = (parsed.policy and parsed.policy.retryLimit) or 0,
     autoRejoinPackages = (parsed.policy and parsed.policy.autoRejoinPackages) or {},
     packageTargets = (parsed.policy and parsed.policy.packageTargets) or {},
+    packageBounds = (parsed.policy and parsed.policy.packageBounds) or {},
     pausedPackages = parsed.pausedPackages or {},
+    -- Packages the server sees as "has a target but account is offline". Cross-
+    -- checked against our running set to spot a stuck (running-but-not-in-game)
+    -- clone.
+    offlinePackages = parsed.offlinePackages or {},
   }
 end
 
@@ -777,6 +790,30 @@ local function is_paused(pkg)
     if p == pkg then return true end
   end
   return false
+end
+
+-- Server says this package has a target but its account isn't heartbeating.
+local function is_account_offline(pkg)
+  if not CACHED_POLICY or not CACHED_POLICY.offlinePackages then return false end
+  for _, p in ipairs(CACHED_POLICY.offlinePackages) do
+    if p == pkg then return true end
+  end
+  return false
+end
+
+local function has_target(pkg)
+  return CACHED_POLICY and CACHED_POLICY.packageTargets
+    and CACHED_POLICY.packageTargets[pkg] ~= nil
+    and CACHED_POLICY.packageTargets[pkg] ~= ""
+end
+
+-- Relaunch a package for auto-rejoin / stuck recovery, applying its saved
+-- window bounds so the reopen stays a floating tile (never fullscreen, which
+-- would collapse the other clones).
+local function rejoin_launch(pkg)
+  local target = (CACHED_POLICY and CACHED_POLICY.packageTargets and CACHED_POLICY.packageTargets[pkg]) or ""
+  local bounds = (CACHED_POLICY and CACHED_POLICY.packageBounds and CACHED_POLICY.packageBounds[pkg]) or ""
+  launch_app(pkg, bounds, bounds ~= "", 0, target)
 end
 
 -- Should this package auto-rejoin? True when auto-rejoin is on globally AND
@@ -872,10 +909,36 @@ local function maybe_auto_rejoin()
         rlog(pkg, C.dim .. "[" .. ts() .. "] rejoin fired but " .. pkg .. " now paused, aborting" .. C.reset)
       else
         RETRY_COUNT[pkg] = (RETRY_COUNT[pkg] or 0) + 1
-        local target = CACHED_POLICY.packageTargets and CACHED_POLICY.packageTargets[pkg] or ""
         log(C.cyan .. "[" .. ts() .. "] auto-rejoin " .. pkg .. " (attempt " .. RETRY_COUNT[pkg] .. ")" .. C.reset)
-        launch_app(pkg, "", false, 0, target)
+        rejoin_launch(pkg)
       end
+    end
+  end
+
+  -- Stuck detection: a package that IS running but whose account is offline
+  -- (server view) is wedged on an error/reconnect screen -- not in a game.
+  -- The drop-based logic above can't see it (the process is alive). Give it a
+  -- grace window, then force-stop + rejoin. Same opt-in / pause / retry gates.
+  for pkg, _ in pairs(seen_now) do
+    if should_rejoin(pkg) and has_target(pkg) and not is_paused(pkg) and is_account_offline(pkg) then
+      if not STUCK_SINCE[pkg] then
+        STUCK_SINCE[pkg] = now
+      elseif now - STUCK_SINCE[pkg] >= STUCK_GRACE then
+        local limit = CACHED_POLICY.retryLimit or 0
+        local tries = RETRY_COUNT[pkg] or 0
+        if limit > 0 and tries >= limit then
+          rlog(pkg, C.yellow .. "[" .. ts() .. "] stuck rejoin retry limit hit for " .. pkg .. C.reset)
+          STUCK_SINCE[pkg] = now  -- back off a full grace window before rechecking
+        else
+          RETRY_COUNT[pkg] = tries + 1
+          STUCK_SINCE[pkg] = nil
+          log(C.cyan .. "[" .. ts() .. "] stuck (" .. pkg .. " running but offline >" .. STUCK_GRACE .. "s) -- force rejoin (attempt " .. RETRY_COUNT[pkg] .. ")" .. C.reset)
+          rejoin_launch(pkg)
+        end
+      end
+    else
+      -- Joined (account online), no target, paused, or not opted in -> clear.
+      STUCK_SINCE[pkg] = nil
     end
   end
 end
