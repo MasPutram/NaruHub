@@ -30,6 +30,16 @@ interface LogEntry {
   packages: string[];
 }
 
+interface PresenceRow {
+  pkg: string;
+  account: string;
+  jobId: string;
+  placeId: string;
+  lastSeen: number;
+  inGame: boolean;
+  rejoin: { attempts: number; gaveUp: boolean; staleSince: number } | null;
+}
+
 interface TermuxDevice {
   deviceId: string;
   hostname: string;
@@ -130,6 +140,7 @@ export default function DeviceDetailPage() {
   const [accounts, setAccounts] = useState<Record<string, AccountInfo>>({});
   const [consoleLog, setConsoleLog] = useState<LogEntry[]>([]);
   const [agentLogs, setAgentLogs] = useState<{ ts: number; line: string }[]>([]);
+  const [presence, setPresence] = useState<PresenceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [layout, setLayout] = useState<{ cols: number; rows: number }>({ cols: 4, rows: 3 });
   const [draftLayout, setDraftLayout] = useState<{ cols: number; rows: number }>({ cols: 4, rows: 3 });
@@ -318,6 +329,22 @@ export default function DeviceDetailPage() {
     };
     load();
     const id = setInterval(load, 4000);
+    return () => { alive = false; clearInterval(id); };
+  }, [deviceId]);
+
+  // Poll presence + auto-rejoin status for the monitoring panel.
+  useEffect(() => {
+    if (!deviceId) return;
+    let alive = true;
+    const load = async () => {
+      try {
+        const res = await fetch(`/api/device-control/presence-status?deviceId=${encodeURIComponent(deviceId)}`);
+        const data = await res.json();
+        if (alive && data.ok) setPresence(data.rows || []);
+      } catch {}
+    };
+    load();
+    const id = setInterval(load, 5000);
     return () => { alive = false; clearInterval(id); };
   }, [deviceId]);
 
@@ -1105,6 +1132,55 @@ export default function DeviceDetailPage() {
           >
             {savingPolicy ? "Saving..." : "Save execution policy"}
           </button>
+        </section>
+
+        <section className="panel" style={{ marginTop: 14, gridColumn: "1 / -1" }}>
+          <div className="panelhead">
+            <h3>Presence & Auto-Rejoin</h3>
+            <span className="muted">{presence.filter((r) => r.inGame).length}/{presence.length} in-game</span>
+          </div>
+          {presence.length === 0 ? (
+            <div className="empty" style={{ padding: 20 }}>
+              Belum ada data presence. (Restart agent biar heartbeat script ke-deploy ke tiap clone.)
+            </div>
+          ) : (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>ACCOUNT</th>
+                  <th>SERVER (JOB ID)</th>
+                  <th>HEARTBEAT</th>
+                  <th>STATUS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {presence.map((r) => (
+                  <tr key={r.pkg}>
+                    <td>{r.account}</td>
+                    <td style={{ fontFamily: "ui-monospace, monospace", fontSize: 11 }}>
+                      {r.jobId ? r.jobId.slice(0, 8) + "…" : "—"}
+                    </td>
+                    <td>{r.lastSeen ? ago(r.lastSeen) : "—"}</td>
+                    <td>
+                      {r.inGame ? (
+                        <span className="badge game">IN GAME</span>
+                      ) : r.rejoin?.gaveUp ? (
+                        <span className="badge off">NYERAH → HOME</span>
+                      ) : r.rejoin && r.rejoin.attempts > 0 ? (
+                        <span className="badge" style={{ background: "#2a2410", color: "var(--yellow)" }}>
+                          REJOIN #{r.rejoin.attempts}
+                        </span>
+                      ) : r.rejoin && r.rejoin.staleSince > 0 ? (
+                        <span className="badge unk">WATCHING</span>
+                      ) : (
+                        <span className="badge unk">OFFLINE</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </section>
       </div>
 
