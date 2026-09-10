@@ -1176,7 +1176,7 @@ export default function DeviceDetailPage() {
                         <span className="badge" style={{ background: "#2a2410", color: "var(--yellow)" }}>
                           REJOIN #{r.rejoin.attempts}
                         </span>
-                      ) : r.rejoin && r.rejoin.staleSince > 0 ? (
+                      ) : r.rejoin ? (
                         <span className="badge unk">WATCHING</span>
                       ) : (
                         <span className="badge unk">OFFLINE</span>

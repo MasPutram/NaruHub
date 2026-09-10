@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { deviceId, packages, stats, screen } = body;
+    const { deviceId, packages, running, stats, screen } = body;
 
     if (!deviceId || typeof deviceId !== "string") {
       return NextResponse.json({ ok: false, error: "deviceId required" }, { status: 400 });
@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
       device.lastSeen = Date.now();
       device.status = "online";
       if (packages) device.packages = packages;
+      if (Array.isArray(running)) device.running = running;
       if (stats) device.stats = stats;
       if (screen && screen.width && screen.height) device.screen = screen;
     } else {
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
         registeredAt: meta?.registeredAt || Date.now(),
         lastSeen: Date.now(),
         packages: packages || [],
+        running: Array.isArray(running) ? running : [],
         stats: stats || {},
         screen: screen && screen.width && screen.height ? screen : undefined,
       };

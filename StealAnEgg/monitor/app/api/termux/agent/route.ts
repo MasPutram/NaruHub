@@ -282,6 +282,25 @@ local function collect_packages()
   return pkgs
 end
 
+-- Roblox packages currently in the activity stack (i.e. running). The server
+-- brain uses this to tell a force-closed / not-open clone (relaunch fast, no
+-- loading to protect) from one that's running but not yet in a game (give it
+-- the full 300s loading grace).
+local function collect_running()
+  local stack = shell('su -c "am stack list"')
+  local running = {}
+  local seen = {}
+  for line in stack:gmatch("[^\\n]+") do
+    for pkg in line:gmatch("([%w%.]+)/[%w%.$]+") do
+      if pkg:lower():find("roblox", 1, true) and not seen[pkg] then
+        seen[pkg] = true
+        running[#running+1] = pkg
+      end
+    end
+  end
+  return running
+end
+
 -- ─── Screen detection ───
 local function collect_screen()
   local cur = shell('su -c "dumpsys window displays" | grep -m1 -oE "cur=[0-9]+x[0-9]+"')
@@ -628,11 +647,12 @@ local function http_register()
   end
 end
 
-local function http_heartbeat(pkgs, screen, stats)
+local function http_heartbeat(pkgs, screen, stats, running)
   if not DEVICE_ID then return end
   local code = http_post("/api/termux/heartbeat", {
     deviceId = DEVICE_ID,
     packages = pkgs or {},
+    running = running or {},
     screen = screen,
     stats = stats or {},
   })
@@ -1192,7 +1212,7 @@ while true do
     local pkgs = collect_packages()
     local screen = collect_screen()
     local stats = collect_stats()
-    http_heartbeat(pkgs, screen, stats)
+    http_heartbeat(pkgs, screen, stats, collect_running())
   end
 
   log(C.green .. "[" .. ts() .. "] online - streaming" .. C.reset)
@@ -1208,6 +1228,7 @@ while true do
       local pkgs = collect_packages()
       local screen = collect_screen()
       local stats = collect_stats()
+      local running = collect_running()
       -- Auto-trim when RAM is genuinely tight. Unlike the old per-heartbeat
       -- trim (which KILLED background clones and caused random force-closes),
       -- this only drops reclaimable page cache -- it never touches a running
@@ -1225,10 +1246,11 @@ while true do
         deviceId = DEVICE_ID,
         hostname = HOSTNAME,
         packages = pkgs,
+        running = running,
         screen = screen,
         stats = stats,
       })
-      http_heartbeat(pkgs, screen, stats)
+      http_heartbeat(pkgs, screen, stats, running)
       last_heartbeat = now
     end
 

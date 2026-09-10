@@ -28,7 +28,8 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const STUCK_THRESHOLD_MS = 300 * 1000; // no heartbeat this long -> start rejoin
+const STUCK_THRESHOLD_MS = 300 * 1000; // running-but-no-heartbeat (loading grace) -> rejoin
+const NOTRUNNING_GRACE_MS = 30 * 1000; // force-closed/not-open -> relaunch fast (nothing to protect)
 const ESCALATE_WAIT_MS = 120 * 1000; // wait this long after an attempt before escalating
 const MAX_ATTEMPTS = 3; // then give up -> home
 
@@ -101,6 +102,7 @@ export async function GET(req: NextRequest) {
     if (!devRaw) return NextResponse.json({ ok: true, actions: [] });
     const device = typeof devRaw === "string" ? JSON.parse(devRaw) : devRaw;
     const packages: any[] = Array.isArray(device.packages) ? device.packages : [];
+    const runningSet = new Set<string>(Array.isArray(device.running) ? device.running : []);
 
     // Paused packages (Siap Jual etc.) -- scan the pkgpause keys.
     const pausePrefix = `termux:pkgpause:${deviceId}:`;
@@ -162,9 +164,15 @@ export async function GET(req: NextRequest) {
           }
           anchor = st.staleSince;
         }
-        if (now - anchor < STUCK_THRESHOLD_MS) {
+        // A clone that isn't in the running set is force-closed / never opened
+        // -> nothing is loading, so relaunch fast (~30s, also the auto-boot on
+        // agent start). One that IS running but silent might be mid-load -> give
+        // it the full 300s before we touch it.
+        const isRunning = runningSet.has(pkg);
+        const graceMs = isRunning ? STUCK_THRESHOLD_MS : NOTRUNNING_GRACE_MS;
+        if (now - anchor < graceMs) {
           await save();
-          continue; // still inside the 300s loading/lag grace
+          continue;
         }
         // Attempt 1: rejoin to the place (random server).
         st.attempts = 1;
