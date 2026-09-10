@@ -909,9 +909,18 @@ local function reportToMonitor()
 		local autoPrice = computeAutoPrice(petPool)
 
 		local bossToken = 0
+		local mutationToken = 0
 		pcall(function()
 			local s = SaveModule.Get()
-			bossToken = tonumber(s and s.BossTokens) or 0
+			if not s then return end
+			bossToken = tonumber(s.BossTokens) or 0
+			-- MutationConsumable inventory. Try several likely storage
+			-- shapes since the field name isn't verified yet.
+			mutationToken = tonumber(s.MutationConsumables)
+				or tonumber(s.MutationConsumable)
+				or (type(s.Consumables) == "table" and (tonumber(s.Consumables.Mutation) or tonumber(s.Consumables.MutationConsumable)))
+				or (type(s.Inventory) == "table" and (tonumber(s.Inventory.MutationConsumable) or tonumber(s.Inventory.MutationConsumables)))
+				or 0
 		end)
 
 		local fullData = {
@@ -949,6 +958,7 @@ local function reportToMonitor()
 			petsCount = #allPets + #activePets,
 			stolenCount = #backpackEggs,
 			bossToken = bossToken,
+			mutationToken = mutationToken,
 			topPets = topPets,
 			fullData = fullData,
 		}
