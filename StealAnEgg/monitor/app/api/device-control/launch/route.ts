@@ -126,7 +126,14 @@ export async function POST(req: NextRequest) {
             const servers: any[] = Array.isArray(data?.data) ? data.data : [];
             available = servers
               .filter((s) => s && s.id && !occupied.has(s.id) && typeof s.playing === "number" && s.playing < (s.maxPlayers || 999))
-              .sort((a, b) => (a.ping || 9999) - (b.ping || 9999) || (a.playing || 0) - (b.playing || 0))
+              // Populated servers (>=5 players) first -- real victims + clones
+              // spread across busy servers instead of all landing on empty ones.
+              .sort((a, b) => {
+                const ap = (a.playing || 0) >= 5 ? 0 : 1;
+                const bp = (b.playing || 0) >= 5 ? 0 : 1;
+                if (ap !== bp) return ap - bp;
+                return (a.ping || 9999) - (b.ping || 9999);
+              })
               .map((s) => String(s.id));
           }
         } catch {}

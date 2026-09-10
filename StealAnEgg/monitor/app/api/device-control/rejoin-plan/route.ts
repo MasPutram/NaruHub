@@ -69,11 +69,18 @@ async function pickServer(placeId: string, exclude: string[]): Promise<string | 
     const data = await res.json();
     const servers: any[] = Array.isArray(data?.data) ? data.data : [];
     const excludeSet = new Set(exclude);
-    const candidates = servers.filter(
+    const withRoom = servers.filter(
       (s) => s && s.id && !excludeSet.has(s.id) && typeof s.playing === "number" && s.playing < (s.maxPlayers || 999)
     );
-    candidates.sort((a, b) => (a.ping || 9999) - (b.ping || 9999) || (a.playing || 0) - (b.playing || 0));
-    return candidates.length > 0 ? String(candidates[0].id) : null;
+    // Prefer already-populated servers (>=5 players): they have real victims and
+    // are far less likely to be our own near-empty clones, so clones spread
+    // across many busy servers instead of all rushing the same empty ones
+    // (which caused constant hop churn -> bot-like -> facelock). Fall back to
+    // any server with room if none are populated.
+    const populated = withRoom.filter((s) => (s.playing || 0) >= 5);
+    const pool = populated.length > 0 ? populated : withRoom;
+    pool.sort((a, b) => (a.ping || 9999) - (b.ping || 9999));
+    return pool.length > 0 ? String(pool[0].id) : null;
   } catch {
     return null;
   }
