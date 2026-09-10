@@ -1050,6 +1050,42 @@ end)
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
 	local TreadmillClient = require(LocalPlayer.PlayerScripts.GUI.TreadmillUpgrade.Client)
+
+	-- Returns true if any owned egg OR pen pet OR backpack asset carries
+	-- the "Boss" (a.k.a. Fractured) mutation.
+	local function hasFracturedMutation()
+		local ok, penRecords = pcall(function()
+			return AssetRoster.ReadOwnerPen(LocalPlayer.UserId)
+		end)
+		if ok and penRecords then
+			for _, rec in pairs(penRecords) do
+				local muts = rec.ItemData and rec.ItemData.Mutations
+				if type(muts) == "table" then
+					for _, m in ipairs(muts) do
+						if m == "Boss" then return true end
+					end
+				end
+			end
+		end
+		for _, rec in pairs(getMyOwnedEggs()) do
+			if type(rec.Mutations) == "table" then
+				for _, m in ipairs(rec.Mutations) do
+					if m == "Boss" then return true end
+				end
+			end
+		end
+		local backpack = LocalPlayer:FindFirstChild("Backpack")
+		if backpack then
+			for _, tool in ipairs(backpack:GetChildren()) do
+				if tool:GetAttribute("ItemType") == "Asset" then
+					local str = tool:GetAttribute("Mutations")
+					if str and tostring(str):find("Boss") then return true end
+				end
+			end
+		end
+		return false
+	end
+
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoBossShopEnabled then
 			pcall(function()
@@ -1058,12 +1094,15 @@ task.spawn(function()
 				if tokens <= 0 then return end
 				local tmLevel = tonumber(stats.TreadmillUpgradeLevel) or 0
 				local item, price
-				if tmLevel == 10 then
+				if not hasFracturedMutation() then
+					-- No Fractured mutation yet — always try to roll one via consumable
+					item, price = "MutationConsumable", 400
+				elseif tmLevel == 10 then
 					item, price = "TreadmillBooster", 200
 				elseif tmLevel == 1 then
 					item, price = "MutationConsumable", 400
 				else
-					return -- other levels: do nothing
+					return -- other TM levels + already have Fractured: idle
 				end
 				if tokens >= price then
 					pcall(function()
