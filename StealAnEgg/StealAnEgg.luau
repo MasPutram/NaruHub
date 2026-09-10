@@ -1032,6 +1032,38 @@ end)
 
 
 ------------------------------------------------------------
+-- Auto Buy Boss Shop (no UI, runs forever, one item per tick)
+--   Treadmill MAXED  -> buy TreadmillBooster (200 tokens)
+--   Treadmill not max -> buy MutationConsumable (400 tokens)
+-- One-at-a-time to keep server calls sparse (matches sell-egg pace).
+------------------------------------------------------------
+task.spawn(function()
+	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+	local TreadmillClient = require(LocalPlayer.PlayerScripts.GUI.TreadmillUpgrade.Client)
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		pcall(function()
+			local stats = SaveModule.Get()
+			local tokens = tonumber(stats.BossTokens) or 0
+			if tokens <= 0 then return end
+			local tmMaxed = TreadmillClient.GetNextConfig(stats) == nil
+			local item, price
+			if tmMaxed then
+				item, price = "TreadmillBooster", 200
+			else
+				item, price = "MutationConsumable", 400
+			end
+			if tokens >= price then
+				pcall(function()
+					Remotes.BossMastery.AskBuyShopItem:InvokeServer(item)
+				end)
+			end
+		end)
+		task.wait(5)
+	end
+end)
+
+
+------------------------------------------------------------
 -- Auto Sell inventory backlog (< 300M/s, unplaced only, never Divine/Titan)
 -- Requires equip (AskWearTool) then SellPet on the held UID.
 ------------------------------------------------------------
