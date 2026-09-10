@@ -844,7 +844,41 @@ local TRACKED = {}
 local REJOIN_SWEEP_INTERVAL = 5
 local LAST_REJOIN_SWEEP = 0
 
+local LAST_PLAN_POLL = 0
+local PLAN_POLL_INTERVAL = 15
+-- Auto-rejoin is a SERVER-SIDE brain now: the agent fetches the plan the
+-- server computed (from in-game presence heartbeats), executes each launch,
+-- and acks so the server times the next step from real execution. All the
+-- decisions (300s stuck / 120s escalate / 3-strike -> home / server pick) live
+-- in /api/device-control/rejoin-plan, gated behind autoRejoinEnabled. The
+-- legacy local sweep below is superseded and left unreachable (do return end).
 local function maybe_auto_rejoin()
+  if DEVICE_ID then
+    local now = os.time()
+    if now - LAST_PLAN_POLL >= PLAN_POLL_INTERVAL then
+      LAST_PLAN_POLL = now
+      local body = http_get("/api/device-control/rejoin-plan?deviceId=" .. DEVICE_ID)
+      local ok, parsed = pcall(json.decode, body)
+      if ok and parsed and parsed.actions then
+        for _, act in ipairs(parsed.actions) do
+          if act.pkg then
+            if act.home then
+              log(C.yellow .. "[" .. ts() .. "] auto-rejoin: gave up on " .. act.pkg .. " -> home" .. C.reset)
+            else
+              log(C.cyan .. "[" .. ts() .. "] auto-rejoin " .. act.pkg ..
+                (act.target ~= "" and (" -> " .. act.target) or "") .. C.reset)
+            end
+            local bnds = act.bounds or ""
+            -- forceKill=true so the rejoin cold-starts (clears a stuck screen).
+            launch_app(act.pkg, bnds, bnds ~= "", 0, act.target or "", true)
+            http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
+          end
+        end
+      end
+    end
+  end
+  do return end
+
   poll_policy_if_due()
   if not CACHED_POLICY or not CACHED_POLICY.autoRejoinEnabled then return end
 
@@ -1112,7 +1146,7 @@ log("")
 -- start, so restarting the agent always ships the latest script. Best-effort:
 -- autoexec_write skips executors that aren't installed.
 do
-  local hb = http_get("/api/termux/heartbeat-script?key=" .. LICENSE_KEY)
+  local hb = http_get("/api/termux/heartbeat-script?key=" .. LICENSE_KEY .. "&deviceId=" .. DEVICE_ID)
   if hb and hb ~= "" and not hb:find("access key required", 1, true) then
     autoexec_write("heartbeatnaru.lua", hb)
     log(C.green .. "[" .. ts() .. "] heartbeat script deployed to autoexec" .. C.reset)

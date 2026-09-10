@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 const HEARTBEAT_SCRIPT = `-- heartbeatnaru.lua (auto-deployed by NaruHub agent)
 local BASE_URL = "https://naruhub.my.id"
 local ACCESS_KEY = "$$LICENSE$$"
+local DEVICE_ID = "$$DEVICEID$$"
 local INTERVAL = 20
 
 local Players = game:GetService("Players")
@@ -44,6 +45,7 @@ task.spawn(function()
 		if name and jobId and jobId ~= "" then
 			post("/api/termux/presence", {
 				account = name,
+				deviceId = DEVICE_ID,
 				jobId = jobId,
 				placeId = placeId,
 			})
@@ -67,7 +69,10 @@ export async function GET(req: NextRequest) {
       headers: { "Content-Type": "text/plain" },
     });
   }
-  const script = HEARTBEAT_SCRIPT.replace(/\$\$LICENSE\$\$/g, accessKey);
+  const deviceId = req.nextUrl.searchParams.get("deviceId") || "";
+  const script = HEARTBEAT_SCRIPT
+    .replace(/\$\$LICENSE\$\$/g, accessKey)
+    .replace(/\$\$DEVICEID\$\$/g, deviceId);
   return new NextResponse(script, {
     status: 200,
     headers: { "Content-Type": "text/plain; charset=utf-8" },

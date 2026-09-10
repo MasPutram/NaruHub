@@ -10,6 +10,7 @@
 
 local BASE_URL = "https://naruhub.my.id"
 local ACCESS_KEY = "$$LICENSE$$"
+local DEVICE_ID = "$$DEVICEID$$"
 local INTERVAL = 20 -- seconds between presence pings
 
 local Players = game:GetService("Players")
@@ -48,6 +49,7 @@ task.spawn(function()
 		if name and jobId and jobId ~= "" then
 			post("/api/termux/presence", {
 				account = name,
+				deviceId = DEVICE_ID,
 				jobId = jobId,
 				placeId = placeId,
 			})

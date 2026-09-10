@@ -39,13 +39,24 @@ export function petIconKey(category: string) {
 }
 
 // Live server presence reported by the in-game heartbeat script: which Roblox
-// server (jobId) each account is currently sitting in. Used to spread clones
-// across servers -- a launch/hop can blacklist jobIds already occupied by our
-// own accounts. Short TTL so a clone that left a server drops out fast.
-export function presenceKey(account: string) {
-  return `presence:${account}`;
+// server (jobId) each account is currently sitting in, and when it last
+// checked in. Keyed by deviceId + account because Roblox client (account)
+// names repeat across cloud phones -- account alone would collide. The brain
+// reads this to tell "in a game" (fresh) from "stuck/dropped" (stale). TTL is
+// long enough to still measure staleness past the give-up point.
+export function presenceKey(deviceId: string, account: string) {
+  return `presence:${deviceId}:${account}`;
 }
-export const PRESENCE_TTL_S = 90;
+export const PRESENCE_TTL_S = 600; // 10 min -- outlives the stuck/give-up window
+export const PRESENCE_FRESH_S = 60; // seen within this = currently in-game
+
+// Per-package auto-rejoin state machine (server-side brain). Tracks how long a
+// clone has been stuck, how many rejoin attempts have fired, which servers
+// failed, and whether we've given up (sent it home).
+export function rejoinStateKey(deviceId: string, pkg: string) {
+  return `rejoinstate:${deviceId}:${pkg}`;
+}
+export const REJOIN_STATE_TTL_S = 60 * 60; // 1h; refreshed on every touch
 
 export const PET_ICON_TTL_S = 60 * 60 * 24 * 30; // 30 days
 

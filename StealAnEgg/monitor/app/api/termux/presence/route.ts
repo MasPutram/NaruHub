@@ -22,15 +22,21 @@ export async function POST(req: NextRequest) {
   try {
     const data = await req.json();
     const account = (data.account || data.sourceAccount || "").toString().trim();
+    // deviceId scopes presence so same-named accounts on different cloud phones
+    // don't overwrite each other. Falls back to the X-Device-Id header.
+    const deviceId = (data.deviceId || req.headers.get("x-device-id") || "").toString().trim();
     if (!account) {
       return NextResponse.json({ ok: false, error: "account required" }, { status: 400 });
+    }
+    if (!deviceId) {
+      return NextResponse.json({ ok: false, error: "deviceId required" }, { status: 400 });
     }
     const jobId = (data.jobId || "").toString();
     const placeId = data.placeId != null ? String(data.placeId) : "";
 
     await redis.set(
-      presenceKey(account),
-      JSON.stringify({ account, jobId, placeId, ts: Date.now() }),
+      presenceKey(deviceId, account),
+      JSON.stringify({ account, deviceId, jobId, placeId, ts: Date.now() }),
       { ex: PRESENCE_TTL_S }
     );
 
