@@ -1056,13 +1056,14 @@ task.spawn(function()
 				local stats = SaveModule.Get()
 				local tokens = tonumber(stats.BossTokens) or 0
 				if tokens <= 0 then return end
-				local _, tmCfg = TreadmillClient.GetNextConfig(stats)
-				local tmMaxed = tmCfg == nil
+				local tmLevel = tonumber(stats.TreadmillUpgradeLevel) or 0
 				local item, price
-				if tmMaxed then
+				if tmLevel == 10 then
 					item, price = "TreadmillBooster", 200
-				else
+				elseif tmLevel == 1 then
 					item, price = "MutationConsumable", 400
+				else
+					return -- other levels: do nothing
 				end
 				if tokens >= price then
 					pcall(function()
