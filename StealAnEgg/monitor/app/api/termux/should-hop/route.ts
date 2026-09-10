@@ -9,6 +9,12 @@ import { redis, presenceKey, PRESENCE_TTL_S, PRESENCE_FRESH_S } from "@/lib/redi
 // hop and thrash. All presence is the operator's own clones (same BlekokGong
 // prefix), so "2+ on this jobId" == a collision.
 //
+// Device hop cooldown (40s): at most one clone per device hops at a time.
+// When a clone is told to hop, a cooldown key is written for that deviceId.
+// Any other clone on the same device that needs to hop will get hop:false until
+// the cooldown expires, then poll again (15s interval) and hop in turn.
+// This serializes hops per device: A hops, B waits ~15-40s, C waits ~30-55s.
+//
 // Public path (under /api/termux), gated by the shared access key the script
 // carries. POST { deviceId, account, jobId, placeId } -> { ok, hop, count }.
 export async function OPTIONS() {
@@ -87,7 +93,20 @@ export async function POST(req: NextRequest) {
     // exactly one stays and everyone else hops (no double-hop even under
     // simultaneous asks).
     const list = Array.from(byAccount.entries()).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]));
-    return NextResponse.json({ ok: true, hop: account !== list[0][0], count: byAccount.size });
+    const shouldHop = account !== list[0][0];
+
+    if (shouldHop) {
+      // Device hop cooldown: if another clone on this device hopped recently,
+      // hold off so hops are serialized (one at a time per device, ~40s apart).
+      const cooldownKey = `hop-cooldown:${deviceId}`;
+      const cooldownActive = await redis.get(cooldownKey);
+      if (cooldownActive) {
+        return NextResponse.json({ ok: true, hop: false, count: byAccount.size, queued: true });
+      }
+      await redis.set(cooldownKey, "1", { ex: 40 });
+    }
+
+    return NextResponse.json({ ok: true, hop: shouldHop, count: byAccount.size });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message, hop: false }, { status: 500 });
   }

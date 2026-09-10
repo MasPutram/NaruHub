@@ -521,8 +521,7 @@ local function do_hop()
 			local MAX_PING = 100
 			for _, s in ipairs(data.data) do
 				local ping = tonumber(s.ping) or 9999
-				if s.id and not hopBlacklist[s.id] and s.playing and s.playing >= 5
-					and s.playing < (s.maxPlayers or 8)
+				if s.id and not hopBlacklist[s.id] and s.playing and s.playing == 1
 					and ping <= MAX_PING then
 					table.insert(candidates, {
 						id = s.id,
@@ -543,7 +542,7 @@ local function do_hop()
 
 	local candidates = fetchCandidates()
 	if #candidates == 0 then
-		monitorPara:SetContent("No 5-7p server found")
+		monitorPara:SetContent("No 1p server found")
 		failConn:Disconnect()
 		hopBusy = false
 		return
