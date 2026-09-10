@@ -79,6 +79,27 @@ async function pickServer(placeId: string, exclude: string[]): Promise<string | 
   }
 }
 
+// Choose a rejoin target that AVOIDS the server the clone was just on. Roblox's
+// matchmaker tends to drop a plain place-join back into the same server, so we
+// always aim at a specific gameInstanceId that isn't the last-known jobId, the
+// one we just tried, or any that already failed. Falls back to a plain place
+// join only if the server list can't be fetched / everything's excluded.
+async function chooseRejoinTarget(
+  placeTarget: string,
+  st: RejoinState,
+  lastKnownJobId: string
+): Promise<{ target: string; jobId: string | null }> {
+  const placeId = parsePlaceId(placeTarget);
+  if (!placeId) return { target: placeTarget, jobId: null };
+  const exclude = [...st.failedJobIds];
+  if (st.lastTriedJobId && !exclude.includes(st.lastTriedJobId)) exclude.push(st.lastTriedJobId);
+  if (lastKnownJobId && !exclude.includes(lastKnownJobId)) exclude.push(lastKnownJobId);
+  st.failedJobIds = exclude.slice(-20); // cap so it can't grow unbounded
+  const jobId = await pickServer(placeId, exclude);
+  if (jobId) return { target: `roblox://placeId=${placeId}&gameInstanceId=${jobId}`, jobId };
+  return { target: placeTarget, jobId: null };
+}
+
 export async function GET(req: NextRequest) {
   const accessKey = process.env.ACCESS_KEY;
   const headerKey = req.headers.get("x-access-key");
@@ -177,13 +198,17 @@ export async function GET(req: NextRequest) {
           await save();
           continue;
         }
-        // Attempt 1: rejoin to the place (random server).
+        // Attempt 1: rejoin to a SPECIFIC server that isn't the one it was
+        // just on (avoids the matchmaker dropping it back into the same server).
         st.attempts = 1;
-        st.lastFiredAt = now;
-        st.lastAckAt = 0;
-        st.lastTriedJobId = null;
-        await save();
-        actions.push({ pkg, target, bounds: bounds[pkg] || "" });
+        {
+          const choice = await chooseRejoinTarget(target, st, pres?.jobId || "");
+          st.lastTriedJobId = choice.jobId;
+          st.lastFiredAt = now;
+          st.lastAckAt = 0;
+          await save();
+          actions.push({ pkg, target: choice.target, bounds: bounds[pkg] || "" });
+        }
         continue;
       }
 
@@ -191,8 +216,7 @@ export async function GET(req: NextRequest) {
       const waitFrom = st.lastAckAt || st.lastFiredAt;
       if (now - waitFrom < ESCALATE_WAIT_MS) continue;
 
-      // The last attempt didn't land. Escalate.
-      if (st.lastTriedJobId) st.failedJobIds.push(st.lastTriedJobId);
+      // The last attempt didn't land. Escalate to yet another server.
       st.attempts += 1;
       if (st.attempts > MAX_ATTEMPTS) {
         st.gaveUp = true;
@@ -202,20 +226,14 @@ export async function GET(req: NextRequest) {
         actions.push({ pkg, target: "", bounds: bounds[pkg] || "", home: true });
         continue;
       }
-      const placeId = parsePlaceId(target);
-      let nextTarget = target;
-      st.lastTriedJobId = null;
-      if (placeId) {
-        const jobId = await pickServer(placeId, st.failedJobIds);
-        if (jobId) {
-          nextTarget = `roblox://placeId=${placeId}&gameInstanceId=${jobId}`;
-          st.lastTriedJobId = jobId;
-        }
+      {
+        const choice = await chooseRejoinTarget(target, st, pres?.jobId || "");
+        st.lastTriedJobId = choice.jobId;
+        st.lastFiredAt = now;
+        st.lastAckAt = 0;
+        await save();
+        actions.push({ pkg, target: choice.target, bounds: bounds[pkg] || "" });
       }
-      st.lastFiredAt = now;
-      st.lastAckAt = 0;
-      await save();
-      actions.push({ pkg, target: nextTarget, bounds: bounds[pkg] || "" });
     }
 
     return NextResponse.json({ ok: true, actions });
