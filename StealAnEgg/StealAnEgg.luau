@@ -487,103 +487,137 @@ section:AddToggle("AutoBossShopToggle", {
 -- run doesn't inherit blacklists from earlier sessions.
 local hopBlacklist = {}
 local hopBusy = false
+
+local function do_hop()
+	local TeleportService = game:GetService("TeleportService")
+	local HttpService = game:GetService("HttpService")
+	local placeId = game.PlaceId
+	local currentJobId = game.JobId
+
+	if currentJobId and currentJobId ~= "" then
+		hopBlacklist[currentJobId] = true
+	end
+
+	local lastFailReason
+	local failConn = TeleportService.TeleportInitFailed:Connect(function(_, result, err)
+		lastFailReason = tostring(result) .. " " .. tostring(err)
+	end)
+
+	local function fetchCandidates()
+		local cursor
+		local candidates = {}
+		for _ = 1, 5 do
+			local url = "https://games.roblox.com/v1/games/" .. placeId ..
+				"/servers/Public?sortOrder=Asc&limit=100" ..
+				(cursor and ("&cursor=" .. cursor) or "")
+			local ok, body = pcall(function()
+				return game:HttpGet(url)
+			end)
+			if not ok then break end
+			local ok2, data = pcall(function()
+				return HttpService:JSONDecode(body)
+			end)
+			if not ok2 or not data or not data.data then break end
+			local MAX_PING = 100
+			for _, s in ipairs(data.data) do
+				local ping = tonumber(s.ping) or 9999
+				if s.id and not hopBlacklist[s.id] and s.playing and s.playing >= 1
+					and s.playing <= 3 and s.playing < (s.maxPlayers or 6)
+					and ping <= MAX_PING then
+					table.insert(candidates, {
+						id = s.id,
+						playing = s.playing,
+						ping = ping,
+					})
+				end
+			end
+			cursor = data.nextPageCursor
+			if not cursor or #candidates >= 40 then break end
+		end
+		table.sort(candidates, function(a, b)
+			if a.ping ~= b.ping then return a.ping < b.ping end
+			return a.playing < b.playing
+		end)
+		return candidates
+	end
+
+	local candidates = fetchCandidates()
+	if #candidates == 0 then
+		monitorPara:SetContent("No 1-3p server found")
+		failConn:Disconnect()
+		hopBusy = false
+		return
+	end
+
+	for i, c in ipairs(candidates) do
+		if i > 10 then break end
+		monitorPara:SetContent(string.format("Hop try %d (%dp, %dms)", i, c.playing, c.ping))
+		lastFailReason = nil
+		pcall(function()
+			TeleportService:TeleportToPlaceInstance(placeId, c.id, LocalPlayer)
+		end)
+		local waited = 0
+		while waited < 8 and lastFailReason == nil do
+			task.wait(0.5)
+			waited += 0.5
+		end
+		if lastFailReason == nil then
+			break
+		end
+		hopBlacklist[c.id] = true
+	end
+
+	failConn:Disconnect()
+	if lastFailReason then
+		monitorPara:SetContent("Hop failed: " .. lastFailReason:sub(1, 30))
+	end
+	hopBusy = false
+end
+
 section:AddButton({
 	Title = "Hop Server (1-3 players)",
 	Callback = function()
 		if hopBusy then return end
 		hopBusy = true
-		task.spawn(function()
-			local TeleportService = game:GetService("TeleportService")
-			local HttpService = game:GetService("HttpService")
-			local placeId = game.PlaceId
-			local currentJobId = game.JobId
-
-			-- Blacklist the server we're leaving so we don't hop back in
-			if currentJobId and currentJobId ~= "" then
-				hopBlacklist[currentJobId] = true
-			end
-
-			local lastFailReason
-			local failConn = TeleportService.TeleportInitFailed:Connect(function(_, result, err)
-				lastFailReason = tostring(result) .. " " .. tostring(err)
-			end)
-
-			local function fetchCandidates()
-				local cursor
-				local candidates = {}
-				for _ = 1, 5 do
-					local url = "https://games.roblox.com/v1/games/" .. placeId ..
-						"/servers/Public?sortOrder=Asc&limit=100" ..
-						(cursor and ("&cursor=" .. cursor) or "")
-					local ok, body = pcall(function()
-						return game:HttpGet(url)
-					end)
-					if not ok then break end
-					local ok2, data = pcall(function()
-						return HttpService:JSONDecode(body)
-					end)
-					if not ok2 or not data or not data.data then break end
-					local MAX_PING = 100 -- cap: skip laggy servers
-					for _, s in ipairs(data.data) do
-						local ping = tonumber(s.ping) or 9999
-						if s.id and not hopBlacklist[s.id] and s.playing and s.playing >= 1
-							and s.playing <= 3 and s.playing < (s.maxPlayers or 6)
-							and ping <= MAX_PING then
-							table.insert(candidates, {
-								id = s.id,
-								playing = s.playing,
-								ping = ping,
-							})
-						end
-					end
-					cursor = data.nextPageCursor
-					if not cursor or #candidates >= 40 then break end
-				end
-				-- Sort by ping ascending (best ping first); tie-break by fewer players
-				table.sort(candidates, function(a, b)
-					if a.ping ~= b.ping then return a.ping < b.ping end
-					return a.playing < b.playing
-				end)
-				return candidates
-			end
-
-			local candidates = fetchCandidates()
-			if #candidates == 0 then
-				monitorPara:SetContent("No 1-3p server found")
-				failConn:Disconnect()
-				hopBusy = false
-				return
-			end
-
-			for i, c in ipairs(candidates) do
-				if i > 10 then break end
-				monitorPara:SetContent(string.format("Hop try %d (%dp, %dms)", i, c.playing, c.ping))
-				lastFailReason = nil
-				pcall(function()
-					TeleportService:TeleportToPlaceInstance(placeId, c.id, LocalPlayer)
-				end)
-				-- wait for either successful teleport (script torn down) or TeleportInitFailed
-				local waited = 0
-				while waited < 8 and lastFailReason == nil do
-					task.wait(0.5)
-					waited += 0.5
-				end
-				if lastFailReason == nil then
-					-- teleport in progress or succeeded
-					break
-				end
-				-- failed on this candidate too — blacklist it for the rest of this exec
-				hopBlacklist[c.id] = true
-			end
-
-			failConn:Disconnect()
-			if lastFailReason then
-				monitorPara:SetContent("Hop failed: " .. lastFailReason:sub(1, 30))
-			end
-			hopBusy = false
-		end)
+		task.spawn(do_hop)
 	end,
 })
+
+-- Coordinator poll: ask the server whether this clone should hop.
+-- Server picks exactly one clone to stay when multiple of our accounts
+-- land in the same jobId; the rest get told to hop.
+task.spawn(function()
+	task.wait(20) -- let the script settle after join / re-exec
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		if not hopBusy and game.JobId and game.JobId ~= "" then
+			pcall(function()
+				local body = HttpService:JSONEncode({
+					account = LocalPlayer.Name,
+					deviceId = DEVICE_ID,
+					jobId = game.JobId,
+					placeId = tostring(game.PlaceId),
+				})
+				local res = request({
+					Url = SERVER_BASE_URL .. "/api/termux/should-hop",
+					Method = "POST",
+					Headers = {
+						["Content-Type"] = "application/json",
+						["X-Access-Key"] = ACCESS_KEY_USED,
+					},
+					Body = body,
+				})
+				if res and res.Body then
+					local ok, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
+					if ok and data and data.hop == true and not hopBusy then
+						hopBusy = true
+						task.spawn(do_hop)
+					end
+				end
+			end)
+		end
+		task.wait(15)
+	end
+end)
 
 Window:SelectTab(1)
 
