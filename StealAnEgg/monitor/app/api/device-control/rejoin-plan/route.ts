@@ -5,6 +5,7 @@ import {
   termuxDeviceKey,
   presenceKey,
   rejoinStateKey,
+  lastLaunchKey,
   PRESENCE_FRESH_S,
   REJOIN_STATE_TTL_S,
 } from "@/lib/redis";
@@ -130,6 +131,10 @@ export async function GET(req: NextRequest) {
       const stRaw = await redis.get<string>(rejoinStateKey(deviceId, pkg));
       let st: RejoinState = stRaw ? { ...freshState(), ...(typeof stRaw === "string" ? JSON.parse(stRaw) : stRaw) } : freshState();
 
+      const llRaw = await redis.get<string>(lastLaunchKey(deviceId, pkg));
+      const lastLaunchAt = llRaw ? Number(llRaw) || 0 : 0;
+      const lastHeartbeatAt = pres && pres.ts ? Number(pres.ts) || 0 : 0;
+
       const save = async () => {
         await redis.set(rejoinStateKey(deviceId, pkg), JSON.stringify(st), { ex: REJOIN_STATE_TTL_S });
       };
@@ -142,14 +147,22 @@ export async function GET(req: NextRequest) {
       }
       if (st.gaveUp) continue;
 
-      if (!st.staleSince) {
-        st.staleSince = now;
-        await save();
-        continue; // start the grace clock
-      }
-
       if (st.attempts === 0) {
-        if (now - st.staleSince < STUCK_THRESHOLD_MS) {
+        // Anchor the 300s grace on the clone's OWN launch or its last in-game
+        // heartbeat -- whichever is later -- so a clone that failed early in a
+        // long batch is judged from its own launch, and one that dropped after
+        // playing gets a fresh grace from when it was last alive. Falls back to
+        // first-observation when we have neither (launched outside the app).
+        let anchor = Math.max(lastLaunchAt, lastHeartbeatAt);
+        if (anchor === 0) {
+          if (!st.staleSince) {
+            st.staleSince = now;
+            await save();
+            continue;
+          }
+          anchor = st.staleSince;
+        }
+        if (now - anchor < STUCK_THRESHOLD_MS) {
           await save();
           continue; // still inside the 300s loading/lag grace
         }

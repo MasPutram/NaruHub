@@ -58,6 +58,15 @@ export function rejoinStateKey(deviceId: string, pkg: string) {
 }
 export const REJOIN_STATE_TTL_S = 60 * 60; // 1h; refreshed on every touch
 
+// When a package was last launched (batch/manual). The brain anchors the
+// "no heartbeat for 300s = stuck" grace on this so a clone that failed early
+// in a long batch is judged from its OWN launch, not from when the batch
+// finished (the agent can't poll the brain while it's busy launching).
+export function lastLaunchKey(deviceId: string, pkg: string) {
+  return `lastlaunch:${deviceId}:${pkg}`;
+}
+export const LAST_LAUNCH_TTL_S = 60 * 60; // 1h
+
 export const PET_ICON_TTL_S = 60 * 60 * 24 * 30; // 30 days
 
 export function termuxCommandQueueKey(deviceId: string) {

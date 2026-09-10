@@ -5,6 +5,8 @@ import {
   termuxDevicePolicyKey,
   termuxCommandQueueKey,
   termuxCommandLogKey,
+  lastLaunchKey,
+  LAST_LAUNCH_TTL_S,
   TERMUX_COMMAND_QUEUE_TTL_S,
   TERMUX_COMMAND_QUEUE_MAX,
   TERMUX_COMMAND_LOG_TTL_S,
@@ -196,6 +198,8 @@ export async function POST(req: NextRequest) {
         ttl: TERMUX_COMMAND_QUEUE_TTL_S,
         maxLen: TERMUX_COMMAND_QUEUE_MAX,
       });
+      // Anchor the auto-rejoin stuck grace on each clone's own launch time.
+      await redis.set(lastLaunchKey(deviceId, packageName), String(Date.now()), { ex: LAST_LAUNCH_TTL_S });
     }
 
     const logEntry = {
