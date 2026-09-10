@@ -43,6 +43,9 @@ export async function POST(req: NextRequest) {
       // is whitelisted here (this endpoint only persists listed fields), so
       // it survives into the account record the dashboard reads.
       bossToken: data.bossToken ?? null,
+      // Consumable mutation token count -- shown on the dashboard in place of
+      // boss token. Lua sends `mutationToken`.
+      mutationToken: data.mutationToken ?? null,
       growingEggCount: data.fullData?.growingEggs?.length ?? 0,
       backpackEggCount: data.fullData?.backpackEggs?.length ?? 0,
       topPets: data.topPets || [],

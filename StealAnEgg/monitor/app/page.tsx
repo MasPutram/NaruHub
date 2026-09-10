@@ -101,6 +101,7 @@ interface Account {
   petsCount: number;
   stolenCount: number;
   bossToken?: number | null;
+  mutationToken?: number | null;
   growingEggCount?: number;
   backpackEggCount?: number;
   topPets: Pet[];
@@ -705,7 +706,7 @@ function AccountCard({ account: a, onOpen, onSell, onDelete, deleteConfirm, onDe
         <div className="st"><div className="sl">KANDANG</div><div className="sv">{(() => { const k = fmtKandang(a.kandangLevel); return k.isMax ? <>{fmtLevel(a.kandangLevel)} <span className="max-tag">MAX</span></> : fmtLevel(a.kandangLevel); })()}</div></div>
         <div className="st"><div className="sl">TREADMILL</div><div className="sv">{(() => { const t = fmtTreadmill(a.treadmillLevel); return t.isMax ? <>{fmtLevel(a.treadmillLevel)} <span className="max-tag">MAX</span></> : fmtLevel(a.treadmillLevel); })()}</div></div>
         <div className="st"><div className="sl">PETS</div><div className="sv">{fmtNum(a.petsCount)}</div></div>
-        <div className="st boss"><div className="sl">&#x1F451; BOSS TOKEN</div><div className="sv">{fmtNum(a.bossToken ?? 0)}</div></div>
+        <div className="st boss"><div className="sl">&#x1F9EC; TOKEN MUTASI</div><div className="sv">{fmtNum(a.mutationToken ?? 0)}</div></div>
       </div>
       {eggCount > 0 && (
         <div className="egg-bar">
