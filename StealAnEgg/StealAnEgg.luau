@@ -522,8 +522,8 @@ local function do_hop()
 			for _, s in ipairs(data.data) do
 				local ping = tonumber(s.ping) or 9999
 				if s.id and not hopBlacklist[s.id] and s.playing and s.playing >= 5
-    and s.playing < (s.maxPlayers or 8)
-    and ping <= MAX_PING then
+					and s.playing < (s.maxPlayers or 8)
+					and ping <= MAX_PING then
 					table.insert(candidates, {
 						id = s.id,
 						playing = s.playing,
@@ -536,14 +536,14 @@ local function do_hop()
 		end
 		table.sort(candidates, function(a, b)
 			if a.ping ~= b.ping then return a.ping < b.ping end
-			return a.playing < b.playing
+			return a.playing > b.playing
 		end)
 		return candidates
 	end
 
 	local candidates = fetchCandidates()
 	if #candidates == 0 then
-		monitorPara:SetContent("No 1-3p server found")
+		monitorPara:SetContent("No 5-7p server found")
 		failConn:Disconnect()
 		hopBusy = false
 		return
