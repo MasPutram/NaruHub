@@ -521,9 +521,9 @@ local function do_hop()
 			local MAX_PING = 100
 			for _, s in ipairs(data.data) do
 				local ping = tonumber(s.ping) or 9999
-				if s.id and not hopBlacklist[s.id] and s.playing and s.playing >= 1
-					and s.playing <= 3 and s.playing < (s.maxPlayers or 6)
-					and ping <= MAX_PING then
+				if s.id and not hopBlacklist[s.id] and s.playing and s.playing >= 5
+    and s.playing < (s.maxPlayers or 8)
+    and ping <= MAX_PING then
 					table.insert(candidates, {
 						id = s.id,
 						playing = s.playing,
