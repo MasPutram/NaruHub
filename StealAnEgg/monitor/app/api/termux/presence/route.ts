@@ -34,9 +34,22 @@ export async function POST(req: NextRequest) {
     const jobId = (data.jobId || "").toString();
     const placeId = data.placeId != null ? String(data.placeId) : "";
 
+    // Track when the clone entered THIS server (arrival time) so the hop
+    // coordinator can pick "earliest stays". Reset only when jobId changes.
+    const key = presenceKey(deviceId, account);
+    const nowTs = Date.now();
+    let jobIdSince = nowTs;
+    try {
+      const prevRaw = await redis.get<string>(key);
+      if (prevRaw) {
+        const prev = typeof prevRaw === "string" ? JSON.parse(prevRaw) : prevRaw;
+        if (prev.jobId === jobId && prev.jobIdSince) jobIdSince = Number(prev.jobIdSince) || nowTs;
+      }
+    } catch {}
+
     await redis.set(
-      presenceKey(deviceId, account),
-      JSON.stringify({ account, deviceId, jobId, placeId, ts: Date.now() }),
+      key,
+      JSON.stringify({ account, deviceId, jobId, placeId, ts: nowTs, jobIdSince }),
       { ex: PRESENCE_TTL_S }
     );
 
