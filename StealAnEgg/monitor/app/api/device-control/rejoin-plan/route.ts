@@ -28,7 +28,10 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const STUCK_THRESHOLD_MS = 300 * 1000; // running-but-no-heartbeat (loading grace) -> rejoin
+// Running-but-no-heartbeat = maybe loading, maybe wedged (e.g. Error 279). We
+// can't read the screen to tell them apart, so we wait a grace that safely
+// clears a normal load (~40s here) before force-stopping. 120s = 3x load.
+const STUCK_THRESHOLD_MS = 120 * 1000;
 const NOTRUNNING_GRACE_MS = 30 * 1000; // force-closed/not-open -> relaunch fast (nothing to protect)
 const ESCALATE_WAIT_MS = 120 * 1000; // wait this long after an attempt before escalating
 const MAX_ATTEMPTS = 3; // then give up -> home
