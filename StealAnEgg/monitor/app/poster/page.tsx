@@ -35,6 +35,7 @@ interface AccountSummary {
   treadmillLevel: number | null;
   petsCount: number;
   stolenCount: number;
+  mutationToken?: number | null;
   topPets: Pet[];
   online: boolean;
 }
@@ -470,6 +471,7 @@ function makeDummyData(): { summary: AccountSummary; detail: AccountDetail } {
       treadmillLevel: 38,
       petsCount: 156,
       stolenCount: 0,
+      mutationToken: 5,
       topPets: dummyPets.slice(0, 3),
       online: true,
     },
@@ -858,7 +860,7 @@ function PosterPage() {
 
   const totalEggs = growingEggs.length + backpackEggs.length;
 
-  const statItems = [
+  const statItems: { label: string; value: string; accent?: "mut" }[] = [
     { label: "SPEED", value: fmtCompact(summary.speed) },
     { label: "CASH", value: fmtMoney(summary.money) },
     { label: `POTENSI ${MAX_EQUIP} PET AKTIF`, value: fmtRate(potentialActiveRate) },
@@ -870,6 +872,9 @@ function PosterPage() {
       : []),
     ...(summary.treadmillLevel != null
       ? [{ label: "TREADMILL LEVEL", value: `Lv. ${summary.treadmillLevel}` }]
+      : []),
+    ...(Number(summary.mutationToken) > 0
+      ? [{ label: "TOKEN MUTASI", value: "× " + Math.round(Number(summary.mutationToken)), accent: "mut" as const }]
       : []),
   ];
 
@@ -920,6 +925,9 @@ function PosterPage() {
         }
         .stat-cell .slabel { font-size: 11px; font-weight: 700; color: #64748b; letter-spacing: .3px; }
         .stat-cell .sval { font-size: 24px; font-weight: 800; color: #16a34a; margin-top: 2px; }
+        .stat-cell.mut-cell-stat { background: #f5f3ff; border-color: #7c3aed; }
+        .stat-cell.mut-cell-stat .slabel { color: #7c3aed; }
+        .stat-cell.mut-cell-stat .sval { color: #6d28d9; }
 
         .top3 { display: flex; gap: 14px; margin-bottom: 18px; }
         .pick-card {
@@ -1209,7 +1217,7 @@ function PosterPage() {
 
             <div className="stat-grid">
               {statItems.map((s, i) => (
-                <div key={i} className="stat-cell">
+                <div key={i} className={`stat-cell${s.accent === "mut" ? " mut-cell-stat" : ""}`}>
                   <div className="slabel">{s.label}</div>
                   <div className="sval">{s.value}</div>
                 </div>
