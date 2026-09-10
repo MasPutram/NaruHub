@@ -1095,14 +1095,14 @@ task.spawn(function()
 				local tmLevel = tonumber(stats.TreadmillUpgradeLevel) or 0
 				local item, price
 				if not hasFracturedMutation() then
-					-- No Fractured mutation yet — always try to roll one via consumable
+					-- No Fractured mutation yet — keep rolling for one
 					item, price = "MutationConsumable", 400
 				elseif tmLevel == 10 then
+					-- Already have Fractured + TM maxed — buy Boosters to power it
 					item, price = "TreadmillBooster", 200
-				elseif tmLevel == 1 then
-					item, price = "MutationConsumable", 400
 				else
-					return -- other TM levels + already have Fractured: idle
+					-- Have Fractured but TM not yet 10 — idle, save tokens for Boosters later
+					return
 				end
 				if tokens >= price then
 					pcall(function()
