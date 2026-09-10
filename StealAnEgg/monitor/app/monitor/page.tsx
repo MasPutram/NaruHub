@@ -269,6 +269,7 @@ export default function MonitorListPage() {
           <div className="sub">Termux root devices &bull; polling every 10 seconds</div>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <button className="gen-btn" onClick={() => router.push("/monitor/overview")}>Fleet Overview</button>
           <button className="gen-btn" onClick={openCommandModal}>+ Generate Command</button>
           <span className="live"><span className="dot" /> LIVE</span>
         </div>
