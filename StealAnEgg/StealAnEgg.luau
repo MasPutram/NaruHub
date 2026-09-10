@@ -916,11 +916,7 @@ local function reportToMonitor()
 			bossToken = tonumber(s.BossTokens) or 0
 			-- MutationConsumable inventory. Try several likely storage
 			-- shapes since the field name isn't verified yet.
-			mutationToken = tonumber(s.MutationConsumables)
-				or tonumber(s.MutationConsumable)
-				or (type(s.Consumables) == "table" and (tonumber(s.Consumables.Mutation) or tonumber(s.Consumables.MutationConsumable)))
-				or (type(s.Inventory) == "table" and (tonumber(s.Inventory.MutationConsumable) or tonumber(s.Inventory.MutationConsumables)))
-				or 0
+			mutationToken = (type(s.BossMastery) == "table" and tonumber(s.BossMastery.MutationConsumables)) or 0
 		end)
 
 		local fullData = {
