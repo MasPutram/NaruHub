@@ -1110,8 +1110,11 @@ task.spawn(function()
 				elseif tmLevel == 10 then
 					-- Already have Fractured + TM maxed — buy Boosters to power it
 					item, price = "TreadmillBooster", 200
+				elseif tmLevel == 1 then
+					-- TM 1 is a spend window too — grind more Consumables
+					item, price = "MutationConsumable", 400
 				else
-					-- Have Fractured but TM not yet 10 — idle, save tokens for Boosters later
+					-- Have Fractured but TM 2..9 — idle, save tokens
 					return
 				end
 				if tokens >= price then
