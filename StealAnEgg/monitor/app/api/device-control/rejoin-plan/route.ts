@@ -82,7 +82,7 @@ async function pickServer(placeId: string, exclude: string[]): Promise<string | 
 export async function GET(req: NextRequest) {
   const accessKey = process.env.ACCESS_KEY;
   const headerKey = req.headers.get("x-access-key");
-  if (accessKey && headerKey && headerKey !== accessKey) {
+  if (accessKey && headerKey !== accessKey) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
   const deviceId = req.nextUrl.searchParams.get("deviceId");

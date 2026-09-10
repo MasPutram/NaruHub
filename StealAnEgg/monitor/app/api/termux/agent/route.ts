@@ -1161,6 +1161,16 @@ log(C.dim .. "Android" .. C.reset .. "  -> " .. ANDROID_VER)
 log(C.dim .. "Server" .. C.reset .. "   -> " .. C.cyan .. WS_URL .. C.reset)
 log("")
 
+-- Fresh start: wipe this device's stale session state on the server (rejoin
+-- state machine, presence, launch anchors) so a restart re-arms everything
+-- cleanly instead of inheriting a "gave up" flag or stale presence.
+do
+  local code = http_post("/api/device-control/reset-session", { deviceId = DEVICE_ID })
+  if code == "200" then
+    log(C.dim .. "[" .. ts() .. "] session state reset (fresh start)" .. C.reset)
+  end
+end
+
 -- Deploy the in-game presence heartbeat into every executor autoexec dir so
 -- each clone reports which Roblox server (JobId) it's in. Fetched fresh on
 -- start, so restarting the agent always ships the latest script. Best-effort:

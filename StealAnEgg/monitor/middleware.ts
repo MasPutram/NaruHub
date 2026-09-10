@@ -10,8 +10,19 @@ const PUBLIC_PATHS = [
   "/api/save-temp-image",
 ];
 
+// Agent-facing device-control endpoints: the Termux agent calls these with its
+// access key (X-Access-Key), NOT a session cookie, so they must bypass the
+// session-auth redirect below. Each verifies the access key itself. Everything
+// else under /api/device-control/ stays session-protected (dashboard only).
+const AGENT_DEVICE_CONTROL_PATHS = [
+  "/api/device-control/rejoin-plan",
+  "/api/device-control/rejoin-ack",
+  "/api/device-control/reset-session",
+];
+
 function isPublic(pathname: string): boolean {
   if (pathname === "/poster") return true;
+  if (AGENT_DEVICE_CONTROL_PATHS.includes(pathname)) return true;
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
