@@ -169,10 +169,8 @@ export async function GET(req: NextRequest) {
       const lastLaunchAt = llRaw ? Number(llRaw) || 0 : 0;
       const lastHeartbeatAt = pres && pres.ts ? Number(pres.ts) || 0 : 0;
 
-      // Only rejoin packages that have been launched at least once via dashboard
-      // (lastLaunchAt > 0). Freshly restarted agents won't trigger auto-rejoins
-      // until the operator manually initiates a launch.
-      if (lastLaunchAt === 0) continue;
+      // Rejoin if launched from dashboard OR has a previous in-game heartbeat.
+      if (lastLaunchAt === 0 && lastHeartbeatAt === 0) continue;
 
       const save = async () => {
         await redis.set(rejoinStateKey(deviceId, pkg), JSON.stringify(st), { ex: REJOIN_STATE_TTL_S });
@@ -201,12 +199,9 @@ export async function GET(req: NextRequest) {
           }
           anchor = st.staleSince;
         }
-        // A clone that isn't in the running set is force-closed / never opened
-        // -> nothing is loading, so relaunch fast (~30s, also the auto-boot on
-        // agent start). One that IS running but silent might be mid-load -> give
-        // it the full 300s before we touch it.
-        const isRunning = runningSet.has(pkg);
-        const graceMs = isRunning ? STUCK_THRESHOLD_MS : notRunningGraceMs;
+        // Use notRunningGraceMs (rejoinDelay from policy) consistently whether app is
+        // process-dead or stuck on an error/reconnect screen.
+        const graceMs = notRunningGraceMs;
         if (now - anchor < graceMs) {
           await save();
           continue;
