@@ -873,6 +873,7 @@ local PLAN_POLL_INTERVAL = 15
 -- in /api/device-control/rejoin-plan, gated behind autoRejoinEnabled. The
 -- legacy local sweep below is superseded and left unreachable (do return end).
 local function maybe_auto_rejoin()
+  poll_policy_if_due()
   if DEVICE_ID then
     local now = os.time()
     if now - LAST_PLAN_POLL >= PLAN_POLL_INTERVAL then
@@ -880,18 +881,27 @@ local function maybe_auto_rejoin()
       local body = http_get("/api/device-control/rejoin-plan?deviceId=" .. DEVICE_ID)
       local ok, parsed = pcall(json.decode, body)
       if ok and parsed and parsed.actions then
-        for _, act in ipairs(parsed.actions) do
+        local rejoinDelay = (CACHED_POLICY and CACHED_POLICY.rejoinDelay) or 30
+        for i, act in ipairs(parsed.actions) do
           if act.pkg then
             if act.home then
               log(C.yellow .. "[" .. ts() .. "] auto-rejoin: gave up on " .. act.pkg .. " -> home" .. C.reset)
+              local bnds = act.bounds or ""
+              launch_app(act.pkg, bnds, bnds ~= "", 0, "", true)
+              http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
             else
+              local bnds = act.bounds or ""
+              local delay = (i == 1) and 0 or rejoinDelay
               log(C.cyan .. "[" .. ts() .. "] auto-rejoin " .. act.pkg ..
-                (act.target ~= "" and (" -> " .. act.target) or "") .. C.reset)
+                (act.target ~= "" and (" -> " .. act.target) or "") ..
+                (delay > 0 and (" (wait " .. delay .. "s)") or "") .. C.reset)
+              if delay > 0 then
+                os.execute("sleep " .. delay)
+              end
+              -- forceKill=true so the rejoin cold-starts (clears a stuck screen).
+              launch_app(act.pkg, bnds, bnds ~= "", 0, act.target or "", true)
+              http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
             end
-            local bnds = act.bounds or ""
-            -- forceKill=true so the rejoin cold-starts (clears a stuck screen).
-            launch_app(act.pkg, bnds, bnds ~= "", 0, act.target or "", true)
-            http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
           end
         end
       end
