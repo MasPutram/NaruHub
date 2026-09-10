@@ -71,6 +71,69 @@ export async function POST(req: NextRequest) {
       } catch {}
     }
 
+    // Spread: assign each launching clone a DIFFERENT Roblox server so they
+    // don't all pile into one (they'd steal from each other -> less income).
+    // Opt-in via body.spread. Best-effort: excludes servers this device's own
+    // clones already sit in (presence) + assigns distinct within this batch;
+    // if the server list can't be fetched or runs out, those packages keep
+    // their plain place target (random server) -- never worse than before.
+    const spread = body.spread === true;
+    const assigned: Record<string, string> = {};
+    if (spread) {
+      const byPlace: Record<string, string[]> = {};
+      for (const pkg of packageNames) {
+        const m = (targets[pkg] || "").match(/placeId=(\d+)/);
+        if (m) (byPlace[m[1]] ||= []).push(pkg);
+      }
+      // Occupied jobIds from this device's own presence.
+      const occupiedByPlace: Record<string, Set<string>> = {};
+      try {
+        const presPrefix = `presence:${deviceId}:`;
+        let cur = "0";
+        const keys: string[] = [];
+        do {
+          const [next, ks] = await redis.scan(cur, { match: `${presPrefix}*`, count: 100 });
+          cur = next;
+          keys.push(...ks);
+        } while (cur !== "0");
+        if (keys.length > 0) {
+          const vals = await redis.mget(...keys);
+          const now = Date.now();
+          for (const v of vals) {
+            if (!v) continue;
+            try {
+              const o = JSON.parse(v as string);
+              if (o.placeId && o.jobId && o.ts && now - o.ts < 600 * 1000) {
+                (occupiedByPlace[o.placeId] ||= new Set()).add(o.jobId);
+              }
+            } catch {}
+          }
+        }
+      } catch {}
+      for (const [placeId, pkgs] of Object.entries(byPlace)) {
+        const occupied = occupiedByPlace[placeId] || new Set<string>();
+        let available: string[] = [];
+        try {
+          const url = `https://games.roblox.com/v1/games/${placeId}/servers/Public?sortOrder=Asc&limit=100`;
+          const ctrl = new AbortController();
+          const to = setTimeout(() => ctrl.abort(), 6000);
+          const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
+          clearTimeout(to);
+          if (res.ok) {
+            const data = await res.json();
+            const servers: any[] = Array.isArray(data?.data) ? data.data : [];
+            available = servers
+              .filter((s) => s && s.id && !occupied.has(s.id) && typeof s.playing === "number" && s.playing < (s.maxPlayers || 999))
+              .sort((a, b) => (a.ping || 9999) - (b.ping || 9999) || (a.playing || 0) - (b.playing || 0))
+              .map((s) => String(s.id));
+          }
+        } catch {}
+        for (let k = 0; k < pkgs.length && k < available.length; k++) {
+          assigned[pkgs[k]] = available[k];
+        }
+      }
+    }
+
     const queueKey = termuxCommandQueueKey(deviceId);
     const commands: any[] = [];
     for (let i = 0; i < packageNames.length; i++) {
@@ -112,6 +175,12 @@ export async function POST(req: NextRequest) {
         useResize = true;
       }
 
+      let target = targets[packageName] || "";
+      if (assigned[packageName]) {
+        const m = target.match(/placeId=(\d+)/);
+        if (m) target = `roblox://placeId=${m[1]}&gameInstanceId=${assigned[packageName]}`;
+      }
+
       const command = {
         id: `${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
         type: "launch",
@@ -119,7 +188,7 @@ export async function POST(req: NextRequest) {
         bounds,
         resize: useResize,
         launchDelay,
-        target: targets[packageName] || "",
+        target,
         createdAt: Date.now(),
       };
       commands.push(command);
@@ -140,7 +209,7 @@ export async function POST(req: NextRequest) {
       maxLen: TERMUX_COMMAND_LOG_MAX,
     });
 
-    return NextResponse.json({ ok: true, commands });
+    return NextResponse.json({ ok: true, commands, spreadCount: Object.keys(assigned).length });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
