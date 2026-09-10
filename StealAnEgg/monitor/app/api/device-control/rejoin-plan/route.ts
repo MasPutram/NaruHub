@@ -128,6 +128,7 @@ export async function GET(req: NextRequest) {
     const bounds: Record<string, string> = policy.packageBounds || {};
     const optIn: string[] = Array.isArray(policy.autoRejoinPackages) ? policy.autoRejoinPackages : [];
     const optInAll = optIn.length === 0;
+    const notRunningGraceMs = Math.max(1, Number(policy.rejoinDelay) || 30) * 1000;
 
     const devRaw = await redis.get<string>(termuxDeviceKey(deviceId));
     if (!devRaw) return NextResponse.json({ ok: true, actions: [] });
@@ -200,7 +201,7 @@ export async function GET(req: NextRequest) {
         // agent start). One that IS running but silent might be mid-load -> give
         // it the full 300s before we touch it.
         const isRunning = runningSet.has(pkg);
-        const graceMs = isRunning ? STUCK_THRESHOLD_MS : NOTRUNNING_GRACE_MS;
+        const graceMs = isRunning ? STUCK_THRESHOLD_MS : notRunningGraceMs;
         if (now - anchor < graceMs) {
           await save();
           continue;
