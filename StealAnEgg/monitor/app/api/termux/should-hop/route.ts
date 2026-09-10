@@ -24,11 +24,14 @@ export async function POST(req: NextRequest) {
   try {
     const data = await req.json();
     const account = (data.account || data.sourceAccount || "").toString().trim();
-    const deviceId = (data.deviceId || req.headers.get("x-device-id") || "").toString().trim();
+    // deviceId is only used for the presence key; the clone IDENTITY is the
+    // account name (globally unique: BlekokGong<n>). Optional so the in-game
+    // script can call this without knowing the agent's hardware id.
+    const deviceId = (data.deviceId || req.headers.get("x-device-id") || account).toString().trim();
     const jobId = (data.jobId || "").toString();
     const placeId = data.placeId != null ? String(data.placeId) : "";
-    if (!account || !deviceId) {
-      return NextResponse.json({ ok: false, error: "account and deviceId required" }, { status: 400 });
+    if (!account) {
+      return NextResponse.json({ ok: false, error: "account required" }, { status: 400 });
     }
     // Not in a server yet -> nothing to coordinate.
     if (!jobId) return NextResponse.json({ ok: true, hop: false });
@@ -62,27 +65,29 @@ export async function POST(req: NextRequest) {
     } while (cursor !== "0");
     const vals = presKeys.length > 0 ? await redis.mget(...presKeys) : [];
 
-    const onServer: { id: string; since: number }[] = [];
+    // Dedupe by account (a clone can briefly have two presence keys if the
+    // in-game script and the agent report different deviceIds) -- keep the
+    // earliest arrival per account.
+    const byAccount = new Map<string, number>();
     for (const v of vals) {
       if (!v) continue;
       try {
         const o = typeof v === "string" ? JSON.parse(v) : v;
-        if (o.jobId === jobId && o.ts && now - o.ts < PRESENCE_FRESH_S * 1000) {
-          onServer.push({
-            id: `${o.deviceId}:${o.account}`,
-            since: Number(o.jobIdSince) || Number(o.ts) || now,
-          });
+        if (o.account && o.jobId === jobId && o.ts && now - o.ts < PRESENCE_FRESH_S * 1000) {
+          const since = Number(o.jobIdSince) || Number(o.ts) || now;
+          const prev = byAccount.get(o.account);
+          if (prev === undefined || since < prev) byAccount.set(o.account, since);
         }
       } catch {}
     }
 
-    if (onServer.length <= 1) return NextResponse.json({ ok: true, hop: false, count: onServer.length });
+    if (byAccount.size <= 1) return NextResponse.json({ ok: true, hop: false, count: byAccount.size });
 
-    // Stayer = earliest arrival; deterministic tiebreak by id so exactly one
-    // stays and everyone else hops (no double-hop even under simultaneous asks).
-    onServer.sort((a, b) => a.since - b.since || a.id.localeCompare(b.id));
-    const me = `${deviceId}:${account}`;
-    return NextResponse.json({ ok: true, hop: me !== onServer[0].id, count: onServer.length });
+    // Stayer = earliest arrival; deterministic tiebreak by account name so
+    // exactly one stays and everyone else hops (no double-hop even under
+    // simultaneous asks).
+    const list = Array.from(byAccount.entries()).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]));
+    return NextResponse.json({ ok: true, hop: account !== list[0][0], count: byAccount.size });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message, hop: false }, { status: 500 });
   }
