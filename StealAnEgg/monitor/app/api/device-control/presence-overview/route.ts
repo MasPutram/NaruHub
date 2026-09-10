@@ -62,19 +62,24 @@ export async function GET(_req: NextRequest) {
     }
 
     const now = Date.now();
-    const rows = Array.from(byAccount.values()).map((o: any) => {
-      const dev = accountToDev[o.account];
-      const inGame = o.ts && now - o.ts < PRESENCE_FRESH_S * 1000;
-      return {
-        account: o.account as string,
-        deviceId: dev?.deviceId || o.deviceId || "",
-        deviceName: dev?.name || (o.deviceId || "").slice(0, 8) || "?",
-        jobId: (o.jobId || "") as string,
-        placeId: (o.placeId || "") as string,
-        lastSeen: (o.ts || 0) as number,
-        inGame: !!inGame,
-      };
-    });
+    const rows = Array.from(byAccount.values())
+      // Only clones that belong to a live device record. Presence whose account
+      // isn't listed by any current device is stale/orphaned (device offline or
+      // expired) -- drop it so the view stays clean instead of showing raw hex.
+      .filter((o: any) => accountToDev[o.account])
+      .map((o: any) => {
+        const dev = accountToDev[o.account];
+        const inGame = o.ts && now - o.ts < PRESENCE_FRESH_S * 1000;
+        return {
+          account: o.account as string,
+          deviceId: dev.deviceId,
+          deviceName: dev.name,
+          jobId: (o.jobId || "") as string,
+          placeId: (o.placeId || "") as string,
+          lastSeen: (o.ts || 0) as number,
+          inGame: !!inGame,
+        };
+      });
 
     // Flag collisions: a jobId held by 2+ in-game clones.
     const countByJob: Record<string, number> = {};
