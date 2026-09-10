@@ -1052,7 +1052,11 @@ task.spawn(function()
 	local TreadmillClient = require(LocalPlayer.PlayerScripts.GUI.TreadmillUpgrade.Client)
 
 	-- Returns true if any owned egg OR pen pet OR backpack asset carries
-	-- the "Boss" (a.k.a. Fractured) mutation.
+	-- the "Boss" (a.k.a. Fractured, displayed in-game as FRACTURED) mutation.
+	-- Case-insensitive on the mutation name.
+	local function isBossMut(name)
+		return type(name) == "string" and string.lower(name) == "boss"
+	end
 	local function hasFracturedMutation()
 		local ok, penRecords = pcall(function()
 			return AssetRoster.ReadOwnerPen(LocalPlayer.UserId)
@@ -1062,7 +1066,7 @@ task.spawn(function()
 				local muts = rec.ItemData and rec.ItemData.Mutations
 				if type(muts) == "table" then
 					for _, m in ipairs(muts) do
-						if m == "Boss" then return true end
+						if isBossMut(m) then return true end
 					end
 				end
 			end
@@ -1070,7 +1074,7 @@ task.spawn(function()
 		for _, rec in pairs(getMyOwnedEggs()) do
 			if type(rec.Mutations) == "table" then
 				for _, m in ipairs(rec.Mutations) do
-					if m == "Boss" then return true end
+					if isBossMut(m) then return true end
 				end
 			end
 		end
@@ -1079,7 +1083,7 @@ task.spawn(function()
 			for _, tool in ipairs(backpack:GetChildren()) do
 				if tool:GetAttribute("ItemType") == "Asset" then
 					local str = tool:GetAttribute("Mutations")
-					if str and tostring(str):find("Boss") then return true end
+					if str and string.lower(tostring(str)):find("boss") then return true end
 				end
 			end
 		end
