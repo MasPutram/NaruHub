@@ -352,8 +352,8 @@ export default function CatalogPage() {
           color: #fff; height: ${HEADER_H}px; padding: 22px 36px; display: flex; align-items: center; gap: 18px;
           border-bottom: 4px solid #facc15; flex-shrink: 0; box-sizing: border-box;
         }
-        .rk-header h1 { margin: 0; font-size: 34px; font-weight: 900; letter-spacing: 3px; }
-        .rk-header .sub { color: #cbd5e1; font-size: 14px; margin-top: 8px; letter-spacing: 2px; }
+        .rk-header h1 { margin: 0; font-size: 34px; font-weight: 900; letter-spacing: 0.5px; }
+        .rk-header .sub { color: #cbd5e1; font-size: 14px; margin-top: 8px; letter-spacing: 0.5px; }
         .rk-header .qr { margin-left: auto; background: #fff; padding: 6px; border-radius: 8px; flex-shrink: 0; }
         .rk-header .qr img { display: block; width: 104px; height: 104px; }
         .rk-header .qr-info { color: #f8fafc; font-size: 13px; text-align: right; flex-shrink: 0; }
@@ -406,8 +406,8 @@ export default function CatalogPage() {
       <div class="rk-wrap">
         <div class="rk-header">
           <div>
-            <h1>RANGKUMAN KATALOG AKUN</h1>
-            <div class="sub">MAS NARU • JUAL AKUN ROBLOX TERPERCAYA</div>
+            <h1>Katalog Akun Steal an Egg</h1>
+            <div class="sub">Mas Naru — Jual Akun SAE Bergaransi Capcay</div>
           </div>
           <div class="qr">${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR" />` : ""}</div>
           <div class="qr-info">
