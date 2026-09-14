@@ -382,19 +382,56 @@ export default function CatalogPage() {
     document.body.appendChild(container);
 
     try {
+      // firstElementChild would be the <style> node (empty box -> broken PNG),
+      // so grab the actual content wrapper by class instead.
+      const target = container.querySelector<HTMLElement>(".rk-wrap");
+      if (!target) throw new Error("rangkuman container tidak terbentuk");
+
+      // Wait for the QR <img> (data URL) + first layout pass, then wait for
+      // any pending image decodes so the capture never fires before render.
+      await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+      const imgs = Array.from(target.querySelectorAll("img"));
+      await Promise.all(
+        imgs.map((img) => {
+          if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+          return new Promise<void>((res) => {
+            img.addEventListener("load", () => res(), { once: true });
+            img.addEventListener("error", () => res(), { once: true });
+          });
+        })
+      );
+      await new Promise((r) => setTimeout(r, 100));
+
+      // Mobile browsers cap canvas dimensions (iOS ~4096, some Android ~8192);
+      // with many accounts our height at scale=2 blows past that -> capture
+      // returns an empty/black canvas -> broken PNG icon in the gallery. Pick
+      // a scale that fits under 8000px on the longer side.
+      const isMobile = /Mobi|Android/i.test(navigator.userAgent || "");
+      const maxSide = Math.max(target.offsetWidth, target.offsetHeight);
+      const defaultScale = isMobile ? 1.5 : 2;
+      const scale = Math.min(defaultScale, Math.max(1, 8000 / maxSide));
+
       const { default: html2canvas } = await import("html2canvas-pro");
-      // Wait a tick so the QR <img> paints before capture.
-      await new Promise((r) => setTimeout(r, 200));
-      const canvas = await html2canvas(container.firstElementChild as HTMLElement, {
-        scale: 2,
+      const canvas = await html2canvas(target, {
+        scale,
         backgroundColor: "#f8fafc",
         useCORS: true,
+        width: target.offsetWidth,
+        height: target.offsetHeight,
+        windowWidth: target.offsetWidth,
       });
+      if (!canvas.width || !canvas.height) throw new Error("hasil capture kosong");
+
+      const dataUrl = canvas.toDataURL("image/png");
       const link = document.createElement("a");
       const dateStr = new Date().toISOString().slice(0, 10);
       link.download = `Rangkuman-Katalog-MasNaru-${dateStr}.png`;
-      link.href = canvas.toDataURL("image/png");
+      link.href = dataUrl;
+      // Some Android browsers ignore programmatic download from an offscreen
+      // link -- append it first so the click reaches a real handler.
+      document.body.appendChild(link);
       link.click();
+      document.body.removeChild(link);
     } catch (e: any) {
       alert("Gagal generate rangkuman: " + e.message);
     } finally {
