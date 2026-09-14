@@ -293,28 +293,14 @@ export default function CatalogPage() {
     container.innerHTML = `
       <style>
         .rk-wrap { position: relative; width: ${CANVAS_W}px; height: ${CANVAS_H}px; overflow: hidden; display: flex; flex-direction: column; }
-        .rk-tape {
-          position: absolute; left: 0; right: 0; pointer-events: none; z-index: 5;
-        }
-        .rk-tape.top { top: ${HEADER_H + SUMMARY_H - 22}px; }
-        .rk-tape.bottom { bottom: ${FOOTER_H - 22}px; }
-        .rk-band {
-          background: repeating-linear-gradient(
-            135deg,
-            #facc15 0 60px,
-            #0f172a 60px 120px
-          );
-          color: #fef3c7; font-weight: 900; letter-spacing: 6px; font-size: 13px;
-          text-transform: uppercase; padding: 7px 0; text-align: center;
-          border-top: 2px solid #0f172a; border-bottom: 2px solid #0f172a;
-          text-shadow: 0 0 4px #000, 0 0 4px #000;
-          transform: rotate(-3deg);
-          opacity: 0.82;
-        }
         .rk-wm {
           position: absolute;
           top: -400px; left: -400px; right: -400px; bottom: -400px;
-          pointer-events: none; z-index: 2;
+          pointer-events: none;
+          /* z-index above everything so watermark actually covers the whole
+             layout uniformly (header + summary + table + footer). Kept faint
+             enough that table text stays readable. */
+          z-index: 20;
           display: grid;
           grid-template-columns: repeat(auto-fill, 260px);
           grid-auto-rows: 90px;
@@ -323,7 +309,11 @@ export default function CatalogPage() {
           transform: rotate(-22deg);
         }
         .rk-wm span {
-          color: rgba(15, 23, 42, 0.11);
+          /* Mid-tone slate at low alpha shows up as light gray on the dark
+             header/footer AND as a soft gray on the white table -- so the tile
+             actually covers the whole layout without a second colored copy,
+             and stays faint enough that table text remains sharp. */
+          color: rgba(120, 130, 155, 0.30);
           font-weight: 900; font-size: 34px; letter-spacing: 4px;
           white-space: nowrap; text-align: center;
           display: flex; align-items: center; justify-content: center;
@@ -426,8 +416,6 @@ export default function CatalogPage() {
         <div class="rk-wm">
           ${Array.from({ length: 200 }).map(() => "<span>MAS NARU</span>").join("")}
         </div>
-        <div class="rk-tape top"><div class="rk-band">MAS NARU • JUAL AKUN NARUHUB • DO NOT COPY •</div></div>
-        <div class="rk-tape bottom"><div class="rk-band">MAS NARU • JUAL AKUN NARUHUB • DO NOT COPY •</div></div>
       </div>
     `;
     document.body.appendChild(container);
