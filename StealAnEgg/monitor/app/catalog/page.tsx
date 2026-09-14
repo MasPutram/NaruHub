@@ -266,9 +266,9 @@ export default function CatalogPage() {
     const FOOTER_H = 60;
     const ROWS_AREA_H = CANVAS_H - HEADER_H - SUMMARY_H - FOOTER_H - THEAD_H;
     const idealRowH = Math.floor(ROWS_AREA_H / rows.length);
-    const rowH = Math.max(22, Math.min(58, idealRowH));
-    const bodyFontSize = Math.max(10, Math.min(17, Math.round(rowH * 0.42)));
-    const pillFontSize = Math.max(9, bodyFontSize - 2);
+    const rowH = Math.max(26, Math.min(66, idealRowH));
+    const bodyFontSize = Math.max(13, Math.min(22, Math.round(rowH * 0.48)));
+    const pillFontSize = Math.max(11, bodyFontSize - 2);
     if (rows.length > 60) {
       const proceed = confirm(`${rows.length} akun mungkin terlalu banyak buat satu poster 9:16. Tetap generate? Tulisan bakal sangat kecil.`);
       if (!proceed) { setSummaryBusy(false); return; }
@@ -312,23 +312,33 @@ export default function CatalogPage() {
           opacity: 0.82;
         }
         .rk-wm {
-          position: absolute; inset: 0; pointer-events: none; z-index: 2;
-          display: flex; flex-wrap: wrap; align-content: center;
-          justify-content: center; gap: 40px 70px; padding: 100px 40px;
-          transform: rotate(-24deg);
+          position: absolute;
+          top: -400px; left: -400px; right: -400px; bottom: -400px;
+          pointer-events: none; z-index: 2;
+          display: grid;
+          grid-template-columns: repeat(auto-fill, 260px);
+          grid-auto-rows: 90px;
+          gap: 0;
+          justify-content: center; align-content: center;
+          transform: rotate(-22deg);
         }
-        .rk-wm span { color: rgba(15, 23, 42, 0.07); font-weight: 900; font-size: 72px; letter-spacing: 12px; white-space: nowrap; }
+        .rk-wm span {
+          color: rgba(15, 23, 42, 0.11);
+          font-weight: 900; font-size: 34px; letter-spacing: 4px;
+          white-space: nowrap; text-align: center;
+          display: flex; align-items: center; justify-content: center;
+        }
         .rk-header {
           background: linear-gradient(135deg,#0f172a,#1e293b);
           color: #fff; height: ${HEADER_H}px; padding: 22px 36px; display: flex; align-items: center; gap: 18px;
           border-bottom: 4px solid #facc15; flex-shrink: 0; box-sizing: border-box;
         }
-        .rk-header h1 { margin: 0; font-size: 28px; font-weight: 900; letter-spacing: 3px; }
-        .rk-header .sub { color: #cbd5e1; font-size: 12px; margin-top: 6px; letter-spacing: 2px; }
+        .rk-header h1 { margin: 0; font-size: 34px; font-weight: 900; letter-spacing: 3px; }
+        .rk-header .sub { color: #cbd5e1; font-size: 14px; margin-top: 8px; letter-spacing: 2px; }
         .rk-header .qr { margin-left: auto; background: #fff; padding: 6px; border-radius: 8px; flex-shrink: 0; }
-        .rk-header .qr img { display: block; width: 96px; height: 96px; }
-        .rk-header .qr-info { color: #f8fafc; font-size: 11px; text-align: right; flex-shrink: 0; }
-        .rk-header .qr-info .u { font-weight: 900; font-size: 15px; color: #facc15; }
+        .rk-header .qr img { display: block; width: 104px; height: 104px; }
+        .rk-header .qr-info { color: #f8fafc; font-size: 13px; text-align: right; flex-shrink: 0; }
+        .rk-header .qr-info .u { font-weight: 900; font-size: 17px; color: #facc15; }
 
         .rk-summary {
           height: ${SUMMARY_H}px; padding: 12px 36px; display: flex; gap: 24px; align-items: center;
@@ -336,13 +346,13 @@ export default function CatalogPage() {
           flex-shrink: 0; box-sizing: border-box;
         }
         .rk-summary .st { display: flex; flex-direction: column; }
-        .rk-summary .st .l { font-size: 10px; color: #64748b; letter-spacing: 1.5px; font-weight: 800; text-transform: uppercase; }
-        .rk-summary .st .v { font-size: 18px; font-weight: 900; color: #0f172a; margin-top: 2px; }
+        .rk-summary .st .l { font-size: 12px; color: #64748b; letter-spacing: 1.5px; font-weight: 800; text-transform: uppercase; }
+        .rk-summary .st .v { font-size: 22px; font-weight: 900; color: #0f172a; margin-top: 3px; }
 
         .rk-tblwrap { flex: 1; position: relative; z-index: 3; background: rgba(255,255,255,0.85); overflow: hidden; }
         table.rk-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
         table.rk-tbl th {
-          background: #0f172a; color: #f8fafc; font-size: 11px; letter-spacing: 1.5px;
+          background: #0f172a; color: #f8fafc; font-size: 13px; letter-spacing: 1.5px;
           font-weight: 900; text-transform: uppercase; border-bottom: 3px solid #facc15;
           padding: 0 12px; height: ${THEAD_H}px; text-align: left; box-sizing: border-box;
         }
@@ -360,7 +370,7 @@ export default function CatalogPage() {
 
         .rk-foot {
           height: ${FOOTER_H}px; padding: 12px 36px; display: flex; align-items: center; justify-content: center;
-          text-align: center; background: #0f172a; color: #cbd5e1; font-size: 12px;
+          text-align: center; background: #0f172a; color: #cbd5e1; font-size: 14px;
           position: relative; z-index: 3; border-top: 2px solid #facc15;
           flex-shrink: 0; box-sizing: border-box;
         }
@@ -382,19 +392,18 @@ export default function CatalogPage() {
 
         <div class="rk-summary">
           <div class="st"><div class="l">Total Akun</div><div class="v">${rows.length}</div></div>
-          <div class="st"><div class="l">Total Nilai</div><div class="v">${fmtRupiah(totalHarga)}</div></div>
           <div class="st"><div class="l">Terbit</div><div class="v">${fmtDate(Date.now())}</div></div>
         </div>
 
         <div class="rk-tblwrap">
           <table class="rk-tbl">
             <colgroup>
-              <col style="width:15%">
-              <col style="width:15%">
-              <col style="width:24%">
-              <col style="width:13%">
               <col style="width:14%">
-              <col style="width:19%">
+              <col style="width:13%">
+              <col style="width:20%">
+              <col style="width:11%">
+              <col style="width:13%">
+              <col style="width:29%">
             </colgroup>
             <thead>
               <tr>
@@ -415,7 +424,7 @@ export default function CatalogPage() {
         </div>
 
         <div class="rk-wm">
-          ${Array.from({ length: 30 }).map(() => "<span>MAS NARU</span>").join("")}
+          ${Array.from({ length: 200 }).map(() => "<span>MAS NARU</span>").join("")}
         </div>
         <div class="rk-tape top"><div class="rk-band">MAS NARU • JUAL AKUN NARUHUB • DO NOT COPY •</div></div>
         <div class="rk-tape bottom"><div class="rk-band">MAS NARU • JUAL AKUN NARUHUB • DO NOT COPY •</div></div>
