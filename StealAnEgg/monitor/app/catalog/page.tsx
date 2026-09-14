@@ -391,7 +391,7 @@ export default function CatalogPage() {
         }
         .rk-header {
           background: linear-gradient(135deg,#0f172a,#1e293b);
-          color: #fff; height: ${HEADER_H}px; padding: 22px 36px; display: flex; align-items: center; gap: 18px;
+          color: #fff; height: ${HEADER_H}px; padding: 22px 80px; display: flex; align-items: center; gap: 22px;
           border-bottom: 4px solid #facc15; flex-shrink: 0; box-sizing: border-box;
         }
         .rk-header h1 { margin: 0; font-size: 34px; font-weight: 900; letter-spacing: 0.5px; }
@@ -401,7 +401,7 @@ export default function CatalogPage() {
         .rk-header .qr-info { color: #f8fafc; font-size: 13px; text-align: right; flex-shrink: 0; }
         .rk-header .qr-info .u { font-weight: 900; font-size: 17px; color: #facc15; }
 
-        .rk-tblwrap { flex: 1; position: relative; z-index: 3; background: rgba(255,255,255,0.85); overflow: hidden; }
+        .rk-tblwrap { flex: 1; position: relative; z-index: 3; background: rgba(255,255,255,0.85); overflow: hidden; padding: 0 60px; box-sizing: border-box; }
         table.rk-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
         table.rk-tbl th {
           background: #0f172a; color: #f8fafc; font-size: 13px; letter-spacing: 1.5px;
@@ -429,7 +429,7 @@ export default function CatalogPage() {
         .mut-pill { display: inline-block; background: #a78bfa; color: #fff; padding: 1px 8px; border-radius: 999px; font-size: ${pillFontSize}px; font-weight: 900; }
 
         .rk-foot {
-          height: ${FOOTER_H}px; padding: 12px 36px; display: flex; align-items: center; justify-content: center;
+          height: ${FOOTER_H}px; padding: 12px 80px; display: flex; align-items: center; justify-content: center;
           text-align: center; background: #0f172a; color: #cbd5e1; font-size: 14px;
           position: relative; z-index: 3; border-top: 2px solid #facc15;
           flex-shrink: 0; box-sizing: border-box;
