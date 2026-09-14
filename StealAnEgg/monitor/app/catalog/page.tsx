@@ -204,22 +204,46 @@ export default function CatalogPage() {
 
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; account: string } | null>(null);
   const [summaryBusy, setSummaryBusy] = useState(false);
+  // Pre-generate filter modal for rangkuman.
+  const [summaryModalOpen, setSummaryModalOpen] = useState(false);
+  const [summaryFilterPriced, setSummaryFilterPriced] = useState(false);
+  const [summaryFilterMutation, setSummaryFilterMutation] = useState(false);
+  const [summaryFilterDevice, setSummaryFilterDevice] = useState<string>("all");
+  const [summaryFilterMinIncome, setSummaryFilterMinIncome] = useState("");
 
   // Build + capture a single PNG that lists every catalog account (code | speed |
   // income potensi | total telur | mutasi | harga) with a police-line style
   // watermark and a QR to the seller's Facebook, then trigger download. The
   // whole thing is a temporary offscreen DOM node -- no react tree pollution.
+  // Read the current filter state and return the accounts that pass. Kept as
+  // a closure so both the modal preview count and the actual capture share
+  // the exact same source of truth.
+  function filteredSummaryRows(): Account[] {
+    const minInc = parseFloat(summaryFilterMinIncome) || 0; // in B (billions)
+    return accounts.filter((a) => {
+      if (summaryFilterPriced && !(a.catalogPrice && a.catalogPrice > 0)) return false;
+      if (summaryFilterMutation && !((a.mutationToken || 0) > 0)) return false;
+      if (summaryFilterDevice !== "all" && deviceLabel(a.sourceAccount) !== summaryFilterDevice) return false;
+      if (minInc > 0) {
+        const potB = potensi18(a) / 1e9;
+        if (potB < minInc) return false;
+      }
+      return true;
+    });
+  }
+
   async function downloadSummary() {
     if (summaryBusy) return;
-    const rows = accounts.slice().sort((a, b) => {
+    const rows = filteredSummaryRows().sort((a, b) => {
       const na = accountNumber(a.sourceAccount) ?? 0;
       const nb = accountNumber(b.sourceAccount) ?? 0;
       return na - nb;
     });
     if (rows.length === 0) {
-      alert("Belum ada akun di katalog.");
+      alert("Tidak ada akun yang cocok dengan filter.");
       return;
     }
+    setSummaryModalOpen(false);
     setSummaryBusy(true);
     const totalHarga = rows.reduce((s, a) => s + (a.catalogPrice || 0), 0);
 
@@ -1087,9 +1111,9 @@ export default function CatalogPage() {
           <button
             className="btn-download-all"
             style={{ background: "#facc15", color: "#0f172a" }}
-            onClick={downloadSummary}
+            onClick={() => setSummaryModalOpen(true)}
             disabled={summaryBusy || accounts.length === 0}
-            title="Download PNG rangkuman semua akun di katalog"
+            title="Download PNG rangkuman akun (pilih filter dulu)"
           >
             {summaryBusy ? "Generating..." : `📋 Download Rangkuman (${accounts.length} akun)`}
           </button>
@@ -1329,6 +1353,99 @@ export default function CatalogPage() {
           </tbody>
         </table>
       )}
+
+      {summaryModalOpen && (() => {
+        const devices = Array.from(
+          new Set(accounts.map((a) => deviceLabel(a.sourceAccount)).filter((d): d is string => !!d))
+        ).sort((a, b) => {
+          const na = parseInt(a.match(/\d+/)?.[0] || "0", 10);
+          const nb = parseInt(b.match(/\d+/)?.[0] || "0", 10);
+          return na - nb;
+        });
+        const previewCount = filteredSummaryRows().length;
+        return (
+          <div className="modal-backdrop" onClick={() => { if (!summaryBusy) setSummaryModalOpen(false); }}>
+            <div className="modal-box" style={{ width: 460 }} onClick={(e) => e.stopPropagation()}>
+              <h2>Filter Rangkuman</h2>
+              <div className="modal-sub">
+                Pilih akun mana yang mau dimasukin ke poster rangkuman. Dari <strong>{accounts.length} akun</strong> di katalog, <strong style={{ color: "var(--accent)" }}>{previewCount} akun</strong> lolos filter.
+              </div>
+
+              <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={summaryFilterPriced}
+                  onChange={(e) => setSummaryFilterPriced(e.target.checked)}
+                  style={{ width: 16, height: 16 }}
+                />
+                <span style={{ fontSize: 13, color: "var(--ink)", fontWeight: 700 }}>Cuma yang udah punya harga</span>
+              </label>
+
+              <label style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={summaryFilterMutation}
+                  onChange={(e) => setSummaryFilterMutation(e.target.checked)}
+                  style={{ width: 16, height: 16 }}
+                />
+                <span style={{ fontSize: 13, color: "var(--ink)", fontWeight: 700 }}>Cuma yang punya token mutasi</span>
+              </label>
+
+              <label>Filter Device</label>
+              <select
+                value={summaryFilterDevice}
+                onChange={(e) => setSummaryFilterDevice(e.target.value)}
+                style={{ width: "100%", background: "#1c1c2b", color: "var(--ink)", border: "1px solid var(--card-border)", borderRadius: 8, padding: "8px 10px", fontSize: 13, marginBottom: 14, fontWeight: 700 }}
+              >
+                <option value="all">Semua device</option>
+                {devices.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+
+              <label>Min Income Potensi (B/s)</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <input
+                  type="number"
+                  step="0.5"
+                  placeholder="0"
+                  value={summaryFilterMinIncome}
+                  onChange={(e) => setSummaryFilterMinIncome(e.target.value)}
+                  style={{ margin: 0 }}
+                />
+                <span style={{ color: "var(--dim)", fontSize: 12, fontWeight: 700 }}>B/s</span>
+              </div>
+              <div style={{ color: "var(--dim)", fontSize: 11, marginBottom: 16 }}>
+                Kosongin buat gak filter income.
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  className="btn-cancel"
+                  onClick={() => {
+                    setSummaryFilterPriced(false);
+                    setSummaryFilterMutation(false);
+                    setSummaryFilterDevice("all");
+                    setSummaryFilterMinIncome("");
+                  }}
+                  disabled={summaryBusy}
+                  style={{ background: "#262636" }}
+                >
+                  Reset
+                </button>
+                <button
+                  className="btn-confirm"
+                  style={{ background: "#facc15", color: "#0f172a" }}
+                  onClick={downloadSummary}
+                  disabled={summaryBusy || previewCount === 0}
+                >
+                  {summaryBusy ? "Generating..." : `Generate (${previewCount} akun)`}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {rateModalOpen && (() => {
         const rInc = parseFloat(rateIncome) || 0;
