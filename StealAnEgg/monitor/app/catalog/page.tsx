@@ -274,16 +274,45 @@ export default function CatalogPage() {
       if (!proceed) { setSummaryBusy(false); return; }
     }
 
-    const tableRows = rows.map((a, i) => `
+    // Pick the pet with the highest rate across every pool the account has
+    // (topPets fallback, then full detail). Returns a short label + rate so it
+    // fits in one line inside the fixed-height row.
+    function topPetLabel(a: Account): { text: string; rate: string; mut: string } {
+      const pools: Pet[] = [];
+      if (a.topPets) pools.push(...a.topPets);
+      if (a.detail) {
+        if (a.detail.activePets) pools.push(...a.detail.activePets);
+        if (a.detail.allPets) pools.push(...a.detail.allPets);
+        if (a.detail.growingEggs) pools.push(...a.detail.growingEggs);
+        if (a.detail.backpackEggs) pools.push(...a.detail.backpackEggs);
+      }
+      const best = pools.sort((x, y) => (y.rate || 0) - (x.rate || 0))[0];
+      if (!best) return { text: "—", rate: "", mut: "" };
+      const name = best.name || best.category || "?";
+      const mut = (best.mutations || [])[0] || "";
+      return { text: name, rate: fmtRate(best.rate || 0), mut: mut.toUpperCase() };
+    }
+    function escHtml(s: string): string {
+      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    const tableRows = rows.map((a, i) => {
+      const tp = topPetLabel(a);
+      const petCell = tp.text === "—"
+        ? "—"
+        : `<div class="tp-row">${tp.mut ? `<span class="tp-mut" data-m="${escHtml(tp.mut)}">${escHtml(tp.mut)}</span>` : ""}<span class="tp-name">${escHtml(tp.text)}</span><span class="tp-rate">${tp.rate}</span></div>`;
+      return `
       <tr class="${i % 2 === 1 ? "alt" : ""}">
         <td class="c-code">${accCode(a.sourceAccount)}</td>
         <td>${fmtCompact(a.speed)}</td>
         <td>${fmtRate(potensi18(a))}</td>
+        <td class="c-toppet">${petCell}</td>
         <td class="c-num">${eggTotal(a)}</td>
         <td class="c-mut">${(a.mutationToken || 0) > 0 ? `<span class="mut-pill">${a.mutationToken}</span>` : "—"}</td>
         <td class="c-price">${a.catalogPrice ? fmtRupiah(a.catalogPrice) : "—"}</td>
       </tr>
-    `).join("");
+    `;
+    }).join("");
 
     // Police-line diagonal stripes overlay: repeated yellow-black tape reading
     // "MAS NARU • JUAL AKUN NARUHUB • DO NOT COPY". Rendered as a background
@@ -356,6 +385,14 @@ export default function CatalogPage() {
         table.rk-tbl .c-num { text-align: center; font-weight: 700; }
         table.rk-tbl .c-mut { text-align: center; }
         table.rk-tbl .c-price { font-weight: 900; color: #16a34a; text-align: right; }
+        .tp-row { display: flex; align-items: center; gap: 6px; overflow: hidden; }
+        .tp-name { font-weight: 800; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+        .tp-rate { font-size: ${Math.max(10, bodyFontSize - 3)}px; color: #16a34a; font-weight: 800; margin-left: auto; flex-shrink: 0; }
+        .tp-mut { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: ${Math.max(8, bodyFontSize - 5)}px; font-weight: 900; letter-spacing: .5px; background: #e0e7ff; color: #3730a3; flex-shrink: 0; }
+        .tp-mut[data-m*="RAINBOW"] { background: linear-gradient(90deg,#fecaca,#fed7aa,#fef08a,#bbf7d0,#bae6fd,#c7d2fe,#e9d5ff); color: #4c1d95; }
+        .tp-mut[data-m*="GOLDEN"] { background: #fef3c7; color: #92400e; }
+        .tp-mut[data-m*="DIAMOND"] { background: #dbeafe; color: #1e40af; }
+        .tp-mut[data-m*="TITANIUM"] { background: #e2e8f0; color: #334155; }
         .mut-pill { display: inline-block; background: #a78bfa; color: #fff; padding: 1px 8px; border-radius: 999px; font-size: ${pillFontSize}px; font-weight: 900; }
 
         .rk-foot {
@@ -388,20 +425,22 @@ export default function CatalogPage() {
         <div class="rk-tblwrap">
           <table class="rk-tbl">
             <colgroup>
-              <col style="width:14%">
-              <col style="width:13%">
-              <col style="width:20%">
               <col style="width:11%">
-              <col style="width:13%">
-              <col style="width:29%">
+              <col style="width:10%">
+              <col style="width:14%">
+              <col style="width:22%">
+              <col style="width:8%">
+              <col style="width:10%">
+              <col style="width:25%">
             </colgroup>
             <thead>
               <tr>
-                <th>Code Akun</th>
+                <th>Code</th>
                 <th>Speed</th>
-                <th>Income Potensi</th>
-                <th style="text-align:center">Total Telur</th>
-                <th style="text-align:center">Token Mutasi</th>
+                <th>Income Pot</th>
+                <th>Top Pet</th>
+                <th style="text-align:center">Telur</th>
+                <th style="text-align:center">Token</th>
                 <th style="text-align:right">Harga</th>
               </tr>
             </thead>
