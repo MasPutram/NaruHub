@@ -297,10 +297,9 @@ export default function CatalogPage() {
     const CANVAS_W = 1920;
     const CANVAS_H = 1080;
     const HEADER_H = 160;
-    const SUMMARY_H = 70;
     const THEAD_H = 46;
     const FOOTER_H = 56;
-    const ROWS_AREA_H = CANVAS_H - HEADER_H - SUMMARY_H - FOOTER_H - THEAD_H;
+    const ROWS_AREA_H = CANVAS_H - HEADER_H - FOOTER_H - THEAD_H;
     const idealRowH = Math.floor(ROWS_AREA_H / rows.length);
     const rowH = Math.max(22, Math.min(60, idealRowH));
     const bodyFontSize = Math.max(12, Math.min(22, Math.round(rowH * 0.48)));
@@ -402,15 +401,6 @@ export default function CatalogPage() {
         .rk-header .qr-info { color: #f8fafc; font-size: 13px; text-align: right; flex-shrink: 0; }
         .rk-header .qr-info .u { font-weight: 900; font-size: 17px; color: #facc15; }
 
-        .rk-summary {
-          height: ${SUMMARY_H}px; padding: 12px 36px; display: flex; gap: 24px; align-items: center;
-          background: #eef2f7; border-bottom: 1px solid #cbd5e1; position: relative; z-index: 3;
-          flex-shrink: 0; box-sizing: border-box;
-        }
-        .rk-summary .st { display: flex; flex-direction: column; }
-        .rk-summary .st .l { font-size: 12px; color: #64748b; letter-spacing: 1.5px; font-weight: 800; text-transform: uppercase; }
-        .rk-summary .st .v { font-size: 22px; font-weight: 900; color: #0f172a; margin-top: 3px; }
-
         .rk-tblwrap { flex: 1; position: relative; z-index: 3; background: rgba(255,255,255,0.85); overflow: hidden; }
         table.rk-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
         table.rk-tbl th {
@@ -427,7 +417,7 @@ export default function CatalogPage() {
         table.rk-tbl .c-code { font-weight: 900; color: #1e40af; }
         table.rk-tbl .c-num { text-align: center; font-weight: 700; }
         table.rk-tbl .c-mut { text-align: center; }
-        table.rk-tbl .c-price { font-weight: 900; color: #16a34a; text-align: right; }
+        table.rk-tbl .c-price { font-weight: 900; color: #16a34a; text-align: center; padding-left: 24px; padding-right: 24px; }
         .tp-row { display: flex; align-items: center; gap: 6px; overflow: hidden; }
         .tp-name { font-weight: 800; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
         .tp-rate { font-size: ${Math.max(10, bodyFontSize - 3)}px; color: #16a34a; font-weight: 800; margin-left: auto; flex-shrink: 0; }
@@ -460,11 +450,6 @@ export default function CatalogPage() {
           </div>
         </div>
 
-        <div class="rk-summary">
-          <div class="st"><div class="l">Total Akun</div><div class="v">${rows.length}</div></div>
-          <div class="st"><div class="l">Terbit</div><div class="v">${fmtDate(Date.now())}</div></div>
-        </div>
-
         <div class="rk-tblwrap">
           <table class="rk-tbl">
             <colgroup>
@@ -484,7 +469,7 @@ export default function CatalogPage() {
                 <th>Top Pet</th>
                 <th style="text-align:center">Telur</th>
                 <th style="text-align:center">Token</th>
-                <th style="text-align:right">Harga</th>
+                <th style="text-align:center">Harga</th>
               </tr>
             </thead>
             <tbody>${tableRows}</tbody>
