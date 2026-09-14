@@ -133,11 +133,17 @@ function highValuePetTotal(a: Account): number {
   return all.reduce((sum, p) => sum + ((p.rate || 0) >= 1_000_000_000 ? (p.rate || 0) : 0), 0);
 }
 
-function calcAccountPrice(a: Account, rInc: number, rHv: number, rSpd: number): number {
+function calcAccountPrice(a: Account, rInc: number, rHv: number, rSpd: number, rTok: number = 0): number {
   const incB = potensi18(a) / 1e9;
   const hvB = highValuePetTotal(a) / 1e9;
   const spdB = (Number(a.speed) || 0) / 1e9;
-  const priceValue = Math.round(incB * (rInc * 1000) + hvB * (rHv * 1000) + spdB * (rSpd * 1000));
+  const tok = Number(a.mutationToken) || 0;
+  const priceValue = Math.round(
+    incB * (rInc * 1000) +
+    hvB * (rHv * 1000) +
+    spdB * (rSpd * 1000) +
+    tok * rTok
+  );
   return priceValue > 0 ? priceValue : 0;
 }
 
@@ -173,6 +179,8 @@ export default function CatalogPage() {
   const [rateIncome, setRateIncome] = useState("5");
   const [rateHv, setRateHv] = useState("5");
   const [rateSpeed, setRateSpeed] = useState("0");
+  // Per-token flat rupiah rate (not scaled by 1000 -- token counts are small).
+  const [rateToken, setRateToken] = useState("0");
   const [rateApplying, setRateApplying] = useState(false);
 
   async function unmarkForSale(account: string) {
@@ -461,7 +469,8 @@ export default function CatalogPage() {
     const rInc = parseFloat(rateIncome) || 0;
     const rHv = parseFloat(rateHv) || 0;
     const rSpd = parseFloat(rateSpeed) || 0;
-    if (rInc <= 0 && rHv <= 0 && rSpd <= 0) {
+    const rTok = parseFloat(rateToken) || 0;
+    if (rInc <= 0 && rHv <= 0 && rSpd <= 0 && rTok <= 0) {
       alert("Isi minimal salah satu rate!");
       return;
     }
@@ -469,7 +478,7 @@ export default function CatalogPage() {
     try {
       const updates: { account: string; price: number }[] = [];
       const updatedAccounts = accounts.map((a) => {
-        const newPrice = calcAccountPrice(a, rInc, rHv, rSpd);
+        const newPrice = calcAccountPrice(a, rInc, rHv, rSpd, rTok);
         if (newPrice > 0) updates.push({ account: a.sourceAccount, price: newPrice });
         return { ...a, catalogPrice: newPrice > 0 ? newPrice : a.catalogPrice };
       });
@@ -1199,90 +1208,151 @@ export default function CatalogPage() {
         </table>
       )}
 
-      {rateModalOpen && (
-        <div className="modal-backdrop" onClick={() => { if (!rateApplying) setRateModalOpen(false); }}>
-          <div className="modal-box" style={{ width: 440 }} onClick={(e) => e.stopPropagation()}>
-            <h2>Set Rate & Hitung Harga Massal</h2>
-            <div className="modal-sub">
-              Hitung harga otomatis untuk <strong>{accounts.length} akun</strong> di Katalog berdasarkan kalkulasi rate income, pet high-value, dan speed.
-            </div>
-
-            <label>Rate Income / 1B (Karyawan/Potensi 18 Pet)</label>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-              <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700 }}>Rp</span>
-              <input
-                type="number"
-                step="0.5"
-                placeholder="5"
-                value={rateIncome}
-                onChange={(e) => setRateIncome(e.target.value)}
-                style={{ margin: 0 }}
-              />
-              <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / 1B</span>
-            </div>
-
-            <label>Rate High-Value Pet / 1B (Pet ≥ 1B Rate)</label>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-              <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700 }}>Rp</span>
-              <input
-                type="number"
-                step="0.5"
-                placeholder="5"
-                value={rateHv}
-                onChange={(e) => setRateHv(e.target.value)}
-                style={{ margin: 0 }}
-              />
-              <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / 1B</span>
-            </div>
-
-            <label>Rate Speed / 1B</label>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-              <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700 }}>Rp</span>
-              <input
-                type="number"
-                step="0.5"
-                placeholder="0"
-                value={rateSpeed}
-                onChange={(e) => setRateSpeed(e.target.value)}
-                style={{ margin: 0 }}
-              />
-              <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / 1B</span>
-            </div>
-
-            <div style={{ background: "#1c1c2b", border: "1px solid var(--card-border)", borderRadius: 10, padding: "12px 14px", marginBottom: 16, fontSize: 12 }}>
-              <div style={{ color: "var(--dim)", marginBottom: 4, fontWeight: 700 }}>ESTIMASI HASIL HITUNG</div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
-                <span>Total Estimasi Pendapatan:</span>
-                <strong style={{ color: "var(--green)" }}>
-                  {fmtRupiah(
-                    accounts.reduce((sum, a) => sum + calcAccountPrice(a, parseFloat(rateIncome)||0, parseFloat(rateHv)||0, parseFloat(rateSpeed)||0), 0)
-                  )}
-                </strong>
+      {rateModalOpen && (() => {
+        const rInc = parseFloat(rateIncome) || 0;
+        const rHv = parseFloat(rateHv) || 0;
+        const rSpd = parseFloat(rateSpeed) || 0;
+        const rTok = parseFloat(rateToken) || 0;
+        const preview = accounts
+          .slice()
+          .sort((a, b) => {
+            const na = accountNumber(a.sourceAccount) ?? 0;
+            const nb = accountNumber(b.sourceAccount) ?? 0;
+            return na - nb;
+          })
+          .map((a) => ({ acc: a, price: calcAccountPrice(a, rInc, rHv, rSpd, rTok) }));
+        const totalPreview = preview.reduce((s, p) => s + p.price, 0);
+        const pricedCount = preview.filter((p) => p.price > 0).length;
+        return (
+          <div className="modal-backdrop" onClick={() => { if (!rateApplying) setRateModalOpen(false); }}>
+            <div className="modal-box" style={{ width: 720, maxHeight: "88vh", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
+              <h2>Edit All Harga — Rate Calculator</h2>
+              <div className="modal-sub">
+                Set rate, langsung liat harga per akun di preview. Terapkan sekali klik ke <strong>{accounts.length} akun</strong>.
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span>Akun Yang Dapat Harga (&gt; Rp0):</span>
-                <strong style={{ color: "var(--accent)" }}>
-                  {accounts.filter((a) => calcAccountPrice(a, parseFloat(rateIncome)||0, parseFloat(rateHv)||0, parseFloat(rateSpeed)||0) > 0).length} / {accounts.length}
-                </strong>
-              </div>
-            </div>
 
-            <div className="modal-actions">
-              <button className="btn-cancel" onClick={() => setRateModalOpen(false)} disabled={rateApplying}>
-                Batal
-              </button>
-              <button
-                className="btn-confirm"
-                style={{ background: "var(--accent)", color: "#1a1030" }}
-                onClick={applyBulkRates}
-                disabled={rateApplying}
-              >
-                {rateApplying ? "Menghitung & Menyimpan..." : "Terapkan ke Semua Akun"}
-              </button>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div>
+                  <label>Rate Income Potensi / 1B</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ color: "var(--dim)", fontSize: 12, fontWeight: 700 }}>Rp</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      placeholder="5"
+                      value={rateIncome}
+                      onChange={(e) => setRateIncome(e.target.value)}
+                      style={{ margin: 0 }}
+                    />
+                    <span style={{ color: "var(--dim)", fontSize: 11, fontWeight: 700 }}>k/1B</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label>Rate High-Value Pet / 1B</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ color: "var(--dim)", fontSize: 12, fontWeight: 700 }}>Rp</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      placeholder="0"
+                      value={rateHv}
+                      onChange={(e) => setRateHv(e.target.value)}
+                      style={{ margin: 0 }}
+                    />
+                    <span style={{ color: "var(--dim)", fontSize: 11, fontWeight: 700 }}>k/1B</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label>Rate Speed / 1B</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ color: "var(--dim)", fontSize: 12, fontWeight: 700 }}>Rp</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      placeholder="0"
+                      value={rateSpeed}
+                      onChange={(e) => setRateSpeed(e.target.value)}
+                      style={{ margin: 0 }}
+                    />
+                    <span style={{ color: "var(--dim)", fontSize: 11, fontWeight: 700 }}>k/1B</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label>Rate Token Mutasi</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ color: "var(--dim)", fontSize: 12, fontWeight: 700 }}>Rp</span>
+                    <input
+                      type="number"
+                      step="100"
+                      placeholder="0"
+                      value={rateToken}
+                      onChange={(e) => setRateToken(e.target.value)}
+                      style={{ margin: 0 }}
+                    />
+                    <span style={{ color: "var(--dim)", fontSize: 11, fontWeight: 700 }}>/ token</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ background: "#1c1c2b", border: "1px solid var(--card-border)", borderRadius: 10, padding: "10px 14px", marginBottom: 10, fontSize: 12, display: "flex", justifyContent: "space-between", gap: 20 }}>
+                <div><span style={{ color: "var(--dim)" }}>Total: </span><strong style={{ color: "var(--green)" }}>{fmtRupiah(totalPreview)}</strong></div>
+                <div><span style={{ color: "var(--dim)" }}>Akun dapat harga: </span><strong style={{ color: "var(--accent)" }}>{pricedCount}/{accounts.length}</strong></div>
+              </div>
+
+              <div style={{ flex: 1, overflow: "auto", border: "1px solid var(--card-border)", borderRadius: 10, background: "#0d0d15", marginBottom: 12 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                  <thead style={{ position: "sticky", top: 0, background: "#151521", zIndex: 1 }}>
+                    <tr>
+                      <th style={{ textAlign: "left", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>AKUN</th>
+                      <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SPEED</th>
+                      <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>POTENSI 18</th>
+                      <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>HV</th>
+                      <th style={{ textAlign: "center", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>TOKEN</th>
+                      <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SEBELUM</th>
+                      <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SESUDAH</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.map(({ acc, price }) => {
+                      const changed = (acc.catalogPrice || 0) !== price && price > 0;
+                      return (
+                        <tr key={acc.sourceAccount} style={{ borderBottom: "1px solid #1a1a25" }}>
+                          <td style={{ padding: "6px 10px", fontWeight: 700 }}>{acc.sourceAccount}</td>
+                          <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{fmtCompact(acc.speed)}</td>
+                          <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{fmtRate(potensi18(acc))}</td>
+                          <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{fmtRate(highValuePetTotal(acc))}</td>
+                          <td style={{ padding: "6px 10px", textAlign: "center", color: (acc.mutationToken || 0) > 0 ? "var(--accent)" : "var(--dim)", fontWeight: 800 }}>{acc.mutationToken || 0}</td>
+                          <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{acc.catalogPrice ? fmtRupiah(acc.catalogPrice) : "—"}</td>
+                          <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: 900, color: price > 0 ? (changed ? "#4ade80" : "var(--ink)") : "var(--dim)" }}>
+                            {price > 0 ? fmtRupiah(price) : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="modal-actions">
+                <button className="btn-cancel" onClick={() => setRateModalOpen(false)} disabled={rateApplying}>
+                  Batal
+                </button>
+                <button
+                  className="btn-confirm"
+                  style={{ background: "var(--accent)", color: "#1a1030" }}
+                  onClick={applyBulkRates}
+                  disabled={rateApplying || pricedCount === 0}
+                >
+                  {rateApplying ? "Menghitung & Menyimpan..." : `Terapkan ke ${pricedCount} Akun`}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {priceEditing && (() => {
         const editingAcc = accounts.find((a) => a.sourceAccount === priceEditing);

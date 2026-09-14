@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, accountKey, detailKey, ACCOUNT_TTL_S, petIconKey, PET_ICON_TTL_S } from "@/lib/redis";
+import { redis, accountKey, detailKey, forSaleKey, soldKey, ACCOUNT_TTL_S, petIconKey, PET_ICON_TTL_S } from "@/lib/redis";
 
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
@@ -15,6 +15,22 @@ export async function POST(req: NextRequest) {
   try {
     const data = await req.json();
     const name = data.sourceAccount || "?";
+
+    // Suppress ingestion for accounts that have already been moved out of
+    // active monitoring (Siap Jual -> catalog, or already sold). Between the
+    // moment the operator clicks Siap Jual and the moment the agent actually
+    // force-stops the Roblox app on-device, the executor keeps posting
+    // heartbeats -- and those were recreating the account record so it kept
+    // reappearing in the dashboard as "offline". A short-circuit here makes
+    // "Siap Jual" a sticky state: nothing an executor sends can bring the
+    // account back onto the main dashboard.
+    const [fsExists, soldExists] = await Promise.all([
+      redis.get<string>(forSaleKey(name)),
+      redis.get<string>(soldKey(name)),
+    ]);
+    if (fsExists || soldExists) {
+      return NextResponse.json({ ok: true, suppressed: fsExists ? "forsale" : "sold" });
+    }
 
     const now = Date.now() / 1000;
 
