@@ -254,8 +254,28 @@ export default function CatalogPage() {
       return caps + digits;
     }
 
-    const tableRows = rows.map((a) => `
-      <tr>
+    // 9:16 portrait canvas (1080 x 1920). Header/summary/footer are fixed
+    // height; the table gets whatever remains and each row is sized so all
+    // accounts fit. Font shrinks alongside row height so 20-60 accounts stay
+    // on one page. Beyond ~60 we warn the operator.
+    const CANVAS_W = 1080;
+    const CANVAS_H = 1920;
+    const HEADER_H = 160;
+    const SUMMARY_H = 70;
+    const THEAD_H = 42;
+    const FOOTER_H = 60;
+    const ROWS_AREA_H = CANVAS_H - HEADER_H - SUMMARY_H - FOOTER_H - THEAD_H;
+    const idealRowH = Math.floor(ROWS_AREA_H / rows.length);
+    const rowH = Math.max(22, Math.min(58, idealRowH));
+    const bodyFontSize = Math.max(10, Math.min(17, Math.round(rowH * 0.42)));
+    const pillFontSize = Math.max(9, bodyFontSize - 2);
+    if (rows.length > 60) {
+      const proceed = confirm(`${rows.length} akun mungkin terlalu banyak buat satu poster 9:16. Tetap generate? Tulisan bakal sangat kecil.`);
+      if (!proceed) { setSummaryBusy(false); return; }
+    }
+
+    const tableRows = rows.map((a, i) => `
+      <tr class="${i % 2 === 1 ? "alt" : ""}">
         <td class="c-code">${accCode(a.sourceAccount)}</td>
         <td>${fmtCompact(a.speed)}</td>
         <td>${fmtRate(potensi18(a))}</td>
@@ -269,14 +289,15 @@ export default function CatalogPage() {
     // "MAS NARU • JUAL AKUN NARUHUB • DO NOT COPY". Rendered as a background
     // pattern so html2canvas captures it cleanly.
     const container = document.createElement("div");
-    container.style.cssText = "position:fixed;left:-9999px;top:0;width:1080px;background:#f8fafc;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;color:#0f172a;";
+    container.style.cssText = `position:fixed;left:-9999px;top:0;width:${CANVAS_W}px;height:${CANVAS_H}px;background:#f8fafc;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;color:#0f172a;`;
     container.innerHTML = `
       <style>
-        .rk-wrap { position: relative; overflow: hidden; }
+        .rk-wrap { position: relative; width: ${CANVAS_W}px; height: ${CANVAS_H}px; overflow: hidden; display: flex; flex-direction: column; }
         .rk-tape {
-          position: absolute; inset: 0; pointer-events: none; z-index: 5;
-          display: flex; flex-direction: column; justify-content: space-between;
+          position: absolute; left: 0; right: 0; pointer-events: none; z-index: 5;
         }
+        .rk-tape.top { top: ${HEADER_H + SUMMARY_H - 22}px; }
+        .rk-tape.bottom { bottom: ${FOOTER_H - 22}px; }
         .rk-band {
           background: repeating-linear-gradient(
             135deg,
@@ -284,52 +305,65 @@ export default function CatalogPage() {
             #0f172a 60px 120px
           );
           color: #fef3c7; font-weight: 900; letter-spacing: 6px; font-size: 13px;
-          text-transform: uppercase; padding: 8px 0; text-align: center;
+          text-transform: uppercase; padding: 7px 0; text-align: center;
           border-top: 2px solid #0f172a; border-bottom: 2px solid #0f172a;
           text-shadow: 0 0 4px #000, 0 0 4px #000;
           transform: rotate(-3deg);
-          opacity: 0.85;
+          opacity: 0.82;
         }
         .rk-wm {
           position: absolute; inset: 0; pointer-events: none; z-index: 2;
           display: flex; flex-wrap: wrap; align-content: center;
-          justify-content: center; gap: 30px 60px; padding: 60px;
+          justify-content: center; gap: 40px 70px; padding: 100px 40px;
           transform: rotate(-24deg);
         }
-        .rk-wm span { color: rgba(15, 23, 42, 0.06); font-weight: 900; font-size: 60px; letter-spacing: 10px; white-space: nowrap; }
+        .rk-wm span { color: rgba(15, 23, 42, 0.07); font-weight: 900; font-size: 72px; letter-spacing: 12px; white-space: nowrap; }
         .rk-header {
           background: linear-gradient(135deg,#0f172a,#1e293b);
-          color: #fff; padding: 26px 40px; display: flex; align-items: center; gap: 18px;
-          border-bottom: 4px solid #facc15;
+          color: #fff; height: ${HEADER_H}px; padding: 22px 36px; display: flex; align-items: center; gap: 18px;
+          border-bottom: 4px solid #facc15; flex-shrink: 0; box-sizing: border-box;
         }
-        .rk-header h1 { margin: 0; font-size: 26px; font-weight: 900; letter-spacing: 3px; }
-        .rk-header .sub { color: #cbd5e1; font-size: 12px; margin-top: 4px; letter-spacing: 2px; }
-        .rk-header .qr { margin-left: auto; background: #fff; padding: 8px; border-radius: 10px; }
-        .rk-header .qr img { display: block; width: 110px; height: 110px; }
-        .rk-header .qr-info { color: #f8fafc; font-size: 11px; text-align: right; }
-        .rk-header .qr-info .u { font-weight: 900; font-size: 14px; color: #facc15; }
+        .rk-header h1 { margin: 0; font-size: 28px; font-weight: 900; letter-spacing: 3px; }
+        .rk-header .sub { color: #cbd5e1; font-size: 12px; margin-top: 6px; letter-spacing: 2px; }
+        .rk-header .qr { margin-left: auto; background: #fff; padding: 6px; border-radius: 8px; flex-shrink: 0; }
+        .rk-header .qr img { display: block; width: 96px; height: 96px; }
+        .rk-header .qr-info { color: #f8fafc; font-size: 11px; text-align: right; flex-shrink: 0; }
+        .rk-header .qr-info .u { font-weight: 900; font-size: 15px; color: #facc15; }
 
-        .rk-summary { padding: 18px 40px; display: flex; gap: 22px; background: #eef2f7; border-bottom: 1px solid #cbd5e1; position: relative; z-index: 3; }
+        .rk-summary {
+          height: ${SUMMARY_H}px; padding: 12px 36px; display: flex; gap: 24px; align-items: center;
+          background: #eef2f7; border-bottom: 1px solid #cbd5e1; position: relative; z-index: 3;
+          flex-shrink: 0; box-sizing: border-box;
+        }
         .rk-summary .st { display: flex; flex-direction: column; }
         .rk-summary .st .l { font-size: 10px; color: #64748b; letter-spacing: 1.5px; font-weight: 800; text-transform: uppercase; }
         .rk-summary .st .v { font-size: 18px; font-weight: 900; color: #0f172a; margin-top: 2px; }
 
-        table.rk-tbl { width: 100%; border-collapse: collapse; position: relative; z-index: 3; background: rgba(255,255,255,0.85); }
-        table.rk-tbl th, table.rk-tbl td {
-          padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-size: 13px; text-align: left;
-        }
+        .rk-tblwrap { flex: 1; position: relative; z-index: 3; background: rgba(255,255,255,0.85); overflow: hidden; }
+        table.rk-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
         table.rk-tbl th {
           background: #0f172a; color: #f8fafc; font-size: 11px; letter-spacing: 1.5px;
           font-weight: 900; text-transform: uppercase; border-bottom: 3px solid #facc15;
+          padding: 0 12px; height: ${THEAD_H}px; text-align: left; box-sizing: border-box;
         }
-        table.rk-tbl tr:nth-child(even) td { background: rgba(241, 245, 249, 0.6); }
+        table.rk-tbl td {
+          padding: 0 12px; height: ${rowH}px; border-bottom: 1px solid #e2e8f0;
+          font-size: ${bodyFontSize}px; text-align: left; box-sizing: border-box;
+          overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+        }
+        table.rk-tbl tr.alt td { background: rgba(241, 245, 249, 0.6); }
         table.rk-tbl .c-code { font-weight: 900; color: #1e40af; }
         table.rk-tbl .c-num { text-align: center; font-weight: 700; }
         table.rk-tbl .c-mut { text-align: center; }
-        table.rk-tbl .c-price { text-align: right; font-weight: 900; color: #16a34a; }
-        .mut-pill { display: inline-block; background: #a78bfa; color: #fff; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 900; }
+        table.rk-tbl .c-price { font-weight: 900; color: #16a34a; text-align: right; }
+        .mut-pill { display: inline-block; background: #a78bfa; color: #fff; padding: 1px 8px; border-radius: 999px; font-size: ${pillFontSize}px; font-weight: 900; }
 
-        .rk-foot { padding: 14px 40px 20px; text-align: center; background: #0f172a; color: #cbd5e1; font-size: 11px; position: relative; z-index: 3; border-top: 2px solid #facc15; }
+        .rk-foot {
+          height: ${FOOTER_H}px; padding: 12px 36px; display: flex; align-items: center; justify-content: center;
+          text-align: center; background: #0f172a; color: #cbd5e1; font-size: 12px;
+          position: relative; z-index: 3; border-top: 2px solid #facc15;
+          flex-shrink: 0; box-sizing: border-box;
+        }
         .rk-foot strong { color: #facc15; }
       </style>
       <div class="rk-wrap">
@@ -352,31 +386,39 @@ export default function CatalogPage() {
           <div class="st"><div class="l">Terbit</div><div class="v">${fmtDate(Date.now())}</div></div>
         </div>
 
-        <table class="rk-tbl">
-          <thead>
-            <tr>
-              <th>Code Akun</th>
-              <th>Speed</th>
-              <th>Income Potensi</th>
-              <th style="text-align:center">Total Telur</th>
-              <th style="text-align:center">Token Mutasi</th>
-              <th style="text-align:right">Harga</th>
-            </tr>
-          </thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-
-        <div class="rk-tape">
-          <div class="rk-band">MAS NARU • JUAL AKUN NARUHUB • DO NOT COPY •</div>
-          <div class="rk-band">MAS NARU • JUAL AKUN NARUHUB • DO NOT COPY •</div>
-        </div>
-        <div class="rk-wm">
-          ${Array.from({ length: 24 }).map(() => "<span>MAS NARU</span>").join("")}
+        <div class="rk-tblwrap">
+          <table class="rk-tbl">
+            <colgroup>
+              <col style="width:15%">
+              <col style="width:15%">
+              <col style="width:24%">
+              <col style="width:13%">
+              <col style="width:14%">
+              <col style="width:19%">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Code Akun</th>
+                <th>Speed</th>
+                <th>Income Potensi</th>
+                <th style="text-align:center">Total Telur</th>
+                <th style="text-align:center">Token Mutasi</th>
+                <th style="text-align:right">Harga</th>
+              </tr>
+            </thead>
+            <tbody>${tableRows}</tbody>
+          </table>
         </div>
 
         <div class="rk-foot">
           Poster resmi dari <strong>Mas Naru</strong> — Kalau tidak ada QR / watermark, itu POSTER PALSU.
         </div>
+
+        <div class="rk-wm">
+          ${Array.from({ length: 30 }).map(() => "<span>MAS NARU</span>").join("")}
+        </div>
+        <div class="rk-tape top"><div class="rk-band">MAS NARU • JUAL AKUN NARUHUB • DO NOT COPY •</div></div>
+        <div class="rk-tape bottom"><div class="rk-band">MAS NARU • JUAL AKUN NARUHUB • DO NOT COPY •</div></div>
       </div>
     `;
     document.body.appendChild(container);
@@ -402,14 +444,10 @@ export default function CatalogPage() {
       );
       await new Promise((r) => setTimeout(r, 100));
 
-      // Mobile browsers cap canvas dimensions (iOS ~4096, some Android ~8192);
-      // with many accounts our height at scale=2 blows past that -> capture
-      // returns an empty/black canvas -> broken PNG icon in the gallery. Pick
-      // a scale that fits under 8000px on the longer side.
+      // Canvas is fixed 1080x1920 (9:16) so scale=2 gives 2160x3840 -- well
+      // within mobile canvas limits. Drop to 1.5 on mobile UAs just in case.
       const isMobile = /Mobi|Android/i.test(navigator.userAgent || "");
-      const maxSide = Math.max(target.offsetWidth, target.offsetHeight);
-      const defaultScale = isMobile ? 1.5 : 2;
-      const scale = Math.min(defaultScale, Math.max(1, 8000 / maxSide));
+      const scale = isMobile ? 1.5 : 2;
 
       const { default: html2canvas } = await import("html2canvas-pro");
       const canvas = await html2canvas(target, {
