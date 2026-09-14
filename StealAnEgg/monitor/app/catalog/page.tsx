@@ -374,7 +374,7 @@ export default function CatalogPage() {
           /* Mid-tone slate at low alpha shows up as light gray on the dark
              header/footer AND as a soft gray on the white table -- so the tile
              actually covers the whole layout without a second colored copy. */
-          color: rgba(120, 130, 155, 0.32);
+          color: rgba(120, 130, 155, 0.16);
           font-weight: 900; font-size: 34px; letter-spacing: 4px;
           flex-shrink: 0;
         }
