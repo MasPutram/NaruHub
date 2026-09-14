@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import QRCode from "qrcode";
 
 interface Pet {
   category: string;
@@ -21,6 +22,7 @@ interface Account {
   treadmillLevel: number | null;
   petsCount: number;
   stolenCount: number;
+  mutationToken?: number | null;
   topPets: Pet[];
   online: boolean;
   forSale?: boolean;
@@ -119,6 +121,26 @@ function potensi18(a: Account): number {
   return total;
 }
 
+function highValuePetTotal(a: Account): number {
+  const d = a.detail;
+  if (!d) return a.highValuePetTotal || 0;
+  const all = [
+    ...(d.activePets || []),
+    ...(d.allPets || []),
+    ...(d.growingEggs || []),
+    ...(d.backpackEggs || []),
+  ];
+  return all.reduce((sum, p) => sum + ((p.rate || 0) >= 1_000_000_000 ? (p.rate || 0) : 0), 0);
+}
+
+function calcAccountPrice(a: Account, rInc: number, rHv: number, rSpd: number): number {
+  const incB = potensi18(a) / 1e9;
+  const hvB = highValuePetTotal(a) / 1e9;
+  const spdB = (Number(a.speed) || 0) / 1e9;
+  const priceValue = Math.round(incB * (rInc * 1000) + hvB * (rHv * 1000) + spdB * (rSpd * 1000));
+  return priceValue > 0 ? priceValue : 0;
+}
+
 type SortMode = "name" | "speed" | "income" | "money" | "pets" | "eggs" | "potensi" | "akun_baru" | "harga";
 type TabMode = "catalog" | "sold";
 
@@ -135,11 +157,23 @@ export default function CatalogPage() {
   const [maxPrice, setMaxPrice] = useState("");
   const [priceEditing, setPriceEditing] = useState<string | null>(null);
   const [priceInput, setPriceInput] = useState("");
+  // Live rate inputs INSIDE the edit-price modal -- when set, the modal shows a
+  // computed suggested price alongside the manual field so the operator can
+  // apply the rate formula per-account (fills 0 if any rate is blank).
+  const [editRateInc, setEditRateInc] = useState("");
+  const [editRateHv, setEditRateHv] = useState("");
+  const [editRateSpd, setEditRateSpd] = useState("");
   const [priceSaving, setPriceSaving] = useState(false);
   const [soldModal, setSoldModal] = useState<string | null>(null);
   const [soldPrice, setSoldPrice] = useState("");
   const [soldLoading, setSoldLoading] = useState(false);
   const [soldError, setSoldError] = useState("");
+
+  const [rateModalOpen, setRateModalOpen] = useState(false);
+  const [rateIncome, setRateIncome] = useState("5");
+  const [rateHv, setRateHv] = useState("5");
+  const [rateSpeed, setRateSpeed] = useState("0");
+  const [rateApplying, setRateApplying] = useState(false);
 
   async function unmarkForSale(account: string) {
     setActionMsg((prev) => ({ ...prev, [account]: "Memproses..." }));
@@ -161,6 +195,205 @@ export default function CatalogPage() {
   }
 
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; account: string } | null>(null);
+  const [summaryBusy, setSummaryBusy] = useState(false);
+
+  // Build + capture a single PNG that lists every catalog account (code | speed |
+  // income potensi | total telur | mutasi | harga) with a police-line style
+  // watermark and a QR to the seller's Facebook, then trigger download. The
+  // whole thing is a temporary offscreen DOM node -- no react tree pollution.
+  async function downloadSummary() {
+    if (summaryBusy) return;
+    const rows = accounts.slice().sort((a, b) => {
+      const na = accountNumber(a.sourceAccount) ?? 0;
+      const nb = accountNumber(b.sourceAccount) ?? 0;
+      return na - nb;
+    });
+    if (rows.length === 0) {
+      alert("Belum ada akun di katalog.");
+      return;
+    }
+    setSummaryBusy(true);
+    const totalHarga = rows.reduce((s, a) => s + (a.catalogPrice || 0), 0);
+
+    let qrDataUrl = "";
+    try {
+      qrDataUrl = await QRCode.toDataURL("https://www.facebook.com/naruaho", {
+        width: 220,
+        margin: 1,
+        color: { dark: "#0f172a", light: "#ffffff" },
+      });
+    } catch {}
+
+    function eggTotal(a: Account): number {
+      const d = a.detail;
+      if (d) {
+        const g = d.growingEggs?.length || 0;
+        const b = d.backpackEggs?.length || 0;
+        if (g + b > 0) return g + b;
+      }
+      return a.stolenCount || 0;
+    }
+
+    function accCode(name: string): string {
+      const m = name.match(/(\d+)$/);
+      const digits = m ? m[1] : "";
+      const lettersPart = digits ? name.slice(0, name.length - digits.length) : name;
+      let caps = "";
+      for (const ch of lettersPart) {
+        if (ch !== ch.toLowerCase() && ch === ch.toUpperCase()) caps += ch;
+      }
+      if (!caps) caps = lettersPart.slice(0, 2).toUpperCase();
+      return caps + digits;
+    }
+
+    const tableRows = rows.map((a) => `
+      <tr>
+        <td class="c-code">${accCode(a.sourceAccount)}</td>
+        <td>${fmtCompact(a.speed)}</td>
+        <td>${fmtRate(potensi18(a))}</td>
+        <td class="c-num">${eggTotal(a)}</td>
+        <td class="c-mut">${(a.mutationToken || 0) > 0 ? `<span class="mut-pill">${a.mutationToken}</span>` : "—"}</td>
+        <td class="c-price">${a.catalogPrice ? fmtRupiah(a.catalogPrice) : "—"}</td>
+      </tr>
+    `).join("");
+
+    // Police-line diagonal stripes overlay: repeated yellow-black tape reading
+    // "MAS NARU • JUAL AKUN NARUHUB • DO NOT COPY". Rendered as a background
+    // pattern so html2canvas captures it cleanly.
+    const container = document.createElement("div");
+    container.style.cssText = "position:fixed;left:-9999px;top:0;width:1080px;background:#f8fafc;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;color:#0f172a;";
+    container.innerHTML = `
+      <style>
+        .rk-wrap { position: relative; overflow: hidden; }
+        .rk-tape {
+          position: absolute; inset: 0; pointer-events: none; z-index: 5;
+          display: flex; flex-direction: column; justify-content: space-between;
+        }
+        .rk-band {
+          background: repeating-linear-gradient(
+            135deg,
+            #facc15 0 60px,
+            #0f172a 60px 120px
+          );
+          color: #fef3c7; font-weight: 900; letter-spacing: 6px; font-size: 13px;
+          text-transform: uppercase; padding: 8px 0; text-align: center;
+          border-top: 2px solid #0f172a; border-bottom: 2px solid #0f172a;
+          text-shadow: 0 0 4px #000, 0 0 4px #000;
+          transform: rotate(-3deg);
+          opacity: 0.85;
+        }
+        .rk-wm {
+          position: absolute; inset: 0; pointer-events: none; z-index: 2;
+          display: flex; flex-wrap: wrap; align-content: center;
+          justify-content: center; gap: 30px 60px; padding: 60px;
+          transform: rotate(-24deg);
+        }
+        .rk-wm span { color: rgba(15, 23, 42, 0.06); font-weight: 900; font-size: 60px; letter-spacing: 10px; white-space: nowrap; }
+        .rk-header {
+          background: linear-gradient(135deg,#0f172a,#1e293b);
+          color: #fff; padding: 26px 40px; display: flex; align-items: center; gap: 18px;
+          border-bottom: 4px solid #facc15;
+        }
+        .rk-header h1 { margin: 0; font-size: 26px; font-weight: 900; letter-spacing: 3px; }
+        .rk-header .sub { color: #cbd5e1; font-size: 12px; margin-top: 4px; letter-spacing: 2px; }
+        .rk-header .qr { margin-left: auto; background: #fff; padding: 8px; border-radius: 10px; }
+        .rk-header .qr img { display: block; width: 110px; height: 110px; }
+        .rk-header .qr-info { color: #f8fafc; font-size: 11px; text-align: right; }
+        .rk-header .qr-info .u { font-weight: 900; font-size: 14px; color: #facc15; }
+
+        .rk-summary { padding: 18px 40px; display: flex; gap: 22px; background: #eef2f7; border-bottom: 1px solid #cbd5e1; position: relative; z-index: 3; }
+        .rk-summary .st { display: flex; flex-direction: column; }
+        .rk-summary .st .l { font-size: 10px; color: #64748b; letter-spacing: 1.5px; font-weight: 800; text-transform: uppercase; }
+        .rk-summary .st .v { font-size: 18px; font-weight: 900; color: #0f172a; margin-top: 2px; }
+
+        table.rk-tbl { width: 100%; border-collapse: collapse; position: relative; z-index: 3; background: rgba(255,255,255,0.85); }
+        table.rk-tbl th, table.rk-tbl td {
+          padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-size: 13px; text-align: left;
+        }
+        table.rk-tbl th {
+          background: #0f172a; color: #f8fafc; font-size: 11px; letter-spacing: 1.5px;
+          font-weight: 900; text-transform: uppercase; border-bottom: 3px solid #facc15;
+        }
+        table.rk-tbl tr:nth-child(even) td { background: rgba(241, 245, 249, 0.6); }
+        table.rk-tbl .c-code { font-weight: 900; color: #1e40af; }
+        table.rk-tbl .c-num { text-align: center; font-weight: 700; }
+        table.rk-tbl .c-mut { text-align: center; }
+        table.rk-tbl .c-price { text-align: right; font-weight: 900; color: #16a34a; }
+        .mut-pill { display: inline-block; background: #a78bfa; color: #fff; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 900; }
+
+        .rk-foot { padding: 14px 40px 20px; text-align: center; background: #0f172a; color: #cbd5e1; font-size: 11px; position: relative; z-index: 3; border-top: 2px solid #facc15; }
+        .rk-foot strong { color: #facc15; }
+      </style>
+      <div class="rk-wrap">
+        <div class="rk-header">
+          <div>
+            <h1>RANGKUMAN KATALOG AKUN</h1>
+            <div class="sub">MAS NARU • JUAL AKUN ROBLOX TERPERCAYA</div>
+          </div>
+          <div class="qr">${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR" />` : ""}</div>
+          <div class="qr-info">
+            <div class="u">Mas Naru</div>
+            <div>facebook.com/naruaho</div>
+            <div style="margin-top:4px">Scan untuk hubungi</div>
+          </div>
+        </div>
+
+        <div class="rk-summary">
+          <div class="st"><div class="l">Total Akun</div><div class="v">${rows.length}</div></div>
+          <div class="st"><div class="l">Total Nilai</div><div class="v">${fmtRupiah(totalHarga)}</div></div>
+          <div class="st"><div class="l">Terbit</div><div class="v">${fmtDate(Date.now())}</div></div>
+        </div>
+
+        <table class="rk-tbl">
+          <thead>
+            <tr>
+              <th>Code Akun</th>
+              <th>Speed</th>
+              <th>Income Potensi</th>
+              <th style="text-align:center">Total Telur</th>
+              <th style="text-align:center">Token Mutasi</th>
+              <th style="text-align:right">Harga</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+
+        <div class="rk-tape">
+          <div class="rk-band">MAS NARU • JUAL AKUN NARUHUB • DO NOT COPY •</div>
+          <div class="rk-band">MAS NARU • JUAL AKUN NARUHUB • DO NOT COPY •</div>
+        </div>
+        <div class="rk-wm">
+          ${Array.from({ length: 24 }).map(() => "<span>MAS NARU</span>").join("")}
+        </div>
+
+        <div class="rk-foot">
+          Poster resmi dari <strong>Mas Naru</strong> — Kalau tidak ada QR / watermark, itu POSTER PALSU.
+        </div>
+      </div>
+    `;
+    document.body.appendChild(container);
+
+    try {
+      const { default: html2canvas } = await import("html2canvas-pro");
+      // Wait a tick so the QR <img> paints before capture.
+      await new Promise((r) => setTimeout(r, 200));
+      const canvas = await html2canvas(container.firstElementChild as HTMLElement, {
+        scale: 2,
+        backgroundColor: "#f8fafc",
+        useCORS: true,
+      });
+      const link = document.createElement("a");
+      const dateStr = new Date().toISOString().slice(0, 10);
+      link.download = `Rangkuman-Katalog-MasNaru-${dateStr}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch (e: any) {
+      alert("Gagal generate rangkuman: " + e.message);
+    } finally {
+      document.body.removeChild(container);
+      setSummaryBusy(false);
+    }
+  }
 
   function downloadAllPosters() {
     const withPrice = visible.filter((a) => a.catalogPrice && a.catalogPrice > 0);
@@ -222,6 +455,40 @@ export default function CatalogPage() {
       }
     } catch {}
     setPriceSaving(false);
+  }
+
+  async function applyBulkRates() {
+    const rInc = parseFloat(rateIncome) || 0;
+    const rHv = parseFloat(rateHv) || 0;
+    const rSpd = parseFloat(rateSpeed) || 0;
+    if (rInc <= 0 && rHv <= 0 && rSpd <= 0) {
+      alert("Isi minimal salah satu rate!");
+      return;
+    }
+    setRateApplying(true);
+    try {
+      const updates: { account: string; price: number }[] = [];
+      const updatedAccounts = accounts.map((a) => {
+        const newPrice = calcAccountPrice(a, rInc, rHv, rSpd);
+        if (newPrice > 0) updates.push({ account: a.sourceAccount, price: newPrice });
+        return { ...a, catalogPrice: newPrice > 0 ? newPrice : a.catalogPrice };
+      });
+
+      // Save each to Redis
+      for (const u of updates) {
+        await fetch("/api/set-catalog-price", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ account: u.account, price: u.price }),
+        });
+      }
+      setAccounts(updatedAccounts);
+      setRateModalOpen(false);
+    } catch (e: any) {
+      alert("Error: " + e.message);
+    } finally {
+      setRateApplying(false);
+    }
   }
 
   async function markSold() {
@@ -358,8 +625,14 @@ export default function CatalogPage() {
   const totalSoldRevenue = soldAccounts.reduce((s, a) => s + (a.soldPrice || 0), 0);
   const estimasiPendapatan = accounts.reduce((s, a) => s + (a.catalogPrice || 0), 0);
 
+  const previewIncRate = parseFloat(rateIncome) || 0;
+  const previewHvRate = parseFloat(rateHv) || 0;
+  const previewSpeedRate = parseFloat(rateSpeed) || 0;
+  const previewTotalRev = accounts.reduce((sum, a) => sum + calcAccountPrice(a, previewIncRate, previewHvRate, previewSpeedRate), 0);
+  const previewPricedCount = accounts.filter((a) => calcAccountPrice(a, previewIncRate, previewHvRate, previewSpeedRate) > 0).length;
+
   return (
-    <>
+    <div>
       <style>{`
         :root {
           --bg: #0b0b12; --card: #14141f; --card-border: #262636;
@@ -671,17 +944,35 @@ export default function CatalogPage() {
         </div>
       )}
 
-      {tabMode === "catalog" && visible.some((a) => a.catalogPrice && a.catalogPrice > 0) && (
-        <div style={{ padding: "0 28px 12px", display: "flex", gap: 10, alignItems: "center" }}>
+      {tabMode === "catalog" && (
+        <div style={{ padding: "0 28px 12px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <button
             className="btn-download-all"
-            onClick={downloadAllPosters}
-            disabled={!!batchProgress}
+            style={{ background: "var(--accent)", color: "#1a1030" }}
+            onClick={() => setRateModalOpen(true)}
           >
-            {batchProgress
-              ? `Generating ${batchProgress.current}/${batchProgress.total} — ${batchProgress.account}`
-              : `Download All Poster (${visible.filter((a) => a.catalogPrice && a.catalogPrice > 0).length} akun)`}
+            ⚡ Set Rate & Hitung Harga Massal
           </button>
+          <button
+            className="btn-download-all"
+            style={{ background: "#facc15", color: "#0f172a" }}
+            onClick={downloadSummary}
+            disabled={summaryBusy || accounts.length === 0}
+            title="Download PNG rangkuman semua akun di katalog"
+          >
+            {summaryBusy ? "Generating..." : `📋 Download Rangkuman (${accounts.length} akun)`}
+          </button>
+          {visible.some((a) => a.catalogPrice && a.catalogPrice > 0) && (
+            <button
+              className="btn-download-all"
+              onClick={downloadAllPosters}
+              disabled={!!batchProgress}
+            >
+              {batchProgress
+                ? `Generating ${batchProgress.current}/${batchProgress.total} — ${batchProgress.account}`
+                : `Download All Poster (${visible.filter((a) => a.catalogPrice && a.catalogPrice > 0).length} akun)`}
+            </button>
+          )}
           {batchProgress && (
             <div style={{ flex: 1, maxWidth: 200, height: 6, background: "#262636", borderRadius: 3, overflow: "hidden" }}>
               <div style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%`, height: "100%", background: "#8b5cf6", borderRadius: 3, transition: "width .3s" }} />
@@ -770,39 +1061,20 @@ export default function CatalogPage() {
 
               {!a.sold && (
                 <div className="cc-price-row">
-                  {priceEditing === a.sourceAccount ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, width: "100%" }}>
-                      <span style={{ color: "var(--dim)", fontSize: 12, fontWeight: 700 }}>Rp</span>
-                      <input
-                        type="number"
-                        value={priceInput}
-                        onChange={(e) => setPriceInput(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") saveCatalogPrice(a.sourceAccount); if (e.key === "Escape") setPriceEditing(null); }}
-                        autoFocus
-                        style={{ flex: 1, background: "var(--bg)", color: "var(--ink)", border: "1px solid var(--card-border)", borderRadius: 6, padding: "4px 8px", fontSize: 13, fontWeight: 700 }}
-                      />
-                      <button
-                        onClick={() => saveCatalogPrice(a.sourceAccount)}
-                        disabled={priceSaving}
-                        style={{ background: "var(--accent)", color: "#000", border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}
-                      >
-                        {priceSaving ? "..." : "OK"}
-                      </button>
-                      <button
-                        onClick={() => setPriceEditing(null)}
-                        style={{ background: "#262636", color: "var(--ink)", border: "none", borderRadius: 6, padding: "4px 8px", fontSize: 11, cursor: "pointer" }}
-                      >
-                        X
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      className="cc-price-btn"
-                      onClick={() => { setPriceEditing(a.sourceAccount); setPriceInput(String(a.catalogPrice || "")); }}
-                    >
-                      {a.catalogPrice ? fmtRupiah(a.catalogPrice) : "Set Harga"}
-                    </button>
-                  )}
+                  <button
+                    className="cc-price-btn"
+                    onClick={() => {
+                      setPriceEditing(a.sourceAccount);
+                      setPriceInput(String(a.catalogPrice || ""));
+                      // Seed rate fields from the last bulk-rate values so the
+                      // per-account modal picks up where the operator left off.
+                      setEditRateInc(rateIncome);
+                      setEditRateHv(rateHv);
+                      setEditRateSpd(rateSpeed);
+                    }}
+                  >
+                    {a.catalogPrice ? fmtRupiah(a.catalogPrice) : "Set Harga"}
+                  </button>
                 </div>
               )}
 
@@ -927,6 +1199,200 @@ export default function CatalogPage() {
         </table>
       )}
 
+      {rateModalOpen && (
+        <div className="modal-backdrop" onClick={() => { if (!rateApplying) setRateModalOpen(false); }}>
+          <div className="modal-box" style={{ width: 440 }} onClick={(e) => e.stopPropagation()}>
+            <h2>Set Rate & Hitung Harga Massal</h2>
+            <div className="modal-sub">
+              Hitung harga otomatis untuk <strong>{accounts.length} akun</strong> di Katalog berdasarkan kalkulasi rate income, pet high-value, dan speed.
+            </div>
+
+            <label>Rate Income / 1B (Karyawan/Potensi 18 Pet)</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+              <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700 }}>Rp</span>
+              <input
+                type="number"
+                step="0.5"
+                placeholder="5"
+                value={rateIncome}
+                onChange={(e) => setRateIncome(e.target.value)}
+                style={{ margin: 0 }}
+              />
+              <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / 1B</span>
+            </div>
+
+            <label>Rate High-Value Pet / 1B (Pet ≥ 1B Rate)</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+              <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700 }}>Rp</span>
+              <input
+                type="number"
+                step="0.5"
+                placeholder="5"
+                value={rateHv}
+                onChange={(e) => setRateHv(e.target.value)}
+                style={{ margin: 0 }}
+              />
+              <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / 1B</span>
+            </div>
+
+            <label>Rate Speed / 1B</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+              <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700 }}>Rp</span>
+              <input
+                type="number"
+                step="0.5"
+                placeholder="0"
+                value={rateSpeed}
+                onChange={(e) => setRateSpeed(e.target.value)}
+                style={{ margin: 0 }}
+              />
+              <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / 1B</span>
+            </div>
+
+            <div style={{ background: "#1c1c2b", border: "1px solid var(--card-border)", borderRadius: 10, padding: "12px 14px", marginBottom: 16, fontSize: 12 }}>
+              <div style={{ color: "var(--dim)", marginBottom: 4, fontWeight: 700 }}>ESTIMASI HASIL HITUNG</div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
+                <span>Total Estimasi Pendapatan:</span>
+                <strong style={{ color: "var(--green)" }}>
+                  {fmtRupiah(
+                    accounts.reduce((sum, a) => sum + calcAccountPrice(a, parseFloat(rateIncome)||0, parseFloat(rateHv)||0, parseFloat(rateSpeed)||0), 0)
+                  )}
+                </strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Akun Yang Dapat Harga (&gt; Rp0):</span>
+                <strong style={{ color: "var(--accent)" }}>
+                  {accounts.filter((a) => calcAccountPrice(a, parseFloat(rateIncome)||0, parseFloat(rateHv)||0, parseFloat(rateSpeed)||0) > 0).length} / {accounts.length}
+                </strong>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={() => setRateModalOpen(false)} disabled={rateApplying}>
+                Batal
+              </button>
+              <button
+                className="btn-confirm"
+                style={{ background: "var(--accent)", color: "#1a1030" }}
+                onClick={applyBulkRates}
+                disabled={rateApplying}
+              >
+                {rateApplying ? "Menghitung & Menyimpan..." : "Terapkan ke Semua Akun"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {priceEditing && (() => {
+        const editingAcc = accounts.find((a) => a.sourceAccount === priceEditing);
+        if (!editingAcc) return null;
+        const rInc = parseFloat(editRateInc) || 0;
+        const rHv = parseFloat(editRateHv) || 0;
+        const rSpd = parseFloat(editRateSpd) || 0;
+        const suggested = calcAccountPrice(editingAcc, rInc, rHv, rSpd);
+        return (
+          <div className="modal-backdrop" onClick={() => { if (!priceSaving) setPriceEditing(null); }}>
+            <div className="modal-box" style={{ width: 460 }} onClick={(e) => e.stopPropagation()}>
+              <h2>Edit Harga — {editingAcc.sourceAccount}</h2>
+              <div className="modal-sub">
+                Isi rate buat auto-hitung harga, atau ketik harga manual di kolom bawah. Rate kosong = 0.
+              </div>
+
+              <label>Rate Income / 1B</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700 }}>Rp</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  placeholder="0"
+                  value={editRateInc}
+                  onChange={(e) => setEditRateInc(e.target.value)}
+                  style={{ margin: 0 }}
+                />
+                <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / 1B</span>
+              </div>
+
+              <label>Rate High-Value Pet / 1B</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700 }}>Rp</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  placeholder="0"
+                  value={editRateHv}
+                  onChange={(e) => setEditRateHv(e.target.value)}
+                  style={{ margin: 0 }}
+                />
+                <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / 1B</span>
+              </div>
+
+              <label>Rate Speed / 1B</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700 }}>Rp</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  placeholder="0"
+                  value={editRateSpd}
+                  onChange={(e) => setEditRateSpd(e.target.value)}
+                  style={{ margin: 0 }}
+                />
+                <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / 1B</span>
+              </div>
+
+              {suggested > 0 && (
+                <div
+                  style={{
+                    background: "#151b2c",
+                    border: "1px solid #2a3556",
+                    borderRadius: 8,
+                    padding: "10px 14px",
+                    marginBottom: 14,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <div style={{ fontSize: 12, color: "var(--dim)" }}>Rekomendasi dari rate</div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: "var(--accent)" }}>{fmtRupiah(suggested)}</div>
+                    <button
+                      onClick={() => setPriceInput(String(suggested))}
+                      style={{ background: "var(--accent)", color: "#000", border: "none", borderRadius: 6, padding: "5px 10px", fontSize: 11, fontWeight: 800, cursor: "pointer" }}
+                    >
+                      Pakai
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <label>Harga Manual (Rupiah)</label>
+              <input
+                type="number"
+                value={priceInput}
+                onChange={(e) => setPriceInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") saveCatalogPrice(priceEditing); }}
+                autoFocus
+                placeholder="Ketik harga langsung"
+              />
+
+              <div className="modal-actions">
+                <button className="btn-cancel" onClick={() => setPriceEditing(null)} disabled={priceSaving}>Batal</button>
+                <button
+                  className="btn-confirm"
+                  style={{ background: "var(--accent)", color: "#000" }}
+                  onClick={() => saveCatalogPrice(priceEditing)}
+                  disabled={priceSaving || !priceInput || Number(priceInput) < 0}
+                >
+                  {priceSaving ? "Menyimpan..." : "Simpan Harga"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {soldModal && (
         <div className="modal-backdrop" onClick={() => { if (!soldLoading) setSoldModal(null); }}>
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
@@ -955,6 +1421,6 @@ export default function CatalogPage() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
