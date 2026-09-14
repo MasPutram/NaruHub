@@ -254,23 +254,23 @@ export default function CatalogPage() {
       return caps + digits;
     }
 
-    // 9:16 portrait canvas (1080 x 1920). Header/summary/footer are fixed
-    // height; the table gets whatever remains and each row is sized so all
-    // accounts fit. Font shrinks alongside row height so 20-60 accounts stay
-    // on one page. Beyond ~60 we warn the operator.
-    const CANVAS_W = 1080;
-    const CANVAS_H = 1920;
+    // 16:9 landscape canvas (1920 x 1080). Header/summary/footer fixed; table
+    // gets what remains and each row sizes to fit all accounts. Wider canvas
+    // gives Top Pet + Harga real room; shorter canvas caps comfortable capacity
+    // around 30 accounts (still fits ~50 with tight rows).
+    const CANVAS_W = 1920;
+    const CANVAS_H = 1080;
     const HEADER_H = 160;
     const SUMMARY_H = 70;
-    const THEAD_H = 42;
-    const FOOTER_H = 60;
+    const THEAD_H = 46;
+    const FOOTER_H = 56;
     const ROWS_AREA_H = CANVAS_H - HEADER_H - SUMMARY_H - FOOTER_H - THEAD_H;
     const idealRowH = Math.floor(ROWS_AREA_H / rows.length);
-    const rowH = Math.max(26, Math.min(66, idealRowH));
-    const bodyFontSize = Math.max(13, Math.min(22, Math.round(rowH * 0.48)));
-    const pillFontSize = Math.max(11, bodyFontSize - 2);
-    if (rows.length > 60) {
-      const proceed = confirm(`${rows.length} akun mungkin terlalu banyak buat satu poster 9:16. Tetap generate? Tulisan bakal sangat kecil.`);
+    const rowH = Math.max(22, Math.min(60, idealRowH));
+    const bodyFontSize = Math.max(12, Math.min(22, Math.round(rowH * 0.48)));
+    const pillFontSize = Math.max(10, bodyFontSize - 2);
+    if (rows.length > 50) {
+      const proceed = confirm(`${rows.length} akun cukup banyak buat satu poster 16:9. Tetap generate? Tulisan bakal kecil.`);
       if (!proceed) { setSummaryBusy(false); return; }
     }
 
@@ -324,28 +324,35 @@ export default function CatalogPage() {
         .rk-wrap { position: relative; width: ${CANVAS_W}px; height: ${CANVAS_H}px; overflow: hidden; display: flex; flex-direction: column; }
         .rk-wm {
           position: absolute;
-          top: -400px; left: -400px; right: -400px; bottom: -400px;
+          top: -300px; left: -300px; right: -300px; bottom: -300px;
           pointer-events: none;
-          /* z-index above everything so watermark actually covers the whole
-             layout uniformly (header + summary + table + footer). Kept faint
-             enough that table text stays readable. */
+          /* z-index above everything so watermark covers the whole layout
+             uniformly (header + summary + table + footer). Faint enough that
+             table text stays readable. */
           z-index: 20;
-          display: grid;
-          grid-template-columns: repeat(auto-fill, 260px);
-          grid-auto-rows: 90px;
-          gap: 0;
-          justify-content: center; align-content: center;
+          display: flex;
+          flex-direction: column;
+          gap: 40px;
+          padding: 30px 0;
           transform: rotate(-22deg);
         }
+        .rk-wm-row {
+          display: flex;
+          gap: 70px;
+          white-space: nowrap;
+          justify-content: flex-start;
+          padding-left: 0;
+        }
+        /* Every other row shifts by half a tile so the pattern reads as a
+           brick / staggered layout instead of a strict aligned grid. */
+        .rk-wm-row.stagger { padding-left: 140px; }
         .rk-wm span {
           /* Mid-tone slate at low alpha shows up as light gray on the dark
              header/footer AND as a soft gray on the white table -- so the tile
-             actually covers the whole layout without a second colored copy,
-             and stays faint enough that table text remains sharp. */
-          color: rgba(120, 130, 155, 0.30);
+             actually covers the whole layout without a second colored copy. */
+          color: rgba(120, 130, 155, 0.32);
           font-weight: 900; font-size: 34px; letter-spacing: 4px;
-          white-space: nowrap; text-align: center;
-          display: flex; align-items: center; justify-content: center;
+          flex-shrink: 0;
         }
         .rk-header {
           background: linear-gradient(135deg,#0f172a,#1e293b);
@@ -437,7 +444,7 @@ export default function CatalogPage() {
               <tr>
                 <th>Code</th>
                 <th>Speed</th>
-                <th>Income Pot</th>
+                <th>Income Potensi</th>
                 <th>Top Pet</th>
                 <th style="text-align:center">Telur</th>
                 <th style="text-align:center">Token</th>
@@ -453,7 +460,11 @@ export default function CatalogPage() {
         </div>
 
         <div class="rk-wm">
-          ${Array.from({ length: 200 }).map(() => "<span>MAS NARU</span>").join("")}
+          ${Array.from({ length: 22 }).map((_, r) => `
+            <div class="rk-wm-row ${r % 2 === 1 ? "stagger" : ""}">
+              ${Array.from({ length: 12 }).map(() => "<span>MAS NARU</span>").join("")}
+            </div>
+          `).join("")}
         </div>
       </div>
     `;
