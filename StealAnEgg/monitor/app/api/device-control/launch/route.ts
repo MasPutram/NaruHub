@@ -144,6 +144,19 @@ export async function POST(req: NextRequest) {
     }
 
     const queueKey = termuxCommandQueueKey(deviceId);
+
+    // Drop any commands still queued from a previous Launch Selected. Those
+    // carry the spread jobIds that were fresh at their queue time -- but if
+    // the agent didn't drain them yet (or a prior batch failed mid-way), those
+    // jobIds may already be dead by now, and the agent would keep replaying
+    // them into "This experience has ended". Latest launch wins.
+    let stalePreviousCommands = 0;
+    try {
+      const peek = await redis.queuePeek(queueKey, 100);
+      stalePreviousCommands = peek.length;
+      if (stalePreviousCommands > 0) await redis.del(queueKey);
+    } catch {}
+
     const commands: any[] = [];
     for (let i = 0; i < packageNames.length; i++) {
       const packageName = packageNames[i];
@@ -220,7 +233,7 @@ export async function POST(req: NextRequest) {
       maxLen: TERMUX_COMMAND_LOG_MAX,
     });
 
-    return NextResponse.json({ ok: true, commands, spreadCount: Object.keys(assigned).length });
+    return NextResponse.json({ ok: true, commands, spreadCount: Object.keys(assigned).length, stalePreviousCommands });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }

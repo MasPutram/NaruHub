@@ -844,6 +844,32 @@ export default function DeviceDetailPage() {
           </span>
           <button className="btn" disabled>Screenshot — unavailable</button>
           <button className="btn" disabled>Restart — unavailable</button>
+          <button
+            className="btn"
+            style={{ color: "var(--red)", borderColor: "#5a1e1e" }}
+            onClick={async () => {
+              if (!window.confirm(`Reset device ${displayName(device)}?\n\nBersihin: pending launch commands, rejoin state, presence, session timer. Aman — clone in-game gak keganggu, cuma state di server yang di-clear.`)) return;
+              try {
+                const res = await fetch("/api/device-control/force-reset", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ deviceId }),
+                });
+                const data = await res.json();
+                if (data.ok) {
+                  setToast(`Reset: ${data.commandsDropped ?? 0} stale command(s), ${data.sessionsReset ?? 0} session(s) dibersihin.`);
+                  fetchDevice();
+                } else {
+                  setToast(`Reset gagal: ${data.error || "unknown"}`);
+                }
+              } catch (e: any) {
+                setToast("Reset gagal: " + e.message);
+              }
+            }}
+            title="Bersihin pending launch commands + state di server (gak restart agent-nya)"
+          >
+            🔄 Reset Device
+          </button>
         </div>
       </div>
 
