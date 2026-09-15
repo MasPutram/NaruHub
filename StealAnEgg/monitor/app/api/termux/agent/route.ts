@@ -1183,7 +1183,7 @@ do
     packages = pkgs_now,
   })
   if code == "200" then
-    log(C.dim .. "[" .. ts() .. "] session state reset (fresh start, " .. #pkgs_now .. " pkgs)" .. C.reset)
+    log(C.yellow .. "[" .. ts() .. "] session reset: " .. #pkgs_now .. " pkgs, stale commands + presence dropped" .. C.reset)
   end
 end
 

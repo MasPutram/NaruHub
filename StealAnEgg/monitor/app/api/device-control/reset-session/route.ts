@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, termuxDeviceKey, termuxDeviceMetaKey, accountKey } from "@/lib/redis";
+import { redis, termuxDeviceKey, termuxDeviceMetaKey, termuxCommandQueueKey, accountKey } from "@/lib/redis";
 
 // Called by the agent once per process start (a device/agent restart) to wipe
 // this device's stale session state so everything re-arms cleanly: the rejoin
@@ -39,6 +39,23 @@ export async function POST(req: NextRequest) {
         }
       } while (cursor !== "0");
     }
+
+    // Drain the launch command queue too. Any command sitting there was queued
+    // BEFORE this restart -- for launch selected that carries the spread jobIds
+    // that were fresh at queue time. By the time a restarted agent picks them
+    // up the Roblox server list has moved on and those jobIds may be gone, so
+    // the clone joins into "This experience has ended / server unavailable".
+    // Safer to drop them and let the operator re-launch than to replay stale
+    // targets.
+    let commandsDropped = 0;
+    try {
+      const qKey = termuxCommandQueueKey(deviceId);
+      // Count before dropping so the response tells the operator what was
+      // discarded (queuePeek is non-destructive).
+      const peek = await redis.queuePeek(qKey, 100);
+      commandsDropped = peek.length;
+      await redis.del(qKey);
+    } catch {}
 
     // Reset the per-clone SESSION timer (uptime column) so it counts from this
     // restart, not from hours ago. Source the account list from THREE places
@@ -88,7 +105,7 @@ export async function POST(req: NextRequest) {
       } catch {}
     }
 
-    return NextResponse.json({ ok: true, deleted, sessionsReset, accountsConsidered: usernames.size });
+    return NextResponse.json({ ok: true, deleted, sessionsReset, commandsDropped, accountsConsidered: usernames.size });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
