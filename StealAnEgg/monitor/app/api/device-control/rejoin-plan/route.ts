@@ -209,9 +209,19 @@ export async function GET(req: NextRequest) {
           }
           anchor = st.staleSince;
         }
-        // Use notRunningGraceMs (rejoinDelay from policy) consistently whether app is
-        // process-dead or stuck on an error/reconnect screen.
-        const graceMs = notRunningGraceMs;
+        // Split the grace by process state:
+        //  - NOT running (force-closed / never opened) -> fast reopen using
+        //    policy.rejoinDelay. Nothing is loading so we can be aggressive.
+        //  - RUNNING (loading OR stuck on an error/reconnect screen) -> use
+        //    the loading-safe STUCK_THRESHOLD_MS. A normal Roblox cold-start
+        //    on cloud phones is ~40-60s; if we treated running the same as
+        //    dead we'd fire the force-stop mid-load and kill a clone that was
+        //    about to join. The operator saw exactly that: "force stop not
+        //    running padahal dia lagi ngeload".
+        const isRunning = runningSet.has(pkg);
+        const graceMs = isRunning
+          ? Math.max(STUCK_THRESHOLD_MS, notRunningGraceMs)
+          : notRunningGraceMs;
         if (now - anchor < graceMs) {
           await save();
           continue;
