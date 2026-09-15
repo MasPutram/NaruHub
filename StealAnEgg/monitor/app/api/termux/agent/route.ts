@@ -1173,11 +1173,17 @@ log("")
 
 -- Fresh start: wipe this device's stale session state on the server (rejoin
 -- state machine, presence, launch anchors) so a restart re-arms everything
--- cleanly instead of inheriting a "gave up" flag or stale presence.
+-- cleanly instead of inheriting a "gave up" flag or stale presence. Ship the
+-- packages list too -- server can't rely on the live device key (90s TTL --
+-- almost always expired at restart time) to find which accounts to reset.
 do
-  local code = http_post("/api/device-control/reset-session", { deviceId = DEVICE_ID })
+  local pkgs_now = collect_packages()
+  local code = http_post("/api/device-control/reset-session", {
+    deviceId = DEVICE_ID,
+    packages = pkgs_now,
+  })
   if code == "200" then
-    log(C.dim .. "[" .. ts() .. "] session state reset (fresh start)" .. C.reset)
+    log(C.dim .. "[" .. ts() .. "] session state reset (fresh start, " .. #pkgs_now .. " pkgs)" .. C.reset)
   end
 end
 

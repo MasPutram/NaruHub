@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, termuxDeviceKey, accountKey } from "@/lib/redis";
+import { redis, termuxDeviceKey, termuxDeviceMetaKey, accountKey } from "@/lib/redis";
 
 // Called by the agent once per process start (a device/agent restart) to wipe
 // this device's stale session state so everything re-arms cleanly: the rejoin
@@ -41,32 +41,54 @@ export async function POST(req: NextRequest) {
     }
 
     // Reset the per-clone SESSION timer (uptime column) so it counts from this
-    // restart, not from hours ago. Session = now - firstSeen, so we stamp
-    // firstSeen = now on each of this device's accounts. Presence (jobId) is
-    // already wiped by the prefix delete above, so clones re-report fresh.
-    let sessionsReset = 0;
+    // restart, not from hours ago. Source the account list from THREE places
+    // and take the union -- because the live device key (termux:device:<id>) has
+    // a 90s TTL and is USUALLY EXPIRED at agent-restart time (the whole reason
+    // the operator is restarting). The persistent meta key + an optional
+    // packages payload from the agent fill that gap so we always find accounts
+    // to reset instead of silently no-op'ing.
+    const usernames = new Set<string>();
+    // 1. Live device key (may be gone if agent has been offline).
     try {
       const devRaw = await redis.get<string>(termuxDeviceKey(deviceId));
       if (devRaw) {
         const device = typeof devRaw === "string" ? JSON.parse(devRaw) : devRaw;
-        const packages: any[] = Array.isArray(device.packages) ? device.packages : [];
-        const now = Date.now() / 1000;
-        for (const p of packages) {
-          const account = p && typeof p === "object" ? p.username : null;
-          if (!account) continue;
-          const accRaw = await redis.get<string>(accountKey(account));
-          if (!accRaw) continue;
-          try {
-            const acc = typeof accRaw === "string" ? JSON.parse(accRaw) : accRaw;
-            acc.firstSeen = now;
-            await redis.set(accountKey(account), JSON.stringify(acc));
-            sessionsReset++;
-          } catch {}
+        for (const p of Array.isArray(device.packages) ? device.packages : []) {
+          if (p && typeof p === "object" && p.username) usernames.add(p.username);
         }
       }
     } catch {}
+    // 2. Persistent meta snapshot -- survives the 90s TTL.
+    try {
+      const metaRaw = await redis.get<string>(termuxDeviceMetaKey(deviceId));
+      if (metaRaw) {
+        const meta = typeof metaRaw === "string" ? JSON.parse(metaRaw) : metaRaw;
+        for (const p of Array.isArray(meta.packages) ? meta.packages : []) {
+          if (p && typeof p === "object" && p.username) usernames.add(p.username);
+        }
+      }
+    } catch {}
+    // 3. Explicit list from the agent (fresh from its own collect_packages()).
+    for (const p of Array.isArray(body.packages) ? body.packages : []) {
+      if (typeof p === "string") { usernames.add(p); continue; }
+      if (p && typeof p === "object" && p.username) usernames.add(p.username);
+    }
 
-    return NextResponse.json({ ok: true, deleted, sessionsReset });
+    let sessionsReset = 0;
+    const now = Date.now() / 1000;
+    for (const account of Array.from(usernames)) {
+      try {
+        const accRaw = await redis.get<string>(accountKey(account));
+        if (!accRaw) continue;
+        const acc = typeof accRaw === "string" ? JSON.parse(accRaw) : accRaw;
+        acc.firstSeen = now;
+        acc.lastSeen = now;
+        await redis.set(accountKey(account), JSON.stringify(acc));
+        sessionsReset++;
+      } catch {}
+    }
+
+    return NextResponse.json({ ok: true, deleted, sessionsReset, accountsConsidered: usernames.size });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
