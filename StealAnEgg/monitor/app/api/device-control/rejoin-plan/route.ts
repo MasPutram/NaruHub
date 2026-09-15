@@ -80,16 +80,25 @@ async function pickServer(placeId: string, exclude: string[]): Promise<string | 
     const populated = withRoom.filter((s) => (s.playing || 0) >= 5);
     const pool = populated.length > 0 ? populated : withRoom;
     pool.sort((a, b) => (a.ping || 9999) - (b.ping || 9999));
-    return pool.length > 0 ? String(pool[0].id) : null;
+    // Random-pick among the top-5 lowest-ping so consecutive calls don't lock
+    // onto the exact same server (Roblox's list changes slowly, and the
+    // ping-asc sort was deterministic -- every clone converged on the same
+    // first result and stacked).
+    const topN = Math.min(5, pool.length);
+    if (topN === 0) return null;
+    return String(pool[Math.floor(Math.random() * topN)].id);
   } catch {
     return null;
   }
 }
 
-// Choose a rejoin target that AVOIDS the server the clone was just on. Roblox's
-// matchmaker tends to drop a plain place-join back into the same server, so we
-// aim at a specific gameInstanceId that isn't the last-known jobId, the one we
-// just tried, or any that already failed.
+// Choose a rejoin target that AVOIDS the server the clone was just on AND any
+// server another of this device's clones is already sitting on (or has just
+// been assigned in this same brain tick). Without the cross-clone exclusion,
+// every clone independently picked the SAME lowest-ping candidate on rejoin
+// and stacked into one server -- which then filled up and rejected them, so
+// they all failed together (visible in the log: jobId 8a1ee67a chosen for 6
+// different clones in a row).
 //
 // If pickServer fails (Roblox server list unreachable, or every candidate has
 // been excluded), we return a PLACE-ONLY target -- NEVER the original with its
@@ -100,14 +109,18 @@ async function pickServer(placeId: string, exclude: string[]): Promise<string | 
 async function chooseRejoinTarget(
   placeTarget: string,
   st: RejoinState,
-  lastKnownJobId: string
+  lastKnownJobId: string,
+  siblingsOccupied: Set<string>
 ): Promise<{ target: string; jobId: string | null }> {
   const placeId = parsePlaceId(placeTarget);
   if (!placeId) return { target: placeTarget, jobId: null };
   const exclude = [...st.failedJobIds];
   if (st.lastTriedJobId && !exclude.includes(st.lastTriedJobId)) exclude.push(st.lastTriedJobId);
   if (lastKnownJobId && !exclude.includes(lastKnownJobId)) exclude.push(lastKnownJobId);
-  st.failedJobIds = exclude.slice(-20); // cap so it can't grow unbounded
+  for (const s of Array.from(siblingsOccupied)) {
+    if (s && !exclude.includes(s)) exclude.push(s);
+  }
+  st.failedJobIds = st.failedJobIds.slice(-20); // cap so it can't grow unbounded
   const jobId = await pickServer(placeId, exclude);
   if (jobId) return { target: `roblox://placeId=${placeId}&gameInstanceId=${jobId}`, jobId };
   // Fallback: place-only. Do NOT return placeTarget as-is -- if it carries a
@@ -155,6 +168,34 @@ export async function GET(req: NextRequest) {
       cursor = next;
       for (const k of keys) paused.add(k.slice(pausePrefix.length));
     } while (cursor !== "0");
+
+    // Cross-clone spread: collect jobIds this device's OTHER clones are already
+    // sitting on (from presence heartbeats) OR are about to be assigned to in
+    // this same tick, so we don't rejoin two clones into the exact same server.
+    // The log showed a stacking failure: all 6 clones got the same 8a1ee67a
+    // jobId on rejoin, which promptly filled up and rejected them.
+    const siblingsOccupied = new Set<string>();
+    try {
+      const presPrefix = `presence:${deviceId}:`;
+      let pc = "0";
+      const presKeys: string[] = [];
+      do {
+        const [next, keys] = await redis.scan(pc, { match: `${presPrefix}*`, count: 100 });
+        pc = next;
+        presKeys.push(...keys);
+      } while (pc !== "0");
+      if (presKeys.length > 0) {
+        const vals = await redis.mget(...presKeys);
+        const cutoff = Date.now() - PRESENCE_FRESH_S * 1000;
+        for (const v of vals) {
+          if (!v) continue;
+          try {
+            const o = typeof v === "string" ? JSON.parse(v) : v;
+            if (o.jobId && o.ts && o.ts >= cutoff) siblingsOccupied.add(o.jobId);
+          } catch {}
+        }
+      }
+    } catch {}
 
     const now = Date.now();
     const actions: { pkg: string; target: string; bounds: string; home?: boolean }[] = [];
@@ -230,8 +271,9 @@ export async function GET(req: NextRequest) {
         // just on (avoids the matchmaker dropping it back into the same server).
         st.attempts = 1;
         {
-          const choice = await chooseRejoinTarget(target, st, pres?.jobId || "");
+          const choice = await chooseRejoinTarget(target, st, pres?.jobId || "", siblingsOccupied);
           st.lastTriedJobId = choice.jobId;
+          if (choice.jobId) siblingsOccupied.add(choice.jobId);
           st.lastFiredAt = now;
           st.lastAckAt = 0;
           await save();
@@ -255,8 +297,9 @@ export async function GET(req: NextRequest) {
         continue;
       }
       {
-        const choice = await chooseRejoinTarget(target, st, pres?.jobId || "");
+        const choice = await chooseRejoinTarget(target, st, pres?.jobId || "", siblingsOccupied);
         st.lastTriedJobId = choice.jobId;
+        if (choice.jobId) siblingsOccupied.add(choice.jobId);
         st.lastFiredAt = now;
         st.lastAckAt = 0;
         await save();
