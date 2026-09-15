@@ -88,9 +88,15 @@ async function pickServer(placeId: string, exclude: string[]): Promise<string | 
 
 // Choose a rejoin target that AVOIDS the server the clone was just on. Roblox's
 // matchmaker tends to drop a plain place-join back into the same server, so we
-// always aim at a specific gameInstanceId that isn't the last-known jobId, the
-// one we just tried, or any that already failed. Falls back to a plain place
-// join only if the server list can't be fetched / everything's excluded.
+// aim at a specific gameInstanceId that isn't the last-known jobId, the one we
+// just tried, or any that already failed.
+//
+// If pickServer fails (Roblox server list unreachable, or every candidate has
+// been excluded), we return a PLACE-ONLY target -- NEVER the original with its
+// possibly-dead gameInstanceId. Joining a stale jobId is the failure the user
+// reported: the client stays on the loading screen forever waiting for a Roblox
+// server that no longer exists. A place-only join lets the matchmaker pick a
+// live server instead.
 async function chooseRejoinTarget(
   placeTarget: string,
   st: RejoinState,
@@ -104,7 +110,11 @@ async function chooseRejoinTarget(
   st.failedJobIds = exclude.slice(-20); // cap so it can't grow unbounded
   const jobId = await pickServer(placeId, exclude);
   if (jobId) return { target: `roblox://placeId=${placeId}&gameInstanceId=${jobId}`, jobId };
-  return { target: placeTarget, jobId: null };
+  // Fallback: place-only. Do NOT return placeTarget as-is -- if it carries a
+  // gameInstanceId (from a Link Private Server URL or a prior launch's spread
+  // that got baked in), the Roblox client would try to join that dead server
+  // and hang on the loading screen.
+  return { target: `roblox://placeId=${placeId}`, jobId: null };
 }
 
 export async function GET(req: NextRequest) {
