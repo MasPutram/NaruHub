@@ -204,6 +204,12 @@ export default function CatalogPage() {
 
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; account: string } | null>(null);
   const [summaryBusy, setSummaryBusy] = useState(false);
+  // Multi-select for bulk set-harga on selected accounts. Keyed by
+  // sourceAccount; toggled by the checkbox at the top-left of each card.
+  const [selectedAccountIds, setSelectedAccountIds] = useState<Record<string, boolean>>({});
+  const [selectionModalOpen, setSelectionModalOpen] = useState(false);
+  const [selectionPriceInput, setSelectionPriceInput] = useState("");
+  const [selectionSaving, setSelectionSaving] = useState(false);
   // Pre-generate filter modal for rangkuman.
   const [summaryModalOpen, setSummaryModalOpen] = useState(false);
   const [summaryFilterPriced, setSummaryFilterPriced] = useState(false);
@@ -606,6 +612,34 @@ export default function CatalogPage() {
       }
     } catch {}
     setPriceSaving(false);
+  }
+
+  // Apply one flat price to every currently-selected account. Runs the writes
+  // sequentially so a slow endpoint doesn't slam Redis, then closes the modal
+  // and clears the selection.
+  async function applySelectedPrice() {
+    const price = Number(selectionPriceInput);
+    if (!Number.isFinite(price) || price < 0) return;
+    const targets = Object.entries(selectedAccountIds).filter(([, v]) => v).map(([k]) => k);
+    if (targets.length === 0) return;
+    setSelectionSaving(true);
+    try {
+      for (const account of targets) {
+        await fetch("/api/set-catalog-price", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ account, price }),
+        });
+      }
+      setAccounts((prev) => prev.map((a) => (selectedAccountIds[a.sourceAccount] ? { ...a, catalogPrice: price } : a)));
+      setSelectionModalOpen(false);
+      setSelectedAccountIds({});
+      setSelectionPriceInput("");
+    } catch (e: any) {
+      alert("Gagal simpan harga: " + e.message);
+    } finally {
+      setSelectionSaving(false);
+    }
   }
 
   async function applyBulkRates() {
@@ -1098,6 +1132,35 @@ export default function CatalogPage() {
 
       {tabMode === "catalog" && (
         <div style={{ padding: "0 28px 12px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          {(() => {
+            const selectedCount = Object.values(selectedAccountIds).filter(Boolean).length;
+            const catalogUnsold = visible.filter((a) => !a.sold);
+            const allSelected = catalogUnsold.length > 0 && catalogUnsold.every((a) => selectedAccountIds[a.sourceAccount]);
+            return (
+              <>
+                <button
+                  className="btn-download-all"
+                  style={{ background: allSelected ? "#334155" : "#1c1c2b", color: "var(--ink)", border: "1px solid var(--card-border)" }}
+                  onClick={() => {
+                    if (allSelected) setSelectedAccountIds({});
+                    else setSelectedAccountIds(Object.fromEntries(catalogUnsold.map((a) => [a.sourceAccount, true])));
+                  }}
+                >
+                  {allSelected ? "☑ Unselect All" : `☐ Select All (${catalogUnsold.length})`}
+                </button>
+                {selectedCount > 0 && (
+                  <button
+                    className="btn-download-all"
+                    style={{ background: "#22c55e", color: "#052e10", fontWeight: 800 }}
+                    onClick={() => { setSelectionPriceInput(""); setSelectionModalOpen(true); }}
+                    title="Kasih harga sekaligus ke akun yang dipilih"
+                  >
+                    💰 Set Harga Selected ({selectedCount})
+                  </button>
+                )}
+              </>
+            );
+          })()}
           <button
             className="btn-download-all"
             style={{ background: "var(--accent)", color: "#1a1030" }}
@@ -1160,6 +1223,16 @@ export default function CatalogPage() {
               )}
 
               <div className="cc-head">
+                {!a.sold && (
+                  <input
+                    type="checkbox"
+                    className="cc-select"
+                    checked={!!selectedAccountIds[a.sourceAccount]}
+                    onChange={(e) => setSelectedAccountIds((prev) => ({ ...prev, [a.sourceAccount]: e.target.checked }))}
+                    title="Pilih untuk set harga massal"
+                    style={{ width: 18, height: 18, accentColor: "var(--accent)", cursor: "pointer", marginRight: 2 }}
+                  />
+                )}
                 <span className={`cc-dot ${a.online ? "on" : "off"}`} />
                 <span className="cc-name">{a.sourceAccount}</span>
                 {deviceLabel(a.sourceAccount) && (
@@ -1560,6 +1633,62 @@ export default function CatalogPage() {
                   disabled={rateApplying || pricedCount === 0}
                 >
                   {rateApplying ? "Menghitung & Menyimpan..." : `Terapkan ke ${pricedCount} Akun`}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {selectionModalOpen && (() => {
+        const selected = accounts.filter((a) => selectedAccountIds[a.sourceAccount] && !a.sold);
+        const price = Number(selectionPriceInput);
+        const priceValid = Number.isFinite(price) && price > 0;
+        return (
+          <div className="modal-backdrop" onClick={() => { if (!selectionSaving) setSelectionModalOpen(false); }}>
+            <div className="modal-box" style={{ width: 480, maxHeight: "82vh", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
+              <h2>Set Harga — {selected.length} akun</h2>
+              <div className="modal-sub">
+                Harga di bawah bakal di-apply ke <strong>{selected.length} akun</strong> yang kamu pilih. Harga lama bakal ditimpa.
+              </div>
+
+              <label>Harga (Rupiah)</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="cth: 75000"
+                value={selectionPriceInput}
+                onChange={(e) => setSelectionPriceInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && priceValid && !selectionSaving) applySelectedPrice(); }}
+                autoFocus
+                style={{ margin: 0, marginBottom: 8 }}
+              />
+              {priceValid && (
+                <div style={{ color: "var(--dim)", fontSize: 12, marginBottom: 12 }}>
+                  Preview: <strong style={{ color: "var(--accent)" }}>{fmtRupiah(price)}</strong> per akun × {selected.length} = <strong style={{ color: "var(--green)" }}>{fmtRupiah(price * selected.length)}</strong>
+                </div>
+              )}
+
+              <div style={{ flex: 1, overflow: "auto", border: "1px solid var(--card-border)", borderRadius: 8, background: "#0f0f18", padding: "6px 0", marginBottom: 14, maxHeight: 260 }}>
+                {selected.map((a) => (
+                  <div key={a.sourceAccount} style={{ display: "flex", justifyContent: "space-between", padding: "6px 12px", fontSize: 12 }}>
+                    <span style={{ fontWeight: 700 }}>{a.sourceAccount}</span>
+                    <span style={{ color: "var(--dim)" }}>{a.catalogPrice ? `${fmtRupiah(a.catalogPrice)} → ` : ""}<strong style={{ color: priceValid ? "var(--accent)" : "var(--dim)" }}>{priceValid ? fmtRupiah(price) : "—"}</strong></span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="modal-actions">
+                <button className="btn-cancel" onClick={() => setSelectionModalOpen(false)} disabled={selectionSaving}>
+                  Batal
+                </button>
+                <button
+                  className="btn-confirm"
+                  style={{ background: "#22c55e", color: "#052e10", fontWeight: 800 }}
+                  onClick={applySelectedPrice}
+                  disabled={!priceValid || selectionSaving}
+                >
+                  {selectionSaving ? "Menyimpan..." : `Simpan ke ${selected.length} akun`}
                 </button>
               </div>
             </div>
