@@ -521,7 +521,9 @@ local function do_hop()
 			local MAX_PING = 100
 			for _, s in ipairs(data.data) do
 				local ping = tonumber(s.ping) or 9999
-				if s.id and not hopBlacklist[s.id] and s.playing and s.playing == 1
+				local maxP = s.maxPlayers or 8
+				if s.id and not hopBlacklist[s.id] and s.playing
+					and s.playing >= 5 and s.playing < maxP
 					and ping <= MAX_PING then
 					table.insert(candidates, {
 						id = s.id,
@@ -533,10 +535,9 @@ local function do_hop()
 			cursor = data.nextPageCursor
 			if not cursor or #candidates >= 40 then break end
 		end
-		table.sort(candidates, function(a, b)
-			if a.ping ~= b.ping then return a.ping < b.ping end
-			return a.playing > b.playing
-		end)
+		-- Sort by best ping only; don't tie-break on player count so we
+		-- don't drift back toward the emptiest server.
+		table.sort(candidates, function(a, b) return a.ping < b.ping end)
 		return candidates
 	end
 
