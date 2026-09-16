@@ -469,6 +469,32 @@ export default function DashboardPage() {
         .time-tag.on { color: var(--dim); }
         .time-tag.off { color: var(--red); }
 
+        /* Aggregated "All Accounts" combined card */
+        .card.combined { background: linear-gradient(135deg, rgba(34,211,238,.06), rgba(139,92,246,.06)), var(--card); border-color: rgba(34,211,238,.28); cursor: default; }
+        .card.combined:hover { transform: none; box-shadow: 0 0 0 1px rgba(34,211,238,.35), 0 4px 20px rgba(34,211,238,.08); border-color: rgba(34,211,238,.45); }
+        .combined-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .combined-icon { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--accent2), var(--accent)); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; box-shadow: 0 0 16px rgba(34,211,238,.35); }
+        .combined-title { flex: 1; min-width: 0; }
+        .combined-name { font-weight: 900; font-size: 15px; letter-spacing: .2px; }
+        .combined-sub { font-size: 10px; color: var(--dim); margin-top: 2px; }
+        .combined-badge { font-size: 9px; font-weight: 900; letter-spacing: .5px; padding: 3px 8px; border-radius: 6px; color: var(--accent2); background: rgba(34,211,238,.12); border: 1px solid rgba(34,211,238,.3); flex-shrink: 0; }
+        .combined-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 12px; }
+        .combined-stats .cs-cell { background: rgba(255,255,255,.02); border: 1px solid var(--card-border); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+        .combined-stats .cs-cell.eggs { border-color: rgba(251,191,36,.25); background: rgba(251,191,36,.05); }
+        .combined-stats .cs-label { font-size: 9px; font-weight: 800; color: var(--dim); text-transform: uppercase; letter-spacing: .3px; display: flex; align-items: center; gap: 4px; }
+        .combined-stats .cs-value { font-size: 13px; font-weight: 900; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .combined-stats .cs-money .cs-value { color: var(--gold); }
+        .combined-stats .cs-income .cs-value { color: var(--accent2); }
+        .combined-stats .cs-speed .cs-value { color: var(--accent); }
+        .combined-stats .cs-eggs .cs-value { color: var(--gold); }
+        .combined-stats .cs-sub { font-size: 9px; color: var(--dim); margin-top: 1px; }
+        .combined-toppets { border-top: 1px solid var(--card-border); padding-top: 10px; }
+        .combined-toppets-label { font-size: 9px; font-weight: 800; color: var(--dim); text-transform: uppercase; letter-spacing: .3px; margin-bottom: 6px; }
+        .combined-toppets-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .combined-chip { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .combined-chip-more { font-size: 10px; color: var(--dim); font-weight: 700; }
+        @media (max-width: 900px) { .combined-stats { grid-template-columns: repeat(2, 1fr); } }
+
         .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 12px; margin-bottom: 10px; }
         .st .sl { font-size: 9px; font-weight: 800; color: var(--dim); letter-spacing: .3px; text-transform: uppercase; }
         .st .sv { font-size: 14px; font-weight: 800; }
@@ -656,6 +682,7 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="grid">
+            <AllAccountsCard accounts={displayed} tabMode={tabMode} />
             {displayed.map((a) => (
               <AccountCard
                 key={a.sourceAccount}
@@ -755,6 +782,107 @@ function AccountCard({ account: a, onOpen, onSell, onDelete, deleteConfirm, onDe
         )}
       </div>
       <div className="genmsg" style={{ color: genMsg?.color || "var(--dim)" }}>{genMsg?.text || ""}</div>
+    </div>
+  );
+}
+
+/* ===== ALL ACCOUNTS COMBINED CARD =====
+ * Sits as the first tile in the grid, aggregating the currently-displayed
+ * accounts (respects the Online/Offline/All tab + device filter). Not a
+ * clickable detail: it's a rollup, so `.combined` disables hover-shift.
+ */
+function AllAccountsCard({ accounts, tabMode }: { accounts: Account[]; tabMode: TabMode }) {
+  const [idx, setIdx] = useState<Record<string, string>>({});
+  useEffect(() => { loadIconIndex().then(setIdx); }, []);
+
+  const totalCount = accounts.length;
+  const onlineCount = accounts.reduce((n, a) => n + (a.online ? 1 : 0), 0);
+  const money = accounts.reduce((s, a) => s + (Number(a.money) || 0), 0);
+  const income = accounts.reduce((s, a) => s + (Number(a.incomeAktif) || 0), 0);
+  const speed = accounts.reduce((s, a) => s + (Number(a.speed) || 0), 0);
+  const pets = accounts.reduce((s, a) => s + (Number(a.petsCount) || 0), 0);
+  const eggBackpackCount = accounts.reduce((s, a) => s + (Number(a.backpackEggCount) || 0), 0);
+  const eggGrowingCount = accounts.reduce((s, a) => s + (Number(a.growingEggCount) || 0), 0);
+  const eggs = eggBackpackCount + eggGrowingCount;
+  const eggIncome = accounts.reduce(
+    (s, a) => s + (Number(a.incomeEggBackpack) || 0) + (Number(a.incomeEggSedangTumbuh) || 0),
+    0
+  );
+
+  // Merge topPets across accounts, sort by rate desc, keep the top 3 for
+  // preview and count the rest so we can show "+N more".
+  const allTopPets: Pet[] = [];
+  for (const a of accounts) {
+    for (const p of (a.topPets || [])) allTopPets.push(p);
+  }
+  allTopPets.sort((a, b) => (b.rate || 0) - (a.rate || 0));
+  const previewPets = allTopPets.slice(0, 3);
+  const moreCount = Math.max(0, allTopPets.length - previewPets.length);
+
+  const subLabel = tabMode === "online"
+    ? `${totalCount} Online`
+    : tabMode === "offline"
+    ? `${totalCount} Offline`
+    : `${onlineCount} / ${totalCount} Online`;
+
+  return (
+    <div className="card combined">
+      <div className="combined-head">
+        <div className="combined-icon">👥</div>
+        <div className="combined-title">
+          <div className="combined-name">All Accounts</div>
+          <div className="combined-sub">{subLabel}</div>
+        </div>
+        <span className="combined-badge">COMBINED</span>
+      </div>
+
+      <div className="combined-stats">
+        <div className="cs-cell cs-money">
+          <div className="cs-label">💵 MONEY</div>
+          <div className="cs-value">{fmtMoney(money)}</div>
+        </div>
+        <div className="cs-cell cs-income">
+          <div className="cs-label">⚡ INCOME / SEC</div>
+          <div className="cs-value">{fmtRate(income)}</div>
+        </div>
+        <div className="cs-cell cs-speed">
+          <div className="cs-label">🏃 SPEED</div>
+          <div className="cs-value">{fmtCompactNum(speed)}</div>
+        </div>
+        <div className="cs-cell">
+          <div className="cs-label">🐾 PETS</div>
+          <div className="cs-value">{fmtNum(pets)}</div>
+        </div>
+        <div className="cs-cell cs-eggs eggs">
+          <div className="cs-label">🥚 TOTAL EGGS</div>
+          <div className="cs-value">{fmtNum(eggs)}</div>
+          {eggIncome > 0 && <div className="cs-sub">{fmtRate(eggIncome)}</div>}
+        </div>
+      </div>
+
+      {previewPets.length > 0 && (
+        <div className="combined-toppets">
+          <div className="combined-toppets-label">TOP PETS</div>
+          <div className="combined-toppets-chips">
+            {previewPets.map((p, i) => {
+              const rar = petRarity(p.category, idx);
+              const rc = rarityColor(rar);
+              return (
+                <span
+                  key={i}
+                  className="combined-chip"
+                  style={{ background: rc + "18", color: rc, border: `1px solid ${rc}33` }}
+                  title={`${p.name || p.category} — ${fmtRate(p.rate || 0)}`}
+                >
+                  <PetIcon category={p.category} name={p.name || p.category} size={16} />
+                  {p.name || p.category}
+                </span>
+              );
+            })}
+            {moreCount > 0 && <span className="combined-chip-more">+{moreCount} more</span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
