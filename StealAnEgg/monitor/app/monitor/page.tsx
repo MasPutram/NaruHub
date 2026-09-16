@@ -75,6 +75,7 @@ export default function MonitorListPage() {
   const [command, setCommand] = useState("");
   const [commandLoading, setCommandLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const fetchDevices = useCallback(async () => {
     try {
@@ -157,6 +158,23 @@ export default function MonitorListPage() {
     } catch {
       setToast("Gagal rename");
     }
+  }
+
+  async function resetAllPolicies() {
+    if (!window.confirm("Reset SEMUA device?\n\n• Auto Rejoin → OFF\n• Semua PS Link → dihapus\n\nDevice cuma bisa launch Roblox, tanpa auto rejoin.")) return;
+    setResetting(true);
+    try {
+      const res = await fetch("/api/device-control/policy/reset-all", { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        setToast(`Reset selesai: ${data.updated} device diupdate`);
+      } else {
+        setToast("Gagal: " + data.error);
+      }
+    } catch (err: any) {
+      setToast("Gagal: " + err.message);
+    }
+    setResetting(false);
   }
 
   const online = devices.filter((d) => d.status === "online");
@@ -244,6 +262,9 @@ export default function MonitorListPage() {
 
         .gen-btn { border: 1px solid var(--border); background: #181823; color: var(--cyan); padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; white-space: nowrap; }
         .gen-btn:hover { border-color: var(--cyan); }
+        .reset-btn { border: 1px solid #3b2c1c; background: #1c1510; color: var(--yellow); padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+        .reset-btn:hover { border-color: var(--yellow); }
+        .reset-btn:disabled { opacity: .5; cursor: not-allowed; }
 
         .modal-overlay { position: fixed; inset: 0; background: #000a; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 20px; }
         .modal { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 24px; max-width: 640px; width: 100%; max-height: 90vh; overflow-y: auto; }
@@ -271,6 +292,7 @@ export default function MonitorListPage() {
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <button className="gen-btn" onClick={() => router.push("/monitor/overview")}>Fleet Overview</button>
           <button className="gen-btn" onClick={openCommandModal}>+ Generate Command</button>
+          <button className="reset-btn" disabled={resetting} onClick={resetAllPolicies}>{resetting ? "Resetting..." : "Reset All Policies"}</button>
           <span className="live"><span className="dot" /> LIVE</span>
         </div>
       </div>
