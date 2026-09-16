@@ -55,6 +55,27 @@ function pickHighlightPet(pets: Pet[], index: Record<string, string>): { highlig
   return { highlight, main };
 }
 
+function mutationClass(name: string): string {
+  const k = String(name || "").trim().toLowerCase();
+  if (!k) return "pg-mutation mut-default";
+  // Named mutations get their own colored badge; anything unknown falls back
+  // to the generic purple pill so the label still renders.
+  if (/^gold/.test(k)) return "pg-mutation mut-golden";
+  if (/^silver/.test(k)) return "pg-mutation mut-silver";
+  if (/^rainbow/.test(k)) return "pg-mutation mut-rainbow";
+  if (/^fract/.test(k) || k === "boss fractured") return "pg-mutation mut-fractured";
+  if (/^boss/.test(k)) return "pg-mutation mut-boss";
+  if (/^sakura/.test(k)) return "pg-mutation mut-sakura";
+  if (/^froz/.test(k) || k === "ice") return "pg-mutation mut-frozen";
+  if (/^magma/.test(k) || k === "lava") return "pg-mutation mut-magma";
+  if (/^candy/.test(k)) return "pg-mutation mut-candy";
+  if (/^shock/.test(k)) return "pg-mutation mut-shocked";
+  if (/^scare/.test(k)) return "pg-mutation mut-scared";
+  if (/^alpha/.test(k)) return "pg-mutation mut-alpha";
+  if (k === "2x" || /^double/.test(k)) return "pg-mutation mut-2x";
+  return "pg-mutation mut-default";
+}
+
 function rarityColor(rarity: string | null): string {
   switch (rarity) {
     case "Divine": return "#e879f9";
@@ -529,7 +550,21 @@ export default function DashboardPage() {
         .pg-meta { display: flex; align-items: center; gap: 6px; margin-top: 3px; flex-wrap: wrap; }
         .pg-rate { font-size: 11px; font-weight: 800; color: var(--gold); }
         .pg-rarity { font-size: 8px; font-weight: 800; padding: 1px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: .3px; }
-        .pg-mutation { font-size: 8px; font-weight: 700; color: var(--accent); background: rgba(167,139,250,.1); border: 1px solid rgba(167,139,250,.2); border-radius: 3px; padding: 0 4px; }
+        .pg-mutation { font-size: 8px; font-weight: 800; border-radius: 3px; padding: 1px 5px; text-transform: uppercase; letter-spacing: .3px; border: 1px solid transparent; }
+        .pg-mutation.mut-golden { color: #7c4a03; background: linear-gradient(135deg, #fde68a, #f59e0b); border-color: rgba(245,158,11,.5); text-shadow: 0 1px 0 rgba(255,255,255,.35); }
+        .pg-mutation.mut-silver { color: #4b5563; background: linear-gradient(135deg, #f3f4f6, #cbd5e1); border-color: rgba(148,163,184,.5); text-shadow: 0 1px 0 rgba(255,255,255,.35); }
+        .pg-mutation.mut-rainbow { color: #fff; background: linear-gradient(90deg, #ef4444, #f59e0b, #22d3ee, #22c55e, #a855f7); border-color: rgba(255,255,255,.2); text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+        .pg-mutation.mut-fractured { color: #fff; background: linear-gradient(135deg, #1a1030, #6d28d9); border-color: rgba(139,92,246,.5); text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+        .pg-mutation.mut-boss { color: #fff; background: linear-gradient(135deg, #7f1d1d, #b91c1c); border-color: rgba(239,68,68,.4); }
+        .pg-mutation.mut-sakura { color: #831843; background: linear-gradient(135deg, #fbcfe8, #f472b6); border-color: rgba(244,114,182,.4); }
+        .pg-mutation.mut-frozen { color: #0c4a6e; background: linear-gradient(135deg, #bae6fd, #38bdf8); border-color: rgba(56,189,248,.4); text-shadow: 0 1px 0 rgba(255,255,255,.35); }
+        .pg-mutation.mut-magma { color: #fff; background: linear-gradient(135deg, #ea580c, #dc2626); border-color: rgba(220,38,38,.5); text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+        .pg-mutation.mut-candy { color: #831843; background: linear-gradient(135deg, #fbcfe8, #fda4af, #fde68a); border-color: rgba(251,113,133,.4); }
+        .pg-mutation.mut-shocked { color: #422006; background: linear-gradient(135deg, #fef08a, #facc15); border-color: rgba(234,179,8,.5); }
+        .pg-mutation.mut-scared { color: #e5e7eb; background: linear-gradient(135deg, #1f2937, #4b5563); border-color: rgba(107,114,128,.4); }
+        .pg-mutation.mut-alpha { color: #fff; background: linear-gradient(135deg, #4c1d95, #7c3aed); border-color: rgba(139,92,246,.5); text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+        .pg-mutation.mut-2x { color: #fff; background: linear-gradient(135deg, #b45309, #f97316); border-color: rgba(249,115,22,.5); text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+        .pg-mutation.mut-default { color: #c4b5fd; background: rgba(167,139,250,.1); border-color: rgba(167,139,250,.25); }
         .pg-weight { font-size: 9px; color: var(--dim); }
 
         /* Growing egg card */
@@ -832,7 +867,7 @@ function PetGrid({ pets, idx }: { pets: Pet[]; idx: Record<string, string> }) {
               <div className="pg-meta">
                 <span className="pg-rate">{fmtRate(p.rate)}</span>
                 {rar && <span className="pg-rarity" style={{ background: rc + "18", color: rc, border: `1px solid ${rc}33` }}>{rar}</span>}
-                {(Array.isArray(p.mutations) ? p.mutations : []).map((m, j) => <span key={j} className="pg-mutation">{m}</span>)}
+                {(Array.isArray(p.mutations) ? p.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{m}</span>)}
               </div>
               {p.weight != null && <div className="pg-weight">{Number(p.weight).toLocaleString()} Kg</div>}
             </div>
@@ -878,6 +913,7 @@ function GrowingEggGrid({ eggs, idx }: { eggs: Pet[]; idx: Record<string, string
               <div className="egg-sub">
                 <span className="egg-rate">{fmtRate(egg.rate)}</span>
                 {rar && <span className="pg-rarity" style={{ background: rc + "18", color: rc, border: `1px solid ${rc}33` }}>{rar}</span>}
+                {(Array.isArray(egg.mutations) ? egg.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{m}</span>)}
               </div>
               <div style={{ marginTop: 3 }}>
                 {isReady ? (
