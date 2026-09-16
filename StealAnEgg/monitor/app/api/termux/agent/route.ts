@@ -553,7 +553,10 @@ local function launch_app(pkg, bounds, resize, delay, target, forceKill)
     end
   end
 
-  if target and target ~= "" then
+  -- Only use VIEW intent for roblox:// deep links. Plain https:// URLs
+  -- (e.g. roblox.com/home) open a browser instead of the app and timeout.
+  local use_target = target and target ~= "" and target:sub(1,9) == "roblox://"
+  if use_target then
     log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset .. C.dim .. " -> " .. target .. C.reset)
     local safe = target:gsub('"', '\\\\"')
     local ok = shellcode(string.format(
@@ -564,6 +567,9 @@ local function launch_app(pkg, bounds, resize, delay, target, forceKill)
       shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
     end
   else
+    if target and target ~= "" then
+      log(C.yellow .. "[" .. ts() .. "] ignoring non-deeplink target: " .. target .. C.reset)
+    end
     log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset)
     shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
   end
@@ -599,7 +605,8 @@ end
 -- Rapid-fire an am start for one package WITHOUT waiting for it to finish
 -- initializing. No kill — just am start.
 local function fire_start(pkg, target)
-  if target and target ~= "" then
+  local use_target = target and target ~= "" and target:sub(1,9) == "roblox://"
+  if use_target then
     local safe = target:gsub('"', '\\\\"')
     local ok = shellcode(string.format(
       'su -c "am start -a android.intent.action.VIEW -d \\\\"%s\\\\" -p %s"',

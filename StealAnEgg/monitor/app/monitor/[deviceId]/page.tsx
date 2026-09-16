@@ -119,8 +119,10 @@ function parseRobloxTarget(input: string): string {
       return `roblox://navigation/share_links?code=${shareCode}&type=Server`;
     }
   } catch {}
-  // Nothing recognizable -- return as-is so the agent can try it anyway.
-  return s;
+  // Nothing recognizable -- reject it so a bare homepage URL like
+  // https://www.roblox.com/home doesn't get sent as a VIEW intent
+  // (opens a browser instead of the Roblox app and always times out).
+  return "";
 }
 
 function shortTarget(t?: string): string {
