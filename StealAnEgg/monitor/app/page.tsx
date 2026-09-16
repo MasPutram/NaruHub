@@ -338,18 +338,11 @@ export default function DashboardPage() {
       const body = await res.json();
       if (!res.ok || !body.ok) { setGenMsg(account, "Gagal: " + (body.error || "unknown"), "#f87171"); return; }
       setAccounts((prev) => prev.filter((a) => a.sourceAccount !== account));
-      setGenMsg(account, "Akun dipindah, membuka package buat logout...", "var(--dim)");
-      try {
-        const lres = await fetch("/api/device-control/launch-by-username", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: account }),
-        });
-        const lbody = await lres.json();
-        if (lres.ok && lbody.ok) setGenMsg(account, `Package dibuka di ${lbody.hostname}.`, "var(--green)");
-        else setGenMsg(account, "Katalog OK, tapi launch gagal: " + (lbody.error || "unknown"), "#f59e0b");
-      } catch (e: any) {
-        setGenMsg(account, "Katalog OK, tapi launch error: " + e.message, "#f59e0b");
-      }
+      // Script (StealAnEgg.luau) polls /api/monitor and sees forSale:true in the
+      // next heartbeat response -- it Kicks the clone to Roblox home so the
+      // operator can manually log out. No relaunch needed: the auto-rejoin
+      // brain now skips a running-but-not-in-game app (home screen).
+      setGenMsg(account, "Katalog OK. Script Kick ke home dalam ~10 detik.", "var(--green)");
     } catch (e: any) {
       setGenMsg(account, "Gagal: " + e.message, "#f87171");
     }

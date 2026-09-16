@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, forSaleKey, accountKey, detailKey } from "@/lib/redis";
+import { redis, forSaleKey, accountKey, detailKey, forSaleKickKey, FORSALE_KICK_TTL_S } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
 
@@ -35,8 +35,15 @@ export async function POST(req: NextRequest) {
       // logged out (the Siap Jual force-stop), nothing recreates these keys.
       await redis.del(accountKey(account));
       await redis.del(detailKey(account));
+      // Arm the one-shot Kick signal for the in-game script. The heartbeat
+      // will see forSale:true in the /api/monitor response and Kick the clone
+      // to Roblox home so the operator can log out manually. TTL expires the
+      // signal if the clone is offline; operator re-clicks Siap Jual to re-arm.
+      await redis.set(forSaleKickKey(account), "1", { ex: FORSALE_KICK_TTL_S });
     } else {
       await redis.del(fsKey);
+      // Cancel any pending Kick if Siap Jual is un-toggled before the script sees it.
+      await redis.del(forSaleKickKey(account));
     }
     return NextResponse.json({ ok: true, account, forSale: !!forSale });
   } catch (e: any) {

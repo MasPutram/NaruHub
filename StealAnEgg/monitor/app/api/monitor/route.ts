@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, accountKey, detailKey, forSaleKey, soldKey, ACCOUNT_TTL_S, petIconKey, PET_ICON_TTL_S } from "@/lib/redis";
+import { redis, accountKey, detailKey, forSaleKey, soldKey, ACCOUNT_TTL_S, petIconKey, PET_ICON_TTL_S, forSaleKickKey } from "@/lib/redis";
 
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
@@ -24,12 +24,25 @@ export async function POST(req: NextRequest) {
     // reappearing in the dashboard as "offline". A short-circuit here makes
     // "Siap Jual" a sticky state: nothing an executor sends can bring the
     // account back onto the main dashboard.
-    const [fsExists, soldExists] = await Promise.all([
+    const [fsExists, soldExists, kickExists] = await Promise.all([
       redis.get<string>(forSaleKey(name)),
       redis.get<string>(soldKey(name)),
+      redis.get<string>(forSaleKickKey(name)),
     ]);
+    // One-shot Kick signal: armed by /api/mark-forsale, consumed on the first
+    // heartbeat that sees it so the script LocalPlayer:Kick("Siap Jual")s exactly
+    // once. If the operator manually launches the account again later, no key
+    // to trigger another Kick (unless Siap Jual is re-clicked).
+    const shouldKick = !!kickExists;
+    if (shouldKick) {
+      await redis.del(forSaleKickKey(name));
+    }
     if (fsExists || soldExists) {
-      return NextResponse.json({ ok: true, suppressed: fsExists ? "forsale" : "sold" });
+      return NextResponse.json({
+        ok: true,
+        suppressed: fsExists ? "forsale" : "sold",
+        ...(shouldKick ? { forSale: true } : {}),
+      });
     }
 
     const now = Date.now() / 1000;
@@ -95,7 +108,7 @@ export async function POST(req: NextRequest) {
 
     await pipeline.exec();
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, ...(shouldKick ? { forSale: true } : {}) });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }

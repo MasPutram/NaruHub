@@ -20,6 +20,18 @@ export function forSaleKey(name: string) {
   return `forsale:${name}`;
 }
 
+// One-shot Kick signal for the in-game script. Set by /api/mark-forsale when
+// the operator clicks "Siap Jual"; the script polls /api/monitor and, when the
+// response echoes forSale:true, LocalPlayer:Kick("Siap Jual") -> Roblox home.
+// Distinct prefix from forSaleKey so /api/catalog-accounts' `forsale:*` scan
+// never picks this up. TTL is short: if the clone is offline when Siap Jual is
+// clicked, the signal auto-expires and the operator can just click again after
+// the clone comes back.
+export function forSaleKickKey(name: string) {
+  return `forsalekick:${name}`;
+}
+export const FORSALE_KICK_TTL_S = 300; // 5 minutes
+
 export function soldKey(name: string) {
   return `sold:${name}`;
 }
