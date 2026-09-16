@@ -598,11 +598,11 @@ local function do_hop()
 end
 
 section:AddButton({
-	Title = "Hop Server (adaptive: 1-3p, fallback 1-5p, then any populated)",
+	Title = "Leave Game (balik ke Roblox home)",
 	Callback = function()
-		if hopBusy then return end
-		hopBusy = true
-		task.spawn(do_hop)
+		pcall(function()
+			LocalPlayer:Kick("Leave via NaruHub")
+		end)
 	end,
 })
 
