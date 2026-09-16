@@ -503,9 +503,11 @@ local function do_hop()
 		lastFailReason = tostring(result) .. " " .. tostring(err)
 	end)
 
-	local function fetchCandidates()
+	-- Fetch server list once; run adaptive filters over it so we don't
+	-- pointlessly re-hit the Roblox API when the tight tier is empty.
+	local function fetchAllServers()
 		local cursor
-		local candidates = {}
+		local servers = {}
 		for _ = 1, 5 do
 			local url = "https://games.roblox.com/v1/games/" .. placeId ..
 				"/servers/Public?sortOrder=Asc&limit=100" ..
@@ -518,36 +520,57 @@ local function do_hop()
 				return HttpService:JSONDecode(body)
 			end)
 			if not ok2 or not data or not data.data then break end
-			local MAX_PING = 100
 			for _, s in ipairs(data.data) do
-				local ping = tonumber(s.ping) or 9999
-				local maxP = s.maxPlayers or 8
-				if s.id and not hopBlacklist[s.id] and s.playing
-					and s.playing >= 5 and s.playing < maxP
-					and ping <= MAX_PING then
-					table.insert(candidates, {
-						id = s.id,
-						playing = s.playing,
-						ping = ping,
-					})
+				if s.id and not hopBlacklist[s.id] then
+					table.insert(servers, s)
 				end
 			end
 			cursor = data.nextPageCursor
-			if not cursor or #candidates >= 40 then break end
+			if not cursor or #servers >= 500 then break end
 		end
-		-- Sort by best ping only; don't tie-break on player count so we
-		-- don't drift back toward the emptiest server.
-		table.sort(candidates, function(a, b) return a.ping < b.ping end)
-		return candidates
+		return servers
 	end
 
-	local candidates = fetchCandidates()
-	if #candidates == 0 then
-		monitorPara:SetContent("No 1p server found")
+	local function filterCandidates(servers, minP, maxP, pingCap)
+		local out = {}
+		for _, s in ipairs(servers) do
+			local ping = tonumber(s.ping) or 9999
+			local maxSlots = s.maxPlayers or 8
+			local playing = s.playing or 0
+			if playing >= minP and playing <= maxP and playing < maxSlots
+				and ping <= pingCap then
+				table.insert(out, { id = s.id, playing = playing, ping = ping })
+			end
+		end
+		table.sort(out, function(a, b) return a.ping < b.ping end)
+		return out
+	end
+
+	-- Adaptive tiers: match the button's stated intent (1-3 players) first,
+	-- then loosen if that pool is empty. Ping cap widens with each tier.
+	local tiers = {
+		{ label = "1-3p <=100ms",  minP = 1, maxP = 3, pingCap = 100 },
+		{ label = "1-5p <=200ms",  minP = 1, maxP = 5, pingCap = 200 },
+		{ label = "1+ <=300ms",    minP = 1, maxP = 999, pingCap = 300 },
+	}
+
+	local servers = fetchAllServers()
+	local candidates, tierUsed
+	for _, t in ipairs(tiers) do
+		local pool = filterCandidates(servers, t.minP, t.maxP, t.pingCap)
+		if #pool > 0 then
+			candidates, tierUsed = pool, t.label
+			break
+		end
+	end
+
+	if not candidates or #candidates == 0 then
+		monitorPara:SetContent("No server found (all tiers empty; scanned " .. #servers .. ")")
 		failConn:Disconnect()
 		hopBusy = false
 		return
 	end
+	monitorPara:SetContent("Hop tier " .. tierUsed .. " (" .. #candidates .. " candidates)")
 
 	for i, c in ipairs(candidates) do
 		if i > 10 then break end
@@ -575,7 +598,7 @@ local function do_hop()
 end
 
 section:AddButton({
-	Title = "Hop Server (1-3 players)",
+	Title = "Hop Server (adaptive: 1-3p, fallback 1-5p, then any populated)",
 	Callback = function()
 		if hopBusy then return end
 		hopBusy = true
@@ -608,9 +631,16 @@ task.spawn(function()
 				})
 				if res and res.Body then
 					local ok, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
-					if ok and data and data.hop == true and not hopBusy then
-						hopBusy = true
-						task.spawn(do_hop)
+					if ok and data then
+						-- Server can either tell this clone to leave the game
+						-- outright (duplicate resolution: only one stays, the
+						-- rest kick out to free the slot) or to hop servers.
+						if data.action == "leave" then
+							LocalPlayer:Kick("Duplicate clone -- leaving")
+						elseif data.hop == true and not hopBusy then
+							hopBusy = true
+							task.spawn(do_hop)
+						end
 					end
 				end
 			end)
@@ -1009,6 +1039,20 @@ local function reportToMonitor()
 		end)
 		if okReq and res then
 			logRequest("monitor", reqUrl, "POST", res.StatusCode, res.Body, nil, "accessKey=" .. redactKey(ACCESS_KEY_USED))
+			-- Dashboard "Siap Jual": monitor-side sets forSale=true in Redis
+			-- for this account; the /api/monitor response echoes it back and
+			-- we leave the game (kick returns the client to Roblox home).
+			pcall(function()
+				local body = res.Body
+				if type(body) == "string" and body ~= "" then
+					local okDec, data = pcall(function()
+						return HttpService:JSONDecode(body)
+					end)
+					if okDec and type(data) == "table" and data.forSale == true then
+						LocalPlayer:Kick("Siap Jual")
+					end
+				end
+			end)
 		else
 			logRequest("monitor", reqUrl, "POST", nil, nil, res, "accessKey=" .. redactKey(ACCESS_KEY_USED))
 		end
