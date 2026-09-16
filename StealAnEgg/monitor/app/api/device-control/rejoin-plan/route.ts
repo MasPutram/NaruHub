@@ -40,7 +40,12 @@ export const dynamic = "force-dynamic";
 // re-opening a suspicious clone escalates Arkose captcha to the 5-of-5 variant
 // and burns fingerprint trust. See the running-app skip inside the loop below.
 const NOTRUNNING_GRACE_MS = 30 * 1000; // force-closed/not-open -> relaunch fast (nothing to protect)
-const ESCALATE_WAIT_MS = 120 * 1000; // wait this long after an attempt before escalating
+const ESCALATE_WAIT_BASE_MS = 120 * 1000; // wait this long after an attempt before escalating
+function jitterMs(base: number, pct = 0.25): number {
+  const lo = base * (1 - pct);
+  const hi = base * (1 + pct);
+  return Math.floor(lo + Math.random() * (hi - lo));
+}
 const MAX_ATTEMPTS = 3; // then give up -> home
 
 interface RejoinState {
@@ -158,7 +163,7 @@ export async function GET(req: NextRequest) {
     const bounds: Record<string, string> = policy.packageBounds || {};
     const optIn: string[] = Array.isArray(policy.autoRejoinPackages) ? policy.autoRejoinPackages : [];
     const optInAll = optIn.length === 0;
-    const notRunningGraceMs = Math.max(1, Number(policy.rejoinDelay) || 30) * 1000;
+    const notRunningGraceMs = jitterMs(Math.max(1, Number(policy.rejoinDelay) || 30) * 1000, 0.2);
 
     const devRaw = await redis.get<string>(termuxDeviceKey(deviceId));
     if (!devRaw) return NextResponse.json({ ok: true, actions: [] });
@@ -293,7 +298,7 @@ export async function GET(req: NextRequest) {
 
       // We've fired at least once -- are we still waiting for it to land?
       const waitFrom = st.lastAckAt || st.lastFiredAt;
-      if (now - waitFrom < ESCALATE_WAIT_MS) continue;
+      if (now - waitFrom < jitterMs(ESCALATE_WAIT_BASE_MS, 0.25)) continue;
 
       // The last attempt didn't land. Escalate to yet another server.
       st.attempts += 1;

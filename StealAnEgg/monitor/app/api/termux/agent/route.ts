@@ -77,6 +77,14 @@ local function sleep(n)
   if n > 0 then os.execute("sleep " .. n) end
 end
 
+math.randomseed(os.time() + (tonumber(tostring({}):match("0x(%x+)")) or 0))
+local function jitter(base, pct)
+  pct = pct or 0.2
+  local lo = base * (1 - pct)
+  local hi = base * (1 + pct)
+  return lo + math.random() * (hi - lo)
+end
+
 local function fread(path)
   local f = io.open(path, "r")
   if not f then return nil end
@@ -585,7 +593,7 @@ local function launch_app(pkg, bounds, resize, delay, target, forceKill)
   end
 
   delay = tonumber(delay) or 10
-  if delay > 0 then sleep(delay) end
+  if delay > 0 then sleep(math.floor(jitter(delay, 0.25))) end
 end
 
 -- Rapid-fire an am start for one package WITHOUT waiting for it to finish
@@ -676,7 +684,7 @@ end
 -- SILENT -- it must never call log() itself, or it would refill the very
 -- buffer it drains. On failure it puts the lines back (respecting the cap)
 -- so a brief server blip doesn't lose them.
-local LAST_LOG_FLUSH = 0
+local NEXT_LOG_FLUSH = 0
 local LOG_FLUSH_INTERVAL = 3
 local function flush_logs()
   if not DEVICE_ID or #LOG_BUFFER == 0 then return end
@@ -765,7 +773,7 @@ end
 -- policy itself is polled less often (POLICY_POLL_INTERVAL) to avoid
 -- hammering the server.
 local POLICY_POLL_INTERVAL = 15  -- seconds
-local LAST_POLICY_POLL = 0
+local LAST_POLICY_POLL = 0 -- unused, kept for compat
 local CACHED_POLICY = nil        -- last successful poll result (or nil)
 local WAS_RUNNING = {}           -- pkg -> true if seen in am stack list last check
 local PENDING_REJOIN = {}        -- pkg -> os.time() when we should relaunch
@@ -780,11 +788,12 @@ local STUCK_SINCE = {}
 -- a clone that's still on its way into the game.
 local STUCK_GRACE = 120
 
+local NEXT_POLICY_POLL = 0
 local function poll_policy_if_due()
   if not DEVICE_ID then return end
   local now = os.time()
-  if now - LAST_POLICY_POLL < POLICY_POLL_INTERVAL then return end
-  LAST_POLICY_POLL = now
+  if now < NEXT_POLICY_POLL then return end
+  NEXT_POLICY_POLL = now + math.floor(jitter(POLICY_POLL_INTERVAL, 0.3))
   local body = http_get("/api/device-control/policy?deviceId=" .. DEVICE_ID)
   if body == "" then return end
   local ok, parsed = pcall(json.decode, body)
@@ -876,8 +885,8 @@ local function maybe_auto_rejoin()
   poll_policy_if_due()
   if DEVICE_ID then
     local now = os.time()
-    if now - LAST_PLAN_POLL >= PLAN_POLL_INTERVAL then
-      LAST_PLAN_POLL = now
+    if now >= LAST_PLAN_POLL then
+      LAST_PLAN_POLL = now + math.floor(jitter(PLAN_POLL_INTERVAL, 0.3))
       local body = http_get("/api/device-control/rejoin-plan?deviceId=" .. DEVICE_ID)
       local ok, parsed = pcall(json.decode, body)
       if ok and parsed and parsed.actions then
@@ -891,7 +900,7 @@ local function maybe_auto_rejoin()
               http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
             else
               local bnds = act.bounds or ""
-              local delay = (i == 1) and 0 or rejoinDelay
+              local delay = (i == 1) and 0 or math.floor(jitter(rejoinDelay, 0.3))
               log(C.cyan .. "[" .. ts() .. "] auto-rejoin " .. act.pkg ..
                 (act.target ~= "" and (" -> " .. act.target) or "") ..
                 (delay > 0 and (" (wait " .. delay .. "s)") or "") .. C.reset)
@@ -1206,8 +1215,9 @@ while true do
   stop_ws()
   local ok = start_ws(DEVICE_ID)
   if not ok then
-    log(C.red .. "[" .. ts() .. "] connect failed, retry in " .. RECONNECT_DELAY .. "s" .. C.reset)
-    sleep(RECONNECT_DELAY)
+    local cf_wait = math.floor(jitter(RECONNECT_DELAY, 0.4))
+    log(C.red .. "[" .. ts() .. "] connect failed, retry in " .. cf_wait .. "s" .. C.reset)
+    sleep(cf_wait)
     goto continue
   end
 
@@ -1244,13 +1254,13 @@ while true do
   log(C.green .. "[" .. ts() .. "] online - streaming" .. C.reset)
   log(C.dim .. "Press Ctrl+C to stop." .. C.reset)
 
-  local last_heartbeat = os.time()
+  local next_heartbeat = os.time() + math.floor(jitter(HEARTBEAT_INTERVAL, 0.25))
 
   while true do
     local now = os.time()
 
     -- Heartbeat via WS
-    if now - last_heartbeat >= HEARTBEAT_INTERVAL then
+    if now >= next_heartbeat then
       local pkgs = collect_packages()
       local screen = collect_screen()
       local stats = collect_stats()
@@ -1277,7 +1287,7 @@ while true do
         stats = stats,
       })
       http_heartbeat(pkgs, screen, stats, running)
-      last_heartbeat = now
+      next_heartbeat = now + math.floor(jitter(HEARTBEAT_INTERVAL, 0.25))
     end
 
     -- Poll HTTP commands (dashboard queues commands via HTTP API)
@@ -1353,9 +1363,9 @@ while true do
     maybe_auto_rejoin()
 
     -- Stream buffered log lines to the dashboard console.
-    if now - LAST_LOG_FLUSH >= LOG_FLUSH_INTERVAL then
+    if now >= NEXT_LOG_FLUSH then
       flush_logs()
-      LAST_LOG_FLUSH = now
+      NEXT_LOG_FLUSH = now + math.floor(jitter(LOG_FLUSH_INTERVAL, 0.3))
     end
 
     -- Check websocat alive
@@ -1364,11 +1374,12 @@ while true do
       break
     end
 
-    sleep(1)
+    sleep(math.random(1, 2))
   end
 
-  log(C.yellow .. "[" .. ts() .. "] reconnecting in " .. RECONNECT_DELAY .. "s..." .. C.reset)
-  sleep(RECONNECT_DELAY)
+  local rc_wait = math.floor(jitter(RECONNECT_DELAY, 0.4))
+  log(C.yellow .. "[" .. ts() .. "] reconnecting in " .. rc_wait .. "s..." .. C.reset)
+  sleep(rc_wait)
 
   ::continue::
 end

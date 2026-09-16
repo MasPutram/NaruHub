@@ -18,8 +18,9 @@ set -e
 echo '=== NARUHUB agent starting (auto-restart on exit) ==='
 while true; do
   curl -s "https://naruhub.my.id/api/termux/agent?key=${key}" | lua5.4
-  echo "[agent exited, restarting in 5s...]"
-  sleep 5
+  WAIT=$((3 + RANDOM % 5))
+  echo "[agent exited, restarting in $WAIT s...]"
+  sleep $WAIT
 done
 `;
 

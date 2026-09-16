@@ -50,7 +50,7 @@ task.spawn(function()
 				placeId = placeId,
 			})
 		end
-		task.wait(INTERVAL)
+		task.wait(INTERVAL + math.random(-12, 12))
 	end
 end)
 `;
