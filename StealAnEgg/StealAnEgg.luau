@@ -482,121 +482,7 @@ section:AddToggle("AutoBossShopToggle", {
 	end,
 })
 
--- Per-exec Hop blacklist. Every server this session hops FROM is added
--- so we don't bounce back into it. Empty on script (re-)exec, so a fresh
--- run doesn't inherit blacklists from earlier sessions.
-local hopBlacklist = {}
-local hopBusy = false
-
-local function do_hop()
-	local TeleportService = game:GetService("TeleportService")
-	local HttpService = game:GetService("HttpService")
-	local placeId = game.PlaceId
-	local currentJobId = game.JobId
-
-	if currentJobId and currentJobId ~= "" then
-		hopBlacklist[currentJobId] = true
-	end
-
-	local lastFailReason
-	local failConn = TeleportService.TeleportInitFailed:Connect(function(_, result, err)
-		lastFailReason = tostring(result) .. " " .. tostring(err)
-	end)
-
-	-- Fetch server list once; run adaptive filters over it so we don't
-	-- pointlessly re-hit the Roblox API when the tight tier is empty.
-	local function fetchAllServers()
-		local cursor
-		local servers = {}
-		for _ = 1, 5 do
-			local url = "https://games.roblox.com/v1/games/" .. placeId ..
-				"/servers/Public?sortOrder=Asc&limit=100" ..
-				(cursor and ("&cursor=" .. cursor) or "")
-			local ok, body = pcall(function()
-				return game:HttpGet(url)
-			end)
-			if not ok then break end
-			local ok2, data = pcall(function()
-				return HttpService:JSONDecode(body)
-			end)
-			if not ok2 or not data or not data.data then break end
-			for _, s in ipairs(data.data) do
-				if s.id and not hopBlacklist[s.id] then
-					table.insert(servers, s)
-				end
-			end
-			cursor = data.nextPageCursor
-			if not cursor or #servers >= 500 then break end
-		end
-		return servers
-	end
-
-	local function filterCandidates(servers, minP, maxP, pingCap)
-		local out = {}
-		for _, s in ipairs(servers) do
-			local ping = tonumber(s.ping) or 9999
-			local maxSlots = s.maxPlayers or 8
-			local playing = s.playing or 0
-			if playing >= minP and playing <= maxP and playing < maxSlots
-				and ping <= pingCap then
-				table.insert(out, { id = s.id, playing = playing, ping = ping })
-			end
-		end
-		table.sort(out, function(a, b) return a.ping < b.ping end)
-		return out
-	end
-
-	-- Adaptive tiers: match the button's stated intent (1-3 players) first,
-	-- then loosen if that pool is empty. Ping cap widens with each tier.
-	local tiers = {
-		{ label = "1-3p <=100ms",  minP = 1, maxP = 3, pingCap = 100 },
-		{ label = "1-5p <=200ms",  minP = 1, maxP = 5, pingCap = 200 },
-		{ label = "1+ <=300ms",    minP = 1, maxP = 999, pingCap = 300 },
-	}
-
-	local servers = fetchAllServers()
-	local candidates, tierUsed
-	for _, t in ipairs(tiers) do
-		local pool = filterCandidates(servers, t.minP, t.maxP, t.pingCap)
-		if #pool > 0 then
-			candidates, tierUsed = pool, t.label
-			break
-		end
-	end
-
-	if not candidates or #candidates == 0 then
-		monitorPara:SetContent("No server found (all tiers empty; scanned " .. #servers .. ")")
-		failConn:Disconnect()
-		hopBusy = false
-		return
-	end
-	monitorPara:SetContent("Hop tier " .. tierUsed .. " (" .. #candidates .. " candidates)")
-
-	for i, c in ipairs(candidates) do
-		if i > 10 then break end
-		monitorPara:SetContent(string.format("Hop try %d (%dp, %dms)", i, c.playing, c.ping))
-		lastFailReason = nil
-		pcall(function()
-			TeleportService:TeleportToPlaceInstance(placeId, c.id, LocalPlayer)
-		end)
-		local waited = 0
-		while waited < 8 and lastFailReason == nil do
-			task.wait(0.5)
-			waited += 0.5
-		end
-		if lastFailReason == nil then
-			break
-		end
-		hopBlacklist[c.id] = true
-	end
-
-	failConn:Disconnect()
-	if lastFailReason then
-		monitorPara:SetContent("Hop failed: " .. lastFailReason:sub(1, 30))
-	end
-	hopBusy = false
-end
-
+-- Manual leave button: click to kick this clone back to Roblox home.
 section:AddButton({
 	Title = "Leave Game (balik ke Roblox home)",
 	Callback = function()
@@ -606,13 +492,14 @@ section:AddButton({
 	end,
 })
 
--- Coordinator poll: ask the server whether this clone should hop.
--- Server picks exactly one clone to stay when multiple of our accounts
--- land in the same jobId; the rest get told to hop.
+-- Coordinator poll: ask the server whether this clone should leave.
+-- Any positive signal (action:"leave" OR the legacy hop:true) now just
+-- kicks the clone back to Roblox home -- no in-place server hopping any
+-- more, so duplicate resolution / anti-crowding always ends at home.
 task.spawn(function()
 	task.wait(20) -- let the script settle after join / re-exec
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		if not hopBusy and game.JobId and game.JobId ~= "" then
+		if game.JobId and game.JobId ~= "" then
 			pcall(function()
 				local body = HttpService:JSONEncode({
 					account = LocalPlayer.Name,
@@ -631,16 +518,8 @@ task.spawn(function()
 				})
 				if res and res.Body then
 					local ok, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
-					if ok and data then
-						-- Server can either tell this clone to leave the game
-						-- outright (duplicate resolution: only one stays, the
-						-- rest kick out to free the slot) or to hop servers.
-						if data.action == "leave" then
-							LocalPlayer:Kick("Duplicate clone -- leaving")
-						elseif data.hop == true and not hopBusy then
-							hopBusy = true
-							task.spawn(do_hop)
-						end
+					if ok and data and (data.action == "leave" or data.hop == true) then
+						LocalPlayer:Kick("Server told me to leave")
 					end
 				end
 			end)
