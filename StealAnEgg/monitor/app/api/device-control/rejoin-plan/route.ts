@@ -19,8 +19,14 @@ import {
 // State machine per package (target set + auto-rejoin on + opted in + not
 // paused):
 //   in-game (fresh heartbeat)        -> healthy, clear state
-//   stale < 300s                     -> grace, wait
-//   stale >= 300s, attempt 0         -> attempt 1: rejoin to the PLACE (random server)
+//   RUNNING but no fresh heartbeat   -> SKIP (home / loading / error 279 /
+//                                       Kicked by Siap Jual or should-hop).
+//                                       Blindly re-launching triggers Arkose
+//                                       captcha escalation. The operator (or
+//                                       the process dying naturally) decides.
+//   FORCE-CLOSED, stale < grace       -> wait
+//   FORCE-CLOSED, stale >= grace      -> attempt 1: rejoin to a SPECIFIC server
+//                                       (avoids matchmaker dropping into the same server)
 //   prior attempt, waited < 120s     -> still waiting for the join to land
 //   prior attempt, waited >= 120s    -> failed: attempt 2/3 -> a SPECIFIC server
 //                                       (Roblox server list minus the ones that failed)
@@ -28,10 +34,11 @@ import {
 
 export const dynamic = "force-dynamic";
 
-// Running-but-no-heartbeat = maybe loading, maybe wedged (e.g. Error 279). We
-// can't read the screen to tell them apart, so we wait a grace that safely
-// clears a normal load (~40s here) before force-stopping. 120s = 3x load.
-const STUCK_THRESHOLD_MS = 120 * 1000;
+// Running-but-no-heartbeat = maybe loading, maybe wedged (e.g. Error 279),
+// maybe on Roblox home after a Kick. The brain no longer touches those cases;
+// it only re-launches when the app is force-closed. Rationale: repeatedly
+// re-opening a suspicious clone escalates Arkose captcha to the 5-of-5 variant
+// and burns fingerprint trust. See the running-app skip inside the loop below.
 const NOTRUNNING_GRACE_MS = 30 * 1000; // force-closed/not-open -> relaunch fast (nothing to protect)
 const ESCALATE_WAIT_MS = 120 * 1000; // wait this long after an attempt before escalating
 const MAX_ATTEMPTS = 3; // then give up -> home
@@ -235,8 +242,20 @@ export async function GET(req: NextRequest) {
       }
       if (st.gaveUp) continue;
 
+      // Only auto-rejoin when the app is force-closed. If the process is still
+      // running but no fresh in-game heartbeat, the clone is on Roblox home
+      // (Siap Jual Kick, manual leave, should-hop leave), still loading, or
+      // wedged on an error / reconnect screen (e.g. code 279). Blindly
+      // re-launching in those states re-opens the same "unusual activity"
+      // trail Arkose watches and escalates captcha to the 5-of-5 variant.
+      // Wait for the operator to decide (or for the process to actually die
+      // via LMK / crash, which flips this to force-closed and rejoin resumes).
+      if (runningSet.has(pkg)) {
+        continue;
+      }
+
       if (st.attempts === 0) {
-        // Anchor the 300s grace on the clone's OWN launch or its last in-game
+        // Anchor the grace on the clone's OWN launch or its last in-game
         // heartbeat -- whichever is later -- so a clone that failed early in a
         // long batch is judged from its own launch, and one that dropped after
         // playing gets a fresh grace from when it was last alive. Falls back to
@@ -250,20 +269,10 @@ export async function GET(req: NextRequest) {
           }
           anchor = st.staleSince;
         }
-        // Split the grace by process state:
-        //  - NOT running (force-closed / never opened) -> fast reopen using
-        //    policy.rejoinDelay. Nothing is loading so we can be aggressive.
-        //  - RUNNING (loading OR stuck on an error/reconnect screen) -> use
-        //    the loading-safe STUCK_THRESHOLD_MS. A normal Roblox cold-start
-        //    on cloud phones is ~40-60s; if we treated running the same as
-        //    dead we'd fire the force-stop mid-load and kill a clone that was
-        //    about to join. The operator saw exactly that: "force stop not
-        //    running padahal dia lagi ngeload".
-        const isRunning = runningSet.has(pkg);
-        const graceMs = isRunning
-          ? Math.max(STUCK_THRESHOLD_MS, notRunningGraceMs)
-          : notRunningGraceMs;
-        if (now - anchor < graceMs) {
+        // Fast reopen: app is not running so there's nothing loading to
+        // protect. We only reach here when the app is force-closed (the
+        // running-app skip above handles every other case).
+        if (now - anchor < notRunningGraceMs) {
           await save();
           continue;
         }
