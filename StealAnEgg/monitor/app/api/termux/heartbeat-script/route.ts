@@ -8,7 +8,7 @@ const HEARTBEAT_SCRIPT = `-- heartbeatnaru.lua (auto-deployed by NaruHub agent)
 local BASE_URL = "https://naruhub.my.id"
 local ACCESS_KEY = "$$LICENSE$$"
 local DEVICE_ID = "$$DEVICEID$$"
-local INTERVAL = 20
+local INTERVAL = 60
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
