@@ -46,6 +46,12 @@ export async function GET(req: NextRequest) {
       allPets: data.allPets || [],
       growingEggs: data.growingEggs || [],
       backpackEggs: data.backpackEggs || [],
+      // Passthrough for the redesigned detail modal's STOLEN and TOOLS tabs.
+      // The in-game script may or may not populate these -- the modal shows
+      // an empty state when they aren't sent, so having the fields absent
+      // (or [] here) is safe.
+      stolenItems: data.stolenItems || data.stolen || [],
+      tools: data.tools || [],
     });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });

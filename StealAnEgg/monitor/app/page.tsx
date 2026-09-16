@@ -11,6 +11,12 @@ interface Pet {
   ready?: boolean;
   remainingSeconds?: number;
   rarity?: string;
+  uid?: string;
+  // Presentation-only flags added by DetailModal.petsForTab; not part of the
+  // API response. `_equipped` marks a pet currently in the equip slot,
+  // `_bag` marks one sitting in the backpack (or a backpack egg).
+  _equipped?: boolean;
+  _bag?: boolean;
 }
 
 let iconIndex: Record<string, string> | null = null;
@@ -132,12 +138,29 @@ interface Account {
   forSale?: boolean;
 }
 
+interface StolenItem {
+  category?: string;
+  name?: string;
+  rate?: number;
+  weight?: number;
+  mutations?: string[];
+  fromAccount?: string;
+  stolenAt?: number;
+}
+interface ToolItem {
+  category?: string;
+  name?: string;
+  count?: number;
+  itemType?: string;
+}
 interface AccountDetail {
   activePets: Pet[];
   activeLimit: number | null;
   allPets: Pet[];
   growingEggs: Pet[];
   backpackEggs: Pet[];
+  stolenItems?: StolenItem[];
+  tools?: ToolItem[];
 }
 
 function fmtUptime(firstSeen?: number): string {
@@ -242,7 +265,7 @@ function deviceLabel(name: string): string | null {
 }
 
 type TabMode = "all" | "online" | "offline";
-type DetailTab = "active" | "all" | "growing" | "backpack";
+type DetailTab = "pets" | "eggs" | "stolen" | "tools";
 
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
@@ -251,7 +274,7 @@ export default function DashboardPage() {
   const [deviceFilter, setDeviceFilter] = useState("");
   const [tabMode, setTabMode] = useState<TabMode>("all");
   const [detail, setDetail] = useState<{ name: string; data: AccountDetail | null; loading: boolean; account: Account | null } | null>(null);
-  const [detailTab, setDetailTab] = useState<DetailTab>("active");
+  const [detailTab, setDetailTab] = useState<DetailTab>("pets");
   const [genAllStatus, setGenAllStatus] = useState("");
   const [genAllRunning, setGenAllRunning] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -332,7 +355,7 @@ export default function DashboardPage() {
   async function openDetail(name: string) {
     const acc = accounts.find((a) => a.sourceAccount === name) || null;
     setDetail({ name, data: null, loading: true, account: acc });
-    setDetailTab("active");
+    setDetailTab("pets");
     try {
       const res = await fetch("/api/account-detail?account=" + encodeURIComponent(name));
       const body = await res.json();
@@ -592,6 +615,26 @@ export default function DashboardPage() {
         .pg-mutation.mut-2x { color: #fff; background: linear-gradient(135deg, #b45309, #f97316); border-color: rgba(249,115,22,.5); text-shadow: 0 1px 2px rgba(0,0,0,.3); }
         .pg-mutation.mut-default { color: #c4b5fd; background: rgba(167,139,250,.1); border-color: rgba(167,139,250,.25); }
         .pg-weight { font-size: 9px; color: var(--dim); }
+        .pg-weight-inline { font-size: 10px; color: var(--dim); background: rgba(148,163,184,.08); border: 1px solid rgba(148,163,184,.18); border-radius: 4px; padding: 1px 5px; }
+
+        /* Redesigned card badges (rarity top-right + BAG/EQUIPPED, plus UID footer) */
+        .pg-card { position: relative; padding: 14px; align-items: flex-start; }
+        .pg-badges { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; z-index: 1; pointer-events: none; }
+        .pg-badge-rarity { font-size: 8px; font-weight: 900; padding: 3px 7px; border-radius: 5px; letter-spacing: .4px; text-transform: uppercase; }
+        .pg-badge-role { font-size: 8px; font-weight: 900; padding: 2px 6px; border-radius: 4px; letter-spacing: .3px; }
+        .pg-badge-role.equipped { background: rgba(34,211,238,.15); color: var(--accent2); border: 1px solid rgba(34,211,238,.4); }
+        .pg-badge-role.bag { background: rgba(251,191,36,.12); color: var(--gold); border: 1px solid rgba(251,191,36,.3); }
+        .pg-uid { font-size: 9px; color: var(--dim); margin-top: 6px; font-family: ui-monospace, monospace; letter-spacing: .3px; }
+
+        /* Rarity chip filter row above the grid */
+        .rarity-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 24px 0; background: var(--card); }
+        .rchip { font-size: 10px; font-weight: 800; padding: 5px 10px; border-radius: 20px; background: var(--surface); color: var(--dim); border: 1px solid var(--card-border); cursor: pointer; text-transform: uppercase; letter-spacing: .3px; transition: all .12s; display: inline-flex; align-items: center; gap: 5px; }
+        .rchip:hover { border-color: var(--accent2); color: var(--ink); }
+        .rchip.active { background: rgba(34,211,238,.15); color: var(--accent2); border-color: rgba(34,211,238,.4); }
+        .rchip-count { background: rgba(255,255,255,.06); color: inherit; border-radius: 8px; padding: 0 5px; font-weight: 900; font-size: 9px; }
+
+        /* Value bar showing the aggregate $/s for currently-filtered items */
+        .value-bar { padding: 8px 24px 0; background: var(--card); font-size: 11px; font-weight: 900; color: var(--gold); letter-spacing: .3px; }
 
         /* Growing egg card */
         .egg-card { background: var(--card); border: 1px solid rgba(52,211,153,.2); border-radius: 12px; padding: 12px; display: flex; align-items: center; gap: 12px; }
@@ -887,7 +930,13 @@ function AllAccountsCard({ accounts, tabMode }: { accounts: Account[]; tabMode: 
   );
 }
 
-/* ===== DETAIL MODAL ===== */
+/* ===== DETAIL MODAL =====
+ * Redesign per SS reference:
+ *  - PETS: activePets + allPets (dedup by uid). EQUIPPED badge on active ones.
+ *  - EGGS: growingEggs (timer ring) + backpackEggs (BAG badge).
+ *  - STOLEN / TOOLS: driven by fields the in-game script may or may not send;
+ *    modal shows an empty state until those payloads land.
+ */
 function DetailModal({ detail, detailTab, setDetailTab, onClose }: {
   detail: { name: string; data: AccountDetail | null; loading: boolean; account: Account | null };
   detailTab: DetailTab;
@@ -896,12 +945,60 @@ function DetailModal({ detail, detailTab, setDetailTab, onClose }: {
 }) {
   const [idx, setIdx] = useState<Record<string, string>>({});
   useEffect(() => { loadIconIndex().then(setIdx); }, []);
+  const [rarityFilter, setRarityFilter] = useState<string>("ALL");
+
+  // Reset the rarity chip whenever the user switches tabs -- otherwise a chip
+  // that had a count on tab A can leave the grid empty on tab B.
+  useEffect(() => { setRarityFilter("ALL"); }, [detailTab]);
 
   const acc = detail.account;
   const isOnline = acc?.online ?? false;
 
-  const growingCount = detail.data?.growingEggs?.length ?? 0;
-  const backpackCount = detail.data?.backpackEggs?.length ?? 0;
+  // Merge active + all pets, dedup by uid (activePets are typically also in
+  // allPets on the game side, so listing them twice would double-count).
+  const petsForTab = (): (Pet & { _equipped?: boolean; _bag?: boolean })[] => {
+    if (!detail.data) return [];
+    if (detailTab === "pets") {
+      const activeUids = new Set((detail.data.activePets || []).map((p) => p.uid).filter(Boolean));
+      const merged: (Pet & { _equipped?: boolean; _bag?: boolean })[] = [];
+      for (const p of (detail.data.activePets || [])) merged.push({ ...p, _equipped: true });
+      for (const p of (detail.data.allPets || [])) {
+        if (p.uid && activeUids.has(p.uid)) continue;
+        merged.push({ ...p, _bag: true });
+      }
+      return merged;
+    }
+    if (detailTab === "eggs") {
+      const merged: (Pet & { _equipped?: boolean; _bag?: boolean })[] = [];
+      for (const e of (detail.data.growingEggs || [])) merged.push(e);
+      for (const e of (detail.data.backpackEggs || [])) merged.push({ ...e, _bag: true });
+      return merged;
+    }
+    return [];
+  };
+  const allItems = petsForTab();
+
+  // Count per rarity, driven by the icon index (same lookup PetGrid uses).
+  const rarityCounts: Record<string, number> = { ALL: allItems.length };
+  const RARITY_ORDER = ["Eternal", "Divine", "Secret", "Cosmic", "Mythic", "Legendary", "Epic", "Rare", "Uncommon", "Common"];
+  for (const p of allItems) {
+    const r = petRarity(p.category, idx) || "Unknown";
+    rarityCounts[r] = (rarityCounts[r] || 0) + 1;
+  }
+  const rarityOptions = ["ALL", ...RARITY_ORDER.filter((r) => rarityCounts[r] > 0)];
+  if (rarityCounts["Unknown"] > 0) rarityOptions.push("Unknown");
+
+  const filteredItems = rarityFilter === "ALL"
+    ? allItems
+    : allItems.filter((p) => (petRarity(p.category, idx) || "Unknown") === rarityFilter);
+
+  const totalValueRate = filteredItems.reduce((s, p) => s + (Number(p.rate) || 0), 0);
+
+  const petCount = (detail.data?.activePets?.length ?? 0) + (detail.data?.allPets?.length ?? 0)
+    - (detail.data?.activePets?.filter((p) => p.uid && (detail.data?.allPets || []).some((a) => a.uid === p.uid)).length ?? 0);
+  const eggCount = (detail.data?.growingEggs?.length ?? 0) + (detail.data?.backpackEggs?.length ?? 0);
+  const stolenCount = detail.data?.stolenItems?.length ?? 0;
+  const toolsCount = detail.data?.tools?.length ?? 0;
 
   return (
     <>
@@ -950,26 +1047,83 @@ function DetailModal({ detail, detailTab, setDetailTab, onClose }: {
 
           {/* Tabs */}
           <div className="modal-tabs">
-            <button className={`mtab ${detailTab === "active" ? "active" : ""}`} onClick={() => setDetailTab("active")}>
-              Pet Aktif ({detail.data.activePets.length})
+            <button className={`mtab ${detailTab === "pets" ? "active" : ""}`} onClick={() => setDetailTab("pets")}>
+              🐾 PETS ({petCount})
             </button>
-            <button className={`mtab ${detailTab === "all" ? "active" : ""}`} onClick={() => setDetailTab("all")}>
-              Semua Pet ({detail.data.allPets.length})
+            <button className={`mtab ${detailTab === "eggs" ? "active" : ""}`} onClick={() => setDetailTab("eggs")} style={(detail.data.growingEggs?.length ?? 0) > 0 ? { color: "var(--green)" } : undefined}>
+              🥚 EGGS ({eggCount})
             </button>
-            <button className={`mtab ${detailTab === "growing" ? "active" : ""}`} onClick={() => setDetailTab("growing")} style={growingCount > 0 ? { color: "var(--green)" } : undefined}>
-              Telur Tumbuh ({growingCount})
+            <button className={`mtab ${detailTab === "stolen" ? "active" : ""}`} onClick={() => setDetailTab("stolen")}>
+              🎯 STOLEN ({stolenCount})
             </button>
-            <button className={`mtab ${detailTab === "backpack" ? "active" : ""}`} onClick={() => setDetailTab("backpack")}>
-              Telur Tas ({backpackCount})
+            <button className={`mtab ${detailTab === "tools" ? "active" : ""}`} onClick={() => setDetailTab("tools")}>
+              🛠️ TOOLS ({toolsCount})
             </button>
           </div>
 
+          {/* Rarity chip row + value bar */}
+          {(detailTab === "pets" || detailTab === "eggs") && allItems.length > 0 && (
+            <>
+              <div className="rarity-chips">
+                {rarityOptions.map((r) => {
+                  const isActive = rarityFilter === r;
+                  const rc = r === "ALL" ? "var(--accent2)" : rarityColor(r);
+                  return (
+                    <button
+                      key={r}
+                      className={`rchip ${isActive ? "active" : ""}`}
+                      onClick={() => setRarityFilter(r)}
+                      style={isActive ? { borderColor: rc, color: rc, background: rc + "18" } : undefined}
+                    >
+                      {r.toUpperCase()} <span className="rchip-count">{rarityCounts[r] || 0}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="value-bar">VALUE: {fmtRate(totalValueRate)}</div>
+            </>
+          )}
+
           {/* Content */}
           <div className="modal-body">
-            {detailTab === "active" && <PetGrid pets={detail.data.activePets} idx={idx} />}
-            {detailTab === "all" && <PetGrid pets={detail.data.allPets} idx={idx} />}
-            {detailTab === "growing" && <GrowingEggGrid eggs={detail.data.growingEggs} idx={idx} />}
-            {detailTab === "backpack" && <PetGrid pets={detail.data.backpackEggs} idx={idx} />}
+            {detailTab === "pets" && <PetGrid pets={filteredItems as Pet[]} idx={idx} showBadges />}
+            {detailTab === "eggs" && (
+              <>
+                {(detail.data.growingEggs?.length ?? 0) > 0 && (
+                  <GrowingEggGrid eggs={detail.data.growingEggs.filter((e) => rarityFilter === "ALL" || (petRarity(e.category, idx) || "Unknown") === rarityFilter)} idx={idx} />
+                )}
+                {(detail.data.backpackEggs?.length ?? 0) > 0 && (
+                  <PetGrid pets={detail.data.backpackEggs.filter((e) => rarityFilter === "ALL" || (petRarity(e.category, idx) || "Unknown") === rarityFilter).map((e) => ({ ...e, _bag: true } as any))} idx={idx} showBadges />
+                )}
+                {(detail.data.growingEggs?.length ?? 0) === 0 && (detail.data.backpackEggs?.length ?? 0) === 0 && (
+                  <div className="detail-empty">Belum ada telur.</div>
+                )}
+              </>
+            )}
+            {detailTab === "stolen" && (
+              stolenCount === 0
+                ? <div className="detail-empty">Belum ada pet stolen ke-tracking. Fitur ini nunggu game-side ngirim data <code>stolenItems</code>.</div>
+                : <PetGrid pets={(detail.data.stolenItems || []) as unknown as Pet[]} idx={idx} showBadges />
+            )}
+            {detailTab === "tools" && (
+              toolsCount === 0
+                ? <div className="detail-empty">Belum ada tool ke-tracking. Fitur ini nunggu game-side ngirim data <code>tools</code>.</div>
+                : (
+                  <div className="pet-grid">
+                    {(detail.data.tools || []).map((t, i) => (
+                      <div key={i} className="pg-card">
+                        <div className="pg-info">
+                          <div className="pg-name">{t.name || t.category || "Tool"}</div>
+                          <div className="pg-meta">
+                            {t.itemType && <span className="pg-rarity" style={{ background: "rgba(148,163,184,.15)", color: "var(--dim)", border: "1px solid rgba(148,163,184,.3)" }}>{t.itemType}</span>}
+                            {t.count != null && <span className="pg-rate">×{t.count}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+            )}
           </div>
         </>
       )}
@@ -978,7 +1132,7 @@ function DetailModal({ detail, detailTab, setDetailTab, onClose }: {
 }
 
 /* ===== PET GRID (detail modal) ===== */
-function PetGrid({ pets, idx }: { pets: Pet[]; idx: Record<string, string> }) {
+function PetGrid({ pets, idx, showBadges = false }: { pets: Pet[]; idx: Record<string, string>; showBadges?: boolean }) {
   const sorted = [...(pets || [])].sort((a, b) => (b.rate || 0) - (a.rate || 0));
   if (sorted.length === 0) return <div className="detail-empty">Kosong.</div>;
 
@@ -989,15 +1143,23 @@ function PetGrid({ pets, idx }: { pets: Pet[]; idx: Record<string, string> }) {
         const rc = rarityColor(rar);
         return (
           <div key={i} className="pg-card">
+            {showBadges && (rar || p._equipped || p._bag) && (
+              <div className="pg-badges">
+                {rar && <span className="pg-badge-rarity" style={{ background: rc + "22", color: rc, border: `1px solid ${rc}66` }}>{rar.toUpperCase()}</span>}
+                {p._equipped && <span className="pg-badge-role equipped">EQUIPPED</span>}
+                {p._bag && !p._equipped && <span className="pg-badge-role bag">BAG</span>}
+              </div>
+            )}
             <PetIcon category={p.category} name={p.name || p.category} size={36} />
             <div className="pg-info">
               <div className="pg-name">{p.name || p.category}</div>
               <div className="pg-meta">
                 <span className="pg-rate">{fmtRate(p.rate)}</span>
-                {rar && <span className="pg-rarity" style={{ background: rc + "18", color: rc, border: `1px solid ${rc}33` }}>{rar}</span>}
+                {!showBadges && rar && <span className="pg-rarity" style={{ background: rc + "18", color: rc, border: `1px solid ${rc}33` }}>{rar}</span>}
+                {p.weight != null && <span className="pg-weight-inline">{Number(p.weight).toLocaleString()} Kg</span>}
                 {(Array.isArray(p.mutations) ? p.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{m}</span>)}
               </div>
-              {p.weight != null && <div className="pg-weight">{Number(p.weight).toLocaleString()} Kg</div>}
+              {showBadges && p.uid && <div className="pg-uid">UID: {String(p.uid).slice(0, 8)}</div>}
             </div>
           </div>
         );
