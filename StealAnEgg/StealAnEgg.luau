@@ -1047,32 +1047,34 @@ end)
 
 ------------------------------------------------------------
 -- Auto Buy Trail Shop (no UI, runs forever)
+-- Fully data-driven: reads Trails.Directory every tick, so any trail
+-- the game adds later gets bought automatically without a script update.
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
 	local Trails = require(ReplicatedStorage.Data.Trails)
 
-	local sortedKeys = {}
-	for key, cfg in pairs(Trails.Directory) do
-		if cfg.DisplayInShop and cfg.Price then
-			table.insert(sortedKeys, key)
-		end
-	end
-	table.sort(sortedKeys, function(a, b)
-		return Trails.Directory[a].Price < Trails.Directory[b].Price
-	end)
-
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		pcall(function()
 			local data = SaveModule.Get()
+			local inv = data.TrailInventory or {}
+			local sortedKeys = {}
+			for key, cfg in pairs(Trails.Directory) do
+				if cfg.DisplayInShop and cfg.Price and not inv[key] then
+					table.insert(sortedKeys, key)
+				end
+			end
+			table.sort(sortedKeys, function(a, b)
+				return Trails.Directory[a].Price < Trails.Directory[b].Price
+			end)
 			for _, key in ipairs(sortedKeys) do
 				local cfg = Trails.Directory[key]
-				if not data.TrailInventory[key] and data.Money >= cfg.Price then
+				data = SaveModule.Get()
+				if not (data.TrailInventory or {})[key] and (data.Money or 0) >= cfg.Price then
 					pcall(function()
 						Remotes.Trailwear.AskPurchase:InvokeServer(key)
 					end)
 					task.wait(0.5)
-					data = SaveModule.Get()
 				end
 			end
 		end)
@@ -1083,77 +1085,21 @@ end)
 
 ------------------------------------------------------------
 -- Auto Buy Boss Shop (no UI, runs forever, one item per tick)
---   Treadmill MAXED  -> buy TreadmillBooster (200 tokens)
---   Treadmill not max -> buy MutationConsumable (400 tokens)
--- One-at-a-time to keep server calls sparse (matches sell-egg pace).
+-- Always spends Boss Tokens on MutationConsumable (400 tokens each).
+-- Simple + treadmill-max agnostic, so it keeps working when the game
+-- adds new treadmill levels or changes the Fractured spend windows.
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	local TreadmillClient = require(LocalPlayer.PlayerScripts.GUI.TreadmillUpgrade.Client)
-
-	-- Returns true if any owned egg OR pen pet OR backpack asset carries
-	-- the "Boss" (a.k.a. Fractured, displayed in-game as FRACTURED) mutation.
-	-- Case-insensitive on the mutation name.
-	local function isBossMut(name)
-		return type(name) == "string" and string.lower(name) == "boss"
-	end
-	local function hasFracturedMutation()
-		local ok, penRecords = pcall(function()
-			return AssetRoster.ReadOwnerPen(LocalPlayer.UserId)
-		end)
-		if ok and penRecords then
-			for _, rec in pairs(penRecords) do
-				local muts = rec.ItemData and rec.ItemData.Mutations
-				if type(muts) == "table" then
-					for _, m in ipairs(muts) do
-						if isBossMut(m) then return true end
-					end
-				end
-			end
-		end
-		for _, rec in pairs(getMyOwnedEggs()) do
-			if type(rec.Mutations) == "table" then
-				for _, m in ipairs(rec.Mutations) do
-					if isBossMut(m) then return true end
-				end
-			end
-		end
-		local backpack = LocalPlayer:FindFirstChild("Backpack")
-		if backpack then
-			for _, tool in ipairs(backpack:GetChildren()) do
-				if tool:GetAttribute("ItemType") == "Asset" then
-					local str = tool:GetAttribute("Mutations")
-					if str and string.lower(tostring(str)):find("boss") then return true end
-				end
-			end
-		end
-		return false
-	end
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoBossShopEnabled then
 			pcall(function()
 				local stats = SaveModule.Get()
 				local tokens = tonumber(stats.BossTokens) or 0
-				if tokens <= 0 then return end
-				local tmLevel = tonumber(stats.TreadmillUpgradeLevel) or 0
-				local item, price
-				if not hasFracturedMutation() then
-					-- No Fractured mutation yet — keep rolling for one
-					item, price = "MutationConsumable", 400
-				elseif tmLevel == 10 then
-					-- Already have Fractured + TM maxed — buy Boosters to power it
-					item, price = "TreadmillBooster", 200
-				elseif tmLevel == 1 then
-					-- TM 1 is a spend window too — grind more Consumables
-					item, price = "MutationConsumable", 400
-				else
-					-- Have Fractured but TM 2..9 — idle, save tokens
-					return
-				end
-				if tokens >= price then
+				if tokens >= 400 then
 					pcall(function()
-						Remotes.BossMastery.AskBuyShopItem:InvokeServer(item)
+						Remotes.BossMastery.AskBuyShopItem:InvokeServer("MutationConsumable")
 					end)
 				end
 			end)
