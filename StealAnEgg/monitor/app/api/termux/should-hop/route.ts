@@ -1,22 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis, presenceKey, PRESENCE_TTL_S, PRESENCE_FRESH_S } from "@/lib/redis";
 
-// Global hop coordinator. The in-game script calls this after each join/hop:
-// it (1) freshens this clone's presence with its current server + arrival time,
-// then (2) checks -- across ALL devices -- whether another of the operator's
-// clones is in the same Roblox server. If so, exactly ONE clone stays (the one
-// that arrived first) and the rest are told to hop, so two clones never both
-// hop and thrash. All presence is the operator's own clones (same BlekokGong
-// prefix), so "2+ on this jobId" == a collision.
+// Global duplicate-clone coordinator. The in-game script calls this after each
+// join: it (1) freshens this clone's presence with its current server + arrival
+// time, then (2) checks -- across ALL devices -- whether another of the
+// operator's clones is in the same Roblox server. If so, exactly ONE clone
+// stays (the one that arrived first) and the rest are told to LEAVE the game
+// (Kick to Roblox home), so two clones never both act and thrash.
 //
-// Device hop cooldown (40s): at most one clone per device hops at a time.
-// When a clone is told to hop, a cooldown key is written for that deviceId.
-// Any other clone on the same device that needs to hop will get hop:false until
-// the cooldown expires, then poll again (15s interval) and hop in turn.
-// This serializes hops per device: A hops, B waits ~15-40s, C waits ~30-55s.
+// Historical name: this endpoint used to tell losers to server-hop. That was
+// dropped because repeated hops burn Arkose trust score and escalate captcha.
+// Now the response says `action: "leave"` and the script Kicks the clone to
+// home; the operator can decide whether to relaunch. `hop: true` is kept as a
+// backward-compatible alias -- older cached scripts read that field and Kick
+// (they no longer try to hop servers themselves).
+//
+// Device cooldown (40s): at most one clone per device is told to leave at a
+// time, so a burst of duplicates doesn't clear an entire device at once.
 //
 // Public path (under /api/termux), gated by the shared access key the script
-// carries. POST { deviceId, account, jobId, placeId } -> { ok, hop, count }.
+// carries. POST { deviceId, account, jobId, placeId } -> { ok, action, hop, count }.
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
 }
@@ -40,7 +43,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "account required" }, { status: 400 });
     }
     // Not in a server yet -> nothing to coordinate.
-    if (!jobId) return NextResponse.json({ ok: true, hop: false });
+    if (!jobId) return NextResponse.json({ ok: true, hop: false, action: "stay" });
 
     const now = Date.now();
 
@@ -87,26 +90,33 @@ export async function POST(req: NextRequest) {
       } catch {}
     }
 
-    if (byAccount.size <= 1) return NextResponse.json({ ok: true, hop: false, count: byAccount.size });
+    if (byAccount.size <= 1) return NextResponse.json({ ok: true, hop: false, action: "stay", count: byAccount.size });
 
     // Stayer = earliest arrival; deterministic tiebreak by account name so
-    // exactly one stays and everyone else hops (no double-hop even under
+    // exactly one stays and everyone else leaves (no double-leave even under
     // simultaneous asks).
     const list = Array.from(byAccount.entries()).sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]));
-    const shouldHop = account !== list[0][0];
+    const shouldLeave = account !== list[0][0];
 
-    if (shouldHop) {
-      // Device hop cooldown: if another clone on this device hopped recently,
-      // hold off so hops are serialized (one at a time per device, ~40s apart).
+    if (shouldLeave) {
+      // Device leave cooldown: if another clone on this device was just told
+      // to leave, hold off so leaves are serialized (one at a time per device,
+      // ~40s apart). Key name stays `hop-cooldown` for backward compat with
+      // any deployed instance still reading it -- semantics are now "leave".
       const cooldownKey = `hop-cooldown:${deviceId}`;
       const cooldownActive = await redis.get(cooldownKey);
       if (cooldownActive) {
-        return NextResponse.json({ ok: true, hop: false, count: byAccount.size, queued: true });
+        return NextResponse.json({ ok: true, hop: false, action: "stay", count: byAccount.size, queued: true });
       }
       await redis.set(cooldownKey, "1", { ex: 40 });
     }
 
-    return NextResponse.json({ ok: true, hop: shouldHop, count: byAccount.size });
+    return NextResponse.json({
+      ok: true,
+      hop: shouldLeave, // backward compat: old scripts read this
+      action: shouldLeave ? "leave" : "stay",
+      count: byAccount.size,
+    });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message, hop: false }, { status: 500 });
   }
