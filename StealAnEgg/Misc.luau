@@ -499,4 +499,176 @@ return function(ctx)
 				.. "dari TrailShop kalau mau ganti-ganti trail yang udah kebeli.",
 		})
 	end
+
+	------------------------------------------------------------
+	-- Auto Close Event Popup
+	--
+	-- Roblox Experience Events popup ("Join Event" title + "Notify Me" button,
+	-- e.g. "SAMMY IS COMING") sits in CoreGui and interrupts farming. This
+	-- watches PlayerGui + CoreGui for it and hides it immediately.
+	--
+	-- Matches STRICTLY on the popup's own texts so we never touch other GUIs:
+	--   - a TextButton whose text is exactly "Notify Me"
+	--   - or a TextLabel whose text is exactly "Join Event"
+	------------------------------------------------------------
+	do
+		local section = MiscTab:AddSection("Auto Close Event Popup")
+
+		local statusPara = section:AddParagraph({
+			Title = "Status",
+			Content = "-",
+		})
+
+		local function setStatus(msg)
+			pcall(function() statusPara:SetContent(tostring(msg)) end)
+		end
+
+		local enabled = false
+		local closedCount = 0
+
+		local function isTriggerText(obj)
+			if obj:IsA("TextButton") then
+				local t = tostring(obj.Text or "")
+				if t == "Notify Me" then return true end
+			elseif obj:IsA("TextLabel") then
+				local t = tostring(obj.Text or "")
+				if t == "Join Event" then return true end
+			end
+			return false
+		end
+
+		-- Walk upward from the trigger element to find the outermost container
+		-- that still belongs to the same popup, then hide/destroy that.
+		local function killPopupFor(node)
+			local top = node
+			while top and top.Parent do
+				local parent = top.Parent
+				-- Stop if the parent is a service root (CoreGui, PlayerGui) --
+				-- the current `top` is the popup's ScreenGui/Folder itself.
+				if parent == game or parent.ClassName == "CoreGui" or parent.ClassName == "PlayerGui"
+					or parent.Name == "CoreGui" or parent.Name == "PlayerGui" then
+					break
+				end
+				top = parent
+			end
+			if not top then return false end
+			-- Safety: never touch our own NaruUI window
+			local n = top.Name:lower()
+			if n:find("naru") or n:find("fluent") or n == "cutsceneui" then return false end
+			local ok = pcall(function()
+				if top:IsA("ScreenGui") or top:IsA("GuiObject") then
+					if top:IsA("ScreenGui") then top.Enabled = false end
+					if top:IsA("GuiObject") then top.Visible = false end
+				end
+				-- Also nuke it so it can't be re-shown by the same instance
+				top:Destroy()
+			end)
+			return ok
+		end
+
+		local function scanAndClose(root)
+			if not root then return 0 end
+			local hits = 0
+			local killed = {}
+			local ok, descs = pcall(function() return root:GetDescendants() end)
+			if not ok or type(descs) ~= "table" then return 0 end
+			for _, d in ipairs(descs) do
+				-- Skip anything already unparented by an earlier kill this pass
+				if d.Parent and isTriggerText(d) then
+					local top = d
+					while top and top.Parent do
+						local parent = top.Parent
+						if parent == game or parent.ClassName == "CoreGui" or parent.ClassName == "PlayerGui"
+							or parent.Name == "CoreGui" or parent.Name == "PlayerGui" then
+							break
+						end
+						top = parent
+					end
+					if top and top.Parent and not killed[top] then
+						killed[top] = true
+						if killPopupFor(d) then
+							hits = hits + 1
+						end
+					end
+				end
+			end
+			return hits
+		end
+
+		local watcherConnections = {}
+		local function disconnectAll()
+			for _, c in ipairs(watcherConnections) do
+				pcall(function() c:Disconnect() end)
+			end
+			table.clear(watcherConnections)
+		end
+
+		local function attachWatcher(root)
+			if not root then return end
+			-- React the moment any matching descendant is added.
+			local ok, conn = pcall(function()
+				return root.DescendantAdded:Connect(function(d)
+					if not enabled then return end
+					if isTriggerText(d) then
+						task.wait() -- let the popup finish parenting itself
+						if killPopupFor(d) then
+							closedCount = closedCount + 1
+							setStatus("Popup ditutup (total: " .. closedCount .. ")")
+						end
+					end
+				end)
+			end)
+			if ok and conn then table.insert(watcherConnections, conn) end
+		end
+
+		section:AddToggle("StealAnEgg_AutoCloseEventPopup", {
+			Title = "Auto Close Event Popup",
+			Default = true,
+			Callback = function(val)
+				enabled = val
+				disconnectAll()
+				if not enabled then
+					setStatus("Nonaktif.")
+					return
+				end
+				setStatus("Aktif -- ngintip popup Join Event / Notify Me.")
+
+				local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+				local cg
+				pcall(function() cg = game:GetService("CoreGui") end)
+
+				-- Instant sweep for anything already open
+				local n = 0
+				n = n + scanAndClose(pg)
+				n = n + (cg and scanAndClose(cg) or 0)
+				if n > 0 then
+					closedCount = closedCount + n
+					setStatus("Popup ditutup (total: " .. closedCount .. ")")
+				end
+
+				-- Reactive watchers
+				attachWatcher(pg)
+				attachWatcher(cg)
+
+				-- Safety-net periodic sweep in case DescendantAdded is missed
+				task.spawn(function()
+					while enabled and not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+						local m = scanAndClose(pg) + (cg and scanAndClose(cg) or 0)
+						if m > 0 then
+							closedCount = closedCount + m
+							setStatus("Popup ditutup (total: " .. closedCount .. ")")
+						end
+						task.wait(2)
+					end
+				end)
+			end,
+		})
+
+		section:AddParagraph({
+			Title = "Catatan",
+			Content = "Nutup popup Experience Events (contoh: 'Join Event -- SAMMY IS COMING' dengan tombol "
+				.. "'Notify Me') secara instan pas muncul, biar farming ga ke-interrupt. Cuma nutup popup yang "
+				.. "punya text 'Join Event' atau tombol 'Notify Me' -- popup game lain ga disentuh.",
+		})
+	end
 end
