@@ -1110,6 +1110,98 @@ end)
 
 
 ------------------------------------------------------------
+-- Auto Close Event Popup (no UI, runs forever)
+-- Roblox Experience Events popup ("Join Event -- SAMMY IS COMING" with a
+-- "Notify Me" button) sits on top of the game and interrupts farming when
+-- Sammy or another event NPC is about to arrive. Nuke it the instant it
+-- appears. Matches STRICTLY on the popup's own texts so no other game
+-- popup is touched:
+--   - a TextButton whose text is exactly "Notify Me", or
+--   - a TextLabel whose text is exactly "Join Event"
+------------------------------------------------------------
+task.spawn(function()
+	local function isTriggerText(obj)
+		if obj:IsA("TextButton") and tostring(obj.Text or "") == "Notify Me" then return true end
+		if obj:IsA("TextLabel") and tostring(obj.Text or "") == "Join Event" then return true end
+		return false
+	end
+
+	-- Walk up from the trigger to the outermost container whose parent is a
+	-- service root (CoreGui/PlayerGui). Never touch our own UI or the game's
+	-- CutsceneUI.
+	local function killPopupFor(node)
+		local top = node
+		while top and top.Parent do
+			local parent = top.Parent
+			if parent == game or parent.ClassName == "CoreGui" or parent.ClassName == "PlayerGui"
+				or parent.Name == "CoreGui" or parent.Name == "PlayerGui" then
+				break
+			end
+			top = parent
+		end
+		if not top or not top.Parent then return false end
+		local n = top.Name:lower()
+		if n:find("naru") or n:find("fluent") or n == "cutsceneui" then return false end
+		return (pcall(function() top:Destroy() end))
+	end
+
+	local function scanAndClose(root)
+		if not root then return end
+		local killed = {}
+		local ok, descs = pcall(function() return root:GetDescendants() end)
+		if not ok or type(descs) ~= "table" then return end
+		for _, d in ipairs(descs) do
+			if d.Parent and isTriggerText(d) then
+				local top = d
+				while top and top.Parent do
+					local parent = top.Parent
+					if parent == game or parent.ClassName == "CoreGui" or parent.ClassName == "PlayerGui"
+						or parent.Name == "CoreGui" or parent.Name == "PlayerGui" then
+						break
+					end
+					top = parent
+				end
+				if top and top.Parent and not killed[top] then
+					killed[top] = true
+					killPopupFor(d)
+				end
+			end
+		end
+	end
+
+	local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui")
+	local cg
+	pcall(function() cg = game:GetService("CoreGui") end)
+
+	-- Reactive: kill the moment the popup lands
+	local function attachWatcher(root)
+		if not root then return end
+		pcall(function()
+			root.DescendantAdded:Connect(function(d)
+				if isTriggerText(d) then
+					task.wait() -- let it finish parenting
+					killPopupFor(d)
+				end
+			end)
+		end)
+	end
+	attachWatcher(pg)
+	attachWatcher(cg)
+
+	-- Instant sweep for anything already open at script load
+	scanAndClose(pg)
+	scanAndClose(cg)
+
+	-- Safety-net sweep every 2s in case DescendantAdded ever misses
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		scanAndClose(pg)
+		scanAndClose(cg)
+		task.wait(2)
+	end
+end)
+
+
+------------------------------------------------------------
 -- Auto Sell inventory backlog (< 300M/s, unplaced only, never Divine/Titan)
 -- Requires equip (AskWearTool) then SellPet on the held UID.
 ------------------------------------------------------------
