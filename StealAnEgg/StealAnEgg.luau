@@ -483,6 +483,10 @@ section:AddToggle("AutoBossShopToggle", {
 })
 
 -- Manual leave button: click to kick this clone back to Roblox home.
+-- Only fires on a deliberate click, never on its own -- no auto-leave path
+-- lives in this script (rapid Kick+rejoin cascades trigger the Roblox
+-- Funcaptcha and BAC anti-cheat, so we keep the only leave route the
+-- operator can take from the dashboard via Siap Jual).
 section:AddButton({
 	Title = "Leave Game (balik ke Roblox home)",
 	Callback = function()
@@ -491,42 +495,6 @@ section:AddButton({
 		end)
 	end,
 })
-
--- Coordinator poll: ask the server whether this clone should leave.
--- Any positive signal (action:"leave" OR the legacy hop:true) now just
--- kicks the clone back to Roblox home -- no in-place server hopping any
--- more, so duplicate resolution / anti-crowding always ends at home.
-task.spawn(function()
-	task.wait(20) -- let the script settle after join / re-exec
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		if game.JobId and game.JobId ~= "" then
-			pcall(function()
-				local body = HttpService:JSONEncode({
-					account = LocalPlayer.Name,
-					deviceId = DEVICE_ID,
-					jobId = game.JobId,
-					placeId = tostring(game.PlaceId),
-				})
-				local res = request({
-					Url = SERVER_BASE_URL .. "/api/termux/should-hop",
-					Method = "POST",
-					Headers = {
-						["Content-Type"] = "application/json",
-						["X-Access-Key"] = ACCESS_KEY_USED,
-					},
-					Body = body,
-				})
-				if res and res.Body then
-					local ok, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
-					if ok and data and (data.action == "leave" or data.hop == true) then
-						LocalPlayer:Kick("Server told me to leave")
-					end
-				end
-			end)
-		end
-		task.wait(15)
-	end
-end)
 
 Window:SelectTab(1)
 
