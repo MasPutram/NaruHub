@@ -266,6 +266,7 @@ function deviceLabel(name: string): string | null {
 
 type TabMode = "all" | "online" | "offline";
 type DetailTab = "pets" | "eggs" | "stolen" | "tools";
+type AllDetailTab = "accounts" | "pets" | "eggs" | "stolen" | "tools";
 
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
@@ -275,6 +276,8 @@ export default function DashboardPage() {
   const [tabMode, setTabMode] = useState<TabMode>("all");
   const [detail, setDetail] = useState<{ name: string; data: AccountDetail | null; loading: boolean; account: Account | null } | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("pets");
+  const [allDetail, setAllDetail] = useState<{ accounts: Account[]; details: Record<string, AccountDetail>; loading: boolean } | null>(null);
+  const [allDetailTab, setAllDetailTab] = useState<AllDetailTab>("accounts");
   const [genAllStatus, setGenAllStatus] = useState("");
   const [genAllRunning, setGenAllRunning] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -363,6 +366,31 @@ export default function DashboardPage() {
       else setDetail({ name, data: null, loading: false, account: acc });
     } catch {
       setDetail({ name, data: null, loading: false, account: acc });
+    }
+  }
+
+  async function openAllDetail(list: Account[]) {
+    // Snapshot the currently-displayed accounts so the modal shows the same
+    // scope the user was looking at (respects online/offline/device filter).
+    const snapshot = [...list];
+    setAllDetail({ accounts: snapshot, details: {}, loading: true });
+    setAllDetailTab("accounts");
+    try {
+      const results = await Promise.all(
+        snapshot.map(async (a) => {
+          try {
+            const res = await fetch("/api/account-detail?account=" + encodeURIComponent(a.sourceAccount));
+            const body = await res.json();
+            if (res.ok && body.ok) return [a.sourceAccount, body as AccountDetail] as const;
+          } catch {}
+          return [a.sourceAccount, null] as const;
+        })
+      );
+      const details: Record<string, AccountDetail> = {};
+      for (const [name, data] of results) if (data) details[name] = data;
+      setAllDetail({ accounts: snapshot, details, loading: false });
+    } catch {
+      setAllDetail({ accounts: snapshot, details: {}, loading: false });
     }
   }
 
@@ -493,8 +521,8 @@ export default function DashboardPage() {
         .time-tag.off { color: var(--red); }
 
         /* Aggregated "All Accounts" combined card */
-        .card.combined { background: linear-gradient(135deg, rgba(34,211,238,.06), rgba(139,92,246,.06)), var(--card); border-color: rgba(34,211,238,.28); cursor: default; }
-        .card.combined:hover { transform: none; box-shadow: 0 0 0 1px rgba(34,211,238,.35), 0 4px 20px rgba(34,211,238,.08); border-color: rgba(34,211,238,.45); }
+        .card.combined { background: linear-gradient(135deg, rgba(34,211,238,.06), rgba(139,92,246,.06)), var(--card); border-color: rgba(34,211,238,.28); cursor: pointer; }
+        .card.combined:hover { transform: translateY(-1px); box-shadow: 0 0 0 1px rgba(34,211,238,.45), 0 6px 22px rgba(34,211,238,.12); border-color: rgba(34,211,238,.55); }
         .combined-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
         .combined-icon { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--accent2), var(--accent)); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; box-shadow: 0 0 16px rgba(34,211,238,.35); }
         .combined-title { flex: 1; min-width: 0; }
@@ -650,6 +678,28 @@ export default function DashboardPage() {
         .egg-ready-badge { font-size: 9px; font-weight: 800; color: var(--gold); background: rgba(251,191,36,.15); border: 1px solid rgba(251,191,36,.3); padding: 2px 8px; border-radius: 4px; }
 
         .detail-empty { color: var(--dim); font-size: 13px; padding: 20px 0; text-align: center; }
+
+        /* ============ ALL ACCOUNTS DETAIL MODAL ============ */
+        .modal.modal-wide { max-width: 1100px; }
+        .modal-header .mh-sub { font-size: 11px; color: var(--dim); margin-top: 2px; }
+        .modal-header .mh-title-block { flex: 1; min-width: 0; }
+        .aa-search { display: flex; align-items: center; gap: 8px; padding: 12px 24px; background: var(--card); border-bottom: 1px solid var(--card-border); }
+        .aa-search input { flex: 1; background: var(--surface); color: var(--ink); border: 1px solid var(--card-border); border-radius: 8px; padding: 8px 12px; font-size: 12px; font-weight: 600; }
+        .aa-search input:focus { outline: none; border-color: var(--accent2); }
+        .aa-search .aa-count { font-size: 11px; font-weight: 800; color: var(--dim); letter-spacing: .3px; }
+        .aa-accounts { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+        .aa-row { background: var(--card); border: 1px solid var(--card-border); border-radius: 10px; padding: 10px 12px; cursor: pointer; transition: all .15s; }
+        .aa-row:hover { border-color: var(--accent2); transform: translateY(-1px); }
+        .aa-row-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .aa-row-name { font-size: 13px; font-weight: 800; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .aa-row-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+        .aa-row-stat { min-width: 0; }
+        .aa-row-stat .l { font-size: 8px; font-weight: 800; color: var(--dim); letter-spacing: .3px; text-transform: uppercase; }
+        .aa-row-stat .v { font-size: 11px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .aa-row-stat.money .v { color: var(--gold); }
+        .aa-row-stat.income .v { color: var(--accent2); }
+        .aa-row-stat.speed .v { color: var(--accent); }
+        .aa-loading-note { font-size: 10px; color: var(--dim); padding: 6px 24px 0; background: var(--card); font-style: italic; }
       `}</style>
 
       <div className="dash">
@@ -725,7 +775,7 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="grid">
-            <AllAccountsCard accounts={displayed} tabMode={tabMode} />
+            <AllAccountsCard accounts={displayed} tabMode={tabMode} onOpen={() => openAllDetail(displayed)} />
             {displayed.map((a) => (
               <AccountCard
                 key={a.sourceAccount}
@@ -751,6 +801,21 @@ export default function DashboardPage() {
                 detailTab={detailTab}
                 setDetailTab={setDetailTab}
                 onClose={() => setDetail(null)}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* ===== ALL ACCOUNTS DETAIL MODAL ===== */}
+        {allDetail && (
+          <div className="overlay" onClick={(e) => { if ((e.target as HTMLElement).classList.contains("overlay")) setAllDetail(null); }}>
+            <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
+              <AllAccountsDetailModal
+                allDetail={allDetail}
+                tab={allDetailTab}
+                setTab={setAllDetailTab}
+                onClose={() => setAllDetail(null)}
+                onOpenAccount={(name) => { setAllDetail(null); openDetail(name); }}
               />
             </div>
           </div>
@@ -831,10 +896,10 @@ function AccountCard({ account: a, onOpen, onSell, onDelete, deleteConfirm, onDe
 
 /* ===== ALL ACCOUNTS COMBINED CARD =====
  * Sits as the first tile in the grid, aggregating the currently-displayed
- * accounts (respects the Online/Offline/All tab + device filter). Not a
- * clickable detail: it's a rollup, so `.combined` disables hover-shift.
+ * accounts (respects the Online/Offline/All tab + device filter). Clicking
+ * opens the combined detail modal.
  */
-function AllAccountsCard({ accounts, tabMode }: { accounts: Account[]; tabMode: TabMode }) {
+function AllAccountsCard({ accounts, tabMode, onOpen }: { accounts: Account[]; tabMode: TabMode; onOpen: () => void }) {
   const [idx, setIdx] = useState<Record<string, string>>({});
   useEffect(() => { loadIconIndex().then(setIdx); }, []);
 
@@ -869,7 +934,7 @@ function AllAccountsCard({ accounts, tabMode }: { accounts: Account[]; tabMode: 
     : `${onlineCount} / ${totalCount} Online`;
 
   return (
-    <div className="card combined">
+    <div className="card combined" onClick={onOpen}>
       <div className="combined-head">
         <div className="combined-icon">👥</div>
         <div className="combined-title">
@@ -1127,6 +1192,227 @@ function DetailModal({ detail, detailTab, setDetailTab, onClose }: {
           </div>
         </>
       )}
+    </>
+  );
+}
+
+/* ===== ALL ACCOUNTS DETAIL MODAL ===== */
+function AllAccountsDetailModal({ allDetail, tab, setTab, onClose, onOpenAccount }: {
+  allDetail: { accounts: Account[]; details: Record<string, AccountDetail>; loading: boolean };
+  tab: AllDetailTab;
+  setTab: (t: AllDetailTab) => void;
+  onClose: () => void;
+  onOpenAccount: (name: string) => void;
+}) {
+  const [idx, setIdx] = useState<Record<string, string>>({});
+  useEffect(() => { loadIconIndex().then(setIdx); }, []);
+  const [rarityFilter, setRarityFilter] = useState<string>("ALL");
+  const [query, setQuery] = useState("");
+  useEffect(() => { setRarityFilter("ALL"); }, [tab]);
+
+  const { accounts, details, loading } = allDetail;
+  const totalCount = accounts.length;
+  const onlineCount = accounts.reduce((n, a) => n + (a.online ? 1 : 0), 0);
+  const money = accounts.reduce((s, a) => s + (Number(a.money) || 0), 0);
+  const income = accounts.reduce((s, a) => s + (Number(a.incomeAktif) || 0), 0);
+  const speed = accounts.reduce((s, a) => s + (Number(a.speed) || 0), 0);
+
+  // Aggregate items across all fetched details. Pets merge active + bag with
+  // uid dedup (same rule as per-account DetailModal). Eggs keep the growing /
+  // backpack split. Stolen and tools are flat lists.
+  const allPets: (Pet & { _equipped?: boolean; _bag?: boolean; _from?: string })[] = [];
+  const allGrowingEggs: (Pet & { _from?: string })[] = [];
+  const allBackpackEggs: (Pet & { _from?: string })[] = [];
+  const allStolen: (StolenItem & { _from?: string })[] = [];
+  const allTools: (ToolItem & { _from?: string })[] = [];
+  for (const a of accounts) {
+    const d = details[a.sourceAccount];
+    if (!d) continue;
+    const activeUids = new Set((d.activePets || []).map((p) => p.uid).filter(Boolean));
+    for (const p of (d.activePets || [])) allPets.push({ ...p, _equipped: true, _from: a.sourceAccount });
+    for (const p of (d.allPets || [])) {
+      if (p.uid && activeUids.has(p.uid)) continue;
+      allPets.push({ ...p, _bag: true, _from: a.sourceAccount });
+    }
+    for (const e of (d.growingEggs || [])) allGrowingEggs.push({ ...e, _from: a.sourceAccount });
+    for (const e of (d.backpackEggs || [])) allBackpackEggs.push({ ...e, _from: a.sourceAccount });
+    for (const s of (d.stolenItems || [])) allStolen.push({ ...s, _from: a.sourceAccount });
+    for (const t of (d.tools || [])) allTools.push({ ...t, _from: a.sourceAccount });
+  }
+  const petCount = allPets.length;
+  const eggCount = allGrowingEggs.length + allBackpackEggs.length;
+  const stolenCount = allStolen.length;
+  const toolsCount = allTools.length;
+
+  const currentItems: Pet[] =
+    tab === "pets" ? (allPets as Pet[]) :
+    tab === "eggs" ? ([...allGrowingEggs, ...allBackpackEggs.map((e) => ({ ...e, _bag: true }))] as Pet[]) :
+    [];
+
+  const rarityCounts: Record<string, number> = { ALL: currentItems.length };
+  const RARITY_ORDER = ["Eternal", "Divine", "Secret", "Cosmic", "Mythic", "Legendary", "Epic", "Rare", "Uncommon", "Common"];
+  for (const p of currentItems) {
+    const r = petRarity(p.category, idx) || "Unknown";
+    rarityCounts[r] = (rarityCounts[r] || 0) + 1;
+  }
+  const rarityOptions = ["ALL", ...RARITY_ORDER.filter((r) => rarityCounts[r] > 0)];
+  if (rarityCounts["Unknown"] > 0) rarityOptions.push("Unknown");
+  const filteredItems = rarityFilter === "ALL"
+    ? currentItems
+    : currentItems.filter((p) => (petRarity(p.category, idx) || "Unknown") === rarityFilter);
+  const totalValueRate = filteredItems.reduce((s, p) => s + (Number(p.rate) || 0), 0);
+
+  const q = query.trim().toLowerCase();
+  const filteredAccounts = q
+    ? accounts.filter((a) => a.sourceAccount.toLowerCase().includes(q))
+    : accounts;
+
+  const doneCount = accounts.reduce((n, a) => n + (details[a.sourceAccount] ? 1 : 0), 0);
+
+  return (
+    <>
+      <div className="modal-header">
+        <div className="combined-icon" style={{ width: 36, height: 36, fontSize: 18 }}>👥</div>
+        <div className="mh-title-block">
+          <div className="mh-name">All Accounts</div>
+          <div className="mh-sub">Combined Telemetry · {totalCount} Connected Accounts</div>
+        </div>
+        <span className="mh-badge on">{onlineCount} / {totalCount} ONLINE</span>
+        <button className="modal-close" onClick={onClose}>&times;</button>
+      </div>
+
+      <div className="modal-stats">
+        <div className="ms-card">
+          <div className="mslabel">TOTAL MONEY</div>
+          <div className="msval" style={{ color: "var(--gold)" }}>{fmtMoney(money)}</div>
+        </div>
+        <div className="ms-card">
+          <div className="mslabel">TOTAL INCOME</div>
+          <div className="msval" style={{ color: "var(--accent2)" }}>{fmtRate(income)}</div>
+        </div>
+        <div className="ms-card">
+          <div className="mslabel">TOTAL SPEED</div>
+          <div className="msval" style={{ color: "var(--accent)" }}>{fmtCompactNum(speed)}</div>
+        </div>
+        <div className="ms-card">
+          <div className="mslabel">INVENTORY</div>
+          <div className="msval">{fmtNum(petCount || accounts.reduce((s, a) => s + (Number(a.petsCount) || 0), 0))} pets · {fmtNum(eggCount)} eggs</div>
+        </div>
+      </div>
+
+      <div className="modal-tabs">
+        <button className={`mtab ${tab === "accounts" ? "active" : ""}`} onClick={() => setTab("accounts")}>👥 ACCOUNTS ({totalCount})</button>
+        <button className={`mtab ${tab === "pets" ? "active" : ""}`} onClick={() => setTab("pets")}>🐾 PETS ({petCount})</button>
+        <button className={`mtab ${tab === "eggs" ? "active" : ""}`} onClick={() => setTab("eggs")}>🥚 EGGS ({eggCount})</button>
+        <button className={`mtab ${tab === "stolen" ? "active" : ""}`} onClick={() => setTab("stolen")}>🎯 STOLEN ({stolenCount})</button>
+        <button className={`mtab ${tab === "tools" ? "active" : ""}`} onClick={() => setTab("tools")}>🛠️ TOOLS ({toolsCount})</button>
+      </div>
+
+      {loading && (
+        <div className="aa-loading-note">Memuat detail {doneCount}/{totalCount}...</div>
+      )}
+
+      {tab === "accounts" && (
+        <div className="aa-search">
+          <input placeholder="Cari akun..." value={query} onChange={(e) => setQuery(e.target.value)} />
+          <span className="aa-count">{filteredAccounts.length} / {totalCount}</span>
+        </div>
+      )}
+
+      {(tab === "pets" || tab === "eggs") && filteredItems.length > 0 && (
+        <>
+          <div className="rarity-chips">
+            {rarityOptions.map((r) => {
+              const isActive = rarityFilter === r;
+              const rc = r === "ALL" ? "var(--accent2)" : rarityColor(r);
+              return (
+                <button
+                  key={r}
+                  className={`rchip ${isActive ? "active" : ""}`}
+                  onClick={() => setRarityFilter(r)}
+                  style={isActive ? { borderColor: rc, color: rc, background: rc + "18" } : undefined}
+                >
+                  {r.toUpperCase()} <span className="rchip-count">{rarityCounts[r] || 0}</span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="value-bar">VALUE: {fmtRate(totalValueRate)}</div>
+        </>
+      )}
+
+      <div className="modal-body">
+        {tab === "accounts" && (
+          filteredAccounts.length === 0
+            ? <div className="detail-empty">Ga ada akun yang cocok.</div>
+            : (
+              <div className="aa-accounts">
+                {filteredAccounts.map((a) => (
+                  <div key={a.sourceAccount} className="aa-row" onClick={() => onOpenAccount(a.sourceAccount)}>
+                    <div className="aa-row-head">
+                      <span className={`status-dot ${a.online ? "on" : "off"}`} />
+                      <span className="aa-row-name">{a.sourceAccount}</span>
+                      {deviceLabel(a.sourceAccount) && <span className="dev-tag">{deviceLabel(a.sourceAccount)}</span>}
+                    </div>
+                    <div className="aa-row-stats">
+                      <div className="aa-row-stat money"><div className="l">CASH</div><div className="v">{fmtMoney(a.money)}</div></div>
+                      <div className="aa-row-stat income"><div className="l">INCOME</div><div className="v">{fmtRate(a.incomeAktif)}</div></div>
+                      <div className="aa-row-stat speed"><div className="l">SPEED</div><div className="v">{fmtCompactNum(a.speed)}</div></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+        )}
+
+        {tab === "pets" && (
+          petCount === 0
+            ? <div className="detail-empty">{loading ? "Memuat..." : "Belum ada pet ke-tracking."}</div>
+            : <PetGrid pets={filteredItems as Pet[]} idx={idx} showBadges />
+        )}
+
+        {tab === "eggs" && (
+          eggCount === 0
+            ? <div className="detail-empty">{loading ? "Memuat..." : "Belum ada telur."}</div>
+            : (
+              <>
+                {allGrowingEggs.length > 0 && (
+                  <GrowingEggGrid eggs={allGrowingEggs.filter((e) => rarityFilter === "ALL" || (petRarity(e.category, idx) || "Unknown") === rarityFilter)} idx={idx} />
+                )}
+                {allBackpackEggs.length > 0 && (
+                  <PetGrid pets={allBackpackEggs.filter((e) => rarityFilter === "ALL" || (petRarity(e.category, idx) || "Unknown") === rarityFilter).map((e) => ({ ...e, _bag: true } as any))} idx={idx} showBadges />
+                )}
+              </>
+            )
+        )}
+
+        {tab === "stolen" && (
+          stolenCount === 0
+            ? <div className="detail-empty">{loading ? "Memuat..." : "Belum ada pet stolen ke-tracking."}</div>
+            : <PetGrid pets={allStolen as unknown as Pet[]} idx={idx} showBadges />
+        )}
+
+        {tab === "tools" && (
+          toolsCount === 0
+            ? <div className="detail-empty">{loading ? "Memuat..." : "Belum ada tool ke-tracking."}</div>
+            : (
+              <div className="pet-grid">
+                {allTools.map((t, i) => (
+                  <div key={i} className="pg-card">
+                    <div className="pg-info">
+                      <div className="pg-name">{t.name || t.category || "Tool"}</div>
+                      <div className="pg-meta">
+                        {t.itemType && <span className="pg-rarity" style={{ background: "rgba(148,163,184,.15)", color: "var(--dim)", border: "1px solid rgba(148,163,184,.3)" }}>{t.itemType}</span>}
+                        {t.count != null && <span className="pg-rate">×{t.count}</span>}
+                        {t._from && <span className="pg-weight-inline">{t._from}</span>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+        )}
+      </div>
     </>
   );
 }
