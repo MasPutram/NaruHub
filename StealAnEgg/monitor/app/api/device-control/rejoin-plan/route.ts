@@ -231,9 +231,6 @@ export async function GET(req: NextRequest) {
       const lastLaunchAt = llRaw ? Number(llRaw) || 0 : 0;
       const lastHeartbeatAt = pres && pres.ts ? Number(pres.ts) || 0 : 0;
 
-      // Rejoin if launched from dashboard OR has a previous in-game heartbeat.
-      if (lastLaunchAt === 0 && lastHeartbeatAt === 0) continue;
-
       const save = async () => {
         await redis.set(rejoinStateKey(deviceId, pkg), JSON.stringify(st), { ex: REJOIN_STATE_TTL_S });
       };
