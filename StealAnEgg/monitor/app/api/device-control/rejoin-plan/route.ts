@@ -216,8 +216,7 @@ export async function GET(req: NextRequest) {
       if (!p || typeof p !== "object" || !p.pkg || !p.username) continue;
       const pkg: string = p.pkg;
       const account: string = p.username;
-      const target = targets[pkg];
-      if (!target) continue; // only manage packages with a target
+      const target = targets[pkg] || "";
       if (!optInAll && !optIn.includes(pkg)) continue;
       if (paused.has(pkg)) continue;
 
@@ -284,7 +283,7 @@ export async function GET(req: NextRequest) {
         // Attempt 1: rejoin to a SPECIFIC server that isn't the one it was
         // just on (avoids the matchmaker dropping it back into the same server).
         st.attempts = 1;
-        {
+        if (target) {
           const choice = await chooseRejoinTarget(target, st, pres?.jobId || "", siblingsOccupied);
           st.lastTriedJobId = choice.jobId;
           if (choice.jobId) siblingsOccupied.add(choice.jobId);
@@ -292,6 +291,11 @@ export async function GET(req: NextRequest) {
           st.lastAckAt = 0;
           await save();
           actions.push({ pkg, target: choice.target, bounds: bounds[pkg] || "" });
+        } else {
+          st.lastFiredAt = now;
+          st.lastAckAt = 0;
+          await save();
+          actions.push({ pkg, target: "", bounds: bounds[pkg] || "" });
         }
         continue;
       }
@@ -310,7 +314,7 @@ export async function GET(req: NextRequest) {
         actions.push({ pkg, target: "", bounds: bounds[pkg] || "", home: true });
         continue;
       }
-      {
+      if (target) {
         const choice = await chooseRejoinTarget(target, st, pres?.jobId || "", siblingsOccupied);
         st.lastTriedJobId = choice.jobId;
         if (choice.jobId) siblingsOccupied.add(choice.jobId);
@@ -318,6 +322,11 @@ export async function GET(req: NextRequest) {
         st.lastAckAt = 0;
         await save();
         actions.push({ pkg, target: choice.target, bounds: bounds[pkg] || "" });
+      } else {
+        st.lastFiredAt = now;
+        st.lastAckAt = 0;
+        await save();
+        actions.push({ pkg, target: "", bounds: bounds[pkg] || "" });
       }
     }
 
