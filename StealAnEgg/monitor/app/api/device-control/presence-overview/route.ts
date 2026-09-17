@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, PRESENCE_FRESH_S } from "@/lib/redis";
+import { redis, PRESENCE_FRESH_S, deviceAccountsKey, DEVICE_ACCOUNTS_TTL_S } from "@/lib/redis";
 
 // Global fleet overview: every clone's current Roblox server (jobId) across ALL
 // devices, so the operator can see the spread at a glance and spot any two
@@ -61,14 +61,78 @@ export async function GET(_req: NextRequest) {
       } catch {}
     }
 
+    // Build device-id → name lookup from device + meta records for fallback
+    // when an account's presence has a deviceId but the agent didn't list
+    // the account in its packages (no agent, or prefs.xml detection failed).
+    const deviceIdToName: Record<string, string> = {};
+    for (const [account, dev] of Object.entries(accountToDev)) {
+      deviceIdToName[dev.deviceId] = dev.name;
+    }
+    // Also check device meta keys (persist even after device goes offline)
+    const metaKeys: string[] = [];
+    cursor = "0";
+    do {
+      const [next, keys] = await redis.scan(cursor, { match: "termux:device:meta:*", count: 200 });
+      cursor = next;
+      metaKeys.push(...keys);
+    } while (cursor !== "0");
+    if (metaKeys.length > 0) {
+      const metaVals = await redis.mget(...metaKeys);
+      for (let i = 0; i < metaKeys.length; i++) {
+        const id = metaKeys[i].replace(/^termux:device:meta:/, "");
+        if (deviceIdToName[id]) continue;
+        const v = metaVals[i];
+        if (!v) continue;
+        try {
+          const m = typeof v === "string" ? JSON.parse(v) : v;
+          deviceIdToName[id] = m.customName || m.hostname || id.slice(0, 8);
+        } catch {}
+      }
+    }
+
+    // Enrich accountToDev from game heartbeat mappings (device-accounts:*)
+    // so accounts detected via /api/monitor show up even without agent.
+    const daKeys: string[] = [];
+    cursor = "0";
+    do {
+      const [next, keys] = await redis.scan(cursor, { match: "device-accounts:*", count: 200 });
+      cursor = next;
+      daKeys.push(...keys);
+    } while (cursor !== "0");
+    if (daKeys.length > 0) {
+      const daVals = await redis.mget(...daKeys);
+      const cutoff = Date.now() - DEVICE_ACCOUNTS_TTL_S * 1000;
+      for (let i = 0; i < daKeys.length; i++) {
+        const devId = daKeys[i].replace(/^device-accounts:/, "");
+        const v = daVals[i];
+        if (!v) continue;
+        try {
+          const map: Record<string, number> = typeof v === "string" ? JSON.parse(v) : v;
+          for (const [acct, ts] of Object.entries(map)) {
+            if (ts < cutoff) continue;
+            if (!accountToDev[acct]) {
+              accountToDev[acct] = {
+                name: deviceIdToName[devId] || devId.slice(0, 8),
+                deviceId: devId,
+              };
+            }
+          }
+        } catch {}
+      }
+    }
+
     const now = Date.now();
     const rows = Array.from(byAccount.values())
-      // Only clones that belong to a live device record. Presence whose account
-      // isn't listed by any current device is stale/orphaned (device offline or
-      // expired) -- drop it so the view stays clean instead of showing raw hex.
-      .filter((o: any) => accountToDev[o.account])
       .map((o: any) => {
-        const dev = accountToDev[o.account];
+        // Resolve device: agent package list → game heartbeat mapping → presence record's own deviceId
+        let dev = accountToDev[o.account];
+        if (!dev && o.deviceId) {
+          dev = {
+            name: deviceIdToName[o.deviceId] || o.deviceId.slice(0, 8),
+            deviceId: o.deviceId,
+          };
+        }
+        if (!dev) return null;
         const inGame = o.ts && now - o.ts < PRESENCE_FRESH_S * 1000;
         return {
           account: o.account as string,
@@ -79,7 +143,8 @@ export async function GET(_req: NextRequest) {
           lastSeen: (o.ts || 0) as number,
           inGame: !!inGame,
         };
-      });
+      })
+      .filter(Boolean) as { account: string; deviceId: string; deviceName: string; jobId: string; placeId: string; lastSeen: number; inGame: boolean }[];
 
     // Flag collisions: a jobId held by 2+ in-game clones.
     const countByJob: Record<string, number> = {};
