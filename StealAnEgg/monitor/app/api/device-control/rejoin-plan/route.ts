@@ -162,7 +162,10 @@ export async function GET(req: NextRequest) {
     const targets: Record<string, string> = policy.packageTargets || {};
     const bounds: Record<string, string> = policy.packageBounds || {};
     const optIn: string[] = Array.isArray(policy.autoRejoinPackages) ? policy.autoRejoinPackages : [];
-    const optInAll = optIn.length === 0;
+    // If autoRejoinPackages was explicitly set (field exists on policy),
+    // an empty array means NO packages opted in, not all.
+    // Only treat as "all opt-in" when the field was never saved at all.
+    const optInAll = !("autoRejoinPackages" in policy);
     const notRunningGraceMs = jitterMs(Math.max(1, Number(policy.rejoinDelay) || 30) * 1000, 0.2);
 
     const devRaw = await redis.get<string>(termuxDeviceKey(deviceId));
