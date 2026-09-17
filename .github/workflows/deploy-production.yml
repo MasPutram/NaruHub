@@ -23,12 +23,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: StealAnEgg/monitor/package-lock.json
 
@@ -59,7 +59,7 @@ jobs:
         run: tar -czf naruhub-monitor.tar.gz -C deploy-artifact .
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: naruhub-monitor-${{ github.sha }}
           path: StealAnEgg/monitor/naruhub-monitor.tar.gz
@@ -72,7 +72,7 @@ jobs:
 
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: naruhub-monitor-${{ github.sha }}
 
