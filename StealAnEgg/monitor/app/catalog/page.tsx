@@ -23,6 +23,7 @@ interface Account {
   petsCount: number;
   stolenCount: number;
   mutationToken?: number | null;
+  trail?: string | null;
   topPets: Pet[];
   online: boolean;
   forSale?: boolean;

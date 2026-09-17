@@ -75,6 +75,7 @@ export async function POST(req: NextRequest) {
       // Consumable mutation token count -- shown on the dashboard in place of
       // boss token. Lua sends `mutationToken`.
       mutationToken: data.mutationToken ?? null,
+      trail: data.trail ?? null,
       growingEggCount: data.fullData?.growingEggs?.length ?? 0,
       backpackEggCount: data.fullData?.backpackEggs?.length ?? 0,
       topPets: data.topPets || [],

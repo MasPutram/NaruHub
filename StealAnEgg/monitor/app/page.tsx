@@ -129,6 +129,7 @@ interface Account {
   stolenCount: number;
   bossToken?: number | null;
   mutationToken?: number | null;
+  trail?: string | null;
   growingEggCount?: number;
   backpackEggCount?: number;
   topPets: Pet[];

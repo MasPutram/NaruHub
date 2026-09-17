@@ -36,6 +36,7 @@ interface AccountSummary {
   petsCount: number;
   stolenCount: number;
   mutationToken?: number | null;
+  trail?: string | null;
   topPets: Pet[];
   online: boolean;
 }
@@ -884,7 +885,7 @@ function PosterPage() {
     ...(Number(summary.mutationToken) > 0
       ? [{ label: "TOKEN MUTASI", value: "× " + Math.round(Number(summary.mutationToken)), accent: "mut" as const }]
       : []),
-    { label: "TRAIL", value: "-" },
+    { label: "TRAIL", value: summary.trail || "-" },
   ];
 
   const initials = accountInitials(accountName);
