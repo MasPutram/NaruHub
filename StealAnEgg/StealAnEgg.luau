@@ -821,13 +821,13 @@ local function reportToMonitor()
 
 		local bossToken = 0
 		local mutationToken = 0
+		local equippedTrail = ""
 		pcall(function()
 			local s = SaveModule.Get()
 			if not s then return end
 			bossToken = tonumber(s.BossTokens) or 0
-			-- MutationConsumable inventory. Try several likely storage
-			-- shapes since the field name isn't verified yet.
 			mutationToken = (type(s.BossMastery) == "table" and tonumber(s.BossMastery.MutationConsumables)) or 0
+			equippedTrail = tostring(s.EquippedTrail or s.TrailEquipped or "")
 		end)
 
 		local fullData = {
@@ -847,6 +847,7 @@ local function reportToMonitor()
 			currentMoney = currentMoney,
 			kandangLevel = kandangLevel,
 			treadmillLevel = treadmillLevel,
+			trail = equippedTrail,
 			ownerFacebook = "Putra Ramadhan",
 			sourceAccount = LocalPlayer.Name,
 		}
@@ -867,6 +868,7 @@ local function reportToMonitor()
 			bossToken = bossToken,
 			mutationToken = mutationToken,
 			topPets = topPets,
+			trail = equippedTrail,
 			fullData = fullData,
 		}
 
