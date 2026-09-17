@@ -32,6 +32,7 @@ interface Account {
   soldAt?: number;
   detail?: {
     activePets?: Pet[];
+    activeLimit?: number;
     allPets?: Pet[];
     growingEggs?: Pet[];
     backpackEggs?: Pet[];
@@ -100,9 +101,15 @@ function mutColor(mut: string): string {
   return "#6366f1";
 }
 
-function potensi18(a: Account): number {
+function equipSlots(kandangLevel: number | null | undefined): number {
+  if (kandangLevel == null || kandangLevel < 1) return 18;
+  return kandangLevel + 7;
+}
+
+function potensiEquip(a: Account): number {
   const d = a.detail;
   if (!d) return 0;
+  const limit = d.activeLimit || equipSlots(a.kandangLevel);
   const all = [
     ...(d.activePets || []),
     ...(d.allPets || []),
@@ -117,7 +124,7 @@ function potensi18(a: Account): number {
   }
   deduped.sort((a, b) => (b.rate || 0) - (a.rate || 0));
   let total = 0;
-  for (let i = 0; i < Math.min(18, deduped.length); i++) total += deduped[i].rate || 0;
+  for (let i = 0; i < Math.min(limit, deduped.length); i++) total += deduped[i].rate || 0;
   return total;
 }
 
@@ -134,7 +141,7 @@ function highValuePetTotal(a: Account): number {
 }
 
 function calcAccountPrice(a: Account, rInc: number, rHv: number, rSpd: number, rTok: number = 0): number {
-  const incB = potensi18(a) / 1e9;
+  const incB = potensiEquip(a) / 1e9;
   const hvB = highValuePetTotal(a) / 1e9;
   const spdB = (Number(a.speed) || 0) / 1e9;
   const tok = Number(a.mutationToken) || 0;
@@ -236,7 +243,7 @@ export default function CatalogPage() {
         sorted.sort((a, b) => (Number(b.speed) || 0) - (Number(a.speed) || 0));
         break;
       case "income_desc":
-        sorted.sort((a, b) => potensi18(b) - potensi18(a));
+        sorted.sort((a, b) => potensiEquip(b) - potensiEquip(a));
         break;
       case "harga_asc":
         sorted.sort((a, b) => (a.catalogPrice || Infinity) - (b.catalogPrice || Infinity));
@@ -346,7 +353,7 @@ export default function CatalogPage() {
       <tr class="${i % 2 === 1 ? "alt" : ""}">
         <td class="c-code">${accCode(a.sourceAccount)}</td>
         <td>${fmtCompact(a.speed)}</td>
-        <td>${fmtRate(potensi18(a))}</td>
+        <td>${fmtRate(potensiEquip(a))}</td>
         <td class="c-toppet">${petCell}</td>
         <td class="c-num">${eggTotal(a)}</td>
         <td class="c-mut">${(a.mutationToken || 0) > 0 ? `<span class="mut-pill">${a.mutationToken}</span>` : "—"}</td>
@@ -781,11 +788,11 @@ export default function CatalogPage() {
         list.sort((a, b) => (b.stolenCount || 0) - (a.stolenCount || 0));
         break;
       case "potensi":
-        list.sort((a, b) => potensi18(b) - potensi18(a));
+        list.sort((a, b) => potensiEquip(b) - potensiEquip(a));
         break;
       case "akun_baru":
         list = list.filter((a) => (a.treadmillLevel ?? -1) === 1);
-        list.sort((a, b) => potensi18(b) - potensi18(a));
+        list.sort((a, b) => potensiEquip(b) - potensiEquip(a));
         break;
       case "harga":
         list.sort((a, b) => (b.catalogPrice || 0) - (a.catalogPrice || 0));
@@ -1594,7 +1601,7 @@ export default function CatalogPage() {
                     <tr>
                       <th style={{ textAlign: "left", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>AKUN</th>
                       <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SPEED</th>
-                      <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>POTENSI 18</th>
+                      <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>POTENSI PET</th>
                       <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>HV</th>
                       <th style={{ textAlign: "center", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>TOKEN</th>
                       <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SEBELUM</th>
@@ -1608,7 +1615,7 @@ export default function CatalogPage() {
                         <tr key={acc.sourceAccount} style={{ borderBottom: "1px solid #1a1a25" }}>
                           <td style={{ padding: "6px 10px", fontWeight: 700 }}>{acc.sourceAccount}</td>
                           <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{fmtCompact(acc.speed)}</td>
-                          <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{fmtRate(potensi18(acc))}</td>
+                          <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{fmtRate(potensiEquip(acc))}</td>
                           <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{fmtRate(highValuePetTotal(acc))}</td>
                           <td style={{ padding: "6px 10px", textAlign: "center", color: (acc.mutationToken || 0) > 0 ? "var(--accent)" : "var(--dim)", fontWeight: 800 }}>{acc.mutationToken || 0}</td>
                           <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{acc.catalogPrice ? fmtRupiah(acc.catalogPrice) : "—"}</td>

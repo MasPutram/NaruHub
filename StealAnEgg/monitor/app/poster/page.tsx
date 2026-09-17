@@ -48,7 +48,7 @@ interface AccountDetail {
   backpackEggs: Pet[];
 }
 
-const MAX_EQUIP = 18;
+const DEFAULT_EQUIP = 18;
 const HIGH_VALUE_THRESHOLD = 1_000_000_000;
 const NOTABLE_THRESHOLD = 300_000_000;
 
@@ -104,7 +104,12 @@ function petKey(p: Pet): string {
   return `${p.category}|${(p.mutations || []).slice().sort().join("+")}|${p.rate}`;
 }
 
-function computeIncomePotensiPetAktif(detail: AccountDetail | null): number {
+function equipSlots(kandangLevel: number | null | undefined): number {
+  if (kandangLevel == null || kandangLevel < 1) return DEFAULT_EQUIP;
+  return kandangLevel + 7;
+}
+
+function computeIncomePotensiPetAktif(detail: AccountDetail | null, limit: number): number {
   if (!detail) return 0;
   const pool = [
     ...(detail.activePets || []),
@@ -113,7 +118,7 @@ function computeIncomePotensiPetAktif(detail: AccountDetail | null): number {
     ...(detail.backpackEggs || []),
   ].sort((a, b) => (b.rate || 0) - (a.rate || 0));
   let total = 0;
-  for (let i = 0; i < Math.min(MAX_EQUIP, pool.length); i++) {
+  for (let i = 0; i < Math.min(limit, pool.length); i++) {
     total += pool[i].rate || 0;
   }
   return total;
@@ -143,7 +148,8 @@ function computeAutoPrice(detail: AccountDetail | null, summary: AccountSummary 
   const rateHvPerB = (parseFloat(rateHvPerBStr) || 0) * 1000;
   const rateSpeedPerB = (parseFloat(rateSpeedPerBStr) || 0) * 1000;
   if (ratePerB === 0 && rateHvPerB === 0 && rateSpeedPerB === 0) return "";
-  const incomeB = computeIncomePotensiPetAktif(detail) / 1e9;
+  const limit = detail.activeLimit || equipSlots(summary?.kandangLevel);
+  const incomeB = computeIncomePotensiPetAktif(detail, limit) / 1e9;
   const highvalueB = computeHighValuePetTotal(detail) / 1e9;
   const speedB = (Number(summary?.speed) || 0) / 1e9;
   const priceValue = Math.round(incomeB * ratePerB + highvalueB * rateHvPerB + speedB * rateSpeedPerB);
@@ -737,7 +743,7 @@ function PosterPage() {
   const activePets = detail?.activePets || [];
   const growingEggs = detail?.growingEggs || [];
   const backpackEggs = detail?.backpackEggs || [];
-  const activeLimit = detail?.activeLimit || MAX_EQUIP;
+  const activeLimit = detail?.activeLimit || equipSlots(summary?.kandangLevel);
 
   const allCombined = [...allPets, ...activePets, ...backpackEggs, ...growingEggs];
   const allDeduped: Pet[] = [];
@@ -753,7 +759,7 @@ function PosterPage() {
   const backpackEggKeys = new Set(backpackEggsSorted.map(petKey));
   const eggKeys = new Set([...growingEggsSorted, ...backpackEggsSorted].map(petKey));
 
-  // "Aktif" -- MAX_EQUIP rate TERTINGGI dari gabungan pet aktif + isi tas +
+  // "Aktif" -- top-N rate TERTINGGI dari gabungan pet aktif + isi tas +
   // telur (lagi tumbuh + di tas), terlepas lagi keequip/ditaro apa ngga.
   // Dedup dulu supaya pet yang muncul di equipped DAN inventory tidak
   // dihitung dua kali.
@@ -766,7 +772,7 @@ function PosterPage() {
     petPoolDeduped.push(p);
   }
   const petPoolSorted = petPoolDeduped.sort((a, b) => (b.rate || 0) - (a.rate || 0));
-  const activePetsSorted = petPoolSorted.slice(0, MAX_EQUIP);
+  const activePetsSorted = petPoolSorted.slice(0, activeLimit);
 
   // Kandidat 3 card utama + Paling Gacor.
   const uniqueSeen = new Set<string>();
@@ -860,11 +866,13 @@ function PosterPage() {
 
   const totalEggs = growingEggs.length + backpackEggs.length;
 
+  const equippedIncome = (activePets || []).reduce((s, p) => s + (p.rate || 0), 0);
+
   const statItems: { label: string; value: string; accent?: "mut" }[] = [
     { label: "SPEED", value: fmtCompact(summary.speed) },
     { label: "CASH", value: fmtMoney(summary.money) },
-    { label: `POTENSI ${MAX_EQUIP} PET AKTIF`, value: fmtRate(potentialActiveRate) },
-    { label: "TOTAL PET ≥ B/S", value: fmtRate(highValueTotal) },
+    { label: `POTENSI ${activeLimit} PET AKTIF`, value: fmtRate(potentialActiveRate) },
+    { label: "INCOME AKTIF", value: fmtRate(equippedIncome) },
     { label: "TOTAL PET DI TAS", value: `${allSorted.length} pets` },
     { label: "TOTAL EGG", value: `${totalEggs} eggs` },
     ...(summary.kandangLevel != null
@@ -876,6 +884,7 @@ function PosterPage() {
     ...(Number(summary.mutationToken) > 0
       ? [{ label: "TOKEN MUTASI", value: "× " + Math.round(Number(summary.mutationToken)), accent: "mut" as const }]
       : []),
+    { label: "TRAIL", value: "-" },
   ];
 
   const initials = accountInitials(accountName);

@@ -208,24 +208,20 @@ function fmtRate(v: number | null | undefined): string {
   return fmtMoney(v) + "/s";
 }
 
-const MAX_KANDANG = 11;
-const MAX_TREADMILL = 10;
-
 function fmtLevel(v: number | null | undefined): string {
   if (v == null) return "-";
   return "Lv. " + v;
 }
 
-function fmtKandang(v: number | null | undefined): { text: string; isMax: boolean } {
+function fmtLevelMax(v: number | null | undefined, maxLevel: number): { text: string; isMax: boolean } {
   if (v == null) return { text: "-", isMax: false };
-  const isMax = v >= MAX_KANDANG;
+  const isMax = v >= maxLevel && maxLevel > 0;
   return { text: isMax ? `Lv. ${v} MAX` : `Lv. ${v}`, isMax };
 }
 
-function fmtTreadmill(v: number | null | undefined): { text: string; isMax: boolean } {
-  if (v == null) return { text: "-", isMax: false };
-  const isMax = v >= MAX_TREADMILL;
-  return { text: isMax ? `Lv. ${v} MAX` : `Lv. ${v}`, isMax };
+function equipSlots(kandangLevel: number | null | undefined): number {
+  if (kandangLevel == null || kandangLevel < 1) return 18;
+  return kandangLevel + 7;
 }
 
 function fmtLastSeen(lastSeen?: number): string {
@@ -354,6 +350,8 @@ export default function DashboardPage() {
   const totalPets = allOnline.reduce((s, a) => s + (Number(a.petsCount) || 0), 0);
   const totalStolen = allOnline.reduce((s, a) => s + (Number(a.stolenCount) || 0), 0);
   const totalGrowing = filtered.reduce((s, a) => s + (Number(a.growingEggCount) || 0), 0);
+  const maxKandang = filtered.reduce((m, a) => Math.max(m, a.kandangLevel ?? 0), 0);
+  const maxTreadmill = filtered.reduce((m, a) => Math.max(m, a.treadmillLevel ?? 0), 0);
 
   async function openDetail(name: string) {
     const acc = accounts.find((a) => a.sourceAccount === name) || null;
@@ -787,6 +785,8 @@ export default function DashboardPage() {
                 onDeleteConfirm={deleteAccount}
                 onDeleteCancel={() => setDeleteConfirm(null)}
                 genMsg={genMsgs.current[a.sourceAccount]}
+                maxKandang={maxKandang}
+                maxTreadmill={maxTreadmill}
               />
             ))}
           </div>
@@ -801,6 +801,8 @@ export default function DashboardPage() {
                 detailTab={detailTab}
                 setDetailTab={setDetailTab}
                 onClose={() => setDetail(null)}
+                maxKandang={maxKandang}
+                maxTreadmill={maxTreadmill}
               />
             </div>
           </div>
@@ -826,7 +828,7 @@ export default function DashboardPage() {
 }
 
 /* ===== ACCOUNT CARD ===== */
-function AccountCard({ account: a, onOpen, onSell, onDelete, deleteConfirm, onDeleteConfirm, onDeleteCancel, genMsg }: {
+function AccountCard({ account: a, onOpen, onSell, onDelete, deleteConfirm, onDeleteConfirm, onDeleteCancel, genMsg, maxKandang, maxTreadmill }: {
   account: Account;
   onOpen: (name: string) => void;
   onSell: (name: string) => void;
@@ -835,6 +837,8 @@ function AccountCard({ account: a, onOpen, onSell, onDelete, deleteConfirm, onDe
   onDeleteConfirm: (name: string) => void;
   onDeleteCancel: () => void;
   genMsg?: { text: string; color: string };
+  maxKandang: number;
+  maxTreadmill: number;
 }) {
   const isOff = !a.online;
   const eggCount = a.growingEggCount || 0;
@@ -865,9 +869,9 @@ function AccountCard({ account: a, onOpen, onSell, onDelete, deleteConfirm, onDe
         <div className="st speed"><div className="sl">SPEED</div><div className="sv">{fmtCompactNum(a.speed)}</div></div>
         <div className="st money"><div className="sl">CASH</div><div className="sv">{fmtMoney(a.money)}</div></div>
         <div className="st income"><div className="sl">INCOME AKTIF</div><div className="sv">{fmtRate(a.incomeAktif)}</div></div>
-        <div className="st"><div className="sl">POTENSI 18 PET</div><div className="sv">{fmtRate(a.highValuePetTotal)}</div></div>
-        <div className="st"><div className="sl">KANDANG</div><div className="sv">{(() => { const k = fmtKandang(a.kandangLevel); return k.isMax ? <>{fmtLevel(a.kandangLevel)} <span className="max-tag">MAX</span></> : fmtLevel(a.kandangLevel); })()}</div></div>
-        <div className="st"><div className="sl">TREADMILL</div><div className="sv">{(() => { const t = fmtTreadmill(a.treadmillLevel); return t.isMax ? <>{fmtLevel(a.treadmillLevel)} <span className="max-tag">MAX</span></> : fmtLevel(a.treadmillLevel); })()}</div></div>
+        <div className="st"><div className="sl">POTENSI {equipSlots(a.kandangLevel)} PET</div><div className="sv">{fmtRate(a.highValuePetTotal)}</div></div>
+        <div className="st"><div className="sl">KANDANG</div><div className="sv">{(() => { const k = fmtLevelMax(a.kandangLevel, maxKandang); return k.isMax ? <>{fmtLevel(a.kandangLevel)} <span className="max-tag">MAX</span></> : fmtLevel(a.kandangLevel); })()}</div></div>
+        <div className="st"><div className="sl">TREADMILL</div><div className="sv">{(() => { const t = fmtLevelMax(a.treadmillLevel, maxTreadmill); return t.isMax ? <>{fmtLevel(a.treadmillLevel)} <span className="max-tag">MAX</span></> : fmtLevel(a.treadmillLevel); })()}</div></div>
         <div className="st"><div className="sl">PETS</div><div className="sv">{fmtNum(a.petsCount)}</div></div>
         <div className="st boss"><div className="sl">&#x1F9EC; TOKEN MUTASI</div><div className="sv">{fmtNum(a.mutationToken ?? 0)}</div></div>
       </div>
@@ -1002,11 +1006,13 @@ function AllAccountsCard({ accounts, tabMode, onOpen }: { accounts: Account[]; t
  *  - STOLEN / TOOLS: driven by fields the in-game script may or may not send;
  *    modal shows an empty state until those payloads land.
  */
-function DetailModal({ detail, detailTab, setDetailTab, onClose }: {
+function DetailModal({ detail, detailTab, setDetailTab, onClose, maxKandang, maxTreadmill }: {
   detail: { name: string; data: AccountDetail | null; loading: boolean; account: Account | null };
   detailTab: DetailTab;
   setDetailTab: (t: DetailTab) => void;
   onClose: () => void;
+  maxKandang: number;
+  maxTreadmill: number;
 }) {
   const [idx, setIdx] = useState<Record<string, string>>({});
   useEffect(() => { loadIconIndex().then(setIdx); }, []);
@@ -1097,11 +1103,11 @@ function DetailModal({ detail, detailTab, setDetailTab, onClose }: {
               </div>
               <div className="ms-card">
                 <div className="mslabel">KANDANG</div>
-                <div className="msval">{fmtKandang(acc.kandangLevel).isMax ? <>{fmtLevel(acc.kandangLevel)} <span className="max-tag">MAX</span></> : fmtLevel(acc.kandangLevel)}</div>
+                <div className="msval">{fmtLevelMax(acc.kandangLevel, maxKandang).isMax ? <>{fmtLevel(acc.kandangLevel)} <span className="max-tag">MAX</span></> : fmtLevel(acc.kandangLevel)}</div>
               </div>
               <div className="ms-card">
                 <div className="mslabel">TREADMILL</div>
-                <div className="msval">{fmtTreadmill(acc.treadmillLevel).isMax ? <>{fmtLevel(acc.treadmillLevel)} <span className="max-tag">MAX</span></> : fmtLevel(acc.treadmillLevel)}</div>
+                <div className="msval">{fmtLevelMax(acc.treadmillLevel, maxTreadmill).isMax ? <>{fmtLevel(acc.treadmillLevel)} <span className="max-tag">MAX</span></> : fmtLevel(acc.treadmillLevel)}</div>
               </div>
               <div className="ms-card">
                 <div className="mslabel">ACTIVE LIMIT</div>
