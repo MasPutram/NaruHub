@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, accountKey, detailKey, forSaleKey, soldKey, ACCOUNT_TTL_S, petIconKey, PET_ICON_TTL_S, forSaleKickKey } from "@/lib/redis";
+import { redis, accountKey, detailKey, forSaleKey, soldKey, ACCOUNT_TTL_S, petIconKey, PET_ICON_TTL_S, forSaleKickKey, deviceAccountsKey, DEVICE_ACCOUNTS_TTL_S } from "@/lib/redis";
 
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
@@ -108,6 +108,26 @@ export async function POST(req: NextRequest) {
     }
 
     await pipeline.exec();
+
+    // Update per-device account mapping so the agent heartbeat handler can
+    // enrich packages whose prefs.xml detection failed.
+    const hbDeviceId = req.headers.get("x-device-id") || "unknown";
+    if (hbDeviceId !== "unknown" && name !== "?") {
+      try {
+        const mapKey = deviceAccountsKey(hbDeviceId);
+        const existingMap = await redis.get<string>(mapKey);
+        const map: Record<string, number> = existingMap
+          ? (typeof existingMap === "string" ? JSON.parse(existingMap) : existingMap)
+          : {};
+        map[name] = Date.now();
+        // Prune entries older than TTL
+        const cutoff = Date.now() - DEVICE_ACCOUNTS_TTL_S * 1000;
+        for (const k of Object.keys(map)) {
+          if (map[k] < cutoff) delete map[k];
+        }
+        await redis.set(mapKey, JSON.stringify(map), { ex: DEVICE_ACCOUNTS_TTL_S });
+      } catch {}
+    }
 
     return NextResponse.json({ ok: true, ...(shouldKick ? { forSale: true } : {}) });
   } catch (e: any) {

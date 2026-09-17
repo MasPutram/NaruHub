@@ -62,6 +62,14 @@ export function presenceKey(deviceId: string, account: string) {
 export const PRESENCE_TTL_S = 600; // 10 min -- outlives the stuck/give-up window
 export const PRESENCE_FRESH_S = 60; // seen within this = currently in-game
 
+// Per-device reverse map of accounts detected via game heartbeat (/api/monitor).
+// JSON object: { accountName: lastSeenMs, ... }. Used by /api/termux/heartbeat
+// to enrich packages whose prefs.xml-based username detection failed.
+export function deviceAccountsKey(deviceId: string) {
+  return `device-accounts:${deviceId}`;
+}
+export const DEVICE_ACCOUNTS_TTL_S = ACCOUNT_TTL_S * 2; // 240s
+
 // Per-package auto-rejoin state machine (server-side brain). Tracks how long a
 // clone has been stuck, how many rejoin attempts have fired, which servers
 // failed, and whether we've given up (sent it home).

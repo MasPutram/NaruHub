@@ -49,6 +49,7 @@ interface TermuxDevice {
   registeredAt: number;
   lastSeen: number;
   packages: (string | TermuxPackage)[];
+  heartbeatAccounts?: string[];
   screen?: { width: number; height: number };
   stats?: TermuxStats;
 }
@@ -412,7 +413,21 @@ export default function DeviceDetailPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const pkgs = (Array.isArray(device?.packages) ? device.packages : []).map(normalizePackage);
+  const rawPkgs = (Array.isArray(device?.packages) ? device.packages : []).map(normalizePackage);
+  // Enrich packages with empty usernames using game-heartbeat-detected accounts.
+  // The server populates heartbeatAccounts from /api/monitor data.
+  const pkgs = (() => {
+    const hbAccounts = device?.heartbeatAccounts || [];
+    if (hbAccounts.length === 0) return rawPkgs;
+    const assigned = new Set(rawPkgs.map((p) => p.username).filter(Boolean));
+    const unassigned = hbAccounts.filter((a) => !assigned.has(a));
+    if (unassigned.length === 0) return rawPkgs;
+    let idx = 0;
+    return rawPkgs.map((p) => {
+      if (p.username || idx >= unassigned.length) return p;
+      return { ...p, username: unassigned[idx++], _viaHeartbeat: true };
+    });
+  })();
   const selectedPkgs = pkgs.filter((p) => selected[p.pkg] !== false);
 
   useEffect(() => {
@@ -748,6 +763,7 @@ export default function DeviceDetailPage() {
       .badge.off { background: #2b191c; color: var(--red); }
       .badge.unk { background: #1e1e2a; color: var(--dim); }
       .account-none { color: var(--dim); font-style: italic; }
+      .hb-badge { color: var(--dim); font-size: 10px; opacity: 0.7; }
       .launchbar { display: flex; justify-content: space-between; gap: 10px; align-items: center; margin-top: 13px; }
 
       .console { background: #090910; border: 1px solid #1d1d2a; border-radius: 8px; padding: 11px; height: 215px; overflow: auto; font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; }
@@ -963,7 +979,7 @@ export default function DeviceDetailPage() {
                           />
                         </td>
                         <td>{p.pkg}</td>
-                        <td>{p.username ? p.username : <span className="account-none">belum terdeteksi</span>}</td>
+                        <td>{p.username ? <>{p.username}{(p as any)._viaHeartbeat && <span className="hb-badge" title="Detected via game heartbeat, not prefs.xml"> (hb)</span>}</> : <span className="account-none">belum terdeteksi</span>}</td>
                         <td>{sessionSecs != null ? fmtSession(sessionSecs) : "—"}</td>
                         <td>
                           {p.username ? (

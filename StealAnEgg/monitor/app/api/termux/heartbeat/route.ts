@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, termuxDeviceKey, termuxDeviceMetaKey, TERMUX_DEVICE_TTL_S } from "@/lib/redis";
+import { redis, termuxDeviceKey, termuxDeviceMetaKey, TERMUX_DEVICE_TTL_S, deviceAccountsKey, DEVICE_ACCOUNTS_TTL_S } from "@/lib/redis";
 
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
@@ -47,6 +47,44 @@ export async function POST(req: NextRequest) {
         screen: screen && screen.width && screen.height ? screen : undefined,
       };
       if (meta?.customName) device.customName = meta.customName;
+    }
+
+    // Enrich packages with empty usernames from game heartbeat data.
+    // When prefs.xml detection fails, the per-device account mapping
+    // (populated by /api/monitor) provides a fallback.
+    if (Array.isArray(device.packages) && device.packages.length > 0) {
+      try {
+        const mapRaw = await redis.get<string>(deviceAccountsKey(deviceId));
+        if (mapRaw) {
+          const accountMap: Record<string, number> = typeof mapRaw === "string" ? JSON.parse(mapRaw) : mapRaw;
+          const now = Date.now();
+          const cutoff = now - DEVICE_ACCOUNTS_TTL_S * 1000;
+          const activeAccounts = Object.entries(accountMap)
+            .filter(([, ts]) => ts > cutoff)
+            .map(([name]) => name);
+
+          if (activeAccounts.length > 0) {
+            const assigned = new Set(
+              device.packages
+                .map((p: any) => (typeof p === "string" ? "" : p.username || ""))
+                .filter(Boolean)
+            );
+            const unassigned = activeAccounts.filter((a) => !assigned.has(a));
+            const emptyPkgs = device.packages.filter(
+              (p: any) => typeof p !== "string" && !p.username
+            );
+
+            // 1:1 match: assign unambiguously
+            if (emptyPkgs.length === 1 && unassigned.length === 1) {
+              emptyPkgs[0].username = unassigned[0];
+            }
+
+            // Store all heartbeat-detected accounts on the device record
+            // so the dashboard can display them even without 1:1 match.
+            device.heartbeatAccounts = activeAccounts;
+          }
+        }
+      } catch {}
     }
 
     await redis.set(termuxDeviceKey(deviceId), JSON.stringify(device), { ex: TERMUX_DEVICE_TTL_S });
