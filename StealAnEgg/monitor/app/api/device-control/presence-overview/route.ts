@@ -9,6 +9,18 @@ import { redis, PRESENCE_FRESH_S, deviceAccountsKey, DEVICE_ACCOUNTS_TTL_S } fro
 // that username), NOT by the deviceId in the presence record -- the in-game
 // script reports a different deviceId than the agent, so keying on it would
 // show raw hex groups. Account names are globally unique, so this is stable.
+// Derive a friendly device name from the account username pattern.
+// BlekokGong{N} → SAE{groupStart} where groupStart = floor((N-1)/10)*10+1
+// e.g. BlekokGong161-170 → SAE161, BlekokGong21-30 → SAE21
+function deriveDeviceName(account: string): string | null {
+  const m = account.match(/^BlekokGong(\d+)$/i);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  if (isNaN(n) || n <= 0) return null;
+  const groupStart = Math.floor((n - 1) / 10) * 10 + 1;
+  return `SAE${groupStart}`;
+}
+
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: NextRequest) {
@@ -112,7 +124,7 @@ export async function GET(_req: NextRequest) {
             if (ts < cutoff) continue;
             if (!accountToDev[acct]) {
               accountToDev[acct] = {
-                name: deviceIdToName[devId] || devId.slice(0, 8),
+                name: deviceIdToName[devId] || deriveDeviceName(acct) || devId.slice(0, 8),
                 deviceId: devId,
               };
             }
@@ -128,7 +140,7 @@ export async function GET(_req: NextRequest) {
         let dev = accountToDev[o.account];
         if (!dev && o.deviceId) {
           dev = {
-            name: deviceIdToName[o.deviceId] || o.deviceId.slice(0, 8),
+            name: deviceIdToName[o.deviceId] || deriveDeviceName(o.account) || o.deviceId.slice(0, 8),
             deviceId: o.deviceId,
           };
         }
