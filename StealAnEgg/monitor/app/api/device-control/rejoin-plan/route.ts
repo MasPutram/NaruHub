@@ -55,11 +55,10 @@ interface RejoinState {
   lastAckAt: number;
   failedJobIds: string[];
   lastTriedJobId: string | null;
-  gaveUp: boolean;
 }
 
 function freshState(): RejoinState {
-  return { staleSince: 0, attempts: 0, lastFiredAt: 0, lastAckAt: 0, failedJobIds: [], lastTriedJobId: null, gaveUp: false };
+  return { staleSince: 0, attempts: 0, lastFiredAt: 0, lastAckAt: 0, failedJobIds: [], lastTriedJobId: null };
 }
 
 function parsePlaceId(target: string): string | null {
@@ -267,8 +266,6 @@ export async function GET(req: NextRequest) {
         if (stRaw) await redis.del(rejoinStateKey(deviceId, pkg));
         continue;
       }
-      if (st.gaveUp) continue;
-
       // Running but not in-game: could be loading, on home/login screen, or
       // wedged on an error screen. Give it IDLE_KILL_MS to produce a heartbeat;
       // after that, force-stop to free RAM. Auto-rejoin's retry counter
@@ -276,8 +273,6 @@ export async function GET(req: NextRequest) {
       if (runningSet.has(pkg)) {
         const idleAnchor = Math.max(lastLaunchAt, lastHeartbeatAt);
         if (idleAnchor > 0 && now - idleAnchor >= IDLE_KILL_MS) {
-          // Don't set gaveUp — let the normal retry mechanism handle
-          // relaunch after the kill. retryLimit caps the loop.
           actions.push({ pkg, target: "", bounds: "", kill: true });
         }
         continue;
@@ -332,7 +327,10 @@ export async function GET(req: NextRequest) {
       // The last attempt didn't land. Escalate to yet another server.
       st.attempts += 1;
       if (st.attempts > MAX_ATTEMPTS) {
-        st.gaveUp = true;
+        // Reset and start over — never give up permanently.
+        st.attempts = 0;
+        st.failedJobIds = [];
+        st.lastTriedJobId = null;
         st.lastFiredAt = now;
         st.lastAckAt = 0;
         await save();
