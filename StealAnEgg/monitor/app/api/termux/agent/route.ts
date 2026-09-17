@@ -805,6 +805,7 @@ local function poll_policy_if_due()
   if body == "" then return end
   local ok, parsed = pcall(json.decode, body)
   if not ok or not parsed or not parsed.ok then return end
+  local prev_rejoin = CACHED_POLICY and CACHED_POLICY.autoRejoinEnabled or false
   CACHED_POLICY = {
     autoRejoinEnabled = parsed.policy and parsed.policy.autoRejoinEnabled or false,
     rejoinDelay = (parsed.policy and parsed.policy.rejoinDelay) or 10,
@@ -818,6 +819,13 @@ local function poll_policy_if_due()
     -- clone.
     offlinePackages = parsed.offlinePackages or {},
   }
+  if CACHED_POLICY.autoRejoinEnabled ~= prev_rejoin then
+    if CACHED_POLICY.autoRejoinEnabled then
+      log(C.green .. "[" .. ts() .. "] auto-rejoin = ON" .. C.reset)
+    else
+      log(C.yellow .. "[" .. ts() .. "] auto-rejoin = OFF" .. C.reset)
+    end
+  end
 end
 
 local function is_paused(pkg)
