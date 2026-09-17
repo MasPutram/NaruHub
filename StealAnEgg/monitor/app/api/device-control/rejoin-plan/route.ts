@@ -209,6 +209,27 @@ export async function GET(req: NextRequest) {
       }
     } catch {}
 
+    // Compute fallback grid bounds for packages without saved bounds.
+    // Same logic as launch route: prevents fullscreen launch collapsing
+    // other floating clones.
+    const screen = device.screen;
+    const robloxPkgs = packages.filter((p: any) => p && p.pkg && p.username).map((p: any) => p.pkg as string);
+    const totalClones = robloxPkgs.length;
+    const cols = Math.ceil(Math.sqrt(totalClones));
+    const rows = Math.ceil(totalClones / cols);
+    const computeFallbackBounds = (idx: number): string => {
+      if (!screen || !screen.width || !screen.height) return "";
+      const gap = 16;
+      const topPad = 50;
+      const cellW = Math.floor((screen.width - gap * (cols + 1)) / cols);
+      const cellH = Math.floor((screen.height - topPad - gap * rows) / rows);
+      const col = idx % cols;
+      const row = Math.floor(idx / cols);
+      const left = gap + col * (cellW + gap);
+      const top = topPad + row * (cellH + gap);
+      return `${left},${top},${left + cellW},${top + cellH}`;
+    }
+
     const now = Date.now();
     const actions: { pkg: string; target: string; bounds: string; home?: boolean }[] = [];
 
@@ -287,12 +308,12 @@ export async function GET(req: NextRequest) {
           st.lastFiredAt = now;
           st.lastAckAt = 0;
           await save();
-          actions.push({ pkg, target: choice.target, bounds: bounds[pkg] || "" });
+          actions.push({ pkg, target: choice.target, bounds: bounds[pkg] || computeFallbackBounds(robloxPkgs.indexOf(pkg)) });
         } else {
           st.lastFiredAt = now;
           st.lastAckAt = 0;
           await save();
-          actions.push({ pkg, target: "", bounds: bounds[pkg] || "" });
+          actions.push({ pkg, target: "", bounds: bounds[pkg] || computeFallbackBounds(robloxPkgs.indexOf(pkg)) });
         }
         continue;
       }
@@ -308,7 +329,7 @@ export async function GET(req: NextRequest) {
         st.lastFiredAt = now;
         st.lastAckAt = 0;
         await save();
-        actions.push({ pkg, target: "", bounds: bounds[pkg] || "", home: true });
+        actions.push({ pkg, target: "", bounds: bounds[pkg] || computeFallbackBounds(robloxPkgs.indexOf(pkg)), home: true });
         continue;
       }
       if (target) {
@@ -318,12 +339,12 @@ export async function GET(req: NextRequest) {
         st.lastFiredAt = now;
         st.lastAckAt = 0;
         await save();
-        actions.push({ pkg, target: choice.target, bounds: bounds[pkg] || "" });
+        actions.push({ pkg, target: choice.target, bounds: bounds[pkg] || computeFallbackBounds(robloxPkgs.indexOf(pkg)) });
       } else {
         st.lastFiredAt = now;
         st.lastAckAt = 0;
         await save();
-        actions.push({ pkg, target: "", bounds: bounds[pkg] || "" });
+        actions.push({ pkg, target: "", bounds: bounds[pkg] || computeFallbackBounds(robloxPkgs.indexOf(pkg)) });
       }
     }
 
