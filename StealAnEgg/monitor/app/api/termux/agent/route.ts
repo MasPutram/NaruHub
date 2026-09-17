@@ -942,7 +942,9 @@ local function maybe_auto_rejoin()
                 os.execute("sleep " .. delay)
               end
               -- forceKill=true so the rejoin cold-starts (clears a stuck screen).
-              launch_app(act.pkg, bnds, bnds ~= "", 0, act.target or "", true, true)
+              -- skipTrim=false so trim_ram() runs before launch, preventing LMK
+              -- from killing other in-game clones when RAM is tight.
+              launch_app(act.pkg, bnds, bnds ~= "", 0, act.target or "", true, false)
               http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
             end
           end
