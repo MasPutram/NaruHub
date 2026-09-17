@@ -283,6 +283,15 @@ local function collect_packages()
       local prefs = shell(string.format('su -c "cat /data/data/%s/shared_prefs/prefs.xml"', pkg))
       if prefs ~= "" then
         username = prefs:match('<string name="username">([^<]*)</string>') or ""
+        -- If auth cookie is missing, the account is logged out even if
+        -- username is still cached in prefs. Clear it so the server
+        -- knows this clone has no active session.
+        if username ~= "" then
+          local cookie = prefs:match('<string name="RbxSecurityCookie">([^<]*)</string>')
+          if not cookie or cookie == "" then
+            username = ""
+          end
+        end
       end
       pkgs[#pkgs+1] = { pkg = pkg, label = pkg, username = username }
     end
