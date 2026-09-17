@@ -271,13 +271,13 @@ export async function GET(req: NextRequest) {
 
       // Running but not in-game: could be loading, on home/login screen, or
       // wedged on an error screen. Give it IDLE_KILL_MS to produce a heartbeat;
-      // after that, force-stop to free RAM (idle clones on login screen are the
-      // main culprit). gaveUp prevents a kill->relaunch->kill loop.
+      // after that, force-stop to free RAM. Auto-rejoin's retry counter
+      // (MAX_ATTEMPTS) caps the kill->relaunch cycle.
       if (runningSet.has(pkg)) {
         const idleAnchor = Math.max(lastLaunchAt, lastHeartbeatAt);
         if (idleAnchor > 0 && now - idleAnchor >= IDLE_KILL_MS) {
-          st.gaveUp = true;
-          await save();
+          // Don't set gaveUp — let the normal retry mechanism handle
+          // relaunch after the kill. retryLimit caps the loop.
           actions.push({ pkg, target: "", bounds: "", kill: true });
         }
         continue;

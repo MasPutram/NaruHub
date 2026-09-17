@@ -919,7 +919,13 @@ local function maybe_auto_rejoin()
           if act.pkg then
             if act.kill then
               log(C.yellow .. "[" .. ts() .. "] idle-kill: " .. act.pkg .. " (no heartbeat, freeing RAM)" .. C.reset)
-              kill_if_forced(act.pkg, true)
+              kill_pkg_pidonly(act.pkg)
+              sleep(2)
+              if is_pkg_running(act.pkg) then
+                kill_pkg_pidonly(act.pkg)
+                sleep(2)
+              end
+              log(C.dim .. "[" .. ts() .. "] " .. act.pkg .. " stopped (idle-kill done)" .. C.reset)
               http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
             elseif act.home then
               log(C.yellow .. "[" .. ts() .. "] auto-rejoin: gave up on " .. act.pkg .. " -> home" .. C.reset)
