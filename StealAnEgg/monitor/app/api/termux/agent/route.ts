@@ -534,7 +534,7 @@ local function trim_ram()
   shellcode('su -c "echo 3 > /proc/sys/vm/drop_caches"')
 end
 
-local function launch_app(pkg, bounds, resize, delay, target, forceKill)
+local function launch_app(pkg, bounds, resize, delay, target, forceKill, skipTrim)
   -- A targeted (deep-link) launch must cold-start: Roblox only acts on a
   -- roblox://placeId join from a FRESH process. If the app is already up --
   -- e.g. stuck on an error/reconnect screen after a failed launch -- then
@@ -544,7 +544,7 @@ local function launch_app(pkg, bounds, resize, delay, target, forceKill)
   -- launch pays nothing.)
   local wantKill = forceKill or (target ~= nil and target ~= "")
   kill_if_forced(pkg, wantKill)
-  trim_ram()
+  if not skipTrim then trim_ram() end
 
   if resize and bounds and bounds ~= "" then
     local left, top, right, bottom = bounds:match("(%d+),(%d+),(%d+),(%d+)")
@@ -911,7 +911,7 @@ local function maybe_auto_rejoin()
             if act.home then
               log(C.yellow .. "[" .. ts() .. "] auto-rejoin: gave up on " .. act.pkg .. " -> home" .. C.reset)
               local bnds = act.bounds or ""
-              launch_app(act.pkg, bnds, bnds ~= "", 0, "", true)
+              launch_app(act.pkg, bnds, bnds ~= "", 0, "", true, true)
               http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
             else
               local bnds = act.bounds or ""
@@ -923,7 +923,7 @@ local function maybe_auto_rejoin()
                 os.execute("sleep " .. delay)
               end
               -- forceKill=true so the rejoin cold-starts (clears a stuck screen).
-              launch_app(act.pkg, bnds, bnds ~= "", 0, act.target or "", true)
+              launch_app(act.pkg, bnds, bnds ~= "", 0, act.target or "", true, true)
               http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
             end
           end
