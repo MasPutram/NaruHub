@@ -3,3 +3,5 @@ node_modules/
 .env
 .env.local
 tsconfig.tsbuildinfo
+deploy-artifact/
+naruhub-monitor.tar.gz
