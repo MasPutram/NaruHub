@@ -902,7 +902,7 @@ local PLAN_POLL_INTERVAL = 15
 -- Auto-rejoin is a SERVER-SIDE brain now: the agent fetches the plan the
 -- server computed (from in-game presence heartbeats), executes each launch,
 -- and acks so the server times the next step from real execution. All the
--- decisions (300s stuck / 120s escalate / 3-strike -> home / server pick) live
+-- decisions (300s stuck / 120s escalate / retry cycle / server pick) live
 -- in /api/device-control/rejoin-plan, gated behind autoRejoinEnabled. The
 -- legacy local sweep below is superseded and left unreachable (do return end).
 local function maybe_auto_rejoin()
@@ -926,11 +926,6 @@ local function maybe_auto_rejoin()
                 sleep(2)
               end
               log(C.dim .. "[" .. ts() .. "] " .. act.pkg .. " stopped (idle-kill done)" .. C.reset)
-              http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
-            elseif act.home then
-              log(C.yellow .. "[" .. ts() .. "] auto-rejoin: gave up on " .. act.pkg .. " -> home" .. C.reset)
-              local bnds = act.bounds or ""
-              launch_app(act.pkg, bnds, bnds ~= "", 0, "", true, true)
               http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
             else
               local bnds = act.bounds or ""

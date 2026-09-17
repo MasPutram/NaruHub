@@ -328,13 +328,13 @@ export async function GET(req: NextRequest) {
       st.attempts += 1;
       if (st.attempts > MAX_ATTEMPTS) {
         // Reset and start over — never give up permanently.
+        // No action this cycle; next poll sees attempts=0 and relaunches fresh.
         st.attempts = 0;
         st.failedJobIds = [];
         st.lastTriedJobId = null;
         st.lastFiredAt = now;
         st.lastAckAt = 0;
         await save();
-        actions.push({ pkg, target: "", bounds: bounds[pkg] || computeFallbackBounds(robloxPkgs.indexOf(pkg)), home: true });
         continue;
       }
       if (target) {
