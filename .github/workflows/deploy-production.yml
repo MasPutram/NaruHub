@@ -1,12 +1,13 @@
 name: Deploy NaruHub Monitor
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "StealAnEgg/monitor/**"
-      - ".github/workflows/deploy-production.yml"
+  # push trigger disabled — using local deploy (npm run deploy) instead
+  # push:
+  #   branches:
+  #     - main
+  #   paths:
+  #     - "StealAnEgg/monitor/**"
+  #     - ".github/workflows/deploy-production.yml"
   workflow_dispatch:
 
 concurrency:
