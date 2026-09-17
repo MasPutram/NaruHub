@@ -49,7 +49,7 @@ interface AccountDetail {
   backpackEggs: Pet[];
 }
 
-const DEFAULT_EQUIP = 18;
+const POTENSI_EQUIP = 19;
 const HIGH_VALUE_THRESHOLD = 1_000_000_000;
 const NOTABLE_THRESHOLD = 300_000_000;
 
@@ -105,9 +105,8 @@ function petKey(p: Pet): string {
   return `${p.category}|${(p.mutations || []).slice().sort().join("+")}|${p.rate}`;
 }
 
-function equipSlots(kandangLevel: number | null | undefined): number {
-  if (kandangLevel == null || kandangLevel < 1) return DEFAULT_EQUIP;
-  return kandangLevel + 7;
+function equipSlots(): number {
+  return POTENSI_EQUIP;
 }
 
 function computeIncomePotensiPetAktif(detail: AccountDetail | null, limit: number): number {
@@ -149,7 +148,7 @@ function computeAutoPrice(detail: AccountDetail | null, summary: AccountSummary 
   const rateHvPerB = (parseFloat(rateHvPerBStr) || 0) * 1000;
   const rateSpeedPerB = (parseFloat(rateSpeedPerBStr) || 0) * 1000;
   if (ratePerB === 0 && rateHvPerB === 0 && rateSpeedPerB === 0) return "";
-  const limit = detail.activeLimit || equipSlots(summary?.kandangLevel);
+  const limit = detail.activeLimit || equipSlots();
   const incomeB = computeIncomePotensiPetAktif(detail, limit) / 1e9;
   const highvalueB = computeHighValuePetTotal(detail) / 1e9;
   const speedB = (Number(summary?.speed) || 0) / 1e9;
@@ -744,7 +743,7 @@ function PosterPage() {
   const activePets = detail?.activePets || [];
   const growingEggs = detail?.growingEggs || [];
   const backpackEggs = detail?.backpackEggs || [];
-  const activeLimit = detail?.activeLimit || equipSlots(summary?.kandangLevel);
+  const activeLimit = detail?.activeLimit || equipSlots();
 
   const allCombined = [...allPets, ...activePets, ...backpackEggs, ...growingEggs];
   const allDeduped: Pet[] = [];

@@ -220,9 +220,10 @@ function fmtLevelMax(v: number | null | undefined, maxLevel: number): { text: st
   return { text: isMax ? `Lv. ${v} MAX` : `Lv. ${v}`, isMax };
 }
 
-function equipSlots(kandangLevel: number | null | undefined): number {
-  if (kandangLevel == null || kandangLevel < 1) return 18;
-  return kandangLevel + 7;
+const POTENSI_EQUIP = 19;
+
+function equipSlots(): number {
+  return POTENSI_EQUIP;
 }
 
 function fmtLastSeen(lastSeen?: number): string {
@@ -870,7 +871,7 @@ function AccountCard({ account: a, onOpen, onSell, onDelete, deleteConfirm, onDe
         <div className="st speed"><div className="sl">SPEED</div><div className="sv">{fmtCompactNum(a.speed)}</div></div>
         <div className="st money"><div className="sl">CASH</div><div className="sv">{fmtMoney(a.money)}</div></div>
         <div className="st income"><div className="sl">INCOME AKTIF</div><div className="sv">{fmtRate(a.incomeAktif)}</div></div>
-        <div className="st"><div className="sl">POTENSI {equipSlots(a.kandangLevel)} PET</div><div className="sv">{fmtRate(a.highValuePetTotal)}</div></div>
+        <div className="st"><div className="sl">POTENSI {POTENSI_EQUIP} PET</div><div className="sv">{fmtRate(a.highValuePetTotal)}</div></div>
         <div className="st"><div className="sl">KANDANG</div><div className="sv">{(() => { const k = fmtLevelMax(a.kandangLevel, maxKandang); return k.isMax ? <>{fmtLevel(a.kandangLevel)} <span className="max-tag">MAX</span></> : fmtLevel(a.kandangLevel); })()}</div></div>
         <div className="st"><div className="sl">TREADMILL</div><div className="sv">{(() => { const t = fmtLevelMax(a.treadmillLevel, maxTreadmill); return t.isMax ? <>{fmtLevel(a.treadmillLevel)} <span className="max-tag">MAX</span></> : fmtLevel(a.treadmillLevel); })()}</div></div>
         <div className="st"><div className="sl">PETS</div><div className="sv">{fmtNum(a.petsCount)}</div></div>

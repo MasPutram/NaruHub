@@ -102,15 +102,16 @@ function mutColor(mut: string): string {
   return "#6366f1";
 }
 
-function equipSlots(kandangLevel: number | null | undefined): number {
-  if (kandangLevel == null || kandangLevel < 1) return 18;
-  return kandangLevel + 7;
+const POTENSI_EQUIP = 19;
+
+function equipSlots(): number {
+  return POTENSI_EQUIP;
 }
 
 function potensiEquip(a: Account): number {
   const d = a.detail;
   if (!d) return 0;
-  const limit = d.activeLimit || equipSlots(a.kandangLevel);
+  const limit = d.activeLimit || equipSlots();
   const all = [
     ...(d.activePets || []),
     ...(d.allPets || []),
