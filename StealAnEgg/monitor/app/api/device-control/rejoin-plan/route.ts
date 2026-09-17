@@ -230,8 +230,10 @@ export async function GET(req: NextRequest) {
       return `${left},${top},${left + cellW},${top + cellH}`;
     }
 
+    const IDLE_KILL_MS = 5 * 60 * 1000; // 5 min running with no heartbeat -> kill to free RAM
+
     const now = Date.now();
-    const actions: { pkg: string; target: string; bounds: string; home?: boolean }[] = [];
+    const actions: { pkg: string; target: string; bounds: string; home?: boolean; kill?: boolean }[] = [];
 
     for (const p of packages) {
       if (!p || typeof p !== "object" || !p.pkg || !p.username) continue;
@@ -264,15 +266,17 @@ export async function GET(req: NextRequest) {
       }
       if (st.gaveUp) continue;
 
-      // Only auto-rejoin when the app is force-closed. If the process is still
-      // running but no fresh in-game heartbeat, the clone is on Roblox home
-      // (Siap Jual Kick, manual leave, should-hop leave), still loading, or
-      // wedged on an error / reconnect screen (e.g. code 279). Blindly
-      // re-launching in those states re-opens the same "unusual activity"
-      // trail Arkose watches and escalates captcha to the 5-of-5 variant.
-      // Wait for the operator to decide (or for the process to actually die
-      // via LMK / crash, which flips this to force-closed and rejoin resumes).
+      // Running but not in-game: could be loading, on home/login screen, or
+      // wedged on an error screen. Give it IDLE_KILL_MS to produce a heartbeat;
+      // after that, force-stop to free RAM (idle clones on login screen are the
+      // main culprit). gaveUp prevents a kill->relaunch->kill loop.
       if (runningSet.has(pkg)) {
+        const idleAnchor = Math.max(lastLaunchAt, lastHeartbeatAt);
+        if (idleAnchor > 0 && now - idleAnchor >= IDLE_KILL_MS) {
+          st.gaveUp = true;
+          await save();
+          actions.push({ pkg, target: "", bounds: "", kill: true });
+        }
         continue;
       }
 

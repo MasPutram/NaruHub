@@ -908,7 +908,11 @@ local function maybe_auto_rejoin()
         local rejoinDelay = (CACHED_POLICY and CACHED_POLICY.rejoinDelay) or 30
         for i, act in ipairs(parsed.actions) do
           if act.pkg then
-            if act.home then
+            if act.kill then
+              log(C.yellow .. "[" .. ts() .. "] idle-kill: " .. act.pkg .. " (no heartbeat, freeing RAM)" .. C.reset)
+              kill_if_forced(act.pkg, true)
+              http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
+            elseif act.home then
               log(C.yellow .. "[" .. ts() .. "] auto-rejoin: gave up on " .. act.pkg .. " -> home" .. C.reset)
               local bnds = act.bounds or ""
               launch_app(act.pkg, bnds, bnds ~= "", 0, "", true, true)
