@@ -270,7 +270,7 @@ end
 
 -- Android SDK version: am stack list was removed in Android 12 (SDK 31).
 -- Use dumpsys activity activities as fallback on 12+.
-local SDK_INT = tonumber(shell("getprop ro.build.version.sdk")) or 0
+local SDK_INT = tonumber((shell("getprop ro.build.version.sdk"))) or 0
 local function get_activity_stack()
   if SDK_INT >= 31 then
     return shell('su -c "dumpsys activity activities"')
