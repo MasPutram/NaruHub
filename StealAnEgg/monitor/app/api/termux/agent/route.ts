@@ -268,6 +268,16 @@ local function get_prop(key)
   return v ~= "" and v or "?"
 end
 
+-- Android SDK version: am stack list was removed in Android 12 (SDK 31).
+-- Use dumpsys activity activities as fallback on 12+.
+local SDK_INT = tonumber(shell("getprop ro.build.version.sdk")) or 0
+local function get_activity_stack()
+  if SDK_INT >= 31 then
+    return shell('su -c "dumpsys activity activities"')
+  end
+  return get_activity_stack()
+end
+
 -- ─── Forward-declare state (must be before functions that reference them) ───
 local DEVICE_ID, HOSTNAME, PLATFORM, IS_NEW
 
@@ -304,7 +314,7 @@ end
 -- loading to protect) from one that's running but not yet in a game (give it
 -- the full 300s loading grace).
 local function collect_running()
-  local stack = shell('su -c "am stack list"')
+  local stack = get_activity_stack()
   local running = {}
   local seen = {}
   for line in stack:gmatch("[^\\n]+") do
@@ -502,7 +512,7 @@ end
 -- (reliable for long Android package names -- pgrep -x fails because
 -- /proc/<pid>/comm is truncated to 15 chars).
 local function is_pkg_running(pkg)
-  local stack = shell('su -c "am stack list"')
+  local stack = get_activity_stack()
   return stack:find(pkg .. "/", 1, true) ~= nil
 end
 
@@ -591,7 +601,7 @@ local function launch_app(pkg, bounds, resize, delay, target, forceKill, skipTri
   local waited = 0
   local task_seen = false
   while waited < 60 do
-    local stack = shell('su -c "am stack list"')
+    local stack = get_activity_stack()
     if stack:find(pkg .. "/", 1, true) then
       task_seen = true
       -- Check the app's window is actually visible AND has focus / is
@@ -959,7 +969,7 @@ local function maybe_auto_rejoin()
   LAST_REJOIN_SWEEP = now_top
 
   -- One stack snapshot per pass -- cheaper than pgrep per package.
-  local stack = shell('su -c "am stack list"')
+  local stack = get_activity_stack()
   local now = os.time()
 
   -- Parse current running set out of the stack listing.
@@ -1209,7 +1219,7 @@ log("")
 log(C.dim .. "License" .. C.reset .. "  -> " .. C.yellow .. LICENSE_KEY:sub(1,6) .. "..." .. LICENSE_KEY:sub(-4) .. C.reset)
 log(C.dim .. "Device" .. C.reset .. "   -> " .. C.cyan .. DEVICE_ID:sub(1,8) .. "..." .. DEVICE_ID:sub(-6) .. C.reset)
 log(C.dim .. "Model" .. C.reset .. "    -> " .. DEVICE_MODEL)
-log(C.dim .. "Android" .. C.reset .. "  -> " .. ANDROID_VER)
+log(C.dim .. "Android" .. C.reset .. "  -> " .. ANDROID_VER .. (SDK_INT >= 31 and " (12+, using dumpsys)" or ""))
 log(C.dim .. "Server" .. C.reset .. "   -> " .. C.cyan .. WS_URL .. C.reset)
 log("")
 
@@ -1232,7 +1242,7 @@ end
 -- Ghost process cleanup: kill Roblox clone processes that are running but
 -- have no visible window (closed via X button while agent was offline).
 do
-  local stack = shell('su -c "am stack list"')
+  local stack = get_activity_stack()
   local pkgs_now = collect_packages()
   local killed = 0
   for _, p in ipairs(pkgs_now) do
