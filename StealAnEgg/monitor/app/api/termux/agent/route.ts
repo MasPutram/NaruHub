@@ -936,10 +936,12 @@ local function maybe_auto_rejoin()
               if delay > 0 then
                 os.execute("sleep " .. delay)
               end
-              -- forceKill=true so the rejoin cold-starts (clears a stuck screen).
-              -- skipTrim=false so trim_ram() runs before launch, preventing LMK
-              -- from killing other in-game clones when RAM is tight.
-              launch_app(act.pkg, bnds, bnds ~= "", 0, act.target or "", true, false)
+              -- forceKill=false: same as Launch Selected. kill_if_forced still
+              -- runs if there's a deep-link target (cold-start needed for VIEW
+              -- intent). Avoids am force-stop on a focused window which sends
+              -- all floating clones to background (looks like Home press).
+              -- skipTrim=false so trim_ram() runs before launch.
+              launch_app(act.pkg, bnds, bnds ~= "", 0, act.target or "", false, false)
               http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
             end
           end
