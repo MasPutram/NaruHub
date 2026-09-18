@@ -564,27 +564,23 @@ local function launch_app(pkg, bounds, resize, delay, target, forceKill, skipTri
 
   -- Only use VIEW intent for roblox:// deep links. Plain https:// URLs
   -- (e.g. roblox.com/home) open a browser instead of the app and timeout.
-  -- --windowingMode 5 = freeform: app opens as a floating window instead of
-  -- fullscreen. A fullscreen launch collapses other floating clones (looks
-  -- like pressing the Home button on the other apps).
-  local wm = (resize and bounds and bounds ~= "") and " --windowingMode 5" or ""
   local use_target = target and target ~= "" and target:sub(1,9) == "roblox://"
   if use_target then
     log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset .. C.dim .. " -> " .. target .. C.reset)
     local safe = target:gsub('"', '\\\\"')
     local ok = shellcode(string.format(
-      'su -c "am start -a android.intent.action.VIEW -d \\\\"%s\\\\" -p %s%s"',
-      safe, pkg, wm
+      'su -c "am start -a android.intent.action.VIEW -d \\\\"%s\\\\" -p %s"',
+      safe, pkg
     ))
     if not ok then
-      shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s%s"', pkg, wm))
+      shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
     end
   else
     if target and target ~= "" then
       log(C.yellow .. "[" .. ts() .. "] ignoring non-deeplink target: " .. target .. C.reset)
     end
     log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset)
-    shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s%s"', pkg, wm))
+    shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
   end
 
   -- Wait for the app window to actually be drawn on screen, not just for
