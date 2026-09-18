@@ -1097,7 +1097,11 @@ function DetailModal({ detail, detailTab, setDetailTab, onClose, maxKandang, max
               </div>
               <div className="ms-card">
                 <div className="mslabel">INCOME AKTIF</div>
-                <div className="msval" style={{ color: "var(--accent2)" }}>{fmtRate(acc.incomeAktif)}</div>
+                <div className="msval" style={{ color: "var(--accent2)" }}>{fmtRate(
+                  detail.data?.activePets
+                    ? detail.data.activePets.reduce((s: number, p: Pet) => s + (p.rate || 0), 0)
+                    : acc.incomeAktif
+                )}</div>
               </div>
               <div className="ms-card">
                 <div className="mslabel">SPEED</div>

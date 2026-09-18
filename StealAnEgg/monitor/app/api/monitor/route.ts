@@ -56,11 +56,15 @@ export async function POST(req: NextRequest) {
       } catch {}
     }
 
+    const equippedIncome = Array.isArray(data.fullData?.activePets)
+      ? data.fullData.activePets.reduce((s: number, p: any) => s + (p.rate || 0), 0)
+      : null;
+
     const summary = {
       money: data.money ?? null,
       speed: data.speed ?? null,
       income: data.income ?? null,
-      incomeAktif: data.incomeAktif ?? null,
+      incomeAktif: equippedIncome ?? data.incomeAktif ?? null,
       incomeEggBackpack: data.incomeEggBackpack ?? null,
       incomeEggSedangTumbuh: data.incomeEggSedangTumbuh ?? null,
       highValuePetTotal: data.highValuePetTotal ?? null,
