@@ -52,6 +52,9 @@ interface TermuxDevice {
   heartbeatAccounts?: string[];
   screen?: { width: number; height: number };
   stats?: TermuxStats;
+  androidVersion?: string;
+  model?: string;
+  sdkInt?: number;
 }
 
 function normalizePackage(p: string | TermuxPackage): TermuxPackage {
@@ -853,7 +856,7 @@ export default function DeviceDetailPage() {
             </h1>
           )}
           <div className="sub">
-            {device.hostname} &bull; Android/Termux &bull; HWID {device.deviceId.slice(0, 8)}… &bull; Updated {ago(device.lastSeen)}
+            {device.model || device.hostname} &bull; Android {device.androidVersion || "?"}{device.sdkInt ? ` (SDK ${device.sdkInt})` : ""} &bull; HWID {device.deviceId.slice(0, 8)}… &bull; Updated {ago(device.lastSeen)}
           </div>
         </div>
         <div className="detail-actions">

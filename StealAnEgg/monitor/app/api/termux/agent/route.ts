@@ -271,11 +271,16 @@ end
 -- Android SDK version: am stack list was removed in Android 12 (SDK 31).
 -- Use dumpsys activity activities as fallback on 12+.
 local SDK_INT = tonumber((shell("getprop ro.build.version.sdk"))) or 0
+local ANDROID_VER = shell("getprop ro.build.version.release")
+if ANDROID_VER == "" then ANDROID_VER = "?" end
+local DEVICE_MODEL = shell("getprop ro.product.model")
+if DEVICE_MODEL == "" then DEVICE_MODEL = "?" end
+
 local function get_activity_stack()
   if SDK_INT >= 31 then
     return shell('su -c "dumpsys activity activities"')
   end
-  return get_activity_stack()
+  return shell('su -c "am stack list"')
 end
 
 -- ─── Forward-declare state (must be before functions that reference them) ───
@@ -689,6 +694,9 @@ local function http_heartbeat(pkgs, screen, stats, running)
     running = running or {},
     screen = screen,
     stats = stats or {},
+    androidVersion = ANDROID_VER or "?",
+    model = DEVICE_MODEL or "?",
+    sdkInt = SDK_INT or 0,
   })
   if code ~= "200" then
     log(C.red .. "[" .. ts() .. "] HTTP heartbeat failed (" .. code .. ")" .. C.reset)
@@ -1206,9 +1214,6 @@ else
     fwrite(CONFIG_FILE, json.encode(cfg_now))
   end
 end
-
-local ANDROID_VER = get_prop("ro.build.version.release")
-local DEVICE_MODEL = get_prop("ro.product.model")
 
 os.execute("clear")
 log(C.cyan .. C.bold .. "+------------------------------+" .. C.reset)

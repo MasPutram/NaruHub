@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { deviceId, packages, running, stats, screen } = body;
+    const { deviceId, packages, running, stats, screen, androidVersion, model, sdkInt } = body;
 
     if (!deviceId || typeof deviceId !== "string") {
       return NextResponse.json({ ok: false, error: "deviceId required" }, { status: 400 });
@@ -31,6 +31,9 @@ export async function POST(req: NextRequest) {
       if (Array.isArray(running)) device.running = running;
       if (stats) device.stats = stats;
       if (screen && screen.width && screen.height) device.screen = screen;
+      if (androidVersion) device.androidVersion = androidVersion;
+      if (model) device.model = model;
+      if (sdkInt) device.sdkInt = sdkInt;
     } else {
       const metaRaw = await redis.get<string>(termuxDeviceMetaKey(deviceId));
       const meta = metaRaw ? (typeof metaRaw === "string" ? JSON.parse(metaRaw) : metaRaw) : null;
@@ -45,6 +48,9 @@ export async function POST(req: NextRequest) {
         running: Array.isArray(running) ? running : [],
         stats: stats || {},
         screen: screen && screen.width && screen.height ? screen : undefined,
+        androidVersion: androidVersion || undefined,
+        model: model || undefined,
+        sdkInt: sdkInt || undefined,
       };
       if (meta?.customName) device.customName = meta.customName;
     }
@@ -104,6 +110,9 @@ export async function POST(req: NextRequest) {
       packages: device.packages,
       stats: device.stats,
       screen: device.screen,
+      androidVersion: device.androidVersion,
+      model: device.model,
+      sdkInt: device.sdkInt,
     };
     if (device.customName) snapshot.customName = device.customName;
     await redis.set(termuxDeviceMetaKey(deviceId), JSON.stringify(snapshot));
