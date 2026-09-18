@@ -1229,6 +1229,37 @@ do
   end
 end
 
+-- Ghost process cleanup: kill Roblox clone processes that are running but
+-- have no visible window (closed via X button while agent was offline).
+do
+  local stack = shell('su -c "am stack list"')
+  local pkgs_now = collect_packages()
+  local killed = 0
+  for _, p in ipairs(pkgs_now) do
+    local pkg = (type(p) == "table") and p.pkg or p
+    if pkg and pkg ~= "" then
+      local has_window = stack:find(pkg .. "/", 1, true) ~= nil
+      if not has_window then
+        local pids = shell(string.format('su -c "pidof %s"', pkg))
+        if pids == "" then
+          pids = shell(string.format('su -c "pgrep -x %s"', pkg))
+        end
+        if pids ~= "" then
+          log(C.yellow .. "[" .. ts() .. "] window closed (X) -> " .. pkg .. " (terminating ghost process)" .. C.reset)
+          shellcode(string.format('su -c "am force-stop %s"', pkg))
+          for pid in pids:gmatch("%S+") do
+            shellcode(string.format('su -c "kill -9 %s"', pid))
+          end
+          killed = killed + 1
+        end
+      end
+    end
+  end
+  if killed > 0 then
+    log(C.dim .. "[" .. ts() .. "] cleaned " .. killed .. " ghost process(es)" .. C.reset)
+  end
+end
+
 -- Deploy the in-game presence heartbeat into every executor autoexec dir so
 -- each clone reports which Roblox server (JobId) it's in. Fetched fresh on
 -- start, so restarting the agent always ships the latest script. Best-effort:
