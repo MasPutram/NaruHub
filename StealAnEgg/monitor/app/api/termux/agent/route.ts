@@ -1275,6 +1275,26 @@ do
   end
 end
 
+-- Android 12+ auto-revokes permissions for unused apps after reboot.
+-- Grant storage access and disable auto-revoke for every clone on startup.
+if SDK_INT >= 31 then
+  do
+    local pkgs_perm = collect_packages()
+    local granted = 0
+    for _, p in ipairs(pkgs_perm) do
+      local pkg = (type(p) == "table") and p.pkg or p
+      if pkg and pkg ~= "" then
+        shellcode(string.format('su -c "appops set %s MANAGE_EXTERNAL_STORAGE allow"', pkg))
+        shellcode(string.format('su -c "appops set %s AUTO_REVOKE_PERMISSIONS_IF_UNUSED ignore"', pkg))
+        granted = granted + 1
+      end
+    end
+    if granted > 0 then
+      log(C.dim .. "[" .. ts() .. "] auto-granted permissions for " .. granted .. " package(s) (SDK " .. SDK_INT .. ")" .. C.reset)
+    end
+  end
+end
+
 -- Deploy the in-game presence heartbeat into every executor autoexec dir so
 -- each clone reports which Roblox server (JobId) it's in. Fetched fresh on
 -- start, so restarting the agent always ships the latest script. Best-effort:
