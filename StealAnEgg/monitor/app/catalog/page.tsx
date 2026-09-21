@@ -343,14 +343,17 @@ export default function CatalogPage() {
       const petCell = tp.text === "—"
         ? "—"
         : `<div class="tp-row">${tp.mut ? `<span class="tp-mut" data-m="${escHtml(tp.mut)}">${escHtml(tp.mut)}</span>` : ""}<span class="tp-name">${escHtml(tp.text)}</span><span class="tp-rate">${tp.rate}</span></div>`;
+      const incAktif = a.incomeAktif != null ? fmtRate(a.incomeAktif) : "—";
       return `
       <tr class="${i % 2 === 1 ? "alt" : ""}">
         <td class="c-code">${accCode(a.sourceAccount)}</td>
-        <td>${fmtCompact(a.speed)}</td>
-        <td>${fmtRate(potensiEquip(a))}</td>
+        <td class="c-spd">${fmtCompact(a.speed)}</td>
+        <td class="c-inc">${fmtRate(potensiEquip(a))}</td>
+        <td class="c-aktif">${incAktif}</td>
         <td class="c-toppet">${petCell}</td>
         <td class="c-num">${eggTotal(a)}</td>
         <td class="c-mut">${(a.mutationToken || 0) > 0 ? `<span class="mut-pill">${a.mutationToken}</span>` : "—"}</td>
+        <td class="c-mut">${(a.scrambleToken || 0) > 0 ? `<span class="mut-pill" style="background:#34d399">${a.scrambleToken}</span>` : "—"}</td>
         <td class="c-price">${a.catalogPrice ? fmtRupiah(a.catalogPrice) : "—"}</td>
       </tr>
     `;
@@ -422,6 +425,9 @@ export default function CatalogPage() {
         }
         table.rk-tbl tr.alt td { background: rgba(241, 245, 249, 0.6); }
         table.rk-tbl .c-code { font-weight: 900; color: #1e40af; }
+        table.rk-tbl .c-spd { font-weight: 800; color: #0f172a; }
+        table.rk-tbl .c-inc { font-weight: 800; color: #0f172a; }
+        table.rk-tbl .c-aktif { font-weight: 700; color: #475569; }
         table.rk-tbl .c-num { text-align: center; font-weight: 700; }
         table.rk-tbl .c-mut { text-align: center; }
         table.rk-tbl .c-price { font-weight: 900; color: #16a34a; text-align: center; padding-left: 24px; padding-right: 24px; }
@@ -460,22 +466,26 @@ export default function CatalogPage() {
         <div class="rk-tblwrap">
           <table class="rk-tbl">
             <colgroup>
-              <col style="width:11%">
-              <col style="width:10%">
-              <col style="width:14%">
-              <col style="width:22%">
               <col style="width:8%">
-              <col style="width:10%">
-              <col style="width:25%">
+              <col style="width:9%">
+              <col style="width:11%">
+              <col style="width:11%">
+              <col style="width:18%">
+              <col style="width:6%">
+              <col style="width:8%">
+              <col style="width:8%">
+              <col style="width:21%">
             </colgroup>
             <thead>
               <tr>
                 <th>Code</th>
                 <th>Speed</th>
                 <th>Income Potensi</th>
+                <th>Income Aktif</th>
                 <th>Top Pet</th>
                 <th style="text-align:center">Telur</th>
-                <th style="text-align:center">Token</th>
+                <th style="text-align:center">Mutasi</th>
+                <th style="text-align:center">Scramble</th>
                 <th style="text-align:center">Harga</th>
               </tr>
             </thead>
