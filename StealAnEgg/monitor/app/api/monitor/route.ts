@@ -60,12 +60,33 @@ export async function POST(req: NextRequest) {
       ? data.fullData.activePets.reduce((s: number, p: any) => s + (p.rate || 0), 0)
       : null;
 
+    const POTENSI_EQUIP = 19;
+    let computedPotensi: number | null = null;
+    if (data.fullData) {
+      const pool: any[] = [
+        ...(data.fullData.activePets || []),
+        ...(data.fullData.allPets || []),
+        ...(data.fullData.growingEggs || []),
+        ...(data.fullData.backpackEggs || []),
+      ];
+      const seen = new Set<string>();
+      const deduped: any[] = [];
+      for (const p of pool) {
+        const k = `${p.category}|${((p.mutations || []) as string[]).sort().join("+")}|${p.rate}`;
+        if (!seen.has(k)) { seen.add(k); deduped.push(p); }
+      }
+      deduped.sort((a, b) => (b.rate || 0) - (a.rate || 0));
+      let total = 0;
+      for (let i = 0; i < Math.min(POTENSI_EQUIP, deduped.length); i++) total += deduped[i].rate || 0;
+      if (total > 0) computedPotensi = total;
+    }
+
     const summary = {
       money: data.money ?? null,
       speed: data.speed ?? null,
       income: data.income ?? null,
       incomeAktif: equippedIncome ?? data.incomeAktif ?? null,
-      incomePotensi: data.incomePotensi ?? null,
+      incomePotensi: computedPotensi ?? data.incomePotensi ?? null,
       incomeEggBackpack: data.incomeEggBackpack ?? null,
       incomeEggSedangTumbuh: data.incomeEggSedangTumbuh ?? null,
       highValuePetTotal: data.highValuePetTotal ?? null,
