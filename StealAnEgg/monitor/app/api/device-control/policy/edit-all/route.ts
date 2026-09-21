@@ -6,10 +6,12 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { psLink, cols, rows } = body as {
+    const { psLink, cols, rows, rejoinDelay, launchDelay } = body as {
       psLink?: string;
       cols?: number;
       rows?: number;
+      rejoinDelay?: number;
+      launchDelay?: number;
     };
 
     const policyKeys: string[] = [];
@@ -42,6 +44,9 @@ export async function POST(req: NextRequest) {
       }
 
       const merged: any = { ...existing, updatedAt: Date.now() };
+
+      if (typeof rejoinDelay === "number") merged.rejoinDelay = Math.max(1, Math.min(600, rejoinDelay));
+      if (typeof launchDelay === "number") merged.launchDelay = Math.max(0, Math.min(300, launchDelay));
 
       if (typeof psLink === "string") {
         const targets: Record<string, string> = {};

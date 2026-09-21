@@ -82,6 +82,9 @@ export default function MonitorListPage() {
   const [editRows, setEditRows] = useState(3);
   const [editApplyGrid, setEditApplyGrid] = useState(false);
   const [editApplyPs, setEditApplyPs] = useState(false);
+  const [editApplyDelays, setEditApplyDelays] = useState(false);
+  const [editRejoinDelay, setEditRejoinDelay] = useState(10);
+  const [editLaunchDelay, setEditLaunchDelay] = useState(10);
   const [editSaving, setEditSaving] = useState(false);
 
   const fetchDevices = useCallback(async () => {
@@ -171,7 +174,8 @@ export default function MonitorListPage() {
     const payload: any = {};
     if (editApplyPs) payload.psLink = editPsLink.trim();
     if (editApplyGrid) { payload.cols = editCols; payload.rows = editRows; }
-    if (!editApplyPs && !editApplyGrid) { setToast("Pilih minimal satu opsi"); return; }
+    if (editApplyDelays) { payload.rejoinDelay = editRejoinDelay; payload.launchDelay = editLaunchDelay; }
+    if (!editApplyPs && !editApplyGrid && !editApplyDelays) { setToast("Pilih minimal satu opsi"); return; }
     setEditSaving(true);
     try {
       const res = await fetch("/api/device-control/policy/edit-all", {
@@ -536,9 +540,26 @@ export default function MonitorListPage() {
               </div>
             </div>
 
+            <div className="eafield">
+              <label>
+                <input type="checkbox" checked={editApplyDelays} onChange={(e) => setEditApplyDelays(e.target.checked)} />
+                Set Delays
+              </label>
+              <div className="eagrid">
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: "var(--dim)", fontSize: 11, marginBottom: 4 }}>Rejoin Delay (detik)</div>
+                  <input className="eainput" type="number" min={1} max={600} disabled={!editApplyDelays} value={editRejoinDelay} onChange={(e) => setEditRejoinDelay(Number(e.target.value))} style={{ marginTop: 0 }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: "var(--dim)", fontSize: 11, marginBottom: 4 }}>Launch Delay (detik)</div>
+                  <input className="eainput" type="number" min={0} max={300} disabled={!editApplyDelays} value={editLaunchDelay} onChange={(e) => setEditLaunchDelay(Number(e.target.value))} style={{ marginTop: 0 }} />
+                </div>
+              </div>
+            </div>
+
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
               <button className="close-btn" onClick={() => setEditAllOpen(false)}>Batal</button>
-              <button className="easave" disabled={editSaving || (!editApplyPs && !editApplyGrid)} onClick={saveEditAll}>
+              <button className="easave" disabled={editSaving || (!editApplyPs && !editApplyGrid && !editApplyDelays)} onClick={saveEditAll}>
                 {editSaving ? "Menyimpan..." : "Terapkan ke Semua Device"}
               </button>
             </div>
