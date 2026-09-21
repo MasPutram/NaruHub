@@ -898,7 +898,6 @@ function AccountCard({ account: a, onOpen, onSell, onModerated, onDelete, delete
         <div className="st speed"><div className="sl">SPEED</div><div className="sv">{fmtCompactNum(a.speed)}</div></div>
         <div className="st money"><div className="sl">CASH</div><div className="sv">{fmtMoney(a.money)}</div></div>
         <div className="st income"><div className="sl">INCOME AKTIF</div><div className="sv">{fmtRate(a.incomeAktif)}</div></div>
-        <div className="st"><div className="sl">PET &gt;= 1B/S</div><div className="sv">{fmtMoney(a.highValuePetTotal)}</div></div>
         <div className="st"><div className="sl">KANDANG</div><div className="sv">{(() => { const k = fmtLevelMax(a.kandangLevel, maxKandang); return k.isMax ? <>{fmtLevel(a.kandangLevel)} <span className="max-tag">MAX</span></> : fmtLevel(a.kandangLevel); })()}</div></div>
         <div className="st"><div className="sl">TREADMILL</div><div className="sv">{(() => { const t = fmtLevelMax(a.treadmillLevel, maxTreadmill); return t.isMax ? <>{fmtLevel(a.treadmillLevel)} <span className="max-tag">MAX</span></> : fmtLevel(a.treadmillLevel); })()}</div></div>
         <div className="st"><div className="sl">TOTAL EGG</div><div className="sv">{fmtNum((a.growingEggCount || 0) + (a.backpackEggCount || 0))}</div></div>

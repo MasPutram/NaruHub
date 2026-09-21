@@ -1326,10 +1326,6 @@ export default function CatalogPage() {
                   <div className="csval">{fmtMoney(a.incomeAktif)}/s</div>
                 </div>
                 <div className="cc-stat">
-                  <div className="cslabel">PET &gt;= 1B/S</div>
-                  <div className="csval">{fmtMoney(a.highValuePetTotal)}</div>
-                </div>
-                <div className="cc-stat">
                   <div className="cslabel">KANDANG</div>
                   <div className="csval">{a.kandangLevel != null ? `Lv. ${a.kandangLevel}` : "-"}</div>
                 </div>
@@ -1430,7 +1426,6 @@ export default function CatalogPage() {
               <th>Speed</th>
               <th>Cash</th>
               <th>Income Aktif</th>
-              <th>Pet &gt;= 1B/s</th>
               <th>Pets</th>
               <th>Stolen</th>
               <th>Top Pet</th>
@@ -1458,7 +1453,6 @@ export default function CatalogPage() {
                 <td style={{ color: "var(--accent)" }}>{fmtCompact(a.speed)}</td>
                 <td style={{ color: "var(--gold)" }}>{fmtMoney(a.money)}</td>
                 <td style={{ color: "var(--green)" }}>{fmtMoney(a.incomeAktif)}/s</td>
-                <td>{fmtMoney(a.highValuePetTotal)}</td>
                 <td>{a.petsCount}</td>
                 <td>{a.stolenCount}</td>
                 <td style={{ fontSize: 11 }}>

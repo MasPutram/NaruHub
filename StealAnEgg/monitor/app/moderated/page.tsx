@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
 interface Pet {
@@ -91,7 +91,11 @@ function deviceLabel(name: string): string | null {
 
 type TabMode = "moderated" | "resolved";
 
-export default function ModeratedPage() {
+export default function ModeratedPageWrapper() {
+  return <Suspense><ModeratedPageInner /></Suspense>;
+}
+
+function ModeratedPageInner() {
   const searchParams = useSearchParams();
   const [moderatedAccounts, setModeratedAccounts] = useState<Account[]>([]);
   const [resolvedAccounts, setResolvedAccounts] = useState<Account[]>([]);
@@ -345,12 +349,6 @@ export default function ModeratedPage() {
           </div>
         </div>
         <div className="scard">
-          <div className="slabel">TOTAL HV PET</div>
-          <div className="sval" style={{ color: "var(--accent2)" }}>
-            {fmtMoney(visible.reduce((s, a) => s + (Number(a.highValuePetTotal) || 0), 0))}
-          </div>
-        </div>
-        <div className="scard">
           <div className="slabel">TOTAL SPEED</div>
           <div className="sval" style={{ color: "var(--accent)" }}>
             {fmtCompact(visible.reduce((s, a) => s + (Number(a.speed) || 0), 0))}
@@ -409,10 +407,6 @@ export default function ModeratedPage() {
                 <div className="mc-stat">
                   <div className="mslabel">CASH</div>
                   <div className="msval">{fmtMoney(a.money)}</div>
-                </div>
-                <div className="mc-stat">
-                  <div className="mslabel">HV PET</div>
-                  <div className="msval" style={{ color: "var(--accent2)" }}>{fmtMoney(a.highValuePetTotal)}</div>
                 </div>
               </div>
 
