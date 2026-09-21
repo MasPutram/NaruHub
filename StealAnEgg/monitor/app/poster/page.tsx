@@ -146,8 +146,7 @@ function computeAutoPrice(
   const rateMutasi = (parseFloat(rateMutasiPerUnitStr) || 0) * 1000;
   const rateScramble = (parseFloat(rateScramblePerUnitStr) || 0) * 1000;
   if (rateIncomePerB === 0 && rateSpeedPerB === 0 && rateMutasi === 0 && rateScramble === 0) return "";
-  const limit = detail.activeLimit || equipSlots();
-  const incomeB = computeIncomePotensiPetAktif(detail, limit) / 1e9;
+  const incomeB = computeIncomePotensiPetAktif(detail, POTENSI_EQUIP) / 1e9;
   const speedB = (Number(summary?.speed) || 0) / 1e9;
   const mutasiCount = Number(summary?.mutationToken) || 0;
   const scrambleCount = Number(summary?.scrambleToken) || 0;
@@ -743,7 +742,7 @@ function PosterPage() {
   const activePets = detail?.activePets || [];
   const growingEggs = detail?.growingEggs || [];
   const backpackEggs = detail?.backpackEggs || [];
-  const activeLimit = detail?.activeLimit || equipSlots();
+  const activeLimit = POTENSI_EQUIP;
 
   const allCombined = [...allPets, ...activePets, ...backpackEggs, ...growingEggs];
   const allDeduped: Pet[] = [];
