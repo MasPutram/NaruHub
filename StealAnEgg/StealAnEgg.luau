@@ -1054,11 +1054,14 @@ task.spawn(function()
 end)
 
 ------------------------------------------------------------
--- Auto Mutation Egg (Plot)
--- Targets highest b/s placed pet first. Teleports to each
--- egg model before applying (proximity required). Retries
--- until mutation succeeds (10% chance per attempt).
--- Skips pets that already have Scrambled.
+-- Auto Mutation Egg
+-- For each placed egg (highest b/s first):
+--   1. Determine which mutation is needed (Scrambled first, then Boss)
+--   2. Equip the matching token from Backpack
+--   3. Teleport to the egg model in PlacedEggRenders
+--   4. Apply mutation, retry until success (10% chance)
+--   5. If token runs out, swap to the other type
+-- Skips eggs that already have both Scrambled + Boss.
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -1067,8 +1070,7 @@ task.spawn(function()
 	local function findEggModel(uid)
 		local renders = Workspace:FindFirstChild("PlacedEggRenders")
 		if renders then
-			local model = renders:FindFirstChild(myUserId .. "_" .. uid)
-			if model then return model end
+			return renders:FindFirstChild(myUserId .. "_" .. uid)
 		end
 		return nil
 	end
@@ -1083,29 +1085,46 @@ task.spawn(function()
 		end
 	end
 
+	local function findMutationTool(mutationId)
+		local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+		if not backpack then return nil end
+		for _, tool in ipairs(backpack:GetChildren()) do
+			if tool:GetAttribute("ItemType") == "MutationConsumable"
+				and tool:GetAttribute("MutationId") == mutationId then
+				return tool
+			end
+		end
+		return nil
+	end
+
+	local function equipTool(tool)
+		local char = LocalPlayer.Character
+		if not char then return end
+		local humanoid = char:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			humanoid:EquipTool(tool)
+		end
+	end
+
+	local function hasMutation(rec, name)
+		if type(rec.Mutations) ~= "table" then return false end
+		for _, m in pairs(rec.Mutations) do
+			if m == name then return true end
+		end
+		return false
+	end
+
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoMutationEggEnabled then
 			pcall(function()
 				local stats = SaveModule.Get()
-				local consumables = 0
-				if type(stats.BossMastery) == "table" then
-					consumables = tonumber(stats.BossMastery.MutationConsumables) or 0
-				end
-				if consumables <= 0 then return end
 
 				local candidates = {}
 				for uid, rec in pairs(stats.EggInventory or {}) do
 					if type(rec) == "table" and rec.Placement ~= nil then
-						local hasScrambled = false
-						if type(rec.Mutations) == "table" then
-							for _, mutName in pairs(rec.Mutations) do
-								if mutName == "Scrambled" then
-									hasScrambled = true
-									break
-								end
-							end
-						end
-						if not hasScrambled then
+						local hasScrambled = hasMutation(rec, "Scrambled")
+						local hasBoss = hasMutation(rec, "Boss")
+						if not (hasScrambled and hasBoss) then
 							local rate = 0
 							pcall(function()
 								rate = AssetEarnings.RatePerSecond({
@@ -1114,7 +1133,9 @@ task.spawn(function()
 									Mutations = rec.Mutations or {},
 								})
 							end)
-							table.insert(candidates, { uid = uid, rate = rate })
+							local needed = "Scrambled"
+							if hasScrambled then needed = "Boss" end
+							table.insert(candidates, { uid = uid, rate = rate, needed = needed, rec = rec })
 						end
 					end
 				end
@@ -1124,6 +1145,18 @@ task.spawn(function()
 				for _, pet in ipairs(candidates) do
 					if not autoMutationEggEnabled then break end
 
+					local neededMut = pet.needed
+					local tool = findMutationTool(neededMut)
+					if not tool then
+						local alt = neededMut == "Scrambled" and "Boss" or "Scrambled"
+						tool = findMutationTool(alt)
+						if tool then neededMut = alt end
+					end
+					if not tool then break end
+
+					equipTool(tool)
+					task.wait(0.5)
+
 					local eggModel = findEggModel(pet.uid)
 					if eggModel then
 						teleportToEgg(eggModel)
@@ -1131,12 +1164,18 @@ task.spawn(function()
 					end
 
 					while autoMutationEggEnabled do
-						stats = SaveModule.Get()
-						consumables = 0
-						if type(stats.BossMastery) == "table" then
-							consumables = tonumber(stats.BossMastery.MutationConsumables) or 0
+						tool = findMutationTool(neededMut)
+						if not tool then
+							local alt = neededMut == "Scrambled" and "Boss" or "Scrambled"
+							tool = findMutationTool(alt)
+							if tool then
+								neededMut = alt
+								equipTool(tool)
+								task.wait(0.5)
+							else
+								break
+							end
 						end
-						if consumables <= 0 then break end
 
 						local result
 						pcall(function()
