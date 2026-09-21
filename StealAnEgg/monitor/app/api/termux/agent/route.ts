@@ -967,8 +967,9 @@ local function maybe_auto_rejoin()
               -- runs if there's a deep-link target (cold-start needed for VIEW
               -- intent). Avoids am force-stop on a focused window which sends
               -- all floating clones to background (looks like Home press).
-              -- skipTrim=false so trim_ram() runs before launch.
-              launch_app(act.pkg, bnds, bnds ~= "", 0, act.target or "", false, false)
+              -- skipTrim=true: don't drop_caches during rejoin — the sync I/O
+              -- stalls all running clones and can cause disconnects.
+              launch_app(act.pkg, bnds, bnds ~= "", 0, act.target or "", false, true)
               http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
             end
           end
@@ -1380,7 +1381,7 @@ while true do
       -- clone. Gated behind a high-usage threshold so it's a rare, cheap op.
       if stats.ram and stats.ram.totalMB and stats.ram.totalMB > 0 then
         local pct = (stats.ram.usedMB / stats.ram.totalMB) * 100
-        if pct >= 80 then
+        if pct >= 95 then
           log(C.yellow .. "[" .. ts() .. "] RAM " .. math.floor(pct) .. "% -- trim cache" .. C.reset)
           trim_ram()
         end
