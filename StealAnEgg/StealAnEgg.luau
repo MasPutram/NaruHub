@@ -439,12 +439,12 @@ local monitorPara = section:AddParagraph({
 	Center = true,
 })
 
-local AUTO_SELL_MIN_RATE = 300_000_000
+local AUTO_SELL_MIN_RATE = 1_000_000_000
 local AUTO_SELL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Mythic", "Legendary", "Cosmic" }
 local AUTO_SELL_NEVER = { Eternal = true, Divine = true, Titan = true }
 local autoSellEnabled = false
 section:AddToggle("AutoSellToggle", {
-	Title = "Auto Sell (< 300M/s)",
+	Title = "Auto Sell (< 1B/s)",
 	Default = false,
 	Callback = function(val)
 		autoSellEnabled = val
@@ -473,12 +473,21 @@ section:AddToggle("AutoPlaceToggle", {
 	end,
 })
 
-local autoBossShopEnabled = false
-section:AddToggle("AutoBossShopToggle", {
-	Title = "Auto Buy Boss Shop",
+local autoBuyScrambledEnabled = false
+section:AddToggle("AutoBuyScrambledToggle", {
+	Title = "Auto Buy Scrambled (Dr Scramble Shop)",
 	Default = false,
 	Callback = function(val)
-		autoBossShopEnabled = val
+		autoBuyScrambledEnabled = val
+	end,
+})
+
+local autoMutateScrambledEnabled = false
+section:AddToggle("AutoMutateScrambledToggle", {
+	Title = "Auto Mutate Scrambled (Plot, no-stack)",
+	Default = false,
+	Callback = function(val)
+		autoMutateScrambledEnabled = val
 	end,
 })
 
@@ -821,6 +830,7 @@ local function reportToMonitor()
 
 		local bossToken = 0
 		local mutationToken = 0
+		local scrambleToken = 0
 		local equippedTrail = ""
 		pcall(function()
 			local s = SaveModule.Get()
@@ -828,6 +838,13 @@ local function reportToMonitor()
 			bossToken = tonumber(s.BossTokens) or 0
 			mutationToken = (type(s.BossMastery) == "table" and tonumber(s.BossMastery.MutationConsumables)) or 0
 			equippedTrail = tostring(s.EquippedTrail or s.TrailEquipped or "")
+		end)
+		pcall(function()
+			local Remotes = require(ReplicatedStorage.Shared.Remotes)
+			local snap = Remotes.Scramble.Request:InvokeServer("snapshot")
+			if snap and snap.Snapshot and snap.Snapshot.State then
+				scrambleToken = tonumber(snap.Snapshot.State.Samples) or 0
+			end
 		end)
 
 		local fullData = {
@@ -848,6 +865,7 @@ local function reportToMonitor()
 			kandangLevel = kandangLevel,
 			treadmillLevel = treadmillLevel,
 			trail = equippedTrail,
+			scrambleToken = scrambleToken,
 			ownerFacebook = "Putra Ramadhan",
 			sourceAccount = LocalPlayer.Name,
 		}
@@ -867,6 +885,7 @@ local function reportToMonitor()
 			stolenCount = #backpackEggs,
 			bossToken = bossToken,
 			mutationToken = mutationToken,
+			scrambleToken = scrambleToken,
 			topPets = topPets,
 			trail = equippedTrail,
 			fullData = fullData,
@@ -977,23 +996,83 @@ end)
 
 
 ------------------------------------------------------------
--- Auto Buy Boss Shop (no UI, runs forever, one item per tick)
--- Always spends Boss Tokens on MutationConsumable (400 tokens each).
--- Simple + treadmill-max agnostic, so it keeps working when the game
--- adds new treadmill levels or changes the Fractured spend windows.
+-- Auto Buy Scrambled (Dr Scramble Shop)
+-- Buys the "Scrambled" consumable (MutationConsumable) using Samples
+-- currency from the Dr Scramble event shop. Fetches a fresh shop
+-- snapshot each tick so price/availability changes are auto-detected.
+------------------------------------------------------------
+task.spawn(function()
+	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+	local HttpService = game:GetService("HttpService")
+
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		if autoBuyScrambledEnabled then
+			pcall(function()
+				local snap = Remotes.Scramble.Request:InvokeServer("snapshot")
+				if not snap or not snap.Snapshot then return end
+				local samples = snap.Snapshot.State and snap.Snapshot.State.Samples or 0
+				local shop = snap.Snapshot.Shop
+				if not shop then return end
+				for _, item in ipairs(shop) do
+					if item.Id == "MutationConsumable" and item.Quote and samples >= item.Price then
+						local quote = HttpService:JSONDecode(item.Quote)
+						pcall(function()
+							Remotes.Scramble.Request:InvokeServer(quote)
+						end)
+						break
+					end
+				end
+			end)
+		end
+		task.wait(5)
+	end
+end)
+
+------------------------------------------------------------
+-- Auto Mutate Scrambled (Plot)
+-- Uses MutationConsumable on placed pets that have ZERO mutations.
+-- Mutations cannot be stacked: if a pet already has any mutation
+-- (Golden, Scrambled, etc.) it is skipped.
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		if autoBossShopEnabled then
+		if autoMutateScrambledEnabled then
 			pcall(function()
 				local stats = SaveModule.Get()
-				local tokens = tonumber(stats.BossTokens) or 0
-				if tokens >= 400 then
-					pcall(function()
-						Remotes.BossMastery.AskBuyShopItem:InvokeServer("MutationConsumable")
-					end)
+				local consumables = 0
+				if type(stats.BossMastery) == "table" then
+					consumables = tonumber(stats.BossMastery.MutationConsumables) or 0
+				end
+				if consumables <= 0 then return end
+
+				local SKIP_MUTATIONS = { Scrambled = true, Fractured = true }
+				for uid, rec in pairs(stats.EggInventory or {}) do
+					if not autoMutateScrambledEnabled then break end
+					if type(rec) == "table" and rec.Placement ~= nil then
+						local hasBlockingMut = false
+						if type(rec.Mutations) == "table" then
+							for _, mutName in pairs(rec.Mutations) do
+								if SKIP_MUTATIONS[mutName] then
+									hasBlockingMut = true
+									break
+								end
+							end
+						end
+						if not hasBlockingMut then
+							pcall(function()
+								Remotes.BossMastery.AskUseMutationConsumable:InvokeServer(uid)
+							end)
+							task.wait(1)
+							stats = SaveModule.Get()
+							consumables = 0
+							if type(stats.BossMastery) == "table" then
+								consumables = tonumber(stats.BossMastery.MutationConsumables) or 0
+							end
+							if consumables <= 0 then return end
+						end
+					end
 				end
 			end)
 		end
@@ -1095,7 +1174,7 @@ end)
 
 
 ------------------------------------------------------------
--- Auto Sell inventory backlog (< 300M/s, unplaced only, never Divine/Titan)
+-- Auto Sell inventory backlog (< 1B/s, unplaced only, never Divine/Titan)
 -- Requires equip (AskWearTool) then SellPet on the held UID.
 ------------------------------------------------------------
 task.spawn(function()
