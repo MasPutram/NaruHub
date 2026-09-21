@@ -1008,6 +1008,7 @@ end)
 -- Auto Buy Dr Scramble Shop
 -- Priority 1: MutationConsumable (Scrambled token)
 -- Priority 2: TreadmillBooster (only if enough for 2x treadmill price)
+-- Format from game client: ("Shop", item.Id, decodedQuote)
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -1028,16 +1029,23 @@ task.spawn(function()
 					if item.Id == "TreadmillBooster" and item.Quote then treadItem = item end
 				end
 
+				local function tryBuy(item)
+					local quote = HttpService:JSONDecode(item.Quote)
+					local r
+					pcall(function()
+						r = Remotes.Scramble.Request:InvokeServer("Shop", item.Id, quote)
+					end)
+					if type(r) == "table" and r.Ok == false then
+						pcall(function()
+							Remotes.Scramble.Request:InvokeServer(quote)
+						end)
+					end
+				end
+
 				if mutItem and samples >= mutItem.Price then
-					local quote = HttpService:JSONDecode(mutItem.Quote)
-					pcall(function()
-						Remotes.Scramble.Request:InvokeServer(quote)
-					end)
+					tryBuy(mutItem)
 				elseif treadItem and samples >= treadItem.Price * 2 then
-					local quote = HttpService:JSONDecode(treadItem.Quote)
-					pcall(function()
-						Remotes.Scramble.Request:InvokeServer(quote)
-					end)
+					tryBuy(treadItem)
 				end
 			end)
 		end
