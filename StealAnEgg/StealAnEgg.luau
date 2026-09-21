@@ -475,19 +475,28 @@ section:AddToggle("AutoPlaceToggle", {
 
 local autoBuyScrambledEnabled = false
 section:AddToggle("AutoBuyScrambledToggle", {
-	Title = "Auto Buy Scrambled (Dr Scramble Shop)",
+	Title = "Auto Buy Dr Scramble (Token > Treadmill)",
 	Default = false,
 	Callback = function(val)
 		autoBuyScrambledEnabled = val
 	end,
 })
 
-local autoMutateScrambledEnabled = false
-section:AddToggle("AutoMutateScrambledToggle", {
-	Title = "Auto Mutate Scrambled (Plot, highest b/s first)",
+local autoMutationEggEnabled = false
+section:AddToggle("AutoMutationEggToggle", {
+	Title = "Auto Mutation Egg (Plot, highest b/s first)",
 	Default = false,
 	Callback = function(val)
-		autoMutateScrambledEnabled = val
+		autoMutationEggEnabled = val
+	end,
+})
+
+local autoHatchEnabled = false
+section:AddToggle("AutoHatchToggle", {
+	Title = "Auto Hatch",
+	Default = false,
+	Callback = function(val)
+		autoHatchEnabled = val
 	end,
 })
 
@@ -996,10 +1005,9 @@ end)
 
 
 ------------------------------------------------------------
--- Auto Buy Scrambled (Dr Scramble Shop)
--- Buys the "Scrambled" consumable (MutationConsumable) using Samples
--- currency from the Dr Scramble event shop. Fetches a fresh shop
--- snapshot each tick so price/availability changes are auto-detected.
+-- Auto Buy Dr Scramble Shop
+-- Priority 1: MutationConsumable (Scrambled token)
+-- Priority 2: TreadmillBooster (only if enough for 2x treadmill price)
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -1013,14 +1021,23 @@ task.spawn(function()
 				local samples = snap.Snapshot.State and snap.Snapshot.State.Samples or 0
 				local shop = snap.Snapshot.Shop
 				if not shop then return end
+
+				local mutItem, treadItem
 				for _, item in ipairs(shop) do
-					if item.Id == "MutationConsumable" and item.Quote and samples >= item.Price then
-						local quote = HttpService:JSONDecode(item.Quote)
-						pcall(function()
-							Remotes.Scramble.Request:InvokeServer(quote)
-						end)
-						break
-					end
+					if item.Id == "MutationConsumable" and item.Quote then mutItem = item end
+					if item.Id == "TreadmillBooster" and item.Quote then treadItem = item end
+				end
+
+				if mutItem and samples >= mutItem.Price then
+					local quote = HttpService:JSONDecode(mutItem.Quote)
+					pcall(function()
+						Remotes.Scramble.Request:InvokeServer(quote)
+					end)
+				elseif treadItem and samples >= treadItem.Price * 2 then
+					local quote = HttpService:JSONDecode(treadItem.Quote)
+					pcall(function()
+						Remotes.Scramble.Request:InvokeServer(quote)
+					end)
 				end
 			end)
 		end
@@ -1029,17 +1046,17 @@ task.spawn(function()
 end)
 
 ------------------------------------------------------------
--- Auto Mutate Scrambled (Plot)
+-- Auto Mutation Egg (Plot)
 -- Targets highest b/s placed pet first. Retries on the SAME
 -- pet until mutation succeeds (10% chance per attempt).
--- Skips pets that already have Scrambled or Fractured.
+-- Skips pets that already have Scrambled. Teleports to plot
+-- before applying (required by the game for proximity).
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	local SKIP_MUTATIONS = { Scrambled = true, Fractured = true }
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		if autoMutateScrambledEnabled then
+		if autoMutationEggEnabled then
 			pcall(function()
 				local stats = SaveModule.Get()
 				local consumables = 0
@@ -1051,16 +1068,16 @@ task.spawn(function()
 				local candidates = {}
 				for uid, rec in pairs(stats.EggInventory or {}) do
 					if type(rec) == "table" and rec.Placement ~= nil then
-						local hasBlockingMut = false
+						local hasScrambled = false
 						if type(rec.Mutations) == "table" then
 							for _, mutName in pairs(rec.Mutations) do
-								if SKIP_MUTATIONS[mutName] then
-									hasBlockingMut = true
+								if mutName == "Scrambled" then
+									hasScrambled = true
 									break
 								end
 							end
 						end
-						if not hasBlockingMut then
+						if not hasScrambled then
 							local rate = 0
 							pcall(function()
 								rate = AssetEarnings.RatePerSecond({
@@ -1074,10 +1091,59 @@ task.spawn(function()
 					end
 				end
 				table.sort(candidates, function(a, b) return a.rate > b.rate end)
+				if #candidates == 0 then return end
+
+				-- Teleport to plot (same as auto place)
+				local myPlot
+				local plots = Workspace:FindFirstChild("Plots")
+				if plots then
+					local myLevel = stats and stats.BaseUpgradeLevel or 0
+					local cands = {}
+					for _, plot in ipairs(plots:GetChildren()) do
+						if plot:GetAttribute("BaseUpgradeLevel") == myLevel then
+							table.insert(cands, plot)
+						end
+					end
+					if #cands == 1 then
+						myPlot = cands[1]
+					elseif #cands > 1 then
+						local char = LocalPlayer.Character
+						local hrp = char and char:FindFirstChild("HumanoidRootPart")
+						if hrp then
+							local closest, closestDist = nil, math.huge
+							for _, plot in ipairs(cands) do
+								local cp = plot:FindFirstChild("CenterPoint")
+								if cp then
+									local dist = (hrp.Position - cp.Position).Magnitude
+									if dist < closestDist then closest, closestDist = plot, dist end
+								end
+							end
+							myPlot = closest
+						else
+							myPlot = cands[1]
+						end
+					end
+				end
+				if myPlot then
+					local toUpdate = myPlot:FindFirstChild("ToUpdate")
+					local target = toUpdate and toUpdate:FindFirstChild("PetArea")
+					if not target then
+						target = myPlot:FindFirstChild("CenterPoint")
+						if toUpdate then target = toUpdate:FindFirstChild("CenterPoint") or target end
+					end
+					if target then
+						local char = LocalPlayer.Character
+						local hrp = char and char:FindFirstChild("HumanoidRootPart")
+						if hrp then
+							hrp.CFrame = target.CFrame + Vector3.new(0, 3, 0)
+						end
+					end
+					task.wait(1)
+				end
 
 				for _, pet in ipairs(candidates) do
-					if not autoMutateScrambledEnabled then break end
-					while autoMutateScrambledEnabled do
+					if not autoMutationEggEnabled then break end
+					while autoMutationEggEnabled do
 						stats = SaveModule.Get()
 						consumables = 0
 						if type(stats.BossMastery) == "table" then
@@ -1085,7 +1151,7 @@ task.spawn(function()
 						end
 						if consumables <= 0 then break end
 
-						local ok, result
+						local result
 						pcall(function()
 							result = Remotes.BossMastery.AskUseMutationConsumable:InvokeServer(pet.uid)
 						end)
@@ -1472,47 +1538,49 @@ task.spawn(function()
 end)
 
 ------------------------------------------------------------
--- Auto Hatch every 30 min + Equip Best on any hatch
+-- Auto Hatch (toggle-driven) + Equip Best on any hatch
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		pcall(function()
-			local records = getMyOwnedEggs()
-			local now = Workspace:GetServerTimeNow()
-			local hatched = 0
-			for uid, rec in pairs(records) do
-				if rec.Placement ~= nil then
-					local speed = rec.GrowthSpeedMultiplier or 1
-					local nightCredit = 0
-					pcall(function()
-						nightCredit = EggRecords.CurrentNightCredit(rec, now, speed)
-					end)
-					local remaining = 0
-					pcall(function()
-						remaining = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer)
-					end)
-					if remaining <= 0 then
-						local ok1, r1 = pcall(function()
-							return Remotes.EggWorld.AskHatch:InvokeServer(uid)
+		if autoHatchEnabled then
+			pcall(function()
+				local records = getMyOwnedEggs()
+				local now = Workspace:GetServerTimeNow()
+				local hatched = 0
+				for uid, rec in pairs(records) do
+					if rec.Placement ~= nil then
+						local speed = rec.GrowthSpeedMultiplier or 1
+						local nightCredit = 0
+						pcall(function()
+							nightCredit = EggRecords.CurrentNightCredit(rec, now, speed)
 						end)
-						if ok1 and r1 == true then
-							pcall(function()
-								Remotes.EggWorld.AskFinishHatch:InvokeServer(uid)
+						local remaining = 0
+						pcall(function()
+							remaining = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer)
+						end)
+						if remaining <= 0 then
+							local ok1, r1 = pcall(function()
+								return Remotes.EggWorld.AskHatch:InvokeServer(uid)
 							end)
-							hatched = hatched + 1
+							if ok1 and r1 == true then
+								pcall(function()
+									Remotes.EggWorld.AskFinishHatch:InvokeServer(uid)
+								end)
+								hatched = hatched + 1
+							end
+							task.wait(0.3)
 						end
-						task.wait(0.3)
 					end
 				end
-			end
-			if hatched > 0 then
-				pcall(function()
-					Remotes.Haul.WearBest:InvokeServer()
-				end)
-			end
-		end)
-		task.wait(1800)
+				if hatched > 0 then
+					pcall(function()
+						Remotes.Haul.WearBest:InvokeServer()
+					end)
+				end
+			end)
+		end
+		task.wait(60)
 	end
 end)
 
