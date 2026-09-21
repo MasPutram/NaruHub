@@ -1380,7 +1380,7 @@ while true do
       -- clone. Gated behind a high-usage threshold so it's a rare, cheap op.
       if stats.ram and stats.ram.totalMB and stats.ram.totalMB > 0 then
         local pct = (stats.ram.usedMB / stats.ram.totalMB) * 100
-        if pct >= 95 then
+        if pct >= 80 then
           log(C.yellow .. "[" .. ts() .. "] RAM " .. math.floor(pct) .. "% -- trim cache" .. C.reset)
           trim_ram()
         end
