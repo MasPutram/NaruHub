@@ -484,7 +484,7 @@ export default function CatalogPage() {
                 <th>Income Aktif</th>
                 <th>Top Pet</th>
                 <th style="text-align:center">Telur</th>
-                <th style="text-align:center">Mutasi</th>
+                <th style="text-align:center">Boss</th>
                 <th style="text-align:center">Scramble</th>
                 <th style="text-align:center">Harga</th>
               </tr>
