@@ -939,10 +939,11 @@ function PosterPage() {
         .right { width: 392px; flex-shrink: 0; }
 
         .poster-title { font-size: 40px; font-weight: 800; color: #1e293b; margin-bottom: 12px; }
+        .top-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; align-items: center; }
         .badge-pill {
           display: inline-block; background: #f1f5f9; border: 2px solid #334155;
           border-radius: 20px; padding: 10px 24px; font-size: 18px; font-weight: 800;
-          color: #334155; margin-bottom: 16px;
+          color: #334155;
         }
         .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
         .stat-cell {
@@ -1132,12 +1133,6 @@ function PosterPage() {
           letter-spacing: 12px;
         }
 
-        .detail-box {
-          background: #fff; border: 1px solid #cbd5e1; border-radius: 16px;
-          padding: 16px 20px; margin-bottom: 12px;
-        }
-        .detail-title { font-size: 16px; font-weight: 800; color: #1e293b; margin-bottom: 10px; }
-        .detail-items { display: flex; flex-wrap: wrap; gap: 8px; }
         .detail-pill {
           display: inline-flex; align-items: center; gap: 6px;
           background: #ecfdf5; border: 1.5px solid #16a34a; border-radius: 20px;
@@ -1245,7 +1240,17 @@ function PosterPage() {
           {/* LEFT COLUMN */}
           <div className="left">
             <div className="poster-title">{title}</div>
-            {badge && <div className="badge-pill">{badge}</div>}
+            <div className="top-badges">
+              {badge && <span className="badge-pill">{badge}</span>}
+              {checklist.trim() && checklist.split(",").map((s) => s.trim()).filter(Boolean).map((item, i) => (
+                <span key={i} className="detail-pill">
+                  <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M2 6L5 9L10 3" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  {item}
+                </span>
+              ))}
+            </div>
 
             <div className="stat-grid">
               {statItems.map((s, i) => (
@@ -1458,22 +1463,6 @@ function PosterPage() {
               <div className="inv-row">
                 <span className="inv-count">{totalEggs}</span>
               </div>
-              {divinePetCount > 0 && (
-                <>
-                  <div className="inv-label" style={{ marginTop: 8 }}>PET DIVINE / ETERNAL</div>
-                  <div className="inv-row">
-                    <span className="inv-count">{divinePetCount}</span>
-                  </div>
-                </>
-              )}
-              {Number(summary.scrambleToken) > 0 && (
-                <>
-                  <div className="inv-label" style={{ marginTop: 8 }}>TOKEN SCRAMBLE</div>
-                  <div className="inv-row">
-                    <span className="inv-count" style={{ color: "#34d399" }}>× {Math.round(Number(summary.scrambleToken))}</span>
-                  </div>
-                </>
-              )}
             </div>
 
             <div className="price-box">
@@ -1487,24 +1476,6 @@ function PosterPage() {
               )}
             </div>
 
-            {checklist.trim() && (() => {
-              const items = checklist.split(",").map((s) => s.trim()).filter(Boolean);
-              return items.length > 0 ? (
-                <div className="detail-box">
-                  <div className="detail-title">DETAIL ACC</div>
-                  <div className="detail-items">
-                    {items.map((item, i) => (
-                      <span key={i} className="detail-pill">
-                        <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M2 6L5 9L10 3" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                        {item}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ) : null;
-            })()}
 
             {qrDataUrl && (
               <div className="qr-box">
