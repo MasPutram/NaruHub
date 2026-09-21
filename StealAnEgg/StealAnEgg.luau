@@ -492,11 +492,15 @@ section:AddToggle("AutoMutationEggToggle", {
 })
 
 local autoHatchEnabled = false
+local autoHatchSignal = Instance.new("BindableEvent")
 section:AddToggle("AutoHatchToggle", {
 	Title = "Auto Hatch",
 	Default = false,
 	Callback = function(val)
 		autoHatchEnabled = val
+		if val and autoHatchSignal then
+			autoHatchSignal:Fire()
+		end
 	end,
 })
 
@@ -1522,48 +1526,59 @@ end)
 
 ------------------------------------------------------------
 -- Auto Hatch (toggle-driven) + Equip Best on any hatch
+-- Runs immediately when toggled ON, then every 30 minutes.
 ------------------------------------------------------------
-task.spawn(function()
-	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		if autoHatchEnabled then
-			pcall(function()
-				local records = getMyOwnedEggs()
-				local now = Workspace:GetServerTimeNow()
-				local hatched = 0
-				for uid, rec in pairs(records) do
-					if rec.Placement ~= nil then
-						local speed = rec.GrowthSpeedMultiplier or 1
-						local nightCredit = 0
-						pcall(function()
-							nightCredit = EggRecords.CurrentNightCredit(rec, now, speed)
-						end)
-						local remaining = 0
-						pcall(function()
-							remaining = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer)
-						end)
-						if remaining <= 0 then
-							local ok1, r1 = pcall(function()
-								return Remotes.EggWorld.AskHatch:InvokeServer(uid)
-							end)
-							if ok1 and r1 == true then
-								pcall(function()
-									Remotes.EggWorld.AskFinishHatch:InvokeServer(uid)
-								end)
-								hatched = hatched + 1
-							end
-							task.wait(0.3)
-						end
-					end
-				end
-				if hatched > 0 then
-					pcall(function()
-						Remotes.Haul.WearBest:InvokeServer()
+local function doAutoHatch()
+	pcall(function()
+		local Remotes = require(ReplicatedStorage.Shared.Remotes)
+		local records = getMyOwnedEggs()
+		local now = Workspace:GetServerTimeNow()
+		local hatched = 0
+		for uid, rec in pairs(records) do
+			if rec.Placement ~= nil then
+				local speed = rec.GrowthSpeedMultiplier or 1
+				local nightCredit = 0
+				pcall(function()
+					nightCredit = EggRecords.CurrentNightCredit(rec, now, speed)
+				end)
+				local remaining = 0
+				pcall(function()
+					remaining = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer)
+				end)
+				if remaining <= 0 then
+					local ok1, r1 = pcall(function()
+						return Remotes.EggWorld.AskHatch:InvokeServer(uid)
 					end)
+					if ok1 and r1 == true then
+						pcall(function()
+							Remotes.EggWorld.AskFinishHatch:InvokeServer(uid)
+						end)
+						hatched = hatched + 1
+					end
+					task.wait(0.3)
 				end
+			end
+		end
+		if hatched > 0 then
+			pcall(function()
+				Remotes.Haul.WearBest:InvokeServer()
 			end)
 		end
-		task.wait(300)
+	end)
+end
+
+task.spawn(function()
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		if autoHatchEnabled then
+			doAutoHatch()
+		end
+		local fired = false
+		local conn = autoHatchSignal.Event:Connect(function() fired = true end)
+		for _ = 1, 180 do
+			if fired or Fluent.Unloaded then break end
+			task.wait(10)
+		end
+		conn:Disconnect()
 	end
 end)
 
