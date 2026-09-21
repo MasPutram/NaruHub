@@ -36,6 +36,14 @@ export function soldKey(name: string) {
   return `sold:${name}`;
 }
 
+export function moderatedKey(name: string) {
+  return `moderated:${name}`;
+}
+
+export function resolvedModeratedKey(name: string) {
+  return `modresolved:${name}`;
+}
+
 export function termuxDeviceKey(deviceId: string) {
   return `termux:device:${deviceId}`;
 }

@@ -420,6 +420,23 @@ export default function DashboardPage() {
     }
   }
 
+  async function markModerated(account: string) {
+    setGenMsg(account, "Memindahkan ke moderated...", "var(--dim)");
+    try {
+      const res = await fetch("/api/mark-moderated", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account }),
+      });
+      const body = await res.json();
+      if (!res.ok || !body.ok) { setGenMsg(account, "Gagal: " + (body.error || "unknown"), "#f87171"); return; }
+      setAccounts((prev) => prev.filter((a) => a.sourceAccount !== account));
+      setGenMsg(account, "Dipindahkan ke Moderated.", "var(--green)");
+    } catch (e: any) {
+      setGenMsg(account, "Gagal: " + e.message, "#f87171");
+    }
+  }
+
   async function deleteAccount(account: string) {
     try {
       const res = await fetch("/api/delete-account", {
@@ -577,6 +594,8 @@ export default function DashboardPage() {
         .act-poster { background: var(--accent); color: #1a1030; }
         .act-sell { background: var(--surface); color: var(--ink); border: 1px solid var(--card-border) !important; }
         .act-sell:hover { border-color: var(--accent2) !important; }
+        .act-mod { background: var(--surface); color: #f59e0b; border: 1px solid var(--card-border) !important; }
+        .act-mod:hover { border-color: #f59e0b !important; }
         .act-del { background: transparent; color: var(--red); border: 1px solid rgba(239,68,68,.3) !important; flex: 0; padding: 7px 10px; }
         .act-del:hover { background: rgba(239,68,68,.1); border-color: var(--red) !important; }
         .max-tag { font-size: 9px; font-weight: 900; color: #1a1030; background: linear-gradient(135deg, var(--gold), #f59e0b); padding: 1px 6px; border-radius: 4px; letter-spacing: .5px; vertical-align: middle; margin-left: 4px; display: inline-block; line-height: 1.4; }
@@ -782,6 +801,7 @@ export default function DashboardPage() {
                 account={a}
                 onOpen={openDetail}
                 onSell={markForSale}
+                onModerated={markModerated}
                 onDelete={(name) => setDeleteConfirm(name)}
                 deleteConfirm={deleteConfirm}
                 onDeleteConfirm={deleteAccount}
@@ -830,10 +850,11 @@ export default function DashboardPage() {
 }
 
 /* ===== ACCOUNT CARD ===== */
-function AccountCard({ account: a, onOpen, onSell, onDelete, deleteConfirm, onDeleteConfirm, onDeleteCancel, genMsg, maxKandang, maxTreadmill }: {
+function AccountCard({ account: a, onOpen, onSell, onModerated, onDelete, deleteConfirm, onDeleteConfirm, onDeleteCancel, genMsg, maxKandang, maxTreadmill }: {
   account: Account;
   onOpen: (name: string) => void;
   onSell: (name: string) => void;
+  onModerated: (name: string) => void;
   onDelete: (name: string) => void;
   deleteConfirm: string | null;
   onDeleteConfirm: (name: string) => void;
@@ -891,6 +912,7 @@ function AccountCard({ account: a, onOpen, onSell, onDelete, deleteConfirm, onDe
       <div className="card-actions">
         <a className="act-btn act-poster" href={`/poster?account=${encodeURIComponent(a.sourceAccount)}`} onClick={(e) => e.stopPropagation()}>Poster</a>
         <button className="act-btn act-sell" onClick={(e) => { e.stopPropagation(); onSell(a.sourceAccount); }}>Siap Jual</button>
+        <button className="act-btn act-mod" onClick={(e) => { e.stopPropagation(); onModerated(a.sourceAccount); }}>Moderated</button>
         {isOff && (
           <button className="act-btn act-del" onClick={(e) => { e.stopPropagation(); onDelete(a.sourceAccount); }} title="Hapus akun">&#x2715;</button>
         )}

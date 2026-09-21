@@ -31,6 +31,14 @@ const NAV: NavEntry[] = [
       { label: "Devices", href: "/monitor", icon: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
     ],
   },
+  {
+    label: "Captcha",
+    icon: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z",
+    items: [
+      { label: "Moderated", href: "/moderated", icon: "M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" },
+      { label: "Resolved", href: "/moderated?tab=resolved", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
+    ],
+  },
   { label: "Poster", href: "/poster", icon: "M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" },
 ];
 
@@ -47,7 +55,7 @@ export default function Sidebar() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Termux: true });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Termux: true, Captcha: true });
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -56,8 +64,9 @@ export default function Sidebar() {
   }
 
   function isActive(href: string) {
-    if (href === "/") return pathname === "/";
-    return pathname === href || pathname.startsWith(href + "/");
+    const [hrefPath] = href.split("?");
+    if (hrefPath === "/") return pathname === "/";
+    return pathname === hrefPath || pathname.startsWith(hrefPath + "/");
   }
 
   function isGroupActive(group: NavGroup) {
