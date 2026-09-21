@@ -838,11 +838,12 @@ function PosterPage() {
   const rightPanelShown = rightPanelPets.slice(0, 8);
   const shownInActiveKeys = new Set(rightPanelShown.map(petKey));
 
+  const alreadyShownKeys = new Set([...Array.from(featuredKeys), ...topPicks.map(petKey), ...rightPanelShown.map(petKey)]);
   const mutGroups = groupByMutation(allSorted);
-  const groupsShown = mutGroups.slice(0, 6).map(([name, items]) => [
+  const groupsShown = mutGroups.map(([name, items]) => [
     name,
-    [...items].sort((a, b) => (b.rate || 0) - (a.rate || 0)).slice(0, 6),
-  ] as [string, Pet[]]);
+    [...items].sort((a, b) => (b.rate || 0) - (a.rate || 0)).filter((p) => !alreadyShownKeys.has(petKey(p))).slice(0, 6),
+  ] as [string, Pet[]]).filter(([, items]) => items.length > 0).slice(0, 6);
   const groupShownKeys = new Set<string>();
   for (const [, items] of groupsShown) {
     for (const p of items) groupShownKeys.add(petKey(p));
@@ -1332,7 +1333,7 @@ function PosterPage() {
 
             {groupsShown.length > 0 && (
               <>
-                <div className="section-header">DIKELOMPOKKAN PER MUTASI</div>
+                <div className="section-header">PET MUTASI LAIN</div>
                 {groupsShown.map(([groupName, items]) => {
                   const originalCount = mutGroups.find(([n]) => n === groupName)?.[1].length ?? items.length;
                   return (
