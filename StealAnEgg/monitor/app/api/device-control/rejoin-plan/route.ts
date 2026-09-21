@@ -267,13 +267,15 @@ export async function GET(req: NextRequest) {
         continue;
       }
       // Running but not in-game: could be loading, on home/login screen, or
-      // wedged on an error screen. Give it IDLE_KILL_MS to produce a heartbeat;
-      // after that, force-stop to free RAM. Auto-rejoin's retry counter
-      // (MAX_ATTEMPTS) caps the kill->relaunch cycle.
+      // wedged on an error screen. Only idle-kill when the clone HAS a target
+      // (should be in a game). Clones sitting on the Roblox home screen with
+      // no target are intentionally idle — leave them alone.
       if (runningSet.has(pkg)) {
-        const idleAnchor = Math.max(lastLaunchAt, lastHeartbeatAt);
-        if (idleAnchor > 0 && now - idleAnchor >= IDLE_KILL_MS) {
-          actions.push({ pkg, target: "", bounds: "", kill: true });
+        if (target) {
+          const idleAnchor = Math.max(lastLaunchAt, lastHeartbeatAt);
+          if (idleAnchor > 0 && now - idleAnchor >= IDLE_KILL_MS) {
+            actions.push({ pkg, target: "", bounds: "", kill: true });
+          }
         }
         continue;
       }
