@@ -776,10 +776,11 @@ end
 local HARGA_PER_B = 5
 local DEFAULT_CHECKLIST = splitComma("Data Polos, No Topi, No Sum")
 local MAX_EQUIP_PETS = 17
+local POTENSI_EQUIP = 19
 
 local function computeAutoPrice(petPool)
 	local totalRate = 0
-	for i = 1, math.min(MAX_EQUIP_PETS, #petPool) do
+	for i = 1, math.min(POTENSI_EQUIP, #petPool) do
 		totalRate += (petPool[i].rate or 0)
 	end
 	if totalRate <= 0 then
@@ -839,9 +840,8 @@ local function reportToMonitor()
 
 		local activeLimit = 0
 		pcall(function() activeLimit = AssetRoster.ReadWearLimit() end)
-		local equipLimit = if activeLimit > 0 then activeLimit else MAX_EQUIP_PETS
 		local incomePotensi = 0
-		for i = 1, math.min(equipLimit, #petPool) do
+		for i = 1, math.min(POTENSI_EQUIP, #petPool) do
 			incomePotensi += (petPool[i].rate or 0)
 		end
 		local autoPrice = computeAutoPrice(petPool)

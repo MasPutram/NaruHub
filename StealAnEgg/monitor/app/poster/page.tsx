@@ -112,15 +112,22 @@ function equipSlots(): number {
 
 function computeIncomePotensiPetAktif(detail: AccountDetail | null, limit: number): number {
   if (!detail) return 0;
-  const pool = [
+  const all = [
     ...(detail.activePets || []),
     ...(detail.allPets || []),
     ...(detail.growingEggs || []),
     ...(detail.backpackEggs || []),
-  ].sort((a, b) => (b.rate || 0) - (a.rate || 0));
+  ];
+  const seen = new Set<string>();
+  const deduped: { rate?: number }[] = [];
+  for (const p of all) {
+    const k = petKey(p as Pet);
+    if (!seen.has(k)) { seen.add(k); deduped.push(p); }
+  }
+  deduped.sort((a, b) => (b.rate || 0) - (a.rate || 0));
   let total = 0;
-  for (let i = 0; i < Math.min(limit, pool.length); i++) {
-    total += pool[i].rate || 0;
+  for (let i = 0; i < Math.min(limit, deduped.length); i++) {
+    total += deduped[i].rate || 0;
   }
   return total;
 }
@@ -512,7 +519,7 @@ function PosterPage() {
   const [owner, setOwner] = useState("Mas Naru");
   const [checklist, setChecklist] = useState("Data Polos, No Topi, No Sum");
   const [downloading, setDownloading] = useState(false);
-  const [posterModel, setPosterModel] = useState<"classic" | "dark">("classic");
+
   const [iconIdx, setIconIdx] = useState<Record<string, string>>({});
   const [editPriceOpen, setEditPriceOpen] = useState(false);
   const [editPriceVal, setEditPriceVal] = useState("");
@@ -624,7 +631,7 @@ function PosterPage() {
       const { default: html2canvas } = await import("html2canvas-pro");
       const canvas = await html2canvas(posterRef.current, {
         scale: 2,
-        backgroundColor: posterModel === "dark" ? "#0b0b12" : "#DFE7F0",
+        backgroundColor: "#DFE7F0",
         useCORS: true,
       });
       const link = document.createElement("a");
@@ -1170,138 +1177,6 @@ function PosterPage() {
           padding: 10px 28px; border-radius: 12px;
         }
 
-        /* === DARK POSTER (Model 2) === */
-        .poster-dark {
-          width: 540px; min-height: 960px; background: #0b0b12; padding: 28px;
-          font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #e8e8f0;
-          position: relative;
-        }
-        .poster-dark .pd-header { margin-bottom: 20px; }
-        .poster-dark .pd-title {
-          font-size: 26px; font-weight: 800; color: #facc15;
-          margin-bottom: 6px; letter-spacing: 0.5px;
-        }
-        .poster-dark .pd-badge {
-          display: inline-block; background: rgba(250,204,21,0.12); border: 1.5px solid #facc15;
-          border-radius: 14px; padding: 4px 14px; font-size: 12px; font-weight: 800;
-          color: #facc15; margin-bottom: 6px;
-        }
-        .poster-dark .pd-account {
-          font-size: 13px; font-weight: 700; color: #64748b; letter-spacing: 0.3px;
-        }
-        .poster-dark .pd-stat-grid {
-          display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 16px;
-        }
-        .poster-dark .pd-stat {
-          background: #14141f; border: 1px solid #262636; border-radius: 10px; padding: 8px 10px;
-        }
-        .poster-dark .pd-stat .pd-slabel {
-          font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.3px;
-        }
-        .poster-dark .pd-stat .pd-sval {
-          font-size: 16px; font-weight: 800; color: #22d3ee; margin-top: 1px;
-        }
-        .poster-dark .pd-stat.pd-stat-mut .pd-sval { color: #a78bfa; }
-        .poster-dark .pd-stat.pd-stat-scramble .pd-sval { color: #34d399; }
-        .poster-dark .pd-top3 {
-          display: flex; gap: 8px; margin-bottom: 16px;
-        }
-        .poster-dark .pd-top3-card {
-          flex: 1; background: #14141f; border: 1px solid #262636; border-radius: 12px;
-          padding: 10px; text-align: center; position: relative;
-        }
-        .poster-dark .pd-top3-card .pd-t3name {
-          font-size: 12px; font-weight: 800; color: #e8e8f0; margin-top: 6px;
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
-        .poster-dark .pd-top3-card .pd-t3rate {
-          font-size: 13px; font-weight: 800; color: #22d3ee; margin-top: 2px;
-        }
-        .poster-dark .pd-top3-card .pd-t3mut {
-          font-size: 9px; font-weight: 700; margin-top: 4px;
-        }
-        .poster-dark .pd-top3-card .pd-t3rarity {
-          position: absolute; top: 6px; right: 6px;
-          border-radius: 6px; padding: 2px 6px; font-size: 8px; font-weight: 700;
-          text-transform: uppercase;
-        }
-        .poster-dark .pd-featured {
-          background: #14141f; border: 2px solid #facc15; border-radius: 14px;
-          padding: 14px; margin-bottom: 16px; position: relative;
-        }
-        .poster-dark .pd-featured-ribbon {
-          position: absolute; top: -10px; left: 10px;
-          background: #facc15; color: #0b0b12; font-size: 10px; font-weight: 900;
-          padding: 3px 12px; border-radius: 8px; letter-spacing: 0.5px;
-        }
-        .poster-dark .pd-featured-content {
-          display: flex; align-items: center; gap: 12px; margin-top: 6px;
-        }
-        .poster-dark .pd-featured-text { min-width: 0; flex: 1; }
-        .poster-dark .pd-featured-name { font-size: 18px; font-weight: 800; color: #facc15; }
-        .poster-dark .pd-featured-rate { font-size: 22px; font-weight: 800; color: #22d3ee; margin-top: 2px; }
-        .poster-dark .pd-featured-mut { font-size: 11px; font-weight: 700; }
-        .poster-dark .pd-featured-weight { font-size: 12px; font-weight: 700; color: #64748b; margin-top: 2px; }
-
-        .poster-dark .pd-price-box {
-          background: #14141f; border: 1.5px solid #facc15; border-radius: 12px;
-          padding: 14px; margin-bottom: 14px; text-align: center;
-        }
-        .poster-dark .pd-price-label {
-          font-size: 14px; font-weight: 800; color: #facc15; margin-bottom: 6px;
-        }
-        .poster-dark .pd-price-value {
-          font-size: 24px; font-weight: 800; color: #22d3ee;
-        }
-        .poster-dark .pd-price-empty {
-          border: 1.5px dashed #262636; border-radius: 8px; padding: 12px;
-          color: #64748b; font-size: 12px;
-        }
-
-        .poster-dark .pd-checklist {
-          background: #14141f; border: 1px solid #262636; border-radius: 12px;
-          padding: 12px 14px; margin-bottom: 14px;
-        }
-        .poster-dark .pd-checklist-title {
-          font-size: 12px; font-weight: 800; color: #facc15; margin-bottom: 8px;
-        }
-        .poster-dark .pd-checklist-item {
-          display: flex; align-items: center; gap: 8px; padding: 2px 0;
-        }
-        .poster-dark .pd-checklist-check {
-          width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid #22d3ee;
-          display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-        }
-        .poster-dark .pd-checklist-label { font-size: 12px; color: #cbd5e1; }
-
-        .poster-dark .pd-footer {
-          display: flex; align-items: center; gap: 12px;
-          background: #14141f; border: 1px solid #262636; border-radius: 12px;
-          padding: 12px; margin-bottom: 10px;
-        }
-        .poster-dark .pd-footer img { border-radius: 6px; flex-shrink: 0; }
-        .poster-dark .pd-footer-owner { font-size: 16px; font-weight: 800; color: #facc15; }
-        .poster-dark .pd-footer-label { font-size: 11px; color: #64748b; }
-        .poster-dark .pd-footer-url { font-size: 11px; color: #22d3ee; font-weight: 700; margin-top: 2px; }
-
-        .poster-dark .pd-watermark {
-          position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-          display: flex; flex-direction: column; align-items: center; justify-content: center;
-          transform: rotate(-30deg); pointer-events: none; z-index: 10; overflow: visible;
-        }
-        .poster-dark .pd-watermark-text {
-          font-size: 64px; font-weight: 800; color: rgba(250,204,21,0.06);
-          white-space: nowrap; line-height: 1.4; letter-spacing: 12px;
-        }
-        .poster-dark .pd-watermark-sub {
-          font-size: 24px; font-weight: 800; color: rgba(250,204,21,0.04);
-          white-space: nowrap; letter-spacing: 8px;
-        }
-        .poster-dark .pd-initials {
-          position: absolute; bottom: 10px; right: 14px;
-          font-size: 16px; font-weight: 800; color: #333;
-        }
-        .poster-dark.poster-sold { filter: grayscale(1); }
       `}</style>
 
       <div className="controls">
@@ -1323,24 +1198,6 @@ function PosterPage() {
         <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="nama Facebook" />
         <label>Checklist:</label>
         <input value={checklist} onChange={(e) => setChecklist(e.target.value)} placeholder="Data Polos, No Topi, No Sum" style={{ width: 280 }} />
-        <div style={{ display: "flex", gap: 4, background: "#0b0b12", borderRadius: 8, padding: 2 }}>
-          <button
-            onClick={() => setPosterModel("classic")}
-            style={{
-              padding: "6px 14px", borderRadius: 6, fontSize: 12, fontWeight: 800, cursor: "pointer", border: "none",
-              background: posterModel === "classic" ? "#a78bfa" : "transparent",
-              color: posterModel === "classic" ? "#1a1030" : "#8b8ba3",
-            }}
-          >Classic</button>
-          <button
-            onClick={() => setPosterModel("dark")}
-            style={{
-              padding: "6px 14px", borderRadius: 6, fontSize: 12, fontWeight: 800, cursor: "pointer", border: "none",
-              background: posterModel === "dark" ? "#a78bfa" : "transparent",
-              color: posterModel === "dark" ? "#1a1030" : "#8b8ba3",
-            }}
-          >Dark</button>
-        </div>
         <button className="dlbtn" onClick={downloadPoster} disabled={downloading}>
           {downloading ? "Downloading..." : "Download PNG"}
         </button>
@@ -1376,7 +1233,6 @@ function PosterPage() {
       </div>
 
       <div className="poster-wrap">
-        {posterModel === "classic" && (
         <div className={`poster ${isSold ? "poster-sold" : ""}`} ref={posterRef} style={{ position: "relative" }}>
           {isSold && (
             <div className="poster-sold-overlay">
@@ -1669,158 +1525,6 @@ function PosterPage() {
 
           {initials && <div className="account-tag">{initials}</div>}
         </div>
-        )}
-
-        {posterModel === "dark" && (
-        <div className={`poster-dark ${isSold ? "poster-sold" : ""}`} ref={posterRef}>
-          {isSold && (
-            <div style={{
-              position: "absolute", inset: 0, zIndex: 20,
-              display: "flex", alignItems: "flex-start", justifyContent: "center",
-              paddingTop: 120, pointerEvents: "none",
-            }}>
-              <div style={{
-                border: "6px solid #dc2626", borderRadius: 16, padding: "14px 40px",
-                transform: "rotate(-12deg)", background: "rgba(0,0,0,0.3)",
-              }}>
-                <span style={{ fontSize: 48, fontWeight: 900, color: "#dc2626", letterSpacing: 8 }}>TERJUAL</span>
-              </div>
-            </div>
-          )}
-          {isSold && soldPrice > 0 && (
-            <div style={{
-              position: "absolute", top: 16, right: 20, zIndex: 25,
-              background: "#dc2626", color: "#fff", fontSize: 18, fontWeight: 900,
-              padding: "6px 18px", borderRadius: 10,
-            }}>{formatRupiah(soldPrice)}</div>
-          )}
-
-          {/* HEADER */}
-          <div className="pd-header">
-            <div className="pd-title">{title}</div>
-            {badge && <div className="pd-badge">{badge}</div>}
-            <div className="pd-account">{accountName}</div>
-          </div>
-
-          {/* STATS GRID */}
-          <div className="pd-stat-grid">
-            {statItems.map((s, i) => (
-              <div key={i} className={`pd-stat${s.accent === "mut" ? " pd-stat-mut" : ""}${s.accent === "scramble" ? " pd-stat-scramble" : ""}`}>
-                <div className="pd-slabel">{s.label}</div>
-                <div className="pd-sval">{s.value}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* TOP 3 */}
-          {topPicks.length > 0 && (
-            <div className="pd-top3">
-              {topPicks.map((p, i) => {
-                const rarity = petRarity(p.category, iconIdx);
-                return (
-                  <div key={i} className="pd-top3-card">
-                    {rarity && (
-                      <span className="pd-t3rarity" style={rarityBadgeStyle(rarity)}>{rarity}</span>
-                    )}
-                    <div style={{ display: "flex", justifyContent: "center", marginBottom: 4 }}>
-                      <PetIcon pet={p} size={64} />
-                    </div>
-                    <div className="pd-t3name">{p.name || displayName(p.category)}</div>
-                    <div className="pd-t3rate">{fmtRate(p.rate)}</div>
-                    {p.mutations && p.mutations.length > 0 && (
-                      <div className="pd-t3mut" style={mutTextStyle(p.mutations[0])}>
-                        {p.mutations.map((m) => mutDisplayName(m)).join(" + ")}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* FEATURED */}
-          {featured && (() => {
-            const featuredRarity = petRarity(featured.category, iconIdx);
-            return (
-              <div className="pd-featured">
-                <div className="pd-featured-ribbon">PALING GACOR!</div>
-                {featuredRarity && (
-                  <span style={{
-                    position: "absolute", top: -8, right: 12,
-                    borderRadius: 8, padding: "2px 8px", fontSize: 9, fontWeight: 700,
-                    textTransform: "uppercase", ...rarityBadgeStyle(featuredRarity),
-                  }}>{featuredRarity}</span>
-                )}
-                <div className="pd-featured-content">
-                  <div className="pd-featured-text">
-                    {featured.mutations && featured.mutations.length > 0 && (
-                      <div className="pd-featured-mut" style={mutTextStyle(featured.mutations[0])}>
-                        {featured.mutations.map((m) => mutDisplayName(m)).join(" + ")}
-                      </div>
-                    )}
-                    <div className="pd-featured-name">{(featured.name || displayName(featured.category)).toUpperCase()}</div>
-                    <div className="pd-featured-rate">{fmtRate(featured.rate)}</div>
-                    {featured.weight ? <div className="pd-featured-weight">{fmtWeight(featured.weight)}</div> : null}
-                  </div>
-                  <PetIcon pet={featured} size={100} />
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* PRICE */}
-          <div className="pd-price-box">
-            <div className="pd-price-label">{isSold ? "TERJUAL" : "PRICE ACC"}</div>
-            {isSold && soldPrice > 0 ? (
-              <div className="pd-price-value">{formatRupiah(soldPrice)}</div>
-            ) : (price || computeAutoPrice(detail, summary, ratePerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit)) ? (
-              <div className="pd-price-value">{price || computeAutoPrice(detail, summary, ratePerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit)}</div>
-            ) : (
-              <div className="pd-price-empty">Isi harga atau rate di controls atas</div>
-            )}
-          </div>
-
-          {/* CHECKLIST */}
-          {checklist.trim() && (() => {
-            const items = checklist.split(",").map((s) => s.trim()).filter(Boolean);
-            return items.length > 0 ? (
-              <div className="pd-checklist">
-                <div className="pd-checklist-title">DETAIL ACC</div>
-                {items.map((item, i) => (
-                  <div key={i} className="pd-checklist-item">
-                    <div className="pd-checklist-check">
-                      <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" width={8} height={8}>
-                        <path d="M2 6L5 9L10 3" stroke="#22d3ee" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </div>
-                    <span className="pd-checklist-label">{item}</span>
-                  </div>
-                ))}
-              </div>
-            ) : null;
-          })()}
-
-          {/* FOOTER */}
-          {qrDataUrl && (
-            <div className="pd-footer">
-              <img src={qrDataUrl} width={70} height={70} alt="QR" />
-              <div>
-                <div className="pd-footer-owner">{owner || "Penjual"}</div>
-                <div className="pd-footer-label">Scan untuk hubungi</div>
-                <div className="pd-footer-url">facebook.com/naruaho</div>
-              </div>
-            </div>
-          )}
-
-          {owner.trim() && (
-            <div className="pd-watermark">
-              <div className="pd-watermark-text">{owner}</div>
-              <div className="pd-watermark-sub">FACEBOOK</div>
-            </div>
-          )}
-          {initials && <div className="pd-initials">{initials}</div>}
-        </div>
-        )}
       </div>
 
       {editPriceOpen && (

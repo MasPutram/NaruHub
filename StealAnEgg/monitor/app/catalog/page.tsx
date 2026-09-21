@@ -114,7 +114,7 @@ function equipSlots(): number {
 function potensiEquip(a: Account): number {
   const d = a.detail;
   if (!d) return 0;
-  const limit = d.activeLimit || equipSlots();
+  const limit = POTENSI_EQUIP;
   const all = [
     ...(d.activePets || []),
     ...(d.allPets || []),
