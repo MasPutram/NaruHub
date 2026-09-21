@@ -940,9 +940,9 @@ function PosterPage() {
 
         .poster-title { font-size: 40px; font-weight: 800; color: #1e293b; margin-bottom: 12px; }
         .badge-pill {
-          display: inline-block; background: #e2e8f0; border: 2px solid #2563eb;
-          border-radius: 20px; padding: 8px 20px; font-size: 15px; font-weight: 800;
-          color: #2563eb; margin-bottom: 16px;
+          display: inline-block; background: #f1f5f9; border: 2px solid #334155;
+          border-radius: 20px; padding: 10px 24px; font-size: 18px; font-weight: 800;
+          color: #334155; margin-bottom: 16px;
         }
         .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
         .stat-cell {
@@ -1067,13 +1067,14 @@ function PosterPage() {
           border-bottom: 1px solid #e2e8f0;
         }
         .pet-row:last-child { border-bottom: none; }
-        .pet-info { min-width: 0; }
+        .pet-info { min-width: 0; flex: 1; }
         .pet-info .piname { font-size: 15px; font-weight: 800; color: #1e293b; }
         .pet-info .pirate { font-size: 14px; font-weight: 700; color: #16a34a; }
         .pet-info .piweight { font-size: 11px; color: #64748b; }
+        .pet-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
         .mut-tag {
           border-radius: 10px; padding: 4px 10px; font-size: 10px; font-weight: 700;
-          border: 1px solid; margin-left: auto; white-space: nowrap;
+          border: 1px solid; white-space: nowrap;
         }
 
         .inventory-box {
@@ -1136,13 +1137,13 @@ function PosterPage() {
           padding: 16px 20px; margin-bottom: 12px;
         }
         .detail-title { font-size: 16px; font-weight: 800; color: #1e293b; margin-bottom: 10px; }
-        .detail-item { display: flex; align-items: center; gap: 10px; padding: 3px 0; }
-        .detail-check {
-          width: 18px; height: 18px; border-radius: 50%; border: 2px solid #16a34a;
-          display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        .detail-items { display: flex; flex-wrap: wrap; gap: 8px; }
+        .detail-pill {
+          display: inline-flex; align-items: center; gap: 6px;
+          background: #ecfdf5; border: 1.5px solid #16a34a; border-radius: 20px;
+          padding: 6px 14px; font-size: 13px; font-weight: 700; color: #15803d;
         }
-        .detail-check svg { width: 10px; height: 10px; }
-        .detail-label { font-size: 15px; color: #1e293b; }
+        .detail-pill svg { width: 10px; height: 10px; flex-shrink: 0; }
 
         .qr-box {
           background: #fff; border: 1px solid #cbd5e1; border-radius: 16px;
@@ -1421,19 +1422,20 @@ function PosterPage() {
                       <div className="piname">{p.name || displayName(p.category)}</div>
                       <div className="pirate">{fmtRate(p.rate)}</div>
                       {p.weight ? <div className="piweight">{fmtWeight(p.weight)}</div> : null}
+                      {(growingEggKeys.has(petKey(p)) || eggKeys.has(petKey(p)) || rowRarity || (p.mutations && p.mutations.length > 0)) && (
+                        <div className="pet-badges">
+                          {growingEggKeys.has(petKey(p)) ? <span className="growing-badge">GROWING</span> : eggKeys.has(petKey(p)) && <span className="egg-badge">TELUR</span>}
+                          {rowRarity && (
+                            <span className="rarity-badge" style={rarityBadgeStyle(rowRarity)}>{rowRarity}</span>
+                          )}
+                          {p.mutations && p.mutations.length > 0 && (
+                            <div className="mut-tag" style={mutBadgeStyle(p.mutations[0])}>
+                              {p.mutations.map((m) => mutDisplayName(m)).join(" + ")}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    {growingEggKeys.has(petKey(p)) ? <span className="growing-badge">GROWING</span> : eggKeys.has(petKey(p)) && <span className="egg-badge">TELUR</span>}
-                    {rowRarity && (
-                      <span className="rarity-badge" style={rarityBadgeStyle(rowRarity)}>{rowRarity}</span>
-                    )}
-                    {p.mutations && p.mutations.length > 0 && (
-                      <div
-                        className="mut-tag"
-                        style={mutBadgeStyle(p.mutations[0])}
-                      >
-                        {p.mutations.map((m) => mutDisplayName(m)).join(" + ")}
-                      </div>
-                    )}
                   </div>
                   );
                 })}
@@ -1490,16 +1492,16 @@ function PosterPage() {
               return items.length > 0 ? (
                 <div className="detail-box">
                   <div className="detail-title">DETAIL ACC</div>
-                  {items.map((item, i) => (
-                    <div key={i} className="detail-item">
-                      <div className="detail-check">
+                  <div className="detail-items">
+                    {items.map((item, i) => (
+                      <span key={i} className="detail-pill">
                         <svg viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
                           <path d="M2 6L5 9L10 3" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
-                      </div>
-                      <span className="detail-label">{item}</span>
-                    </div>
-                  ))}
+                        {item}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               ) : null;
             })()}
