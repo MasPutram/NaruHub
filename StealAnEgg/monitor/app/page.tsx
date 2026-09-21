@@ -17,6 +17,7 @@ interface Pet {
   // `_bag` marks one sitting in the backpack (or a backpack egg).
   _equipped?: boolean;
   _bag?: boolean;
+  _from?: string;
 }
 
 let iconIndex: Record<string, string> | null = null;
