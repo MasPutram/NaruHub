@@ -1410,6 +1410,26 @@ export default function CatalogPage() {
         <table className="catalog-table">
           <thead>
             <tr>
+              <th style={{ width: 30 }}>
+                <input
+                  type="checkbox"
+                  checked={tabMode === "sold"
+                    ? visible.length > 0 && visible.every((a) => selectedSoldIds[a.sourceAccount])
+                    : visible.length > 0 && visible.filter((a) => !a.sold).every((a) => selectedAccountIds[a.sourceAccount])}
+                  onChange={(e) => {
+                    if (tabMode === "sold") {
+                      const upd: Record<string, boolean> = {};
+                      visible.forEach((a) => { upd[a.sourceAccount] = e.target.checked; });
+                      setSelectedSoldIds((prev) => ({ ...prev, ...upd }));
+                    } else {
+                      const upd: Record<string, boolean> = {};
+                      visible.filter((a) => !a.sold).forEach((a) => { upd[a.sourceAccount] = e.target.checked; });
+                      setSelectedAccountIds((prev) => ({ ...prev, ...upd }));
+                    }
+                  }}
+                  style={{ width: 16, height: 16, accentColor: tabMode === "sold" ? "var(--red)" : "var(--accent)", cursor: "pointer" }}
+                />
+              </th>
               <th>Status</th>
               <th>Akun</th>
               <th>Device</th>
@@ -1427,6 +1447,20 @@ export default function CatalogPage() {
           <tbody>
             {visible.map((a) => (
               <tr key={a.sourceAccount}>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={a.sold ? !!selectedSoldIds[a.sourceAccount] : !!selectedAccountIds[a.sourceAccount]}
+                    onChange={(e) => {
+                      if (a.sold) {
+                        setSelectedSoldIds((prev) => ({ ...prev, [a.sourceAccount]: e.target.checked }));
+                      } else {
+                        setSelectedAccountIds((prev) => ({ ...prev, [a.sourceAccount]: e.target.checked }));
+                      }
+                    }}
+                    style={{ width: 16, height: 16, accentColor: a.sold ? "var(--red)" : "var(--accent)", cursor: "pointer" }}
+                  />
+                </td>
                 <td>
                   {a.sold ? (
                     <span className="tsold">TERJUAL</span>
