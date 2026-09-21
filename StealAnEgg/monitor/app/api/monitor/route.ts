@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
       speed: data.speed ?? null,
       income: data.income ?? null,
       incomeAktif: equippedIncome ?? data.incomeAktif ?? null,
+      incomePotensi: data.incomePotensi ?? null,
       incomeEggBackpack: data.incomeEggBackpack ?? null,
       incomeEggSedangTumbuh: data.incomeEggSedangTumbuh ?? null,
       highValuePetTotal: data.highValuePetTotal ?? null,

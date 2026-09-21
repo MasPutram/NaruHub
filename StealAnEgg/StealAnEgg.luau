@@ -839,6 +839,11 @@ local function reportToMonitor()
 
 		local activeLimit = 0
 		pcall(function() activeLimit = AssetRoster.ReadWearLimit() end)
+		local equipLimit = if activeLimit > 0 then activeLimit else MAX_EQUIP_PETS
+		local incomePotensi = 0
+		for i = 1, math.min(equipLimit, #petPool) do
+			incomePotensi += (petPool[i].rate or 0)
+		end
 		local autoPrice = computeAutoPrice(petPool)
 
 		local bossToken = 0
@@ -899,6 +904,7 @@ local function reportToMonitor()
 			speed = runSpeed,
 			income = moneyPerSecond,
 			incomeAktif = incomeAktif,
+			incomePotensi = incomePotensi,
 			incomeEggBackpack = incomeEggBackpack,
 			incomeEggSedangTumbuh = incomeEggSedangTumbuh,
 			highValuePetTotal = highValuePetTotal,

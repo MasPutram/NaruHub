@@ -121,6 +121,7 @@ interface Account {
   money: number | null;
   speed: number | null;
   incomeAktif: number | null;
+  incomePotensi: number | null;
   incomeEggBackpack: number | null;
   incomeEggSedangTumbuh: number | null;
   highValuePetTotal: number | null;
@@ -898,8 +899,8 @@ function AccountCard({ account: a, onOpen, onSell, onModerated, onDelete, delete
         <div className="st speed"><div className="sl">SPEED</div><div className="sv">{fmtCompactNum(a.speed)}</div></div>
         <div className="st money"><div className="sl">CASH</div><div className="sv">{fmtMoney(a.money)}</div></div>
         <div className="st income"><div className="sl">INCOME AKTIF</div><div className="sv">{fmtRate(a.incomeAktif)}</div></div>
-        <div className="st"><div className="sl">KANDANG</div><div className="sv">{(() => { const k = fmtLevelMax(a.kandangLevel, maxKandang); return k.isMax ? <>{fmtLevel(a.kandangLevel)} <span className="max-tag">MAX</span></> : fmtLevel(a.kandangLevel); })()}</div></div>
-        <div className="st"><div className="sl">TREADMILL</div><div className="sv">{(() => { const t = fmtLevelMax(a.treadmillLevel, maxTreadmill); return t.isMax ? <>{fmtLevel(a.treadmillLevel)} <span className="max-tag">MAX</span></> : fmtLevel(a.treadmillLevel); })()}</div></div>
+        <div className="st income"><div className="sl">INCOME POTENSI</div><div className="sv">{fmtRate(a.incomePotensi)}</div></div>
+        <div className="st"><div className="sl">PEN &amp; TM</div><div className="sv">{(() => { const k = fmtLevelMax(a.kandangLevel, maxKandang); const t = fmtLevelMax(a.treadmillLevel, maxTreadmill); return <>{k.isMax ? <><span>{fmtLevel(a.kandangLevel)}</span> <span className="max-tag">MAX</span></> : fmtLevel(a.kandangLevel)} &amp; {t.isMax ? <><span>{fmtLevel(a.treadmillLevel)}</span> <span className="max-tag">MAX</span></> : fmtLevel(a.treadmillLevel)}</>; })()}</div></div>
         <div className="st"><div className="sl">TOTAL EGG</div><div className="sv">{fmtNum((a.growingEggCount || 0) + (a.backpackEggCount || 0))}</div></div>
         <div className="st boss"><div className="sl">&#x1F9EC; TOKEN MUTASI</div><div className="sv">{fmtNum(a.mutationToken ?? 0)}</div></div>
         <div className="st scramble"><div className="sl">&#x1F500; TOKEN SCRAMBLE</div><div className="sv">{a.scrambleToken != null ? fmtNum(a.scrambleToken) : "—"}</div></div>
