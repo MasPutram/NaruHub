@@ -1086,12 +1086,16 @@ task.spawn(function()
 	end
 
 	local function findMutationTool(mutationId)
-		local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-		if not backpack then return nil end
-		for _, tool in ipairs(backpack:GetChildren()) do
-			if tool:GetAttribute("ItemType") == "MutationConsumable"
-				and tool:GetAttribute("MutationId") == mutationId then
-				return tool
+		local containers = { LocalPlayer:FindFirstChildOfClass("Backpack"), LocalPlayer.Character }
+		for _, container in ipairs(containers) do
+			if container then
+				for _, tool in ipairs(container:GetChildren()) do
+					if tool:IsA("Tool")
+						and tool:GetAttribute("ItemType") == "MutationConsumable"
+						and tool:GetAttribute("MutationId") == mutationId then
+						return tool
+					end
+				end
 			end
 		end
 		return nil
