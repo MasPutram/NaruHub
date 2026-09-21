@@ -521,13 +521,21 @@ local function is_pkg_running(pkg)
   return stack:find(pkg .. "/", 1, true) ~= nil
 end
 
+local function has_ghost_pid(pkg)
+  local pids = shell(string.format('su -c "pidof %s"', pkg))
+  return pids ~= ""
+end
+
 -- Kill only when forceKill is set (Siap Jual flow). Normal launches
 -- never kill — just am start like first time opening.
 local function kill_if_forced(pkg, forceKill)
   if not forceKill then return false end
-  if not is_pkg_running(pkg) then
+  if not is_pkg_running(pkg) and not has_ghost_pid(pkg) then
     log(C.dim .. "[" .. ts() .. "] force-stop skip (" .. pkg .. " not running)" .. C.reset)
     return false
+  end
+  if not is_pkg_running(pkg) then
+    log(C.yellow .. "[" .. ts() .. "] ghost pid detected for " .. pkg .. ", killing" .. C.reset)
   end
   log(C.yellow .. "[" .. ts() .. "] force-stop " .. pkg .. C.reset)
   kill_pkg_pidonly(pkg)
