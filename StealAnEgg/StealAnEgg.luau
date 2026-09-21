@@ -484,7 +484,7 @@ section:AddToggle("AutoBuyScrambledToggle", {
 
 local autoMutateScrambledEnabled = false
 section:AddToggle("AutoMutateScrambledToggle", {
-	Title = "Auto Mutate Scrambled (Plot, no-stack)",
+	Title = "Auto Mutate Scrambled (Plot, highest b/s first)",
 	Default = false,
 	Callback = function(val)
 		autoMutateScrambledEnabled = val
@@ -1030,12 +1030,13 @@ end)
 
 ------------------------------------------------------------
 -- Auto Mutate Scrambled (Plot)
--- Uses MutationConsumable on placed pets that have ZERO mutations.
--- Mutations cannot be stacked: if a pet already has any mutation
--- (Golden, Scrambled, etc.) it is skipped.
+-- Targets highest b/s placed pet first. Retries on the SAME
+-- pet until mutation succeeds (10% chance per attempt).
+-- Skips pets that already have Scrambled or Fractured.
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+	local SKIP_MUTATIONS = { Scrambled = true, Fractured = true }
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoMutateScrambledEnabled then
@@ -1047,9 +1048,8 @@ task.spawn(function()
 				end
 				if consumables <= 0 then return end
 
-				local SKIP_MUTATIONS = { Scrambled = true, Fractured = true }
+				local candidates = {}
 				for uid, rec in pairs(stats.EggInventory or {}) do
-					if not autoMutateScrambledEnabled then break end
 					if type(rec) == "table" and rec.Placement ~= nil then
 						local hasBlockingMut = false
 						if type(rec.Mutations) == "table" then
@@ -1061,17 +1061,38 @@ task.spawn(function()
 							end
 						end
 						if not hasBlockingMut then
+							local rate = 0
 							pcall(function()
-								Remotes.BossMastery.AskUseMutationConsumable:InvokeServer(uid)
+								rate = AssetEarnings.RatePerSecond({
+									Category = rec.AssetCategory,
+									Scale = rec.AssetScale or 1,
+									Mutations = rec.Mutations or {},
+								})
 							end)
-							task.wait(1)
-							stats = SaveModule.Get()
-							consumables = 0
-							if type(stats.BossMastery) == "table" then
-								consumables = tonumber(stats.BossMastery.MutationConsumables) or 0
-							end
-							if consumables <= 0 then return end
+							table.insert(candidates, { uid = uid, rate = rate })
 						end
+					end
+				end
+				table.sort(candidates, function(a, b) return a.rate > b.rate end)
+
+				for _, pet in ipairs(candidates) do
+					if not autoMutateScrambledEnabled then break end
+					while autoMutateScrambledEnabled do
+						stats = SaveModule.Get()
+						consumables = 0
+						if type(stats.BossMastery) == "table" then
+							consumables = tonumber(stats.BossMastery.MutationConsumables) or 0
+						end
+						if consumables <= 0 then break end
+
+						local ok, result
+						pcall(function()
+							result = Remotes.BossMastery.AskUseMutationConsumable:InvokeServer(pet.uid)
+						end)
+						if type(result) == "table" and result.Mutated then
+							break
+						end
+						task.wait(4)
 					end
 				end
 			end)
