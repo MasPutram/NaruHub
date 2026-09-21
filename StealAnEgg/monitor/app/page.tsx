@@ -129,6 +129,7 @@ interface Account {
   stolenCount: number;
   bossToken?: number | null;
   mutationToken?: number | null;
+  scrambleToken?: number | null;
   trail?: string | null;
   growingEggCount?: number;
   backpackEggCount?: number;
@@ -533,6 +534,9 @@ export default function DashboardPage() {
         .st.boss { background: linear-gradient(135deg, #7c3aed, #a78bfa); border-radius: 8px; padding: 5px 10px; }
         .st.boss .sl { color: #fff; }
         .st.boss .sv { color: #fff; font-size: 18px; }
+        .st.scramble { background: linear-gradient(135deg, #059669, #34d399); border-radius: 8px; padding: 5px 10px; }
+        .st.scramble .sl { color: #fff; }
+        .st.scramble .sv { color: #fff; font-size: 18px; }
         .time-tag { font-size: 10px; font-weight: 700; flex-shrink: 0; }
         .time-tag.on { color: var(--dim); }
         .time-tag.off { color: var(--red); }
@@ -672,6 +676,7 @@ export default function DashboardPage() {
         .pg-badge-role.equipped { background: rgba(34,211,238,.15); color: var(--accent2); border: 1px solid rgba(34,211,238,.4); }
         .pg-badge-role.bag { background: rgba(251,191,36,.12); color: var(--gold); border: 1px solid rgba(251,191,36,.3); }
         .pg-uid { font-size: 9px; color: var(--dim); margin-top: 6px; font-family: ui-monospace, monospace; letter-spacing: .3px; }
+        .pg-from { font-size: 9px; color: var(--accent2); margin-top: 3px; font-weight: 700; background: rgba(34,211,238,0.1); padding: 1px 6px; border-radius: 4px; display: inline-block; }
 
         /* Rarity chip filter row above the grid */
         .rarity-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 24px 0; background: var(--card); }
@@ -892,11 +897,12 @@ function AccountCard({ account: a, onOpen, onSell, onModerated, onDelete, delete
         <div className="st speed"><div className="sl">SPEED</div><div className="sv">{fmtCompactNum(a.speed)}</div></div>
         <div className="st money"><div className="sl">CASH</div><div className="sv">{fmtMoney(a.money)}</div></div>
         <div className="st income"><div className="sl">INCOME AKTIF</div><div className="sv">{fmtRate(a.incomeAktif)}</div></div>
-        <div className="st"><div className="sl">POTENSI {POTENSI_EQUIP} PET</div><div className="sv">{fmtRate(a.highValuePetTotal)}</div></div>
+        <div className="st"><div className="sl">PET &gt;= 1B/S</div><div className="sv">{fmtMoney(a.highValuePetTotal)}</div></div>
         <div className="st"><div className="sl">KANDANG</div><div className="sv">{(() => { const k = fmtLevelMax(a.kandangLevel, maxKandang); return k.isMax ? <>{fmtLevel(a.kandangLevel)} <span className="max-tag">MAX</span></> : fmtLevel(a.kandangLevel); })()}</div></div>
         <div className="st"><div className="sl">TREADMILL</div><div className="sv">{(() => { const t = fmtLevelMax(a.treadmillLevel, maxTreadmill); return t.isMax ? <>{fmtLevel(a.treadmillLevel)} <span className="max-tag">MAX</span></> : fmtLevel(a.treadmillLevel); })()}</div></div>
-        <div className="st"><div className="sl">PETS</div><div className="sv">{fmtNum(a.petsCount)}</div></div>
+        <div className="st"><div className="sl">TOTAL EGG</div><div className="sv">{fmtNum((a.growingEggCount || 0) + (a.backpackEggCount || 0))}</div></div>
         <div className="st boss"><div className="sl">&#x1F9EC; TOKEN MUTASI</div><div className="sv">{fmtNum(a.mutationToken ?? 0)}</div></div>
+        <div className="st scramble"><div className="sl">&#x1F500; TOKEN SCRAMBLE</div><div className="sv">{a.scrambleToken != null ? fmtNum(a.scrambleToken) : "—"}</div></div>
       </div>
       {eggCount > 0 && (
         <div className="egg-bar">
@@ -1140,6 +1146,39 @@ function DetailModal({ detail, detailTab, setDetailTab, onClose, maxKandang, max
               <div className="ms-card">
                 <div className="mslabel">ACTIVE LIMIT</div>
                 <div className="msval">{detail.data.activeLimit ?? "-"}</div>
+              </div>
+              <div className="ms-card">
+                <div className="mslabel">INCOME POTENSI</div>
+                <div className="msval" style={{ color: "var(--green)" }}>{fmtRate(
+                  (() => {
+                    if (!detail.data) return 0;
+                    const limit = detail.data.activeLimit || 19;
+                    const all = [
+                      ...(detail.data.activePets || []),
+                      ...(detail.data.allPets || []),
+                      ...(detail.data.growingEggs || []),
+                      ...(detail.data.backpackEggs || []),
+                    ];
+                    const seen = new Set<string>();
+                    const deduped: Pet[] = [];
+                    for (const p of all) {
+                      const k = p.uid || `${p.category}|${(p.mutations || []).sort().join("+")}|${p.rate}`;
+                      if (!seen.has(k)) { seen.add(k); deduped.push(p); }
+                    }
+                    deduped.sort((a, b) => (b.rate || 0) - (a.rate || 0));
+                    let total = 0;
+                    for (let i = 0; i < Math.min(limit, deduped.length); i++) total += deduped[i].rate || 0;
+                    return total;
+                  })()
+                )}</div>
+              </div>
+              <div className="ms-card">
+                <div className="mslabel">TOKEN MUTASI</div>
+                <div className="msval" style={{ color: "#a78bfa" }}>{fmtNum(acc.mutationToken ?? 0)}</div>
+              </div>
+              <div className="ms-card">
+                <div className="mslabel">TOKEN SCRAMBLE</div>
+                <div className="msval" style={{ color: "var(--green)" }}>{acc.scrambleToken != null ? fmtNum(acc.scrambleToken) : "—"}</div>
               </div>
             </div>
           )}
@@ -1480,6 +1519,7 @@ function PetGrid({ pets, idx, showBadges = false }: { pets: Pet[]; idx: Record<s
                 {(Array.isArray(p.mutations) ? p.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{m}</span>)}
               </div>
               {showBadges && p.uid && <div className="pg-uid">UID: {String(p.uid).slice(0, 8)}</div>}
+              {p._from && <div className="pg-from">{p._from}</div>}
             </div>
           </div>
         );
@@ -1525,12 +1565,13 @@ function GrowingEggGrid({ eggs, idx }: { eggs: Pet[]; idx: Record<string, string
                 {rar && <span className="pg-rarity" style={{ background: rc + "18", color: rc, border: `1px solid ${rc}33` }}>{rar}</span>}
                 {(Array.isArray(egg.mutations) ? egg.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{m}</span>)}
               </div>
-              <div style={{ marginTop: 3 }}>
+              <div style={{ marginTop: 3, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                 {isReady ? (
                   <span className="egg-ready-badge">SIAP MENETAS</span>
                 ) : (
                   <span className="egg-time-label" style={{ color: "var(--green)" }}>{fmtEggTimer(remaining)} tersisa</span>
                 )}
+                {egg._from && <span className="pg-from" style={{ marginTop: 0 }}>{egg._from}</span>}
               </div>
             </div>
           </div>

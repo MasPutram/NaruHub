@@ -23,7 +23,10 @@ interface Account {
   petsCount: number;
   stolenCount: number;
   mutationToken?: number | null;
+  scrambleToken?: number | null;
   trail?: string | null;
+  growingEggCount?: number;
+  backpackEggCount?: number;
   topPets: Pet[];
   online: boolean;
   forSale?: boolean;
@@ -216,6 +219,7 @@ export default function CatalogPage() {
   // Multi-select for bulk set-harga on selected accounts. Keyed by
   // sourceAccount; toggled by the checkbox at the top-left of each card.
   const [selectedAccountIds, setSelectedAccountIds] = useState<Record<string, boolean>>({});
+  const [selectedSoldIds, setSelectedSoldIds] = useState<Record<string, boolean>>({});
   const [selectionModalOpen, setSelectionModalOpen] = useState(false);
   const [selectionPriceInput, setSelectionPriceInput] = useState("");
   const [selectionSaving, setSelectionSaving] = useState(false);
@@ -920,6 +924,12 @@ export default function CatalogPage() {
         .cc-stat.speed .csval { color: var(--accent); }
         .cc-stat.money .csval { color: var(--gold); }
         .cc-stat.income .csval { color: var(--green); }
+        .cc-stat.cc-mut { background: linear-gradient(135deg, #7c3aed, #a78bfa); border-radius: 8px; padding: 5px 8px; }
+        .cc-stat.cc-mut .cslabel { color: #fff; }
+        .cc-stat.cc-mut .csval { color: #fff; font-weight: 800; }
+        .cc-stat.cc-scramble { background: linear-gradient(135deg, #059669, #34d399); border-radius: 8px; padding: 5px 8px; }
+        .cc-stat.cc-scramble .cslabel { color: #fff; }
+        .cc-stat.cc-scramble .csval { color: #fff; font-weight: 800; }
 
         .cc-pets { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 14px; }
         .cc-pet {
@@ -1205,6 +1215,49 @@ export default function CatalogPage() {
         </div>
       )}
 
+      {tabMode === "sold" && soldAccounts.length > 0 && (
+        <div style={{ padding: "0 28px 12px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          {(() => {
+            const selectedCount = Object.values(selectedSoldIds).filter(Boolean).length;
+            const allSelected = visible.length > 0 && visible.every((a) => selectedSoldIds[a.sourceAccount]);
+            return (
+              <>
+                <button
+                  className="btn-download-all"
+                  style={{ background: allSelected ? "#334155" : "#1c1c2b", color: "var(--ink)", border: "1px solid var(--card-border)" }}
+                  onClick={() => {
+                    if (allSelected) setSelectedSoldIds({});
+                    else setSelectedSoldIds(Object.fromEntries(visible.map((a) => [a.sourceAccount, true])));
+                  }}
+                >
+                  {allSelected ? "☑ Unselect All" : `☐ Select All (${visible.length})`}
+                </button>
+                {selectedCount > 0 && (
+                  <button
+                    className="btn-download-all"
+                    style={{ background: "var(--red)", color: "#fff", fontWeight: 800 }}
+                    onClick={async () => {
+                      const targets = soldAccounts.filter((a) => selectedSoldIds[a.sourceAccount]);
+                      if (targets.length === 0) return;
+                      for (let i = 0; i < targets.length; i++) {
+                        const a = targets[i];
+                        setBatchProgress({ current: i + 1, total: targets.length, account: a.sourceAccount });
+                        const url = `/poster?account=${encodeURIComponent(a.sourceAccount)}&sold=1&soldPrice=${a.soldPrice || 0}&autoDownload=1`;
+                        window.open(url, "_blank");
+                        await new Promise((r) => setTimeout(r, 800));
+                      }
+                      setBatchProgress(null);
+                    }}
+                  >
+                    Download Poster ({selectedCount} akun)
+                  </button>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      )}
+
       {visible.length === 0 ? (
         <div className="empty">
           {tabMode === "catalog"
@@ -1232,7 +1285,7 @@ export default function CatalogPage() {
               )}
 
               <div className="cc-head">
-                {!a.sold && (
+                {!a.sold ? (
                   <input
                     type="checkbox"
                     className="cc-select"
@@ -1240,6 +1293,15 @@ export default function CatalogPage() {
                     onChange={(e) => setSelectedAccountIds((prev) => ({ ...prev, [a.sourceAccount]: e.target.checked }))}
                     title="Pilih untuk set harga massal"
                     style={{ width: 18, height: 18, accentColor: "var(--accent)", cursor: "pointer", marginRight: 2 }}
+                  />
+                ) : (
+                  <input
+                    type="checkbox"
+                    className="cc-select"
+                    checked={!!selectedSoldIds[a.sourceAccount]}
+                    onChange={(e) => { e.stopPropagation(); setSelectedSoldIds((prev) => ({ ...prev, [a.sourceAccount]: e.target.checked })); }}
+                    title="Pilih untuk download"
+                    style={{ width: 18, height: 18, accentColor: "var(--red)", cursor: "pointer", marginRight: 2, position: "relative", zIndex: 20 }}
                   />
                 )}
                 <span className={`cc-dot ${a.online ? "on" : "off"}`} />
@@ -1268,12 +1330,24 @@ export default function CatalogPage() {
                   <div className="csval">{fmtMoney(a.highValuePetTotal)}</div>
                 </div>
                 <div className="cc-stat">
-                  <div className="cslabel">PETS</div>
-                  <div className="csval">{a.petsCount}</div>
+                  <div className="cslabel">KANDANG</div>
+                  <div className="csval">{a.kandangLevel != null ? `Lv. ${a.kandangLevel}` : "-"}</div>
                 </div>
                 <div className="cc-stat">
-                  <div className="cslabel">EGGS STOLEN</div>
-                  <div className="csval">{a.stolenCount}</div>
+                  <div className="cslabel">TREADMILL</div>
+                  <div className="csval">{a.treadmillLevel != null ? `Lv. ${a.treadmillLevel}` : "-"}</div>
+                </div>
+                <div className="cc-stat">
+                  <div className="cslabel">TOTAL EGG</div>
+                  <div className="csval">{(() => { const eg = (a.growingEggCount || 0) + (a.backpackEggCount || 0); const ed = (a.detail?.growingEggs?.length || 0) + (a.detail?.backpackEggs?.length || 0); return eg || ed || a.stolenCount || 0; })()}</div>
+                </div>
+                <div className="cc-stat cc-mut">
+                  <div className="cslabel">TOKEN MUTASI</div>
+                  <div className="csval">{a.mutationToken ?? 0}</div>
+                </div>
+                <div className="cc-stat cc-scramble">
+                  <div className="cslabel">TOKEN SCRAMBLE</div>
+                  <div className="csval">{a.scrambleToken != null ? a.scrambleToken : "—"}</div>
                 </div>
               </div>
 

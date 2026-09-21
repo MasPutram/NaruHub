@@ -36,6 +36,7 @@ interface AccountSummary {
   petsCount: number;
   stolenCount: number;
   mutationToken?: number | null;
+  scrambleToken?: number | null;
   trail?: string | null;
   topPets: Pet[];
   online: boolean;
@@ -868,13 +869,19 @@ function PosterPage() {
 
   const equippedIncome = (activePets || []).reduce((s, p) => s + (p.rate || 0), 0);
 
-  const statItems: { label: string; value: string; accent?: "mut" }[] = [
+  const divinePetCount = allSorted.filter((p) => {
+    const r = petRarity(p.category, iconIdx);
+    return r === "Divine" || r === "Eternal";
+  }).length;
+
+  const statItems: { label: string; value: string; accent?: "mut" | "scramble" }[] = [
     { label: "SPEED", value: fmtCompact(summary.speed) },
     { label: "CASH", value: fmtMoney(summary.money) },
     { label: `POTENSI ${activeLimit} PET AKTIF`, value: fmtRate(potentialActiveRate) },
     { label: "INCOME AKTIF", value: fmtRate(equippedIncome) },
     { label: "TOTAL PET DI TAS", value: `${allSorted.length} pets` },
     { label: "TOTAL EGG", value: `${totalEggs} eggs` },
+    { label: "PET DIVINE/ETERNAL", value: `${divinePetCount}` },
     ...(summary.kandangLevel != null
       ? [{ label: "PEN LEVEL", value: `Lv. ${summary.kandangLevel}` }]
       : []),
@@ -883,6 +890,9 @@ function PosterPage() {
       : []),
     ...(Number(summary.mutationToken) > 0
       ? [{ label: "TOKEN MUTASI", value: "× " + Math.round(Number(summary.mutationToken)), accent: "mut" as const }]
+      : []),
+    ...(Number(summary.scrambleToken) > 0
+      ? [{ label: "TOKEN SCRAMBLE", value: "× " + Math.round(Number(summary.scrambleToken)), accent: "scramble" as const }]
       : []),
     { label: "TRAIL", value: summary.trail || "-" },
   ];
@@ -937,6 +947,9 @@ function PosterPage() {
         .stat-cell.mut-cell-stat { background: #f5f3ff; border-color: #7c3aed; }
         .stat-cell.mut-cell-stat .slabel { color: #7c3aed; }
         .stat-cell.mut-cell-stat .sval { color: #6d28d9; }
+        .stat-cell.scramble-cell-stat { background: #ecfdf5; border-color: #059669; }
+        .stat-cell.scramble-cell-stat .slabel { color: #059669; }
+        .stat-cell.scramble-cell-stat .sval { color: #047857; }
 
         .top3 { display: flex; gap: 14px; margin-bottom: 18px; }
         .pick-card {
@@ -1226,7 +1239,7 @@ function PosterPage() {
 
             <div className="stat-grid">
               {statItems.map((s, i) => (
-                <div key={i} className={`stat-cell${s.accent === "mut" ? " mut-cell-stat" : ""}`}>
+                <div key={i} className={`stat-cell${s.accent === "mut" ? " mut-cell-stat" : ""}${s.accent === "scramble" ? " scramble-cell-stat" : ""}`}>
                   <div className="slabel">{s.label}</div>
                   <div className="sval">{s.value}</div>
                 </div>
@@ -1422,17 +1435,35 @@ function PosterPage() {
               </div>
             )}
 
-            {inactiveUnlisted.length > 0 && (
-              <div className="inventory-box">
-                <div className="inv-label">PET INVENTORY (TIDAK AKTIF)</div>
-                <div className="inv-row">
-                  <span className="inv-count">+{inactiveUnlisted.length}</span>
-                  {inactiveTotalRate > 0 && (
-                    <span className="inv-total">total {fmtRate(inactiveTotalRate)}</span>
-                  )}
-                </div>
+            <div className="inventory-box">
+              <div className="inv-label">TOTAL PET DI TAS</div>
+              <div className="inv-row">
+                <span className="inv-count">{allSorted.length}</span>
+                {inactiveTotalRate > 0 && (
+                  <span className="inv-total">total {fmtRate(inactiveTotalRate)}</span>
+                )}
               </div>
-            )}
+              <div className="inv-label" style={{ marginTop: 8 }}>TOTAL EGG</div>
+              <div className="inv-row">
+                <span className="inv-count">{totalEggs}</span>
+              </div>
+              {divinePetCount > 0 && (
+                <>
+                  <div className="inv-label" style={{ marginTop: 8 }}>PET DIVINE / ETERNAL</div>
+                  <div className="inv-row">
+                    <span className="inv-count">{divinePetCount}</span>
+                  </div>
+                </>
+              )}
+              {Number(summary.scrambleToken) > 0 && (
+                <>
+                  <div className="inv-label" style={{ marginTop: 8 }}>TOKEN SCRAMBLE</div>
+                  <div className="inv-row">
+                    <span className="inv-count" style={{ color: "#34d399" }}>× {Math.round(Number(summary.scrambleToken))}</span>
+                  </div>
+                </>
+              )}
+            </div>
 
             <div className="price-box">
               <div className="price-label">{isSold ? "TERJUAL" : "PRICE ACC"}</div>
