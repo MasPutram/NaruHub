@@ -1051,13 +1051,33 @@ end)
 
 ------------------------------------------------------------
 -- Auto Mutation Egg (Plot)
--- Targets highest b/s placed pet first. Retries on the SAME
--- pet until mutation succeeds (10% chance per attempt).
--- Skips pets that already have Scrambled. Teleports to plot
--- before applying (required by the game for proximity).
+-- Targets highest b/s placed pet first. Teleports to each
+-- egg model before applying (proximity required). Retries
+-- until mutation succeeds (10% chance per attempt).
+-- Skips pets that already have Scrambled.
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+	local myUserId = tostring(LocalPlayer.UserId)
+
+	local function findEggModel(uid)
+		local renders = Workspace:FindFirstChild("PlacedEggRenders")
+		if renders then
+			local model = renders:FindFirstChild(myUserId .. "_" .. uid)
+			if model then return model end
+		end
+		return nil
+	end
+
+	local function teleportToEgg(model)
+		local part = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+		if not part then return end
+		local char = LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			hrp.CFrame = part.CFrame + Vector3.new(0, 3, 0)
+		end
+	end
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoMutationEggEnabled then
@@ -1097,56 +1117,15 @@ task.spawn(function()
 				table.sort(candidates, function(a, b) return a.rate > b.rate end)
 				if #candidates == 0 then return end
 
-				-- Teleport to plot (same as auto place)
-				local myPlot
-				local plots = Workspace:FindFirstChild("Plots")
-				if plots then
-					local myLevel = stats and stats.BaseUpgradeLevel or 0
-					local cands = {}
-					for _, plot in ipairs(plots:GetChildren()) do
-						if plot:GetAttribute("BaseUpgradeLevel") == myLevel then
-							table.insert(cands, plot)
-						end
-					end
-					if #cands == 1 then
-						myPlot = cands[1]
-					elseif #cands > 1 then
-						local char = LocalPlayer.Character
-						local hrp = char and char:FindFirstChild("HumanoidRootPart")
-						if hrp then
-							local closest, closestDist = nil, math.huge
-							for _, plot in ipairs(cands) do
-								local cp = plot:FindFirstChild("CenterPoint")
-								if cp then
-									local dist = (hrp.Position - cp.Position).Magnitude
-									if dist < closestDist then closest, closestDist = plot, dist end
-								end
-							end
-							myPlot = closest
-						else
-							myPlot = cands[1]
-						end
-					end
-				end
-				if myPlot then
-					local toUpdate = myPlot:FindFirstChild("ToUpdate")
-					local target = toUpdate and toUpdate:FindFirstChild("PetArea")
-					if not target then
-						target = myPlot:FindFirstChild("CenterPoint")
-						if toUpdate then target = toUpdate:FindFirstChild("CenterPoint") or target end
-					end
-					if target then
-						local char = LocalPlayer.Character
-						local hrp = char and char:FindFirstChild("HumanoidRootPart")
-						if hrp then
-							hrp.CFrame = target.CFrame + Vector3.new(0, 3, 0)
-						end
-					end
-					task.wait(1)
-				end
-
 				for _, pet in ipairs(candidates) do
 					if not autoMutationEggEnabled then break end
+
+					local eggModel = findEggModel(pet.uid)
+					if eggModel then
+						teleportToEgg(eggModel)
+						task.wait(1)
+					end
+
 					while autoMutationEggEnabled do
 						stats = SaveModule.Get()
 						consumables = 0
