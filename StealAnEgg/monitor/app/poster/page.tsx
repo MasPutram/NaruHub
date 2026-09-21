@@ -125,17 +125,6 @@ function computeIncomePotensiPetAktif(detail: AccountDetail | null, limit: numbe
   return total;
 }
 
-function computeHighValuePetTotal(detail: AccountDetail | null): number {
-  if (!detail) return 0;
-  const pool = [
-    ...(detail.activePets || []),
-    ...(detail.allPets || []),
-    ...(detail.growingEggs || []),
-    ...(detail.backpackEggs || []),
-  ];
-  return pool.reduce((sum, p) => sum + ((p.rate || 0) >= HIGH_VALUE_THRESHOLD ? (p.rate || 0) : 0), 0);
-}
-
 function formatRupiah(n: number): string {
   const s = Math.abs(Math.round(n)).toString();
   const reversed = s.split("").reverse().join("");
@@ -143,17 +132,26 @@ function formatRupiah(n: number): string {
   return "Rp " + (n < 0 ? "-" : "") + dotted.split("").reverse().join("");
 }
 
-function computeAutoPrice(detail: AccountDetail | null, summary: AccountSummary | null, ratePerBStr: string, rateHvPerBStr: string, rateSpeedPerBStr: string): string {
+function computeAutoPrice(
+  detail: AccountDetail | null,
+  summary: AccountSummary | null,
+  rateIncomePerBStr: string,
+  rateSpeedPerBStr: string,
+  rateMutasiPerUnitStr: string,
+  rateScramblePerUnitStr: string,
+): string {
   if (!detail) return "";
-  const ratePerB = (parseFloat(ratePerBStr) || 0) * 1000;
-  const rateHvPerB = (parseFloat(rateHvPerBStr) || 0) * 1000;
+  const rateIncomePerB = (parseFloat(rateIncomePerBStr) || 0) * 1000;
   const rateSpeedPerB = (parseFloat(rateSpeedPerBStr) || 0) * 1000;
-  if (ratePerB === 0 && rateHvPerB === 0 && rateSpeedPerB === 0) return "";
+  const rateMutasi = (parseFloat(rateMutasiPerUnitStr) || 0) * 1000;
+  const rateScramble = (parseFloat(rateScramblePerUnitStr) || 0) * 1000;
+  if (rateIncomePerB === 0 && rateSpeedPerB === 0 && rateMutasi === 0 && rateScramble === 0) return "";
   const limit = detail.activeLimit || equipSlots();
   const incomeB = computeIncomePotensiPetAktif(detail, limit) / 1e9;
-  const highvalueB = computeHighValuePetTotal(detail) / 1e9;
   const speedB = (Number(summary?.speed) || 0) / 1e9;
-  const priceValue = Math.round(incomeB * ratePerB + highvalueB * rateHvPerB + speedB * rateSpeedPerB);
+  const mutasiCount = Number(summary?.mutationToken) || 0;
+  const scrambleCount = Number(summary?.scrambleToken) || 0;
+  const priceValue = Math.round(incomeB * rateIncomePerB + speedB * rateSpeedPerB + mutasiCount * rateMutasi + scrambleCount * rateScramble);
   if (priceValue <= 0) return "";
   return formatRupiah(priceValue);
 }
@@ -507,8 +505,9 @@ function PosterPage() {
   const [soldPrice, setSoldPrice] = useState(paramSoldPrice);
   const [price, setPrice] = useState(isTemplate ? "Rp 25.000" : (paramCatalogPrice ? formatRupiah(paramCatalogPrice) : ""));
   const [ratePerB, setRatePerB] = useState("");
-  const [rateHvPerB, setRateHvPerB] = useState("");
   const [rateSpeedPerB, setRateSpeedPerB] = useState("");
+  const [rateMutasiPerUnit, setRateMutasiPerUnit] = useState("");
+  const [rateScramblePerUnit, setRateScramblePerUnit] = useState("");
   const [title, setTitle] = useState("Jual Akun GACOR");
   const [badge, setBadge] = useState(accountInitials(accountName));
   const [owner, setOwner] = useState("Mas Naru");
@@ -646,7 +645,7 @@ function PosterPage() {
       const num = Number(price.replace(/[^\d]/g, ""));
       return isNaN(num) ? 0 : num;
     }
-    const auto = computeAutoPrice(detail, summary, ratePerB, rateHvPerB, rateSpeedPerB);
+    const auto = computeAutoPrice(detail, summary, ratePerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit);
     if (auto) {
       const num = Number(auto.replace(/[^\d]/g, ""));
       return isNaN(num) ? 0 : num;
@@ -1181,10 +1180,12 @@ function PosterPage() {
         <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="kosongin = auto" style={{ width: 120 }} />
         <label>Rate Income/1B (rb):</label>
         <input value={ratePerB} onChange={(e) => setRatePerB(e.target.value)} placeholder="" style={{ width: 50 }} />
-        <label>Rate Pet≥1B/1B (rb):</label>
-        <input value={rateHvPerB} onChange={(e) => setRateHvPerB(e.target.value)} placeholder="" style={{ width: 50 }} />
         <label>Rate Speed/1B (rb):</label>
         <input value={rateSpeedPerB} onChange={(e) => setRateSpeedPerB(e.target.value)} placeholder="" style={{ width: 50 }} />
+        <label>Rate Mutasi/token (rb):</label>
+        <input value={rateMutasiPerUnit} onChange={(e) => setRateMutasiPerUnit(e.target.value)} placeholder="" style={{ width: 50 }} />
+        <label>Rate Scramble/token (rb):</label>
+        <input value={rateScramblePerUnit} onChange={(e) => setRateScramblePerUnit(e.target.value)} placeholder="" style={{ width: 50 }} />
         <label>Owner:</label>
         <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="nama Facebook" />
         <label>Checklist:</label>
@@ -1469,8 +1470,8 @@ function PosterPage() {
               <div className="price-label">{isSold ? "TERJUAL" : "PRICE ACC"}</div>
               {isSold && soldPrice > 0 ? (
                 <div className="price-value">{formatRupiah(soldPrice)}</div>
-              ) : (price || computeAutoPrice(detail, summary, ratePerB, rateHvPerB, rateSpeedPerB)) ? (
-                <div className="price-value">{price || computeAutoPrice(detail, summary, ratePerB, rateHvPerB, rateSpeedPerB)}</div>
+              ) : (price || computeAutoPrice(detail, summary, ratePerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit)) ? (
+                <div className="price-value">{price || computeAutoPrice(detail, summary, ratePerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit)}</div>
               ) : (
                 <div className="price-empty">Isi harga atau rate di controls atas</div>
               )}

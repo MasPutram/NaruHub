@@ -133,28 +133,16 @@ function potensiEquip(a: Account): number {
   return total;
 }
 
-function highValuePetTotal(a: Account): number {
-  const d = a.detail;
-  if (!d) return a.highValuePetTotal || 0;
-  const all = [
-    ...(d.activePets || []),
-    ...(d.allPets || []),
-    ...(d.growingEggs || []),
-    ...(d.backpackEggs || []),
-  ];
-  return all.reduce((sum, p) => sum + ((p.rate || 0) >= 1_000_000_000 ? (p.rate || 0) : 0), 0);
-}
-
-function calcAccountPrice(a: Account, rInc: number, rHv: number, rSpd: number, rTok: number = 0): number {
+function calcAccountPrice(a: Account, rInc: number, rSpd: number, rMutasi: number, rScramble: number): number {
   const incB = potensiEquip(a) / 1e9;
-  const hvB = highValuePetTotal(a) / 1e9;
   const spdB = (Number(a.speed) || 0) / 1e9;
-  const tok = Number(a.mutationToken) || 0;
+  const mutasi = Number(a.mutationToken) || 0;
+  const scramble = Number(a.scrambleToken) || 0;
   const priceValue = Math.round(
     incB * (rInc * 1000) +
-    hvB * (rHv * 1000) +
     spdB * (rSpd * 1000) +
-    tok * rTok
+    mutasi * (rMutasi * 1000) +
+    scramble * (rScramble * 1000)
   );
   return priceValue > 0 ? priceValue : 0;
 }
@@ -179,8 +167,9 @@ export default function CatalogPage() {
   // computed suggested price alongside the manual field so the operator can
   // apply the rate formula per-account (fills 0 if any rate is blank).
   const [editRateInc, setEditRateInc] = useState("");
-  const [editRateHv, setEditRateHv] = useState("");
   const [editRateSpd, setEditRateSpd] = useState("");
+  const [editRateMutasi, setEditRateMutasi] = useState("");
+  const [editRateScramble, setEditRateScramble] = useState("");
   const [priceSaving, setPriceSaving] = useState(false);
   const [soldModal, setSoldModal] = useState<string | null>(null);
   const [soldPrice, setSoldPrice] = useState("");
@@ -188,11 +177,10 @@ export default function CatalogPage() {
   const [soldError, setSoldError] = useState("");
 
   const [rateModalOpen, setRateModalOpen] = useState(false);
-  const [rateIncome, setRateIncome] = useState("5");
-  const [rateHv, setRateHv] = useState("5");
+  const [rateIncome, setRateIncome] = useState("0");
   const [rateSpeed, setRateSpeed] = useState("0");
-  // Per-token flat rupiah rate (not scaled by 1000 -- token counts are small).
-  const [rateToken, setRateToken] = useState("0");
+  const [rateMutasi, setRateMutasi] = useState("0");
+  const [rateScramble, setRateScramble] = useState("0");
   const [rateApplying, setRateApplying] = useState(false);
 
   async function unmarkForSale(account: string) {
@@ -657,10 +645,10 @@ export default function CatalogPage() {
 
   async function applyBulkRates() {
     const rInc = parseFloat(rateIncome) || 0;
-    const rHv = parseFloat(rateHv) || 0;
     const rSpd = parseFloat(rateSpeed) || 0;
-    const rTok = parseFloat(rateToken) || 0;
-    if (rInc <= 0 && rHv <= 0 && rSpd <= 0 && rTok <= 0) {
+    const rMut = parseFloat(rateMutasi) || 0;
+    const rScr = parseFloat(rateScramble) || 0;
+    if (rInc <= 0 && rSpd <= 0 && rMut <= 0 && rScr <= 0) {
       alert("Isi minimal salah satu rate!");
       return;
     }
@@ -668,7 +656,7 @@ export default function CatalogPage() {
     try {
       const updates: { account: string; price: number }[] = [];
       const updatedAccounts = accounts.map((a) => {
-        const newPrice = calcAccountPrice(a, rInc, rHv, rSpd, rTok);
+        const newPrice = calcAccountPrice(a, rInc, rSpd, rMut, rScr);
         if (newPrice > 0) updates.push({ account: a.sourceAccount, price: newPrice });
         return { ...a, catalogPrice: newPrice > 0 ? newPrice : a.catalogPrice };
       });
@@ -825,10 +813,11 @@ export default function CatalogPage() {
   const estimasiPendapatan = accounts.reduce((s, a) => s + (a.catalogPrice || 0), 0);
 
   const previewIncRate = parseFloat(rateIncome) || 0;
-  const previewHvRate = parseFloat(rateHv) || 0;
   const previewSpeedRate = parseFloat(rateSpeed) || 0;
-  const previewTotalRev = accounts.reduce((sum, a) => sum + calcAccountPrice(a, previewIncRate, previewHvRate, previewSpeedRate), 0);
-  const previewPricedCount = accounts.filter((a) => calcAccountPrice(a, previewIncRate, previewHvRate, previewSpeedRate) > 0).length;
+  const previewMutasiRate = parseFloat(rateMutasi) || 0;
+  const previewScrambleRate = parseFloat(rateScramble) || 0;
+  const previewTotalRev = accounts.reduce((sum, a) => sum + calcAccountPrice(a, previewIncRate, previewSpeedRate, previewMutasiRate, previewScrambleRate), 0);
+  const previewPricedCount = accounts.filter((a) => calcAccountPrice(a, previewIncRate, previewSpeedRate, previewMutasiRate, previewScrambleRate) > 0).length;
 
   return (
     <div>
@@ -1373,8 +1362,9 @@ export default function CatalogPage() {
                       // Seed rate fields from the last bulk-rate values so the
                       // per-account modal picks up where the operator left off.
                       setEditRateInc(rateIncome);
-                      setEditRateHv(rateHv);
                       setEditRateSpd(rateSpeed);
+                      setEditRateMutasi(rateMutasi);
+                      setEditRateScramble(rateScramble);
                     }}
                   >
                     {a.catalogPrice ? fmtRupiah(a.catalogPrice) : "Set Harga"}
@@ -1573,9 +1563,9 @@ export default function CatalogPage() {
 
       {rateModalOpen && (() => {
         const rInc = parseFloat(rateIncome) || 0;
-        const rHv = parseFloat(rateHv) || 0;
         const rSpd = parseFloat(rateSpeed) || 0;
-        const rTok = parseFloat(rateToken) || 0;
+        const rMut = parseFloat(rateMutasi) || 0;
+        const rScr = parseFloat(rateScramble) || 0;
         const preview = accounts
           .slice()
           .sort((a, b) => {
@@ -1583,7 +1573,7 @@ export default function CatalogPage() {
             const nb = accountNumber(b.sourceAccount) ?? 0;
             return na - nb;
           })
-          .map((a) => ({ acc: a, price: calcAccountPrice(a, rInc, rHv, rSpd, rTok) }));
+          .map((a) => ({ acc: a, price: calcAccountPrice(a, rInc, rSpd, rMut, rScr) }));
         const totalPreview = preview.reduce((s, p) => s + p.price, 0);
         const pricedCount = preview.filter((p) => p.price > 0).length;
         return (
@@ -1612,22 +1602,6 @@ export default function CatalogPage() {
                 </div>
 
                 <div>
-                  <label>Rate High-Value Pet / 1B</label>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ color: "var(--dim)", fontSize: 12, fontWeight: 700 }}>Rp</span>
-                    <input
-                      type="number"
-                      step="0.5"
-                      placeholder="0"
-                      value={rateHv}
-                      onChange={(e) => setRateHv(e.target.value)}
-                      style={{ margin: 0 }}
-                    />
-                    <span style={{ color: "var(--dim)", fontSize: 11, fontWeight: 700 }}>k/1B</span>
-                  </div>
-                </div>
-
-                <div>
                   <label>Rate Speed / 1B</label>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ color: "var(--dim)", fontSize: 12, fontWeight: 700 }}>Rp</span>
@@ -1644,18 +1618,34 @@ export default function CatalogPage() {
                 </div>
 
                 <div>
-                  <label>Rate Token Mutasi</label>
+                  <label>Rate Token Mutasi / token</label>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ color: "var(--dim)", fontSize: 12, fontWeight: 700 }}>Rp</span>
                     <input
                       type="number"
-                      step="100"
+                      step="0.5"
                       placeholder="0"
-                      value={rateToken}
-                      onChange={(e) => setRateToken(e.target.value)}
+                      value={rateMutasi}
+                      onChange={(e) => setRateMutasi(e.target.value)}
                       style={{ margin: 0 }}
                     />
-                    <span style={{ color: "var(--dim)", fontSize: 11, fontWeight: 700 }}>/ token</span>
+                    <span style={{ color: "var(--dim)", fontSize: 11, fontWeight: 700 }}>k/token</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label>Rate Token Scramble / token</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ color: "var(--dim)", fontSize: 12, fontWeight: 700 }}>Rp</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      placeholder="0"
+                      value={rateScramble}
+                      onChange={(e) => setRateScramble(e.target.value)}
+                      style={{ margin: 0 }}
+                    />
+                    <span style={{ color: "var(--dim)", fontSize: 11, fontWeight: 700 }}>k/token</span>
                   </div>
                 </div>
               </div>
@@ -1672,8 +1662,8 @@ export default function CatalogPage() {
                       <th style={{ textAlign: "left", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>AKUN</th>
                       <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SPEED</th>
                       <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>POTENSI PET</th>
-                      <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>HV</th>
-                      <th style={{ textAlign: "center", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>TOKEN</th>
+                      <th style={{ textAlign: "center", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>MUTASI</th>
+                      <th style={{ textAlign: "center", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SCRAMBLE</th>
                       <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SEBELUM</th>
                       <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SESUDAH</th>
                     </tr>
@@ -1686,8 +1676,8 @@ export default function CatalogPage() {
                           <td style={{ padding: "6px 10px", fontWeight: 700 }}>{acc.sourceAccount}</td>
                           <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{fmtCompact(acc.speed)}</td>
                           <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{fmtRate(potensiEquip(acc))}</td>
-                          <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{fmtRate(highValuePetTotal(acc))}</td>
                           <td style={{ padding: "6px 10px", textAlign: "center", color: (acc.mutationToken || 0) > 0 ? "var(--accent)" : "var(--dim)", fontWeight: 800 }}>{acc.mutationToken || 0}</td>
+                          <td style={{ padding: "6px 10px", textAlign: "center", color: (acc.scrambleToken || 0) > 0 ? "var(--green)" : "var(--dim)", fontWeight: 800 }}>{acc.scrambleToken || 0}</td>
                           <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{acc.catalogPrice ? fmtRupiah(acc.catalogPrice) : "—"}</td>
                           <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: 900, color: price > 0 ? (changed ? "#4ade80" : "var(--ink)") : "var(--dim)" }}>
                             {price > 0 ? fmtRupiah(price) : "—"}
@@ -1777,9 +1767,10 @@ export default function CatalogPage() {
         const editingAcc = accounts.find((a) => a.sourceAccount === priceEditing);
         if (!editingAcc) return null;
         const rInc = parseFloat(editRateInc) || 0;
-        const rHv = parseFloat(editRateHv) || 0;
         const rSpd = parseFloat(editRateSpd) || 0;
-        const suggested = calcAccountPrice(editingAcc, rInc, rHv, rSpd);
+        const rMut = parseFloat(editRateMutasi) || 0;
+        const rScr = parseFloat(editRateScramble) || 0;
+        const suggested = calcAccountPrice(editingAcc, rInc, rSpd, rMut, rScr);
         return (
           <div className="modal-backdrop" onClick={() => { if (!priceSaving) setPriceEditing(null); }}>
             <div className="modal-box" style={{ width: 460 }} onClick={(e) => e.stopPropagation()}>
@@ -1802,22 +1793,8 @@ export default function CatalogPage() {
                 <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / 1B</span>
               </div>
 
-              <label>Rate High-Value Pet / 1B</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700 }}>Rp</span>
-                <input
-                  type="number"
-                  step="0.5"
-                  placeholder="0"
-                  value={editRateHv}
-                  onChange={(e) => setEditRateHv(e.target.value)}
-                  style={{ margin: 0 }}
-                />
-                <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / 1B</span>
-              </div>
-
               <label>Rate Speed / 1B</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                 <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700 }}>Rp</span>
                 <input
                   type="number"
@@ -1828,6 +1805,34 @@ export default function CatalogPage() {
                   style={{ margin: 0 }}
                 />
                 <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / 1B</span>
+              </div>
+
+              <label>Rate Token Mutasi / token</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700 }}>Rp</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  placeholder="0"
+                  value={editRateMutasi}
+                  onChange={(e) => setEditRateMutasi(e.target.value)}
+                  style={{ margin: 0 }}
+                />
+                <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / token</span>
+              </div>
+
+              <label>Rate Token Scramble / token</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700 }}>Rp</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  placeholder="0"
+                  value={editRateScramble}
+                  onChange={(e) => setEditRateScramble(e.target.value)}
+                  style={{ margin: 0 }}
+                />
+                <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / token</span>
               </div>
 
               {suggested > 0 && (
