@@ -849,14 +849,24 @@ local function reportToMonitor()
 			local s = SaveModule.Get()
 			if not s then return end
 			bossToken = tonumber(s.BossTokens) or 0
-			mutationToken = (type(s.BossMastery) == "table" and tonumber(s.BossMastery.MutationConsumables)) or 0
 			equippedTrail = tostring(s.EquippedTrail or s.TrailEquipped or "")
 		end)
 		pcall(function()
-			local Remotes = require(ReplicatedStorage.Shared.Remotes)
-			local snap = Remotes.Scramble.Request:InvokeServer("snapshot")
-			if snap and snap.Snapshot and snap.Snapshot.State then
-				scrambleToken = tonumber(snap.Snapshot.State.Samples) or 0
+			local containers = { LocalPlayer:FindFirstChildOfClass("Backpack"), LocalPlayer.Character }
+			for _, container in ipairs(containers) do
+				if container then
+					for _, tool in ipairs(container:GetChildren()) do
+						if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "MutationConsumable" then
+							local uses = tonumber(tool:GetAttribute("Uses")) or 0
+							local mutId = tool:GetAttribute("MutationId")
+							if mutId == "Boss" then
+								mutationToken = mutationToken + uses
+							elseif mutId == "Scrambled" then
+								scrambleToken = scrambleToken + uses
+							end
+						end
+					end
+				end
 			end
 		end)
 
