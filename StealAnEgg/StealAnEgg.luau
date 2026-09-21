@@ -1008,18 +1008,18 @@ end)
 -- Auto Buy Dr Scramble Shop
 -- Priority 1: MutationConsumable (Scrambled token)
 -- Priority 2: TreadmillBooster (only if enough for 2x treadmill price)
--- Format from game client: ("Shop", item.Id, decodedQuote)
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	local HttpService = game:GetService("HttpService")
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoBuyScrambledEnabled then
 			pcall(function()
 				local snap = Remotes.Scramble.Request:InvokeServer("snapshot")
 				if not snap or not snap.Snapshot then return end
-				local samples = snap.Snapshot.State and snap.Snapshot.State.Samples or 0
+				local state = snap.Snapshot.State
+				if not state then return end
+				local samples = state.Samples or 0
 				local shop = snap.Snapshot.Shop
 				if not shop then return end
 
@@ -1030,16 +1030,12 @@ task.spawn(function()
 				end
 
 				local function tryBuy(item)
-					local quote = HttpService:JSONDecode(item.Quote)
-					local r
 					pcall(function()
-						r = Remotes.Scramble.Request:InvokeServer("Shop", item.Id, quote)
+						Remotes.Scramble.Request:InvokeServer("Shop", item.Id, {
+							Quote = item.Quote,
+							Sequence = state.ShopSequence,
+						})
 					end)
-					if type(r) == "table" and r.Ok == false then
-						pcall(function()
-							Remotes.Scramble.Request:InvokeServer(quote)
-						end)
-					end
 				end
 
 				if mutItem and samples >= mutItem.Price then
