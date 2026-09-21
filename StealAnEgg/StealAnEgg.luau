@@ -1145,46 +1145,58 @@ task.spawn(function()
 				for _, pet in ipairs(candidates) do
 					if not autoMutationEggEnabled then break end
 
-					local neededMut = pet.needed
-					local tool = findMutationTool(neededMut)
-					if not tool then
-						local alt = neededMut == "Scrambled" and "Boss" or "Scrambled"
-						tool = findMutationTool(alt)
-						if tool then neededMut = alt end
-					end
-					if not tool then break end
-
-					equipTool(tool)
-					task.wait(0.5)
-
 					local eggModel = findEggModel(pet.uid)
 					if eggModel then
 						teleportToEgg(eggModel)
 						task.wait(1)
 					end
 
-					while autoMutationEggEnabled do
-						tool = findMutationTool(neededMut)
+					local mutationsToApply = {}
+					if not hasMutation(pet.rec, "Scrambled") then
+						table.insert(mutationsToApply, "Scrambled")
+					end
+					if not hasMutation(pet.rec, "Boss") then
+						table.insert(mutationsToApply, "Boss")
+					end
+
+					for _, targetMut in ipairs(mutationsToApply) do
+						if not autoMutationEggEnabled then break end
+
+						local curMut = targetMut
+						local tool = findMutationTool(curMut)
 						if not tool then
-							local alt = neededMut == "Scrambled" and "Boss" or "Scrambled"
+							local alt = curMut == "Scrambled" and "Boss" or "Scrambled"
 							tool = findMutationTool(alt)
-							if tool then
-								neededMut = alt
-								equipTool(tool)
-								task.wait(0.5)
-							else
+							if tool then curMut = alt end
+						end
+						if not tool then break end
+
+						equipTool(tool)
+						task.wait(0.5)
+
+						while autoMutationEggEnabled do
+							tool = findMutationTool(curMut)
+							if not tool then
+								local alt = curMut == "Scrambled" and "Boss" or "Scrambled"
+								tool = findMutationTool(alt)
+								if tool then
+									curMut = alt
+									equipTool(tool)
+									task.wait(0.5)
+								else
+									break
+								end
+							end
+
+							local result
+							pcall(function()
+								result = Remotes.BossMastery.AskUseMutationConsumable:InvokeServer(pet.uid)
+							end)
+							if type(result) == "table" and result.Mutated then
 								break
 							end
+							task.wait(5)
 						end
-
-						local result
-						pcall(function()
-							result = Remotes.BossMastery.AskUseMutationConsumable:InvokeServer(pet.uid)
-						end)
-						if type(result) == "table" and result.Mutated then
-							break
-						end
-						task.wait(4)
 					end
 				end
 			end)
