@@ -133,12 +133,14 @@ async function chooseRejoinTarget(
   }
   st.failedJobIds = st.failedJobIds.slice(-20); // cap so it can't grow unbounded
   const jobId = await pickServer(placeId, exclude);
-  if (jobId) return { target: `roblox://placeId=${placeId}&gameInstanceId=${jobId}`, jobId };
-  // Fallback: place-only. Do NOT return placeTarget as-is -- if it carries a
-  // gameInstanceId (from a Link Private Server URL or a prior launch's spread
-  // that got baked in), the Roblox client would try to join that dead server
-  // and hang on the loading screen.
-  return { target: `roblox://placeId=${placeId}`, jobId: null };
+  if (jobId) return { target: `https://www.roblox.com/games/start?placeId=${placeId}&gameInstanceId=${jobId}`, jobId };
+  // First attempt failed with exclusions. Retry without any exclusions —
+  // joining a sibling's server or the old server is better than landing on
+  // the game detail page (place-only URL doesn't auto-join).
+  const fallbackJobId = await pickServer(placeId, []);
+  if (fallbackJobId) return { target: `https://www.roblox.com/games/start?placeId=${placeId}&gameInstanceId=${fallbackJobId}`, jobId: fallbackJobId };
+  // Last resort: matchmaker auto-join via web URL (no specific server).
+  return { target: `https://www.roblox.com/games/start?placeId=${placeId}`, jobId: null };
 }
 
 export async function GET(req: NextRequest) {

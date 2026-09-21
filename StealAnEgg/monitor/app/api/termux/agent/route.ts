@@ -586,9 +586,9 @@ local function launch_app(pkg, bounds, resize, delay, target, forceKill, skipTri
     end
   end
 
-  -- Only use VIEW intent for roblox:// deep links. Plain https:// URLs
-  -- (e.g. roblox.com/home) open a browser instead of the app and timeout.
-  local use_target = target and target ~= "" and target:sub(1,9) == "roblox://"
+  -- Use VIEW intent for roblox:// deep links and https://www.roblox.com URLs.
+  -- The -p flag forces the Roblox package to handle it (no browser).
+  local use_target = target and target ~= "" and (target:sub(1,9) == "roblox://" or target:find("roblox.com/", 1, true))
   if use_target then
     log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset .. C.dim .. " -> " .. target .. C.reset)
     local safe = target:gsub('"', '\\\\"')

@@ -76,6 +76,13 @@ export default function MonitorListPage() {
   const [commandLoading, setCommandLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [editAllOpen, setEditAllOpen] = useState(false);
+  const [editPsLink, setEditPsLink] = useState("");
+  const [editCols, setEditCols] = useState(4);
+  const [editRows, setEditRows] = useState(3);
+  const [editApplyGrid, setEditApplyGrid] = useState(false);
+  const [editApplyPs, setEditApplyPs] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
 
   const fetchDevices = useCallback(async () => {
     try {
@@ -158,6 +165,31 @@ export default function MonitorListPage() {
     } catch {
       setToast("Gagal rename");
     }
+  }
+
+  async function saveEditAll() {
+    const payload: any = {};
+    if (editApplyPs) payload.psLink = editPsLink.trim();
+    if (editApplyGrid) { payload.cols = editCols; payload.rows = editRows; }
+    if (!editApplyPs && !editApplyGrid) { setToast("Pilih minimal satu opsi"); return; }
+    setEditSaving(true);
+    try {
+      const res = await fetch("/api/device-control/policy/edit-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setToast(`Edit selesai: ${data.updated} device diupdate`);
+        setEditAllOpen(false);
+      } else {
+        setToast("Gagal: " + data.error);
+      }
+    } catch (err: any) {
+      setToast("Gagal: " + err.message);
+    }
+    setEditSaving(false);
   }
 
   async function resetAllPolicies() {
@@ -280,6 +312,21 @@ export default function MonitorListPage() {
         .modal .close-btn { border: 1px solid var(--border); background: transparent; color: var(--dim); padding: 8px 16px; border-radius: 8px; font-size: 13px; margin-top: 16px; }
         .modal .close-btn:hover { color: var(--ink); border-color: #44445a; }
 
+        .edit-all-btn { border: 1px solid #1c3b2c; background: #101c15; color: var(--green); padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+        .edit-all-btn:hover { border-color: var(--green); }
+        .eafield { margin-bottom: 16px; }
+        .eafield label { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 13px; font-weight: 600; cursor: pointer; }
+        .eafield input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+        .eainput { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; color: var(--ink); font: inherit; font-size: 13px; margin-top: 8px; outline: none; }
+        .eainput:focus { border-color: var(--accent); }
+        .eainput:disabled { opacity: .4; }
+        .eagrid { display: flex; gap: 10px; margin-top: 8px; }
+        .eagrid select { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--ink); font: inherit; font-size: 13px; }
+        .eagrid select:disabled { opacity: .4; }
+        .easave { background: var(--accent); color: #1a1030; border: none; border-radius: 8px; padding: 10px 20px; font-size: 13px; font-weight: 800; cursor: pointer; }
+        .easave:hover { filter: brightness(1.1); }
+        .easave:disabled { opacity: .5; cursor: not-allowed; }
+
         @media (max-width: 1000px) { .stats { grid-template-columns: repeat(2, 1fr); } }
       `}</style>
 
@@ -292,6 +339,7 @@ export default function MonitorListPage() {
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <button className="gen-btn" onClick={() => router.push("/monitor/overview")}>Fleet Overview</button>
           <button className="gen-btn" onClick={openCommandModal}>+ Generate Command</button>
+          <button className="edit-all-btn" onClick={() => setEditAllOpen(true)}>Edit All Policies</button>
           <button className="reset-btn" disabled={resetting} onClick={resetAllPolicies}>{resetting ? "Resetting..." : "Reset All Policies"}</button>
           <span className="live"><span className="dot" /> LIVE</span>
         </div>
@@ -446,6 +494,54 @@ export default function MonitorListPage() {
               5. Heartbeat dikirim setiap 2 menit untuk update status
             </div>
             <button className="close-btn" onClick={() => setShowCommand(false)}>Tutup</button>
+          </div>
+        </div>
+      )}
+
+      {editAllOpen && (
+        <div className="modal-overlay" onClick={() => setEditAllOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Edit All Policies</h2>
+            <div className="msub">Terapkan pengaturan Grid &amp; PS Link ke semua device sekaligus.</div>
+
+            <div className="eafield">
+              <label>
+                <input type="checkbox" checked={editApplyPs} onChange={(e) => setEditApplyPs(e.target.checked)} />
+                Set PS Link (Private Server)
+              </label>
+              <input
+                className="eainput"
+                disabled={!editApplyPs}
+                placeholder="https://www.roblox.com/games/..."
+                value={editPsLink}
+                onChange={(e) => setEditPsLink(e.target.value)}
+              />
+              <div style={{ color: "var(--dim)", fontSize: 11, marginTop: 4 }}>
+                Kosongkan untuk menghapus semua PS link
+              </div>
+            </div>
+
+            <div className="eafield">
+              <label>
+                <input type="checkbox" checked={editApplyGrid} onChange={(e) => setEditApplyGrid(e.target.checked)} />
+                Set Grid Layout
+              </label>
+              <div className="eagrid">
+                <select disabled={!editApplyGrid} value={editCols} onChange={(e) => setEditCols(Number(e.target.value))}>
+                  {Array.from({ length: 8 }).map((_, i) => <option key={i + 1} value={i + 1}>{i + 1} columns</option>)}
+                </select>
+                <select disabled={!editApplyGrid} value={editRows} onChange={(e) => setEditRows(Number(e.target.value))}>
+                  {Array.from({ length: 8 }).map((_, i) => <option key={i + 1} value={i + 1}>{i + 1} rows</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
+              <button className="close-btn" onClick={() => setEditAllOpen(false)}>Batal</button>
+              <button className="easave" disabled={editSaving || (!editApplyPs && !editApplyGrid)} onClick={saveEditAll}>
+                {editSaving ? "Menyimpan..." : "Terapkan ke Semua Device"}
+              </button>
+            </div>
           </div>
         </div>
       )}
