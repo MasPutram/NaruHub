@@ -1026,93 +1026,80 @@ end)
 
 ------------------------------------------------------------
 -- Auto Buy Dr Scramble Shop
--- Waits for event to finish (samples stop increasing) before
--- buying. Priority: Scrambled token first, then TreadmillBooster
--- with leftover samples.
+-- Detects event via Window.Active from snapshot. Waits until
+-- event ends (Active=false), then buys all Scrambled tokens
+-- first, treadmill with leftovers. Checks every 30s.
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	local lastSamples = -1
-	local stableTicks = 0
-	local STABLE_THRESHOLD = 4
+	local wasActive = false
 
-	local function getSamples()
-		local s = 0
-		pcall(function()
-			local snap = Remotes.Scramble.Request:InvokeServer("snapshot")
-			if snap and snap.Snapshot and snap.Snapshot.State then
-				s = snap.Snapshot.State.Samples or 0
-			end
-		end)
-		return s
-	end
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		if autoBuyScrambledEnabled then
+			pcall(function()
+				local snap = Remotes.Scramble.Request:InvokeServer("snapshot")
+				if not snap or not snap.Snapshot then return end
 
-	local function buyAll()
-		pcall(function()
-			local snap = Remotes.Scramble.Request:InvokeServer("snapshot")
-			if not snap or not snap.Snapshot then return end
-			local state = snap.Snapshot.State
-			if not state then return end
-			local samples = state.Samples or 0
-			local shop = snap.Snapshot.Shop
-			if not shop then return end
+				local isActive = snap.Snapshot.Window and snap.Snapshot.Window.Active == true
+				if isActive then
+					wasActive = true
+					return
+				end
 
-			local mutItem, treadItem
-			for _, item in ipairs(shop) do
-				if item.Id == "MutationConsumable" and item.Quote then mutItem = item end
-				if item.Id == "TreadmillBooster" and item.Quote then treadItem = item end
-			end
+				if not wasActive then return end
+				wasActive = false
 
-			local function tryBuy(item)
-				pcall(function()
-					Remotes.Scramble.Request:InvokeServer("Shop", item.Id, {
-						Quote = item.Quote,
-						Sequence = state.ShopSequence,
-					})
-				end)
-			end
+				local state = snap.Snapshot.State
+				if not state then return end
+				local samples = state.Samples or 0
+				local shop = snap.Snapshot.Shop
+				if not shop then return end
 
-			while mutItem and samples >= mutItem.Price do
-				tryBuy(mutItem)
-				task.wait(1)
-				snap = Remotes.Scramble.Request:InvokeServer("snapshot")
-				if not snap or not snap.Snapshot then break end
-				state = snap.Snapshot.State
-				if not state then break end
-				samples = state.Samples or 0
-				shop = snap.Snapshot.Shop
-				if not shop then break end
-				mutItem = nil
-				treadItem = nil
+				local function refreshShop()
+					snap = Remotes.Scramble.Request:InvokeServer("snapshot")
+					if not snap or not snap.Snapshot then return nil, nil, 0 end
+					state = snap.Snapshot.State
+					if not state then return nil, nil, 0 end
+					samples = state.Samples or 0
+					shop = snap.Snapshot.Shop
+					if not shop then return nil, nil, 0 end
+					local mut, tread
+					for _, item in ipairs(shop) do
+						if item.Id == "MutationConsumable" and item.Quote then mut = item end
+						if item.Id == "TreadmillBooster" and item.Quote then tread = item end
+					end
+					return mut, tread, samples
+				end
+
+				local mutItem, treadItem
 				for _, item in ipairs(shop) do
 					if item.Id == "MutationConsumable" and item.Quote then mutItem = item end
 					if item.Id == "TreadmillBooster" and item.Quote then treadItem = item end
 				end
-			end
 
-			if treadItem and samples >= treadItem.Price then
-				tryBuy(treadItem)
-			end
-		end)
-	end
+				while mutItem and samples >= mutItem.Price do
+					pcall(function()
+						Remotes.Scramble.Request:InvokeServer("Shop", mutItem.Id, {
+							Quote = mutItem.Quote,
+							Sequence = state.ShopSequence,
+						})
+					end)
+					task.wait(1)
+					mutItem, treadItem, samples = refreshShop()
+					if not mutItem then break end
+				end
 
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		if autoBuyScrambledEnabled then
-			local current = getSamples()
-			if current ~= lastSamples then
-				stableTicks = 0
-				lastSamples = current
-			else
-				stableTicks = stableTicks + 1
-			end
-			if stableTicks >= STABLE_THRESHOLD and current > 0 then
-				buyAll()
-				lastSamples = getSamples()
-				stableTicks = 0
-			end
+				if treadItem and samples >= treadItem.Price then
+					pcall(function()
+						Remotes.Scramble.Request:InvokeServer("Shop", treadItem.Id, {
+							Quote = treadItem.Quote,
+							Sequence = state.ShopSequence,
+						})
+					end)
+				end
+			end)
 		else
-			lastSamples = -1
-			stableTicks = 0
+			wasActive = false
 		end
 		task.wait(30)
 	end
