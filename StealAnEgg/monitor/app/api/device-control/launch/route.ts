@@ -200,7 +200,7 @@ export async function POST(req: NextRequest) {
       let target = targets[packageName] || "";
       if (assigned[packageName]) {
         const m = target.match(/placeId=(\d+)/);
-        if (m) target = `roblox://placeId=${m[1]}&gameInstanceId=${assigned[packageName]}`;
+        if (m) target = `https://www.roblox.com/games/start?placeId=${m[1]}&gameInstanceId=${assigned[packageName]}`;
       }
 
       const command = {

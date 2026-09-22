@@ -102,30 +102,17 @@ function pctStorageUsed(m?: { totalMB: number; freeMB: number }): number {
 function parseRobloxTarget(input: string): string {
   const s = (input || "").trim();
   if (!s) return "";
-  // Already a deep link -- pass through.
   if (/^roblox:\/\//i.test(s)) return s;
-  // Bare number -> placeId.
-  if (/^\d+$/.test(s)) return `roblox://placeId=${s}`;
-  // Try to parse as URL.
+  if (/^\d+$/.test(s)) return `https://www.roblox.com/games/start?placeId=${s}`;
   try {
     const u = new URL(s.startsWith("http") ? s : `https://${s}`);
-    // Standard game share: /games/<placeId>/<slug>
-    const m = u.pathname.match(/\/games\/(\d+)/i);
-    const placeId = m ? m[1] : null;
-    const linkCode = u.searchParams.get("privateServerLinkCode");
-    if (placeId && linkCode) {
-      return `roblox://placeId=${placeId}&linkCode=${linkCode}`;
-    }
-    if (placeId) return `roblox://placeId=${placeId}`;
-    // /share?code=... style private-server share links.
-    const shareCode = u.searchParams.get("code");
-    if (u.pathname.startsWith("/share") && shareCode) {
-      return `roblox://navigation/share_links?code=${shareCode}&type=Server`;
+    if (u.hostname.includes("roblox.com")) {
+      const m = u.pathname.match(/\/games\/(\d+)/i);
+      if (m) return s.startsWith("http") ? s : `https://${s}`;
+      const shareCode = u.searchParams.get("code");
+      if (u.pathname.startsWith("/share") && shareCode) return s.startsWith("http") ? s : `https://${s}`;
     }
   } catch {}
-  // Nothing recognizable -- reject it so a bare homepage URL like
-  // https://www.roblox.com/home doesn't get sent as a VIEW intent
-  // (opens a browser instead of the Roblox app and always times out).
   return "";
 }
 
