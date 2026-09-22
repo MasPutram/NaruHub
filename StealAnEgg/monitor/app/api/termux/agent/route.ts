@@ -1431,18 +1431,10 @@ while true do
       local screen = collect_screen()
       local stats = collect_stats()
       local running = collect_running()
-      -- Auto-trim when RAM is genuinely tight. Unlike the old per-heartbeat
-      -- trim (which KILLED background clones and caused random force-closes),
-      -- this only drops reclaimable page cache -- it never touches a running
-      -- app -- so it gives the low-memory killer headroom without culling a
-      -- clone. Gated behind a high-usage threshold so it's a rare, cheap op.
-      if stats.ram and stats.ram.totalMB and stats.ram.totalMB > 0 then
-        local pct = (stats.ram.usedMB / stats.ram.totalMB) * 100
-        if pct >= RAM_TRIM_PCT then
-          log(C.yellow .. "[" .. ts() .. "] RAM " .. math.floor(pct) .. "% -- trim cache" .. C.reset)
-          trim_ram()
-        end
-      end
+      -- Proactive trim every heartbeat: send RUNNING_CRITICAL to each clone
+      -- so they release internal caches. This is lightweight (no I/O stall)
+      -- and keeps RAM headroom steady, preventing LMK cascade kills.
+      trim_ram()
       ws_send({
         type = "heartbeat",
         deviceId = DEVICE_ID,
