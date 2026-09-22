@@ -610,9 +610,9 @@ end
 
 local function log_ram_status()
   local running = collect_running()
-  if #running == 0 then return end
+  if #running == 0 then return 100 end
   if TOTAL_RAM_MB == 0 then TOTAL_RAM_MB = get_total_ram_mb() end
-  if TOTAL_RAM_MB == 0 then return end
+  if TOTAL_RAM_MB == 0 then return 100 end
 
   local mem_raw = shell('su -c "cat /proc/meminfo"')
   local mem_avail_kb = tonumber(mem_raw:match("MemAvailable:%s+(%d+)")) or 0
@@ -637,6 +637,7 @@ local function log_ram_status()
     local color = mem_pct < 15 and C.red or (mem_pct < 30 and C.yellow or C.dim)
     log(color .. "[" .. ts() .. "] RAM " .. mem_avail_mb .. "/" .. math.floor(TOTAL_RAM_MB) .. "MB (" .. mem_pct .. "% free) | " .. table.concat(parts, " ") .. C.reset)
   end
+  return mem_pct
 end
 
 local LAST_LMK_TS = ""
@@ -1505,11 +1506,12 @@ while true do
       local screen = collect_screen()
       local stats = collect_stats()
       local running = collect_running()
-      log_ram_status()
+      local ram_pct = log_ram_status()
       check_lmk_kills()
       if now >= next_trim then
         trim_ram()
-        next_trim = now + 120
+        local trim_interval = ram_pct < 15 and 30 or (ram_pct < 30 and 120 or 300)
+        next_trim = now + trim_interval
       end
       ws_send({
         type = "heartbeat",
