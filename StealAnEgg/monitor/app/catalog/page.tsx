@@ -204,6 +204,7 @@ export default function CatalogPage() {
 
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; account: string } | null>(null);
   const [summaryBusy, setSummaryBusy] = useState(false);
+  const [resettingPrices, setResettingPrices] = useState(false);
   // Multi-select for bulk set-harga on selected accounts. Keyed by
   // sourceAccount; toggled by the checkbox at the top-left of each card.
   const [selectedAccountIds, setSelectedAccountIds] = useState<Record<string, boolean>>({});
@@ -603,6 +604,24 @@ export default function CatalogPage() {
       iframe.src = `/poster?account=${encodeURIComponent(a.sourceAccount)}&catalogPrice=${a.catalogPrice || 0}&autoDownload=1`;
     }
     loadNext();
+  }
+
+  async function resetAllPrices() {
+    if (!window.confirm("Reset SEMUA harga akun di katalog ke Rp 0?\n\nAksi ini tidak bisa dibatalkan.")) return;
+    setResettingPrices(true);
+    try {
+      const res = await fetch("/api/reset-catalog-prices", { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        setAccounts((prev) => prev.map((a) => ({ ...a, catalogPrice: 0 })));
+        alert(`Reset selesai: ${data.updated} akun di-reset`);
+      } else {
+        alert("Gagal: " + data.error);
+      }
+    } catch (e: any) {
+      alert("Gagal: " + e.message);
+    }
+    setResettingPrices(false);
   }
 
   async function saveCatalogPrice(account: string) {
@@ -1206,6 +1225,14 @@ export default function CatalogPage() {
                 : `Download All Poster (${visible.filter((a) => a.catalogPrice && a.catalogPrice > 0).length} akun)`}
             </button>
           )}
+          <button
+            className="btn-download-all"
+            style={{ background: "#1c1012", color: "#f87171", border: "1px solid #3b1c1c" }}
+            onClick={resetAllPrices}
+            disabled={resettingPrices}
+          >
+            {resettingPrices ? "Resetting..." : "🗑 Reset All Harga"}
+          </button>
           {batchProgress && (
             <div style={{ flex: 1, maxWidth: 200, height: 6, background: "#262636", borderRadius: 3, overflow: "hidden" }}>
               <div style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%`, height: "100%", background: "#8b5cf6", borderRadius: 3, transition: "width .3s" }} />
