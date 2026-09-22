@@ -586,9 +586,17 @@ end
 -- launch" HipHub does -- caches only, never a kill, so unlike the old
 -- every-heartbeat trim it can't nuke a clone that just went to background.
 local function trim_ram()
-  log(C.dim .. "[" .. ts() .. "] trim_ram: dropping caches" .. C.reset)
-  shellcode('su -c "sync"')
-  shellcode('su -c "echo 3 > /proc/sys/vm/drop_caches"')
+  local running = collect_running()
+  if #running > 0 then
+    for _, pkg in ipairs(running) do
+      shellcode('su -c "am send-trim-memory ' .. pkg .. ' RUNNING_CRITICAL"')
+    end
+    log(C.dim .. "[" .. ts() .. "] trim_ram: sent RUNNING_CRITICAL to " .. #running .. " clones" .. C.reset)
+  else
+    shellcode('su -c "sync"')
+    shellcode('su -c "echo 3 > /proc/sys/vm/drop_caches"')
+    log(C.dim .. "[" .. ts() .. "] trim_ram: dropped caches (no running clones)" .. C.reset)
+  end
 end
 
 local function launch_app(pkg, bounds, resize, delay, target, forceKill, skipTrim)
@@ -1354,6 +1362,16 @@ do
   else
     log(C.yellow .. "[" .. ts() .. "] heartbeat script fetch failed, skipping" .. C.reset)
   end
+end
+
+-- ─── System optimizations (run once at startup) ───
+do
+  log(C.cyan .. "[" .. ts() .. "] applying system optimizations..." .. C.reset)
+  shellcode('su -c "dumpsys deviceidle whitelist +com.termux" 2>/dev/null')
+  shellcode('su -c "/system/bin/device_config put activity_manager max_phantom_processes 2147483647" 2>/dev/null')
+  shellcode('su -c "setprop persist.sys.fflag.override.settings_enable_monitor_phantom_procs false" 2>/dev/null')
+  shellcode('su -c "/system/bin/device_config set_sync_disabled_for_tests persistent" 2>/dev/null')
+  log(C.green .. "[" .. ts() .. "] optimizations applied (doze whitelist, phantom proc disabled)" .. C.reset)
 end
 
 -- ─── Connection loop (auto-reconnect) ───
