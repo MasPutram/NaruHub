@@ -181,6 +181,8 @@ export default function DeviceDetailPage() {
   // Auto-Execute Manager state.
   interface LibScript { slug: string; filename: string; content: string; updatedAt: number; }
   const [aeOpen, setAeOpen] = useState(false);
+  const [cookieExtracting, setCookieExtracting] = useState(false);
+  const [cookieResult, setCookieResult] = useState("");
   const [aeLibrary, setAeLibrary] = useState<LibScript[]>([]);
   const [aeDeployed, setAeDeployed] = useState<string[]>([]);
   const [aeName, setAeName] = useState("");
@@ -1091,7 +1093,30 @@ export default function DeviceDetailPage() {
             <button className="btn" onClick={() => setAeOpen(true)}>
               Auto-Execute Manager
             </button>
+            <button
+              className="btn"
+              style={{ background: "#7c3aed22", borderColor: "#7c3aed", color: "#a78bfa" }}
+              disabled={cookieExtracting || device?.status !== "online"}
+              onClick={async () => {
+                setCookieExtracting(true);
+                setCookieResult("");
+                try {
+                  await fetch("/api/termux/commands", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ deviceId, commands: [{ type: "get_cookies" }] }),
+                  });
+                  setCookieResult("Command sent! Cek di Cookies page.");
+                } catch { setCookieResult("Failed to send command"); }
+                setTimeout(() => setCookieExtracting(false), 3000);
+              }}
+            >
+              {cookieExtracting ? "Extracting..." : "Get Cookies"}
+            </button>
           </div>
+          {cookieResult && (
+            <div style={{ marginTop: 8, fontSize: "0.8rem", color: "#a78bfa" }}>{cookieResult}</div>
+          )}
           <div className="disabled-note" style={{ marginTop: 8 }}>
             Grid only stores window positions -- launching still uses the "Launch selected" button.
             Auto-Execute deploys .lua scripts to Delta / Hydrogen / ArceusX / Fluxus / Vegax autoexec dirs.
