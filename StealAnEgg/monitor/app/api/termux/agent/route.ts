@@ -554,26 +554,13 @@ end
 -- never kill — just am start like first time opening.
 local function kill_if_forced(pkg, forceKill)
   if not forceKill then return false end
-  if not is_pkg_running(pkg) and not has_ghost_pid(pkg) then
-    log(C.dim .. "[" .. ts() .. "] skip " .. pkg:gsub("com.roblox.", "") .. " (not running)" .. C.reset)
-    return false
-  end
-  if not is_pkg_running(pkg) then
-    log(C.yellow .. "[" .. ts() .. "] ghost " .. pkg:gsub("com.roblox.", "") .. ", killing" .. C.reset)
-  end
-  log(C.yellow .. "[" .. ts() .. "] force-stop " .. pkg:gsub("com.roblox.", "") .. C.reset)
+  if not is_pkg_running(pkg) and not has_ghost_pid(pkg) then return false end
   kill_pkg_pidonly(pkg)
   sleep(2)
-  -- Verify it actually died. If the app is still in the activity stack the
-  -- first force-stop didn't take (timing / race), so hit it once more before
-  -- we relaunch -- otherwise am start just refocuses the stuck window (Siap
-  -- Jual: still in-game; deep-link: stuck on error screen, never joins).
   if is_pkg_running(pkg) then
-    log(C.red .. "[" .. ts() .. "] " .. pkg:gsub("com.roblox.", "") .. " still up, retry" .. C.reset)
     kill_pkg_pidonly(pkg)
     sleep(2)
   end
-  log(C.green .. "[" .. ts() .. "] " .. pkg:gsub("com.roblox.", "") .. " stopped" .. C.reset)
   return true
 end
 
@@ -661,7 +648,10 @@ local function check_lmk_kills()
   end
 end
 
-local function launch_app(pkg, bounds, resize, delay, target, forceKill, skipTrim)
+local function launch_app(pkg, bounds, resize, delay, target, forceKill, skipTrim, silent)
+  if not silent then
+    log(C.cyan .. "[" .. ts() .. "] launching " .. pkg:gsub("com.roblox.", "") .. C.reset)
+  end
   -- A targeted (deep-link) launch must cold-start: Roblox only acts on a
   -- roblox://placeId join from a FRESH process. If the app is already up --
   -- e.g. stuck on an error/reconnect screen after a failed launch -- then
@@ -684,7 +674,6 @@ local function launch_app(pkg, bounds, resize, delay, target, forceKill, skipTri
   -- The -p flag forces the Roblox package to handle it (no browser).
   local use_target = target and target ~= "" and (target:sub(1,9) == "roblox://" or target:find("roblox.com/", 1, true))
   if use_target then
-    log(C.cyan .. "[" .. ts() .. "] launching " .. pkg:gsub("com.roblox.", "") .. C.reset)
     local safe = target:gsub('"', '\\\\"')
     local ok = shellcode(string.format(
       'su -c "am start -a android.intent.action.VIEW -d \\\\"%s\\\\" -p %s"',
@@ -694,10 +683,6 @@ local function launch_app(pkg, bounds, resize, delay, target, forceKill, skipTri
       shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
     end
   else
-    if target and target ~= "" then
-      log(C.yellow .. "[" .. ts() .. "] ignoring non-deeplink target: " .. target .. C.reset)
-    end
-    log(C.cyan .. "[" .. ts() .. "] launching " .. pkg:gsub("com.roblox.", "") .. C.reset)
     shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
   end
 
@@ -1031,7 +1016,7 @@ end
 local function rejoin_launch(pkg)
   local target = (CACHED_POLICY and CACHED_POLICY.packageTargets and CACHED_POLICY.packageTargets[pkg]) or ""
   local bounds = (CACHED_POLICY and CACHED_POLICY.packageBounds and CACHED_POLICY.packageBounds[pkg]) or ""
-  launch_app(pkg, bounds, bounds ~= "", 0, target)
+  launch_app(pkg, bounds, bounds ~= "", 0, target, false, false, true)
 end
 
 -- Should this package auto-rejoin? True when auto-rejoin is on globally AND
@@ -1089,7 +1074,7 @@ local function maybe_auto_rejoin()
               os.execute("sleep " .. delay)
             end
             trim_ram()
-            launch_app(act.pkg, bnds, bnds ~= "", 0, act.target or "", false, true)
+            launch_app(act.pkg, bnds, bnds ~= "", 0, act.target or "", false, true, true)
             http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
           end
         end
