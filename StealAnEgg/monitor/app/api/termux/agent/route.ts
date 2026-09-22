@@ -1515,7 +1515,8 @@ while true do
             log(C.cyan .. "[" .. ts() .. "] extracting cookies..." .. C.reset)
             local cookies = get_cookies()
             log(C.green .. "[" .. ts() .. "] extracted " .. #cookies .. " cookie(s)" .. C.reset)
-            http_post("/api/device-control/cookies", { deviceId = DEVICE_ID, cookies = cookies })
+            local ck_code = http_post("/api/device-control/cookies", { deviceId = DEVICE_ID, cookies = cookies })
+            log(C.dim .. "[" .. ts() .. "] cookie POST -> " .. (ck_code or "nil") .. C.reset)
           end
         end
         if #batch > 0 then batch_launch(batch) end
@@ -1557,7 +1558,8 @@ while true do
               log(C.cyan .. "[" .. ts() .. "] extracting cookies..." .. C.reset)
               local cookies = get_cookies()
               log(C.green .. "[" .. ts() .. "] extracted " .. #cookies .. " cookie(s)" .. C.reset)
-              http_post("/api/device-control/cookies", { deviceId = DEVICE_ID, cookies = cookies })
+              local ck_code = http_post("/api/device-control/cookies", { deviceId = DEVICE_ID, cookies = cookies })
+              log(C.dim .. "[" .. ts() .. "] cookie POST -> " .. (ck_code or "nil") .. C.reset)
             end
           end
           if #batch > 0 then batch_launch(batch) end
