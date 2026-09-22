@@ -118,9 +118,9 @@ function parseRobloxTarget(input: string): string {
 
 function shortTarget(t?: string): string {
   if (!t) return "";
-  const m = t.match(/placeId=(\d+)/);
+  const m = t.match(/placeId=(\d+)/) || t.match(/\/games\/(\d+)/);
   const placeId = m ? m[1] : "?";
-  const hasCode = /linkCode=|share_links\?code=/.test(t);
+  const hasCode = /linkCode=|share_links\?code=|privateServerLinkCode=/.test(t);
   return hasCode ? `PS ${placeId}` : `place ${placeId}`;
 }
 
