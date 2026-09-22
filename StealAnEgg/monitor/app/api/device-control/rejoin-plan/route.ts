@@ -234,8 +234,6 @@ export async function GET(req: NextRequest) {
       return `${left},${top},${left + cellW},${top + cellH}`;
     }
 
-    const IDLE_KILL_MS = 5 * 60 * 1000; // 5 min running with no heartbeat -> kill to free RAM
-
     const now = Date.now();
     const actions: { pkg: string; target: string; bounds: string; home?: boolean; kill?: boolean }[] = [];
 
@@ -263,22 +261,12 @@ export async function GET(req: NextRequest) {
       };
 
       if (inGame) {
-        // Healthy: forget everything (this also re-arms after a give-up once
-        // the clone comes back on its own).
         if (stRaw) await redis.del(rejoinStateKey(deviceId, pkg));
         continue;
       }
-      // Running but not in-game: could be loading, on home/login screen, or
-      // wedged on an error screen. Only idle-kill when the clone HAS a target
-      // (should be in a game). Clones sitting on the Roblox home screen with
-      // no target are intentionally idle — leave them alone.
+      // Running but not in-game: loading, home screen, or error screen.
+      // Leave it alone — don't kill running clones.
       if (runningSet.has(pkg)) {
-        if (target) {
-          const idleAnchor = Math.max(lastLaunchAt, lastHeartbeatAt);
-          if (idleAnchor > 0 && now - idleAnchor >= IDLE_KILL_MS) {
-            actions.push({ pkg, target: "", bounds: "", kill: true });
-          }
-        }
         continue;
       }
 
@@ -357,15 +345,10 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Throttle: return at most 1 rejoin (launch) action per poll to prevent
+    // Throttle: return at most 1 rejoin action per poll to prevent
     // RAM spikes from multiple simultaneous Roblox launches killing the rest
-    // of the running clones (cascade force-close). Idle-kill actions are
-    // always returned since they FREE RAM instead of consuming it.
-    const kills = actions.filter(a => a.kill);
-    const launches = actions.filter(a => !a.kill);
-    const throttled = [...kills, ...launches.slice(0, 1)];
-
-    return NextResponse.json({ ok: true, actions: throttled });
+    // of the running clones (cascade force-close).
+    return NextResponse.json({ ok: true, actions: actions.slice(0, 1) });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message, actions: [] }, { status: 500 });
   }

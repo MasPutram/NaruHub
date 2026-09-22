@@ -1019,29 +1019,17 @@ local function maybe_auto_rejoin()
         local rejoinDelay = (CACHED_POLICY and CACHED_POLICY.rejoinDelay) or 30
         for i, act in ipairs(parsed.actions) do
           if act.pkg then
-            if act.kill then
-              log(C.yellow .. "[" .. ts() .. "] idle-kill: " .. act.pkg .. " (no heartbeat, freeing RAM)" .. C.reset)
-              kill_pkg_pidonly(act.pkg)
-              sleep(2)
-              if is_pkg_running(act.pkg) then
-                kill_pkg_pidonly(act.pkg)
-                sleep(2)
-              end
-              log(C.dim .. "[" .. ts() .. "] " .. act.pkg .. " stopped (idle-kill done)" .. C.reset)
-              http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
-            else
-              local bnds = act.bounds or ""
-              local delay = (i == 1) and 0 or math.floor(jitter(rejoinDelay, 0.3))
-              log(C.cyan .. "[" .. ts() .. "] auto-rejoin " .. act.pkg ..
-                (act.target ~= "" and (" -> " .. act.target) or "") ..
-                (delay > 0 and (" (wait " .. delay .. "s)") or "") .. C.reset)
-              if delay > 0 then
-                os.execute("sleep " .. delay)
-              end
-              trim_ram()
-              launch_app(act.pkg, bnds, bnds ~= "", 0, act.target or "", false, true)
-              http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
+            local bnds = act.bounds or ""
+            local delay = (i == 1) and 0 or math.floor(jitter(rejoinDelay, 0.3))
+            log(C.cyan .. "[" .. ts() .. "] auto-rejoin " .. act.pkg ..
+              (act.target ~= "" and (" -> " .. act.target) or "") ..
+              (delay > 0 and (" (wait " .. delay .. "s)") or "") .. C.reset)
+            if delay > 0 then
+              os.execute("sleep " .. delay)
             end
+            trim_ram()
+            launch_app(act.pkg, bnds, bnds ~= "", 0, act.target or "", false, true)
+            http_post("/api/device-control/rejoin-ack", { deviceId = DEVICE_ID, pkg = act.pkg })
           end
         end
       end
