@@ -603,31 +603,8 @@ end
 local function trim_ram()
   local running = collect_running()
   if #running == 0 then return end
-
-  if TOTAL_RAM_MB == 0 then TOTAL_RAM_MB = get_total_ram_mb() end
-  if TOTAL_RAM_MB == 0 then return end
-
-  local threshold_mb = TOTAL_RAM_MB * RAM_TRIM_PCT / 100
-
-  local mem_raw = shell('su -c "cat /proc/meminfo"')
-  local mem_avail_kb = tonumber(mem_raw:match("MemAvailable:%s+(%d+)")) or 0
-  local mem_avail_mb = math.floor(mem_avail_kb / 1024)
-  local mem_pct = TOTAL_RAM_MB > 0 and math.floor(mem_avail_mb / TOTAL_RAM_MB * 100) or 0
-
   for _, pkg in ipairs(running) do
-    local pids = shell('su -c "pidof ' .. pkg .. '"')
-    if pids ~= "" then
-      for pid in pids:gmatch("%S+") do
-        local rss = get_proc_rss_mb(pid)
-        if rss > threshold_mb then
-          local short = pkg:gsub("com.roblox.", "")
-          log(C.yellow .. "[" .. ts() .. "] RAM trim " .. short .. " RSS=" .. math.floor(rss) .. "MB (>" .. math.floor(threshold_mb) .. "MB) avail=" .. mem_avail_mb .. "MB/" .. math.floor(TOTAL_RAM_MB) .. "MB (" .. mem_pct .. "%)" .. C.reset)
-          shellcode('su -c "am send-trim-memory ' .. pkg .. ' RUNNING_CRITICAL"')
-          shellcode('su -c "am send-trim-memory ' .. pkg .. ' RUNNING_CRITICAL"')
-          shellcode('su -c "am send-trim-memory ' .. pkg .. ' RUNNING_CRITICAL"')
-        end
-      end
-    end
+    shellcode('su -c "am send-trim-memory ' .. pkg .. ' RUNNING_CRITICAL"')
   end
 end
 
@@ -1528,6 +1505,7 @@ while true do
       local stats = collect_stats()
       local running = collect_running()
       log_ram_status()
+      trim_ram()
       check_lmk_kills()
       ws_send({
         type = "heartbeat",
