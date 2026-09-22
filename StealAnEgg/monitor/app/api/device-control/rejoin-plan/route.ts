@@ -357,7 +357,15 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true, actions });
+    // Throttle: return at most 1 rejoin (launch) action per poll to prevent
+    // RAM spikes from multiple simultaneous Roblox launches killing the rest
+    // of the running clones (cascade force-close). Idle-kill actions are
+    // always returned since they FREE RAM instead of consuming it.
+    const kills = actions.filter(a => a.kill);
+    const launches = actions.filter(a => !a.kill);
+    const throttled = [...kills, ...launches.slice(0, 1)];
+
+    return NextResponse.json({ ok: true, actions: throttled });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message, actions: [] }, { status: 500 });
   }
