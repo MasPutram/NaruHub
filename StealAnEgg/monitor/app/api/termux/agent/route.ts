@@ -631,6 +631,37 @@ local function trim_ram()
   end
 end
 
+local function log_ram_status()
+  local running = collect_running()
+  if #running == 0 then return end
+  if TOTAL_RAM_MB == 0 then TOTAL_RAM_MB = get_total_ram_mb() end
+  if TOTAL_RAM_MB == 0 then return end
+
+  local mem_raw = shell('su -c "cat /proc/meminfo"')
+  local mem_avail_kb = tonumber(mem_raw:match("MemAvailable:%s+(%d+)")) or 0
+  local mem_avail_mb = math.floor(mem_avail_kb / 1024)
+  local mem_pct = math.floor(mem_avail_mb / TOTAL_RAM_MB * 100)
+
+  local parts = {}
+  for _, pkg in ipairs(running) do
+    local pids = shell('su -c "pidof ' .. pkg .. '"')
+    if pids ~= "" then
+      local rss = 0
+      for pid in pids:gmatch("%S+") do
+        rss = rss + get_proc_rss_mb(pid)
+      end
+      if rss > 0 then
+        parts[#parts+1] = pkg:gsub("com.roblox.", "") .. "=" .. math.floor(rss) .. "MB"
+      end
+    end
+  end
+
+  if #parts > 0 then
+    local color = mem_pct < 15 and C.red or (mem_pct < 30 and C.yellow or C.dim)
+    log(color .. "[" .. ts() .. "] RAM " .. mem_avail_mb .. "/" .. math.floor(TOTAL_RAM_MB) .. "MB (" .. mem_pct .. "% free) | " .. table.concat(parts, " ") .. C.reset)
+  end
+end
+
 local LAST_LMK_TS = ""
 local function check_lmk_kills()
   local raw = shell('su -c "dmesg -T 2>/dev/null | grep -i roblox | tail -5"')
@@ -1496,7 +1527,7 @@ while true do
       local screen = collect_screen()
       local stats = collect_stats()
       local running = collect_running()
-      trim_ram()
+      log_ram_status()
       check_lmk_kills()
       ws_send({
         type = "heartbeat",
