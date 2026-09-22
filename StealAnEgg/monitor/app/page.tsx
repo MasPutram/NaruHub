@@ -267,7 +267,7 @@ function deviceLabel(name: string): string | null {
 
 type TabMode = "all" | "online" | "offline";
 type DetailTab = "pets" | "eggs" | "stolen" | "tools";
-type AllDetailTab = "accounts" | "pets" | "eggs" | "stolen" | "tools";
+type AllDetailTab = "accounts" | "pets" | "eggs" | "stolen" | "tools" | "work";
 
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false);
@@ -689,6 +689,7 @@ export default function DashboardPage() {
 
         /* Value bar showing the aggregate $/s for currently-filtered items */
         .value-bar { padding: 8px 24px 0; background: var(--card); font-size: 11px; font-weight: 900; color: var(--gold); letter-spacing: .3px; }
+        .section-label { font-size: 11px; font-weight: 800; color: var(--dim); letter-spacing: .5px; margin-bottom: 8px; padding-top: 4px; }
 
         /* Growing egg card */
         .egg-card { background: var(--card); border: 1px solid rgba(52,211,153,.2); border-radius: 12px; padding: 12px; display: flex; align-items: center; gap: 12px; }
@@ -1380,6 +1381,7 @@ function AllAccountsDetailModal({ allDetail, tab, setTab, onClose, onOpenAccount
         <button className={`mtab ${tab === "eggs" ? "active" : ""}`} onClick={() => setTab("eggs")}>🥚 EGGS ({eggCount})</button>
         <button className={`mtab ${tab === "stolen" ? "active" : ""}`} onClick={() => setTab("stolen")}>🎯 STOLEN ({stolenCount})</button>
         <button className={`mtab ${tab === "tools" ? "active" : ""}`} onClick={() => setTab("tools")}>🛠️ TOOLS ({toolsCount})</button>
+        <button className={`mtab ${tab === "work" ? "active" : ""}`} onClick={() => setTab("work")}>⚡ WORK</button>
       </div>
 
       {loading && (
@@ -1451,10 +1453,16 @@ function AllAccountsDetailModal({ allDetail, tab, setTab, onClose, onOpenAccount
             : (
               <>
                 {allGrowingEggs.length > 0 && (
-                  <GrowingEggGrid eggs={allGrowingEggs.filter((e) => rarityFilter === "ALL" || (petRarity(e.category, idx) || "Unknown") === rarityFilter)} idx={idx} />
+                  <>
+                    <div className="section-label">🥚 GROWING EGGS ({allGrowingEggs.filter((e) => rarityFilter === "ALL" || (petRarity(e.category, idx) || "Unknown") === rarityFilter).length})</div>
+                    <GrowingEggGrid eggs={allGrowingEggs.filter((e) => rarityFilter === "ALL" || (petRarity(e.category, idx) || "Unknown") === rarityFilter)} idx={idx} />
+                  </>
                 )}
                 {allBackpackEggs.length > 0 && (
-                  <PetGrid pets={allBackpackEggs.filter((e) => rarityFilter === "ALL" || (petRarity(e.category, idx) || "Unknown") === rarityFilter).map((e) => ({ ...e, _bag: true } as any))} idx={idx} showBadges />
+                  <>
+                    <div className="section-label" style={{ marginTop: 16 }}>🎒 BACKPACK EGGS ({allBackpackEggs.filter((e) => rarityFilter === "ALL" || (petRarity(e.category, idx) || "Unknown") === rarityFilter).length})</div>
+                    <PetGrid pets={allBackpackEggs.filter((e) => rarityFilter === "ALL" || (petRarity(e.category, idx) || "Unknown") === rarityFilter).map((e) => ({ ...e, _bag: true } as any))} idx={idx} showBadges />
+                  </>
                 )}
               </>
             )
@@ -1486,6 +1494,55 @@ function AllAccountsDetailModal({ allDetail, tab, setTab, onClose, onOpenAccount
               </div>
             )
         )}
+
+        {tab === "work" && (() => {
+          const WORK_THRESHOLD = 20_000_000_000;
+          const workGrowing = allGrowingEggs.filter((e) => (e.rate || 0) >= WORK_THRESHOLD);
+          const workBackpack = allBackpackEggs.filter((e) => (e.rate || 0) >= WORK_THRESHOLD);
+          const workTotal = workGrowing.length + workBackpack.length;
+          const workValue = [...workGrowing, ...workBackpack].reduce((s, e) => s + (e.rate || 0), 0);
+          return workTotal === 0
+            ? <div className="detail-empty">{loading ? "Memuat..." : "Tidak ada telur >= 20B/s."}</div>
+            : (
+              <>
+                <div className="value-bar">TOTAL: {workTotal} eggs · VALUE: {fmtRate(workValue)}</div>
+                {workGrowing.length > 0 && (
+                  <>
+                    <div className="section-label">🌱 GROWING ({workGrowing.length})</div>
+                    <GrowingEggGrid eggs={workGrowing} idx={idx} />
+                  </>
+                )}
+                {workBackpack.length > 0 && (
+                  <>
+                    <div className="section-label" style={{ marginTop: 16 }}>🎒 BACKPACK ({workBackpack.length})</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
+                      {[...workBackpack].sort((a, b) => (b.rate || 0) - (a.rate || 0)).map((egg, i) => {
+                        const rar = petRarity(egg.category, idx);
+                        const rc = rarityColor(rar);
+                        return (
+                          <div key={i} className="egg-card">
+                            <PetIcon category={egg.category} name={egg.name || egg.category} size={36} />
+                            <div className="egg-info">
+                              <div className="egg-name">{egg.name || egg.category}</div>
+                              <div className="egg-sub">
+                                <span className="egg-rate">{fmtRate(egg.rate)}</span>
+                                {rar && <span className="pg-rarity" style={{ background: rc + "18", color: rc, border: `1px solid ${rc}33` }}>{rar}</span>}
+                                {(Array.isArray(egg.mutations) ? egg.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{m}</span>)}
+                              </div>
+                              <div style={{ marginTop: 3, display: "flex", gap: 6, alignItems: "center" }}>
+                                <span className="pg-badge-role bag">DI TAS</span>
+                                {egg._from && <span className="pg-from" style={{ marginTop: 0 }}>{egg._from}</span>}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </>
+            );
+        })()}
       </div>
     </>
   );
@@ -1536,7 +1593,7 @@ function GrowingEggGrid({ eggs, idx }: { eggs: Pet[]; idx: Record<string, string
   const sorted = [...eggs].sort((a, b) => (a.remainingSeconds ?? 9999999) - (b.remainingSeconds ?? 9999999));
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
       {sorted.map((egg, i) => {
         const isReady = egg.ready || (egg.remainingSeconds != null && egg.remainingSeconds <= 0);
         const remaining = egg.remainingSeconds ?? 0;
