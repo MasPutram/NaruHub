@@ -585,17 +585,16 @@ end
 -- back so the LMK leaves the running clones alone. This is the "trim per-
 -- launch" HipHub does -- caches only, never a kill, so unlike the old
 -- every-heartbeat trim it can't nuke a clone that just went to background.
+local TRIM_LOGGED = false
 local function trim_ram()
   local running = collect_running()
   if #running > 0 then
     for _, pkg in ipairs(running) do
       shellcode('su -c "am send-trim-memory ' .. pkg .. ' RUNNING_CRITICAL"')
     end
-    log(C.dim .. "[" .. ts() .. "] trim_ram: sent RUNNING_CRITICAL to " .. #running .. " clones" .. C.reset)
   else
     shellcode('su -c "sync"')
     shellcode('su -c "echo 3 > /proc/sys/vm/drop_caches"')
-    log(C.dim .. "[" .. ts() .. "] trim_ram: dropped caches (no running clones)" .. C.reset)
   end
 end
 
