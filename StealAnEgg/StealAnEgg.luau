@@ -1486,6 +1486,8 @@ task.spawn(function()
 		return positions
 	end
 
+	local MAX_PLACE_PER_TOGGLE = 10
+
 	local function getUnplaced()
 		local records = getMyOwnedEggs()
 		local list = {}
@@ -1503,6 +1505,9 @@ task.spawn(function()
 			end
 		end
 		table.sort(list, function(a, b) return a.rate > b.rate end)
+		while #list > MAX_PLACE_PER_TOGGLE do
+			table.remove(list)
+		end
 		return list
 	end
 
