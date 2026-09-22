@@ -318,19 +318,15 @@ export default function DashboardPage() {
       case "income_aktif_desc":
         sorted.sort((a, b) => (Number(b.incomeAktif) || 0) - (Number(a.incomeAktif) || 0));
         break;
-      case "income_pasif_desc":
-        sorted.sort((a, b) =>
-          (Number(b.incomeEggBackpack) || 0) + (Number(b.incomeEggSedangTumbuh) || 0) -
-          ((Number(a.incomeEggBackpack) || 0) + (Number(a.incomeEggSedangTumbuh) || 0))
-        );
+      case "income_potensi_desc":
+        sorted.sort((a, b) => (Number(b.incomePotensi) || 0) - (Number(a.incomePotensi) || 0));
         break;
       case "egg_desc":
         sorted.sort((a, b) => (Number(b.stolenCount) || 0) - (Number(a.stolenCount) || 0));
         break;
-      case "akun_baru":
-        return sorted
-          .filter((a) => (a.treadmillLevel ?? -1) === 1)
-          .sort((a, b) => (Number(b.incomeAktif) || 0) - (Number(a.incomeAktif) || 0));
+      case "work":
+        sorted.sort((a, b) => (Number(b.incomePotensi) || 0) - (Number(a.incomePotensi) || 0));
+        break;
       default:
         sorted.sort((a, b) => {
           const na = accountNumber(a.sourceAccount);
@@ -782,9 +778,9 @@ export default function DashboardPage() {
             <option value="name_asc">Nama (Nomor)</option>
             <option value="speed_desc">Speed Tertinggi</option>
             <option value="income_aktif_desc">Income Aktif Tertinggi</option>
-            <option value="income_pasif_desc">Income Pasif Tertinggi</option>
+            <option value="income_potensi_desc">Income Potensi Tertinggi</option>
             <option value="egg_desc">Egg Terbanyak</option>
-            <option value="akun_baru">Akun Baru (TM Lv.1)</option>
+            <option value="work">Work (Potensi Tertinggi)</option>
           </select>
           <label>Device:</label>
           <input type="text" placeholder="cth: 21 (SAE 21-30)" value={deviceFilter} onChange={(e) => setDeviceFilter(e.target.value)} />
