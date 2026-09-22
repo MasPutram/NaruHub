@@ -1034,7 +1034,7 @@ task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
 	local lastSamples = -1
 	local stableTicks = 0
-	local STABLE_THRESHOLD = 6
+	local STABLE_THRESHOLD = 4
 
 	local function getSamples()
 		local s = 0
@@ -1114,7 +1114,7 @@ task.spawn(function()
 			lastSamples = -1
 			stableTicks = 0
 		end
-		task.wait(5)
+		task.wait(30)
 	end
 end)
 
