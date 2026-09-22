@@ -1492,6 +1492,7 @@ while true do
   log(C.dim .. "Press Ctrl+C to stop." .. C.reset)
 
   local next_heartbeat = os.time() + math.floor(jitter(HEARTBEAT_INTERVAL, 0.25))
+  local next_trim = os.time() + 120
 
   while true do
     local now = os.time()
@@ -1505,8 +1506,11 @@ while true do
       local stats = collect_stats()
       local running = collect_running()
       log_ram_status()
-      trim_ram()
       check_lmk_kills()
+      if now >= next_trim then
+        trim_ram()
+        next_trim = now + 120
+      end
       ws_send({
         type = "heartbeat",
         deviceId = DEVICE_ID,
