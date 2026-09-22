@@ -30,7 +30,6 @@ export async function POST(req: NextRequest) {
       const deviceRaw = await redis.get<string>(devKey);
       if (!deviceRaw) continue;
       const device = typeof deviceRaw === "string" ? JSON.parse(deviceRaw) : deviceRaw;
-      if (device.status !== "online") continue;
 
       const deviceId = devKey.replace("termux:device:", "");
       const policyRaw = await redis.get<string>(termuxDevicePolicyKey(deviceId));
