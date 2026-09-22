@@ -585,11 +585,43 @@ end
 -- back so the LMK leaves the running clones alone. This is the "trim per-
 -- launch" HipHub does -- caches only, never a kill, so unlike the old
 -- every-heartbeat trim it can't nuke a clone that just went to background.
+local function get_total_ram_mb()
+  local raw = shell('su -c "cat /proc/meminfo"')
+  local total = raw:match("MemTotal:%s+(%d+)")
+  return total and tonumber(total) / 1024 or 0
+end
+
+local TOTAL_RAM_MB = 0
+
+local function get_proc_rss_mb(pid)
+  local raw = shell('su -c "cat /proc/' .. pid .. '/statm 2>/dev/null"')
+  if raw == "" then return 0 end
+  local pages = raw:match("^%d+%s+(%d+)")
+  return pages and (tonumber(pages) * 4 / 1024) or 0
+end
+
+local TRIM_PCT = 25
+
 local function trim_ram()
   local running = collect_running()
-  if #running > 0 then
-    for _, pkg in ipairs(running) do
-      shellcode('su -c "am send-trim-memory ' .. pkg .. ' RUNNING_CRITICAL"')
+  if #running == 0 then return end
+
+  if TOTAL_RAM_MB == 0 then TOTAL_RAM_MB = get_total_ram_mb() end
+  if TOTAL_RAM_MB == 0 then return end
+
+  local threshold_mb = TOTAL_RAM_MB * TRIM_PCT / 100
+
+  for _, pkg in ipairs(running) do
+    local pids = shell('su -c "pidof ' .. pkg .. '"')
+    if pids ~= "" then
+      for pid in pids:gmatch("%S+") do
+        local rss = get_proc_rss_mb(pid)
+        if rss > threshold_mb then
+          shellcode('su -c "am send-trim-memory ' .. pkg .. ' RUNNING_CRITICAL"')
+          shellcode('su -c "am send-trim-memory ' .. pkg .. ' RUNNING_CRITICAL"')
+          shellcode('su -c "am send-trim-memory ' .. pkg .. ' RUNNING_CRITICAL"')
+        end
+      end
     end
   end
 end
