@@ -34,6 +34,8 @@ local LICENSE_KEY = "$$LICENSE$$"
 local HEARTBEAT_INTERVAL = $$HEARTBEAT_INTERVAL$$
 local RECONNECT_DELAY = $$RECONNECT_DELAY$$
 local RAM_TRIM_PCT = $$RAM_TRIM_PCT$$
+local CONFIG_POLL_INTERVAL = 60
+local NEXT_CONFIG_POLL = 0
 
 -- Paths set after CONFIG_DIR
 local WS_INBOX = nil
@@ -745,6 +747,24 @@ local function http_get(path)
   return shell(cmd)
 end
 
+local function poll_config_if_due()
+  local now = os.time()
+  if now < NEXT_CONFIG_POLL then return end
+  NEXT_CONFIG_POLL = now + CONFIG_POLL_INTERVAL
+  local raw = http_get("/api/device-control/agent-config/values")
+  if raw and raw ~= "" then
+    local ok, cfg = pcall(json.decode, raw)
+    if ok and cfg then
+      if cfg.HEARTBEAT_INTERVAL then HEARTBEAT_INTERVAL = cfg.HEARTBEAT_INTERVAL end
+      if cfg.RECONNECT_DELAY then RECONNECT_DELAY = cfg.RECONNECT_DELAY end
+      if cfg.RAM_TRIM_PCT then RAM_TRIM_PCT = cfg.RAM_TRIM_PCT end
+      if cfg.POLICY_POLL_INTERVAL then POLICY_POLL_INTERVAL = cfg.POLICY_POLL_INTERVAL end
+      if cfg.STUCK_GRACE then STUCK_GRACE = cfg.STUCK_GRACE end
+      if cfg.REJOIN_SWEEP_INTERVAL then REJOIN_SWEEP_INTERVAL = cfg.REJOIN_SWEEP_INTERVAL end
+    end
+  end
+end
+
 -- Ship buffered log lines to the dashboard console (webhook). Deliberately
 -- SILENT -- it must never call log() itself, or it would refill the very
 -- buffer it drains. On failure it puts the lines back (respecting the cap)
@@ -1389,6 +1409,8 @@ while true do
 
   while true do
     local now = os.time()
+
+    poll_config_if_due()
 
     -- Heartbeat via WS
     if now >= next_heartbeat then
