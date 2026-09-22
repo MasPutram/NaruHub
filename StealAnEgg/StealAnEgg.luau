@@ -1033,6 +1033,7 @@ end)
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
 	local wasActive = false
+	local lastSamples = -1
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoBuyScrambledEnabled then
@@ -1040,7 +1041,11 @@ task.spawn(function()
 				local snap = Remotes.Scramble.Request:InvokeServer("snapshot")
 				if not snap or not snap.Snapshot then return end
 
-				local isActive = snap.Snapshot.Window and snap.Snapshot.Window.Active == true
+				local currentSamples = (snap.Snapshot.State and snap.Snapshot.State.Samples) or 0
+				local samplesIncreasing = lastSamples >= 0 and currentSamples > lastSamples
+				lastSamples = currentSamples
+
+				local isActive = (snap.Snapshot.Window and snap.Snapshot.Window.Active == true) or samplesIncreasing
 				if isActive then
 					wasActive = true
 					return
@@ -1100,6 +1105,7 @@ task.spawn(function()
 			end)
 		else
 			wasActive = false
+			lastSamples = -1
 		end
 		task.wait(30)
 	end
