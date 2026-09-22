@@ -555,13 +555,13 @@ end
 local function kill_if_forced(pkg, forceKill)
   if not forceKill then return false end
   if not is_pkg_running(pkg) and not has_ghost_pid(pkg) then
-    log(C.dim .. "[" .. ts() .. "] force-stop skip (" .. pkg .. " not running)" .. C.reset)
+    log(C.dim .. "[" .. ts() .. "] skip " .. pkg:gsub("com.roblox.", "") .. " (not running)" .. C.reset)
     return false
   end
   if not is_pkg_running(pkg) then
-    log(C.yellow .. "[" .. ts() .. "] ghost pid detected for " .. pkg .. ", killing" .. C.reset)
+    log(C.yellow .. "[" .. ts() .. "] ghost " .. pkg:gsub("com.roblox.", "") .. ", killing" .. C.reset)
   end
-  log(C.yellow .. "[" .. ts() .. "] force-stop " .. pkg .. C.reset)
+  log(C.yellow .. "[" .. ts() .. "] force-stop " .. pkg:gsub("com.roblox.", "") .. C.reset)
   kill_pkg_pidonly(pkg)
   sleep(2)
   -- Verify it actually died. If the app is still in the activity stack the
@@ -569,11 +569,11 @@ local function kill_if_forced(pkg, forceKill)
   -- we relaunch -- otherwise am start just refocuses the stuck window (Siap
   -- Jual: still in-game; deep-link: stuck on error screen, never joins).
   if is_pkg_running(pkg) then
-    log(C.red .. "[" .. ts() .. "] " .. pkg .. " still up, retry force-stop" .. C.reset)
+    log(C.red .. "[" .. ts() .. "] " .. pkg:gsub("com.roblox.", "") .. " still up, retry" .. C.reset)
     kill_pkg_pidonly(pkg)
     sleep(2)
   end
-  log(C.green .. "[" .. ts() .. "] " .. pkg .. " stopped, relaunching" .. C.reset)
+  log(C.green .. "[" .. ts() .. "] " .. pkg:gsub("com.roblox.", "") .. " stopped" .. C.reset)
   return true
 end
 
@@ -684,7 +684,7 @@ local function launch_app(pkg, bounds, resize, delay, target, forceKill, skipTri
   -- The -p flag forces the Roblox package to handle it (no browser).
   local use_target = target and target ~= "" and (target:sub(1,9) == "roblox://" or target:find("roblox.com/", 1, true))
   if use_target then
-    log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset .. C.dim .. " -> " .. target .. C.reset)
+    log(C.cyan .. "[" .. ts() .. "] launching " .. pkg:gsub("com.roblox.", "") .. C.reset)
     local safe = target:gsub('"', '\\\\"')
     local ok = shellcode(string.format(
       'su -c "am start -a android.intent.action.VIEW -d \\\\"%s\\\\" -p %s"',
@@ -697,7 +697,7 @@ local function launch_app(pkg, bounds, resize, delay, target, forceKill, skipTri
     if target and target ~= "" then
       log(C.yellow .. "[" .. ts() .. "] ignoring non-deeplink target: " .. target .. C.reset)
     end
-    log(C.dim .. "[" .. ts() .. "]" .. C.reset .. " launching " .. C.cyan .. pkg .. C.reset)
+    log(C.cyan .. "[" .. ts() .. "] launching " .. pkg:gsub("com.roblox.", "") .. C.reset)
     shellcode(string.format('su -c "am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p %s"', pkg))
   end
 
@@ -722,7 +722,7 @@ local function launch_app(pkg, bounds, resize, delay, target, forceKill, skipTri
     waited = waited + 2
   end
   if waited >= 60 and not task_seen then
-    log(C.yellow .. "[" .. ts() .. "] timeout: " .. pkg .. C.reset)
+    log(C.yellow .. "[" .. ts() .. "] timeout " .. pkg:gsub("com.roblox.", "") .. C.reset)
   end
 
   delay = tonumber(delay) or 10
@@ -751,7 +751,7 @@ end
 -- launchDelay before proceeding to the next. Sequential, not rapid-fire.
 local function batch_launch(cmds)
   if #cmds == 0 then return end
-  log(C.cyan .. "[" .. ts() .. "] launching (" .. #cmds .. " packages sequentially)" .. C.reset)
+  log(C.cyan .. "[" .. ts() .. "] batch launch " .. #cmds .. " pkgs" .. C.reset)
   for i, c in ipairs(cmds) do
     launch_app(c.package, c.bounds, c.resize, c.launchDelay, c.target, c.forceKill)
   end
@@ -1084,9 +1084,7 @@ local function maybe_auto_rejoin()
           if act.pkg then
             local bnds = act.bounds or ""
             local delay = (i == 1) and 0 or math.floor(jitter(rejoinDelay, 0.3))
-            log(C.cyan .. "[" .. ts() .. "] auto-rejoin " .. act.pkg ..
-              (act.target ~= "" and (" -> " .. act.target) or "") ..
-              (delay > 0 and (" (wait " .. delay .. "s)") or "") .. C.reset)
+            log(C.cyan .. "[" .. ts() .. "] auto-rejoin " .. act.pkg:gsub("com.roblox.", "") .. C.reset)
             if delay > 0 then
               os.execute("sleep " .. delay)
             end
@@ -1164,7 +1162,7 @@ local function maybe_auto_rejoin()
         rlog(pkg, C.dim .. "[" .. ts() .. "] rejoin fired but " .. pkg .. " now paused, aborting" .. C.reset)
       else
         RETRY_COUNT[pkg] = (RETRY_COUNT[pkg] or 0) + 1
-        log(C.cyan .. "[" .. ts() .. "] auto-rejoin " .. pkg .. " (attempt " .. RETRY_COUNT[pkg] .. ")" .. C.reset)
+        log(C.cyan .. "[" .. ts() .. "] auto-rejoin " .. pkg:gsub("com.roblox.", "") .. C.reset)
         rejoin_launch(pkg)
       end
     end
@@ -1187,7 +1185,7 @@ local function maybe_auto_rejoin()
         else
           RETRY_COUNT[pkg] = tries + 1
           STUCK_SINCE[pkg] = nil
-          log(C.cyan .. "[" .. ts() .. "] stuck (" .. pkg .. " running but offline >" .. STUCK_GRACE .. "s) -- force rejoin (attempt " .. RETRY_COUNT[pkg] .. ")" .. C.reset)
+          log(C.yellow .. "[" .. ts() .. "] stuck " .. pkg:gsub("com.roblox.", "") .. ", rejoining" .. C.reset)
           rejoin_launch(pkg)
         end
       end
@@ -1371,7 +1369,7 @@ do
     packages = pkgs_now,
   })
   if code == "200" then
-    log(C.yellow .. "[" .. ts() .. "] session reset: " .. #pkgs_now .. " pkgs, stale commands + presence dropped" .. C.reset)
+    log(C.yellow .. "[" .. ts() .. "] session reset" .. C.reset)
   end
 end
 
@@ -1391,7 +1389,7 @@ do
           pids = shell(string.format('su -c "pgrep -x %s"', pkg))
         end
         if pids ~= "" then
-          log(C.yellow .. "[" .. ts() .. "] window closed (X) -> " .. pkg .. " (terminating ghost process)" .. C.reset)
+          log(C.yellow .. "[" .. ts() .. "] ghost " .. pkg:gsub("com.roblox.", "") .. ", killing" .. C.reset)
           shellcode(string.format('su -c "am force-stop %s"', pkg))
           for pid in pids:gmatch("%S+") do
             shellcode(string.format('su -c "kill -9 %s"', pid))
@@ -1402,7 +1400,7 @@ do
     end
   end
   if killed > 0 then
-    log(C.dim .. "[" .. ts() .. "] cleaned " .. killed .. " ghost process(es)" .. C.reset)
+    if killed > 0 then log(C.dim .. "[" .. ts() .. "] cleaned " .. killed .. " ghosts" .. C.reset) end
   end
 end
 
@@ -1421,7 +1419,7 @@ if SDK_INT >= 31 then
       end
     end
     if granted > 0 then
-      log(C.dim .. "[" .. ts() .. "] auto-granted permissions for " .. granted .. " package(s) (SDK " .. SDK_INT .. ")" .. C.reset)
+      log(C.dim .. "[" .. ts() .. "] granted perms " .. granted .. " pkgs" .. C.reset)
     end
   end
 end
@@ -1442,12 +1440,13 @@ end
 
 -- ─── System optimizations (run once at startup) ───
 do
-  log(C.cyan .. "[" .. ts() .. "] applying system optimizations..." .. C.reset)
+  log(C.dim .. "[" .. ts() .. "] setup..." .. C.reset)
   shellcode('su -c "dumpsys deviceidle whitelist +com.termux" 2>/dev/null')
   shellcode('su -c "/system/bin/device_config put activity_manager max_phantom_processes 2147483647" 2>/dev/null')
   shellcode('su -c "setprop persist.sys.fflag.override.settings_enable_monitor_phantom_procs false" 2>/dev/null')
   shellcode('su -c "/system/bin/device_config set_sync_disabled_for_tests persistent" 2>/dev/null')
-  log(C.green .. "[" .. ts() .. "] optimizations applied (doze whitelist, phantom proc disabled)" .. C.reset)
+  shellcode('rm -rf "$PREFIX/tmp/"* 2>/dev/null')
+  log(C.green .. "[" .. ts() .. "] optimized + cache cleared" .. C.reset)
 end
 
 -- ─── Connection loop (auto-reconnect) ───
@@ -1573,7 +1572,7 @@ while true do
         end
       elseif msg.type == "heartbeat" then
         if msg.ok then
-          log(C.dim .. "[" .. ts() .. "] heartbeat ok" .. C.reset)
+          -- silent
         end
       elseif msg.type == "command" then
         if msg.commands then
