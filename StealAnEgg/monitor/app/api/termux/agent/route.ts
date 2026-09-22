@@ -609,18 +609,43 @@ local function trim_ram()
 
   local threshold_mb = TOTAL_RAM_MB * RAM_TRIM_PCT / 100
 
+  local mem_raw = shell('su -c "cat /proc/meminfo"')
+  local mem_avail_kb = tonumber(mem_raw:match("MemAvailable:%s+(%d+)")) or 0
+  local mem_avail_mb = math.floor(mem_avail_kb / 1024)
+  local mem_pct = TOTAL_RAM_MB > 0 and math.floor(mem_avail_mb / TOTAL_RAM_MB * 100) or 0
+
   for _, pkg in ipairs(running) do
     local pids = shell('su -c "pidof ' .. pkg .. '"')
     if pids ~= "" then
       for pid in pids:gmatch("%S+") do
         local rss = get_proc_rss_mb(pid)
         if rss > threshold_mb then
+          local short = pkg:gsub("com.roblox.", "")
+          log(C.yellow .. "[" .. ts() .. "] RAM trim " .. short .. " RSS=" .. math.floor(rss) .. "MB (>" .. math.floor(threshold_mb) .. "MB) avail=" .. mem_avail_mb .. "MB/" .. math.floor(TOTAL_RAM_MB) .. "MB (" .. mem_pct .. "%)" .. C.reset)
           shellcode('su -c "am send-trim-memory ' .. pkg .. ' RUNNING_CRITICAL"')
           shellcode('su -c "am send-trim-memory ' .. pkg .. ' RUNNING_CRITICAL"')
           shellcode('su -c "am send-trim-memory ' .. pkg .. ' RUNNING_CRITICAL"')
         end
       end
     end
+  end
+end
+
+local LAST_LMK_TS = ""
+local function check_lmk_kills()
+  local raw = shell('su -c "dmesg -T 2>/dev/null | grep -i roblox | tail -5"')
+  if raw == "" then return end
+  for line in raw:gmatch("[^\\n]+") do
+    local t = line:match("^%[([^%]]+)%]") or ""
+    if t ~= "" and t ~= LAST_LMK_TS then
+      local pkg = line:match("(com%.roblox%.[%w_]+)") or "?"
+      local short = pkg:gsub("com.roblox.", "")
+      if line:lower():find("kill") or line:lower():find("oom") or line:lower():find("lowmemory") then
+        log(C.red .. "[" .. ts() .. "] LMK killed " .. short .. ": " .. line:sub(1, 120) .. C.reset)
+      end
+    end
+    local nt = line:match("^%[([^%]]+)%]")
+    if nt then LAST_LMK_TS = nt end
   end
 end
 
@@ -1471,10 +1496,8 @@ while true do
       local screen = collect_screen()
       local stats = collect_stats()
       local running = collect_running()
-      -- Proactive trim every heartbeat: send RUNNING_CRITICAL to each clone
-      -- so they release internal caches. This is lightweight (no I/O stall)
-      -- and keeps RAM headroom steady, preventing LMK cascade kills.
       trim_ram()
+      check_lmk_kills()
       ws_send({
         type = "heartbeat",
         deviceId = DEVICE_ID,
