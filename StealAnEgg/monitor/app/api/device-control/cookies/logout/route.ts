@@ -6,12 +6,14 @@ export const dynamic = "force-dynamic";
 const COOKIES_KEY = "termux:cookies";
 
 async function getCsrf(cookie: string): Promise<string> {
-  const res = await fetch("https://auth.roblox.com/v2/logout", {
+  // Use a safe endpoint to get CSRF without side effects (v2/logout would actually log out)
+  const res = await fetch("https://auth.roblox.com/v1/logoutfromallsessionsandreauthenticate", {
     method: "POST",
     headers: {
       "Cookie": `.ROBLOSECURITY=${cookie}`,
       "Content-Type": "application/json",
     },
+    body: "{}",
   });
   return res.headers.get("x-csrf-token") || "";
 }
@@ -31,6 +33,7 @@ async function tryLogoutAll(cookie: string, csrf: string): Promise<{ status: num
         "Content-Type": "application/json",
         "X-CSRF-TOKEN": csrf,
       },
+      body: "{}",
     });
     const body = await res.text();
     if (res.status === 200) {
