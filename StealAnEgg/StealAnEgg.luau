@@ -1061,7 +1061,9 @@ task.spawn(function()
 				if mutItem and samples >= mutItem.Price then
 					tryBuy(mutItem)
 				elseif treadItem and samples >= treadItem.Price * 2 then
-					tryBuy(treadItem)
+					if not mutItem or samples >= mutItem.Price + treadItem.Price then
+						tryBuy(treadItem)
+					end
 				end
 			end)
 		end
