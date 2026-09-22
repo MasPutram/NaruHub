@@ -83,6 +83,19 @@ export async function POST(req: NextRequest) {
 
     const result = await tryLogoutAll(cookie, csrf);
 
+    // After logout-all succeeds, also kill the session used for this request
+    // (logout-all keeps the requesting session alive)
+    if (result.status === 200 && !result.endpoint.includes("v2/logout")) {
+      await fetch("https://auth.roblox.com/v2/logout", {
+        method: "POST",
+        headers: {
+          "Cookie": `.ROBLOSECURITY=${cookie}`,
+          "Content-Type": "application/json",
+          "X-CSRF-TOKEN": csrf,
+        },
+      });
+    }
+
     if (result.status === 200) {
       store[pkg] = { ...entry, loggedOut: true, loggedOutAt: Date.now() };
       await redis.set(COOKIES_KEY, JSON.stringify(store));
