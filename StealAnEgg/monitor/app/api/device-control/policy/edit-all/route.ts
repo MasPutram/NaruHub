@@ -14,34 +14,32 @@ export async function POST(req: NextRequest) {
       launchDelay?: number;
     };
 
-    const policyKeys: string[] = [];
+    const deviceKeys: string[] = [];
     let cursor = "0";
     do {
-      const [next, found] = await redis.scan(cursor, { match: "termux:policy:*", count: 100 });
+      const [next, found] = await redis.scan(cursor, { match: "termux:device:*", count: 100 });
       cursor = next;
-      policyKeys.push(...found);
+      deviceKeys.push(...found);
     } while (cursor !== "0");
 
     let updated = 0;
     const gap = 16;
     const topPad = 50;
 
-    for (const key of policyKeys) {
-      const raw = await redis.get<string>(key);
-      if (!raw) continue;
-      const existing = typeof raw === "string" ? JSON.parse(raw) : raw;
+    for (const devKey of deviceKeys) {
+      const deviceRaw = await redis.get<string>(devKey);
+      if (!deviceRaw) continue;
+      const device = typeof deviceRaw === "string" ? JSON.parse(deviceRaw) : deviceRaw;
+      if (device.status !== "online") continue;
 
-      const deviceId = key.replace("termux:policy:", "");
-      const deviceRaw = await redis.get<string>(termuxDeviceKey(deviceId));
-      let packages: string[] = [];
-      let screen = { width: 1080, height: 1920 };
-      if (deviceRaw) {
-        const device = typeof deviceRaw === "string" ? JSON.parse(deviceRaw) : deviceRaw;
-        packages = (device.packages || []).map((p: any) =>
-          typeof p === "string" ? p : p.pkg
-        );
-        if (device.screen) screen = device.screen;
-      }
+      const deviceId = devKey.replace("termux:device:", "");
+      const policyRaw = await redis.get<string>(termuxDevicePolicyKey(deviceId));
+      const existing = policyRaw ? (typeof policyRaw === "string" ? JSON.parse(policyRaw) : policyRaw) : {};
+
+      let packages: string[] = (device.packages || []).map((p: any) =>
+        typeof p === "string" ? p : p.pkg
+      );
+      let screen = device.screen || { width: 1080, height: 1920 };
 
       const merged: any = { ...existing, updatedAt: Date.now() };
 
@@ -74,11 +72,11 @@ export async function POST(req: NextRequest) {
         merged.packageBounds = bounds;
       }
 
-      await redis.set(key, JSON.stringify(merged));
+      await redis.set(termuxDevicePolicyKey(deviceId), JSON.stringify(merged));
       updated++;
     }
 
-    return NextResponse.json({ ok: true, updated, total: policyKeys.length });
+    return NextResponse.json({ ok: true, updated, total: deviceKeys.length });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
