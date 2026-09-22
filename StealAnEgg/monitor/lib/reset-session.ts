@@ -1,4 +1,4 @@
-import { redis, termuxDeviceKey, termuxDeviceMetaKey, termuxCommandQueueKey, accountKey } from "@/lib/redis";
+import { redis, termuxDeviceKey, termuxDeviceMetaKey, termuxCommandQueueKey, termuxAgentLogKey, accountKey } from "@/lib/redis";
 
 // Shared helper used by both /api/device-control/reset-session (agent-authed,
 // public path) and /api/device-control/force-reset (dashboard-authed, session
@@ -44,6 +44,10 @@ export async function resetDeviceSession(
     const peek = await redis.queuePeek(qKey, 100);
     commandsDropped = peek.length;
     await redis.del(qKey);
+  } catch {}
+
+  try {
+    await redis.del(termuxAgentLogKey(deviceId));
   } catch {}
 
   const usernames = new Set<string>();
