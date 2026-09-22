@@ -1497,24 +1497,58 @@ function AllAccountsDetailModal({ allDetail, tab, setTab, onClose, onOpenAccount
 
         {tab === "work" && (() => {
           const WORK_THRESHOLD = 20_000_000_000;
+          const WORK_PET_CATEGORIES = new Set(["Skeleton Horse", "Pegasus", "Arch Angel", "World Burner"]);
           const workGrowing = allGrowingEggs.filter((e) => (e.rate || 0) >= WORK_THRESHOLD);
           const workBackpack = allBackpackEggs.filter((e) => (e.rate || 0) >= WORK_THRESHOLD);
-          const workTotal = workGrowing.length + workBackpack.length;
-          const workValue = [...workGrowing, ...workBackpack].reduce((s, e) => s + (e.rate || 0), 0);
-          return workTotal === 0
-            ? <div className="detail-empty">{loading ? "Memuat..." : "Tidak ada telur >= 20B/s."}</div>
+          const workPets = (allPets as (Pet & { _equipped?: boolean; _bag?: boolean; _from?: string })[])
+            .filter((p) => WORK_PET_CATEGORIES.has(p.category) || WORK_PET_CATEGORIES.has(p.name || ""))
+            .sort((a, b) => (b.rate || 0) - (a.rate || 0));
+          const workEggTotal = workGrowing.length + workBackpack.length;
+          const workAllTotal = workEggTotal + workPets.length;
+          const workValue = [...workGrowing, ...workBackpack, ...workPets].reduce((s, e) => s + (e.rate || 0), 0);
+          return workAllTotal === 0
+            ? <div className="detail-empty">{loading ? "Memuat..." : "Tidak ada item yang masuk kriteria."}</div>
             : (
               <>
-                <div className="value-bar">TOTAL: {workTotal} eggs · VALUE: {fmtRate(workValue)}</div>
+                <div className="value-bar">TOTAL: {workAllTotal} items · VALUE: {fmtRate(workValue)}</div>
+                {workPets.length > 0 && (
+                  <>
+                    <div className="section-label">🐾 KEY PETS ({workPets.length})</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
+                      {workPets.map((p, i) => {
+                        const rar = petRarity(p.category, idx);
+                        const rc = rarityColor(rar);
+                        return (
+                          <div key={i} className="egg-card">
+                            <PetIcon category={p.category} name={p.name || p.category} size={36} />
+                            <div className="egg-info">
+                              <div className="egg-name">{p.name || p.category}</div>
+                              <div className="egg-sub">
+                                <span className="egg-rate">{fmtRate(p.rate)}</span>
+                                {rar && <span className="pg-rarity" style={{ background: rc + "18", color: rc, border: `1px solid ${rc}33` }}>{rar}</span>}
+                                {(Array.isArray(p.mutations) ? p.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{m}</span>)}
+                              </div>
+                              <div style={{ marginTop: 3, display: "flex", gap: 6, alignItems: "center" }}>
+                                {p._equipped && <span className="pg-badge-role equipped">EQUIPPED</span>}
+                                {p._bag && !p._equipped && <span className="pg-badge-role bag">BAG</span>}
+                                {p._from && <span className="pg-from" style={{ marginTop: 0 }}>{p._from}</span>}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
                 {workGrowing.length > 0 && (
                   <>
-                    <div className="section-label">🌱 GROWING ({workGrowing.length})</div>
+                    <div className="section-label" style={{ marginTop: 16 }}>🌱 GROWING EGGS &ge; 20B ({workGrowing.length})</div>
                     <GrowingEggGrid eggs={workGrowing} idx={idx} />
                   </>
                 )}
                 {workBackpack.length > 0 && (
                   <>
-                    <div className="section-label" style={{ marginTop: 16 }}>🎒 BACKPACK ({workBackpack.length})</div>
+                    <div className="section-label" style={{ marginTop: 16 }}>🎒 BACKPACK EGGS &ge; 20B ({workBackpack.length})</div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
                       {[...workBackpack].sort((a, b) => (b.rate || 0) - (a.rate || 0)).map((egg, i) => {
                         const rar = petRarity(egg.category, idx);
