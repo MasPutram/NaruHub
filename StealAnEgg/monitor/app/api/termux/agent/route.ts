@@ -727,7 +727,7 @@ local function http_post(path, body_table)
   fwrite(tmpfile, body)
   local url = BASE_URL .. path
   local cmd = string.format(
-    "curl -s -L -w '%%{http_code}' -o /dev/null -X POST '%s' -H 'Content-Type: application/json' -H 'X-Access-Key: %s' -d @%s",
+    "curl -s -L -w '%%{http_code}' -o /dev/null '%s' -H 'Content-Type: application/json' -H 'X-Access-Key: %s' -d @%s",
     url, LICENSE_KEY, tmpfile
   )
   local result = shell(cmd)
