@@ -1,4 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
+import { redis } from "@/lib/redis";
+
+export interface AgentConfig {
+  HEARTBEAT_INTERVAL: number;
+  RECONNECT_DELAY: number;
+  RAM_TRIM_PCT: number;
+  POLICY_POLL_INTERVAL: number;
+  STUCK_GRACE: number;
+  REJOIN_SWEEP_INTERVAL: number;
+}
+
+export const AGENT_CONFIG_DEFAULTS: AgentConfig = {
+  HEARTBEAT_INTERVAL: 30,
+  RECONNECT_DELAY: 5,
+  RAM_TRIM_PCT: 85,
+  POLICY_POLL_INTERVAL: 15,
+  STUCK_GRACE: 120,
+  REJOIN_SWEEP_INTERVAL: 5,
+};
+
+const AGENT_CONFIG_KEY = "termux:agent-config";
 
 const LUA_AGENT = `
 local VERSION = "3.0"
@@ -10,8 +31,9 @@ local LOG_FILE = CONFIG_DIR .. "/naruhub_agent.log"
 local BASE_URL = "https://naruhub.my.id"
 local WS_URL = "wss://ws.naruhub.my.id"
 local LICENSE_KEY = "$$LICENSE$$"
-local HEARTBEAT_INTERVAL = 30
-local RECONNECT_DELAY = 5
+local HEARTBEAT_INTERVAL = $$HEARTBEAT_INTERVAL$$
+local RECONNECT_DELAY = $$RECONNECT_DELAY$$
+local RAM_TRIM_PCT = $$RAM_TRIM_PCT$$
 
 -- Paths set after CONFIG_DIR
 local WS_INBOX = nil
@@ -815,7 +837,7 @@ end
 -- package name. The main loop calls maybe_auto_rejoin() every tick; the
 -- policy itself is polled less often (POLICY_POLL_INTERVAL) to avoid
 -- hammering the server.
-local POLICY_POLL_INTERVAL = 15  -- seconds
+local POLICY_POLL_INTERVAL = $$POLICY_POLL_INTERVAL$$  -- seconds
 local LAST_POLICY_POLL = 0 -- unused, kept for compat
 local CACHED_POLICY = nil        -- last successful poll result (or nil)
 local WAS_RUNNING = {}           -- pkg -> true if seen in am stack list last check
@@ -829,7 +851,7 @@ local STUCK_SINCE = {}
 -- on an error screen and force a rejoin. Must exceed a normal join's load
 -- time (Roblox splash + loading can be ~60s on cloud phones) so we never nuke
 -- a clone that's still on its way into the game.
-local STUCK_GRACE = 120
+local STUCK_GRACE = $$STUCK_GRACE$$
 
 local NEXT_POLICY_POLL = 0
 local function poll_policy_if_due()
@@ -921,7 +943,7 @@ end
 local TRACKED = {}
 -- Rejoin sweep runs less often than the 1s main-loop tick so we don't
 -- fork am stack list every second on a 4GB device.
-local REJOIN_SWEEP_INTERVAL = 5
+local REJOIN_SWEEP_INTERVAL = $$REJOIN_SWEEP_INTERVAL$$
 local LAST_REJOIN_SWEEP = 0
 
 local LAST_PLAN_POLL = 0
@@ -1381,7 +1403,7 @@ while true do
       -- clone. Gated behind a high-usage threshold so it's a rare, cheap op.
       if stats.ram and stats.ram.totalMB and stats.ram.totalMB > 0 then
         local pct = (stats.ram.usedMB / stats.ram.totalMB) * 100
-        if pct >= 85 then
+        if pct >= RAM_TRIM_PCT then
           log(C.yellow .. "[" .. ts() .. "] RAM " .. math.floor(pct) .. "% -- trim cache" .. C.reset)
           trim_ram()
         end
@@ -1509,7 +1531,16 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const script = LUA_AGENT.replace(/\$\$LICENSE\$\$/g, accessKey);
+  const raw = await redis.get<string>(AGENT_CONFIG_KEY);
+  const saved: Partial<AgentConfig> = raw
+    ? typeof raw === "string" ? JSON.parse(raw) : raw
+    : {};
+  const cfg: AgentConfig = { ...AGENT_CONFIG_DEFAULTS, ...saved };
+
+  let script = LUA_AGENT.replace(/\$\$LICENSE\$\$/g, accessKey);
+  for (const [key, val] of Object.entries(cfg)) {
+    script = script.replace(new RegExp(`\\$\\$${key}\\$\\$`, "g"), String(val));
+  }
 
   return new NextResponse(script, {
     status: 200,

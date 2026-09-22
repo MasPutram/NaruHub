@@ -87,6 +87,13 @@ export default function MonitorListPage() {
   const [editLaunchDelay, setEditLaunchDelay] = useState(10);
   const [editSaving, setEditSaving] = useState(false);
 
+  const [agentCfgOpen, setAgentCfgOpen] = useState(false);
+  const [agentCfg, setAgentCfg] = useState<Record<string, number>>({});
+  const [agentDefaults, setAgentDefaults] = useState<Record<string, number>>({});
+  const [agentCfgLoading, setAgentCfgLoading] = useState(false);
+  const [agentCfgSaving, setAgentCfgSaving] = useState(false);
+  const [agentCopied, setAgentCopied] = useState(false);
+
   const fetchDevices = useCallback(async () => {
     try {
       const res = await fetch("/api/termux/devices");
@@ -213,6 +220,62 @@ export default function MonitorListPage() {
     setResetting(false);
   }
 
+  const AGENT_CFG_LABELS: Record<string, { label: string; desc: string; unit: string }> = {
+    HEARTBEAT_INTERVAL: { label: "Heartbeat Interval", desc: "Interval kirim heartbeat ke server", unit: "detik" },
+    RECONNECT_DELAY: { label: "Reconnect Delay", desc: "Delay sebelum reconnect ke server", unit: "detik" },
+    RAM_TRIM_PCT: { label: "RAM Trim Threshold", desc: "Persentase RAM usage untuk trigger trim cache", unit: "%" },
+    POLICY_POLL_INTERVAL: { label: "Policy Poll Interval", desc: "Interval cek policy dari server", unit: "detik" },
+    STUCK_GRACE: { label: "Stuck Grace Period", desc: "Berapa lama clone boleh stuck sebelum force rejoin", unit: "detik" },
+    REJOIN_SWEEP_INTERVAL: { label: "Rejoin Sweep Interval", desc: "Interval cek rejoin semua package", unit: "detik" },
+  };
+
+  async function openAgentConfig() {
+    setAgentCfgOpen(true);
+    setAgentCfgLoading(true);
+    try {
+      const res = await fetch("/api/device-control/agent-config");
+      const data = await res.json();
+      if (data.ok) {
+        setAgentCfg(data.config);
+        setAgentDefaults(data.defaults);
+      }
+    } catch {}
+    setAgentCfgLoading(false);
+  }
+
+  async function saveAgentConfig() {
+    setAgentCfgSaving(true);
+    try {
+      const res = await fetch("/api/device-control/agent-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(agentCfg),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setAgentCfg(data.config);
+        setToast("Agent config disimpan!");
+      } else {
+        setToast("Gagal: " + data.error);
+      }
+    } catch (err: any) {
+      setToast("Gagal: " + err.message);
+    }
+    setAgentCfgSaving(false);
+  }
+
+  async function copyAgentScript() {
+    try {
+      const res = await fetch("/api/termux/agent?key=YOUR_KEY_HERE");
+      const text = await res.text();
+      await navigator.clipboard.writeText(text);
+      setAgentCopied(true);
+      setTimeout(() => setAgentCopied(false), 2000);
+    } catch {
+      setToast("Gagal copy agent script");
+    }
+  }
+
   const online = devices.filter((d) => d.status === "online");
   const offline = devices.filter((d) => d.status !== "online");
   const totalPackages = devices.reduce((a, d) => a + (d.packages?.length ?? 0), 0);
@@ -331,6 +394,22 @@ export default function MonitorListPage() {
         .easave:hover { filter: brightness(1.1); }
         .easave:disabled { opacity: .5; cursor: not-allowed; }
 
+        .agent-cfg-btn { border: 1px solid #2a1c3b; background: #1a1028; color: var(--accent); padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+        .agent-cfg-btn:hover { border-color: var(--accent); }
+        .acf-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+        .acf-row:last-child { border-bottom: none; }
+        .acf-info { flex: 1; }
+        .acf-label { color: var(--ink); font-size: 13px; font-weight: 600; }
+        .acf-desc { color: var(--dim); font-size: 11px; margin-top: 2px; }
+        .acf-input { width: 90px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--ink); font: inherit; font-size: 13px; text-align: center; outline: none; }
+        .acf-input:focus { border-color: var(--accent); }
+        .acf-unit { color: var(--dim); font-size: 12px; min-width: 40px; }
+        .acf-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        .acf-reset { background: transparent; border: 1px solid var(--border); color: var(--dim); padding: 8px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; }
+        .acf-reset:hover { color: var(--ink); border-color: #44445a; }
+        .acf-copy { background: var(--green); color: #0a1a10; border: none; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 700; cursor: pointer; }
+        .acf-copy:hover { filter: brightness(1.1); }
+
         @media (max-width: 1000px) { .stats { grid-template-columns: repeat(2, 1fr); } }
       `}</style>
 
@@ -344,6 +423,7 @@ export default function MonitorListPage() {
           <button className="gen-btn" onClick={() => router.push("/monitor/overview")}>Fleet Overview</button>
           <button className="gen-btn" onClick={openCommandModal}>+ Generate Command</button>
           <button className="edit-all-btn" onClick={() => setEditAllOpen(true)}>Edit All Policies</button>
+          <button className="agent-cfg-btn" onClick={openAgentConfig}>Agent Config</button>
           <button className="reset-btn" disabled={resetting} onClick={resetAllPolicies}>{resetting ? "Resetting..." : "Reset All Policies"}</button>
           <span className="live"><span className="dot" /> LIVE</span>
         </div>
@@ -563,6 +643,47 @@ export default function MonitorListPage() {
                 {editSaving ? "Menyimpan..." : "Terapkan ke Semua Device"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {agentCfgOpen && (
+        <div className="modal-overlay" onClick={() => setAgentCfgOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+            <h2>Agent Config</h2>
+            <div className="msub">Edit konstanta Termux agent. Perubahan berlaku saat agent di-download ulang.</div>
+            {agentCfgLoading ? (
+              <div style={{ color: "var(--dim)", padding: 20, textAlign: "center" }}>Loading...</div>
+            ) : (
+              <>
+                {Object.entries(AGENT_CFG_LABELS).map(([key, { label, desc, unit }]) => (
+                  <div className="acf-row" key={key}>
+                    <div className="acf-info">
+                      <div className="acf-label">{label}</div>
+                      <div className="acf-desc">{desc} (default: {agentDefaults[key]})</div>
+                    </div>
+                    <input
+                      className="acf-input"
+                      type="number"
+                      min={1}
+                      value={agentCfg[key] ?? agentDefaults[key] ?? 0}
+                      onChange={(e) => setAgentCfg((c) => ({ ...c, [key]: Number(e.target.value) }))}
+                    />
+                    <span className="acf-unit">{unit}</span>
+                  </div>
+                ))}
+                <div className="acf-actions">
+                  <button className="acf-reset" onClick={() => setAgentCfg({ ...agentDefaults })}>Reset Default</button>
+                  <button className="close-btn" style={{ margin: 0 }} onClick={() => setAgentCfgOpen(false)}>Tutup</button>
+                  <button className="easave" disabled={agentCfgSaving} onClick={saveAgentConfig}>
+                    {agentCfgSaving ? "Menyimpan..." : "Simpan"}
+                  </button>
+                  <button className="acf-copy" onClick={copyAgentScript}>
+                    {agentCopied ? "Copied!" : "Copy Agent Script"}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
