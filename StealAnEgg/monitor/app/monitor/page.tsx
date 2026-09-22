@@ -223,7 +223,7 @@ export default function MonitorListPage() {
   const AGENT_CFG_LABELS: Record<string, { label: string; desc: string; unit: string }> = {
     HEARTBEAT_INTERVAL: { label: "Heartbeat Interval", desc: "Interval kirim heartbeat ke server", unit: "detik" },
     RECONNECT_DELAY: { label: "Reconnect Delay", desc: "Delay sebelum reconnect ke server", unit: "detik" },
-    RAM_TRIM_PCT: { label: "RAM Trim Threshold", desc: "Persentase RAM usage untuk trigger trim cache", unit: "%" },
+    RAM_TRIM_PCT: { label: "RAM Trim Per-Clone", desc: "Trim clone jika RSS melebihi % ini dari total RAM device", unit: "%" },
     POLICY_POLL_INTERVAL: { label: "Policy Poll Interval", desc: "Interval cek policy dari server", unit: "detik" },
     STUCK_GRACE: { label: "Stuck Grace Period", desc: "Berapa lama clone boleh stuck sebelum force rejoin", unit: "detik" },
     REJOIN_SWEEP_INTERVAL: { label: "Rejoin Sweep Interval", desc: "Interval cek rejoin semua package", unit: "detik" },

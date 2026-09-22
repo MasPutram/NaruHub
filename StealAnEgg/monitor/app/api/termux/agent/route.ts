@@ -13,7 +13,7 @@ export interface AgentConfig {
 export const AGENT_CONFIG_DEFAULTS: AgentConfig = {
   HEARTBEAT_INTERVAL: 30,
   RECONNECT_DELAY: 5,
-  RAM_TRIM_PCT: 85,
+  RAM_TRIM_PCT: 25,
   POLICY_POLL_INTERVAL: 15,
   STUCK_GRACE: 120,
   REJOIN_SWEEP_INTERVAL: 5,
@@ -33,7 +33,7 @@ local WS_URL = "wss://ws.naruhub.my.id"
 local LICENSE_KEY = "$$LICENSE$$"
 local HEARTBEAT_INTERVAL = $$HEARTBEAT_INTERVAL$$
 local RECONNECT_DELAY = $$RECONNECT_DELAY$$
-local RAM_TRIM_PCT = $$RAM_TRIM_PCT$$
+local RAM_TRIM_PCT = $$RAM_TRIM_PCT$$  -- per-process threshold: trim clone if RSS > this % of total RAM
 local CONFIG_POLL_INTERVAL = 60
 local NEXT_CONFIG_POLL = 0
 
@@ -600,8 +600,6 @@ local function get_proc_rss_mb(pid)
   return pages and (tonumber(pages) * 4 / 1024) or 0
 end
 
-local TRIM_PCT = 25
-
 local function trim_ram()
   local running = collect_running()
   if #running == 0 then return end
@@ -609,7 +607,7 @@ local function trim_ram()
   if TOTAL_RAM_MB == 0 then TOTAL_RAM_MB = get_total_ram_mb() end
   if TOTAL_RAM_MB == 0 then return end
 
-  local threshold_mb = TOTAL_RAM_MB * TRIM_PCT / 100
+  local threshold_mb = TOTAL_RAM_MB * RAM_TRIM_PCT / 100
 
   for _, pkg in ipairs(running) do
     local pids = shell('su -c "pidof ' .. pkg .. '"')
