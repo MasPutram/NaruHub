@@ -889,6 +889,7 @@ end
 local function get_cookies()
   local pkgs = collect_packages()
   local results = {}
+  local py_bin = PREFIX .. "/bin/python"
   local py_script = CONFIG_DIR .. "/.cookie_extract.py"
   fwrite(py_script, [[
 import sqlite3,sys
@@ -902,7 +903,7 @@ except: print('')
   for _, p in ipairs(pkgs) do
     local pkg = p.pkg
     local db = string.format("/data/data/%s/app_webview/Default/Cookies", pkg)
-    local cookie = shell(string.format('su -c "python %s %s"', py_script, db))
+    local cookie = shell(string.format('su -c "%s %s %s"', py_bin, py_script, db))
     if cookie ~= "" then
       results[#results+1] = { pkg = pkg, username = p.username or "", cookie = cookie }
     end
