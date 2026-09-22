@@ -640,7 +640,7 @@ local function log_ram_status()
     local color = mem_pct < 15 and C.red or (mem_pct < 30 and C.yellow or C.dim)
     log(color .. "[" .. ts() .. "] RAM " .. mem_avail_mb .. "/" .. math.floor(TOTAL_RAM_MB) .. "MB (" .. mem_pct .. "% free) | " .. table.concat(parts, " ") .. C.reset)
   end
-  NEXT_RAM_LOG = now + 300
+  NEXT_RAM_LOG = now + 1800
 end
 
 local LAST_LMK_TS = ""
