@@ -4,7 +4,7 @@ import { redis } from "@/lib/redis";
 export interface AgentConfig {
   HEARTBEAT_INTERVAL: number;
   RECONNECT_DELAY: number;
-  RAM_TRIM_PCT: number;
+
   POLICY_POLL_INTERVAL: number;
   STUCK_GRACE: number;
   REJOIN_SWEEP_INTERVAL: number;
@@ -13,7 +13,7 @@ export interface AgentConfig {
 export const AGENT_CONFIG_DEFAULTS: AgentConfig = {
   HEARTBEAT_INTERVAL: 30,
   RECONNECT_DELAY: 5,
-  RAM_TRIM_PCT: 25,
+
   POLICY_POLL_INTERVAL: 15,
   STUCK_GRACE: 120,
   REJOIN_SWEEP_INTERVAL: 5,
@@ -33,7 +33,7 @@ local WS_URL = "wss://ws.naruhub.my.id"
 local LICENSE_KEY = "$$LICENSE$$"
 local HEARTBEAT_INTERVAL = $$HEARTBEAT_INTERVAL$$
 local RECONNECT_DELAY = $$RECONNECT_DELAY$$
-local RAM_TRIM_PCT = $$RAM_TRIM_PCT$$  -- per-process threshold: trim clone if RSS > this % of total RAM
+
 local CONFIG_POLL_INTERVAL = 60
 local NEXT_CONFIG_POLL = 0
 
@@ -610,9 +610,9 @@ end
 
 local function log_ram_status()
   local running = collect_running()
-  if #running == 0 then return 100 end
+  if #running == 0 then return end
   if TOTAL_RAM_MB == 0 then TOTAL_RAM_MB = get_total_ram_mb() end
-  if TOTAL_RAM_MB == 0 then return 100 end
+  if TOTAL_RAM_MB == 0 then return end
 
   local mem_raw = shell('su -c "cat /proc/meminfo"')
   local mem_avail_kb = tonumber(mem_raw:match("MemAvailable:%s+(%d+)")) or 0
@@ -637,7 +637,6 @@ local function log_ram_status()
     local color = mem_pct < 15 and C.red or (mem_pct < 30 and C.yellow or C.dim)
     log(color .. "[" .. ts() .. "] RAM " .. mem_avail_mb .. "/" .. math.floor(TOTAL_RAM_MB) .. "MB (" .. mem_pct .. "% free) | " .. table.concat(parts, " ") .. C.reset)
   end
-  return mem_pct
 end
 
 local LAST_LMK_TS = ""
@@ -824,7 +823,6 @@ local function poll_config_if_due()
     if ok and cfg then
       if cfg.HEARTBEAT_INTERVAL then HEARTBEAT_INTERVAL = cfg.HEARTBEAT_INTERVAL end
       if cfg.RECONNECT_DELAY then RECONNECT_DELAY = cfg.RECONNECT_DELAY end
-      if cfg.RAM_TRIM_PCT then RAM_TRIM_PCT = cfg.RAM_TRIM_PCT end
       if cfg.POLICY_POLL_INTERVAL then POLICY_POLL_INTERVAL = cfg.POLICY_POLL_INTERVAL end
       if cfg.STUCK_GRACE then STUCK_GRACE = cfg.STUCK_GRACE end
       if cfg.REJOIN_SWEEP_INTERVAL then REJOIN_SWEEP_INTERVAL = cfg.REJOIN_SWEEP_INTERVAL end
@@ -1505,9 +1503,9 @@ while true do
       local screen = collect_screen()
       local stats = collect_stats()
       local running = collect_running()
-      local ram_pct = log_ram_status()
+      log_ram_status()
+      trim_ram()
       check_lmk_kills()
-      if ram_pct < 20 then trim_ram() end
       ws_send({
         type = "heartbeat",
         deviceId = DEVICE_ID,
