@@ -84,10 +84,10 @@ export default function CookiesPage() {
       });
       const data = await res.json();
       if (data.ok) {
-        setLogoutResult((prev) => ({ ...prev, [pkg]: { ok: true, msg: "Logged out!" } }));
+        setLogoutResult((prev) => ({ ...prev, [pkg]: { ok: true, msg: `Logged out! (${data.endpoint || "ok"})` } }));
         fetchCookies();
       } else {
-        setLogoutResult((prev) => ({ ...prev, [pkg]: { ok: false, msg: data.error || `HTTP ${data.httpStatus}` } }));
+        setLogoutResult((prev) => ({ ...prev, [pkg]: { ok: false, msg: data.error || `HTTP ${data.httpStatus} - ${data.endpoint || "?"}` } }));
       }
     } catch (e: any) {
       setLogoutResult((prev) => ({ ...prev, [pkg]: { ok: false, msg: e.message } }));

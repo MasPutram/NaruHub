@@ -5,6 +5,55 @@ export const dynamic = "force-dynamic";
 
 const COOKIES_KEY = "termux:cookies";
 
+async function getCsrf(cookie: string): Promise<string> {
+  const res = await fetch("https://auth.roblox.com/v2/logout", {
+    method: "POST",
+    headers: {
+      "Cookie": `.ROBLOSECURITY=${cookie}`,
+      "Content-Type": "application/json",
+    },
+  });
+  return res.headers.get("x-csrf-token") || "";
+}
+
+async function tryLogoutAll(cookie: string, csrf: string): Promise<{ status: number; body: string; endpoint: string }> {
+  const endpoints = [
+    "https://auth.roblox.com/v1/logoutfromallsessionsandreauthenticate",
+    "https://auth.roblox.com/v1/sessions/logout-from-all-sessions-and-reauthenticate",
+    "https://auth.roblox.com/v2/logoutfromallsessionsandreauthenticate",
+  ];
+
+  for (const url of endpoints) {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Cookie": `.ROBLOSECURITY=${cookie}`,
+        "Content-Type": "application/json",
+        "X-CSRF-TOKEN": csrf,
+      },
+    });
+    const body = await res.text();
+    if (res.status === 200) {
+      return { status: 200, body, endpoint: url };
+    }
+    if (res.status !== 404 && res.status !== 405) {
+      return { status: res.status, body, endpoint: url };
+    }
+  }
+
+  // Fallback: logout current session only
+  const res = await fetch("https://auth.roblox.com/v2/logout", {
+    method: "POST",
+    headers: {
+      "Cookie": `.ROBLOSECURITY=${cookie}`,
+      "Content-Type": "application/json",
+      "X-CSRF-TOKEN": csrf,
+    },
+  });
+  const body = await res.text();
+  return { status: res.status, body, endpoint: "v2/logout (fallback)" };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { pkg } = (await req.json()) as { pkg: string };
@@ -23,45 +72,24 @@ export async function POST(req: NextRequest) {
     }
 
     const cookie = entry.cookie;
+    const csrf = await getCsrf(cookie);
 
-    // Step 1: Get CSRF token
-    const csrfRes = await fetch("https://auth.roblox.com/v2/logout", {
-      method: "POST",
-      headers: {
-        "Cookie": `.ROBLOSECURITY=${cookie}`,
-        "Content-Type": "application/json",
-      },
-    });
-    const csrfToken = csrfRes.headers.get("x-csrf-token") || "";
-
-    if (!csrfToken) {
-      return NextResponse.json({ ok: false, error: "failed to get CSRF token", status: csrfRes.status });
+    if (!csrf) {
+      return NextResponse.json({ ok: false, error: "failed to get CSRF token" });
     }
 
-    // Step 2: Logout current session (v2/logout)
-    const logoutRes = await fetch("https://auth.roblox.com/v2/logout", {
-      method: "POST",
-      headers: {
-        "Cookie": `.ROBLOSECURITY=${cookie}`,
-        "Content-Type": "application/json",
-        "X-CSRF-TOKEN": csrfToken,
-      },
-    });
+    const result = await tryLogoutAll(cookie, csrf);
 
-    const logoutStatus = logoutRes.status;
-    let logoutBody = "";
-    try { logoutBody = await logoutRes.text(); } catch {}
-
-    if (logoutStatus === 200) {
-      // Mark cookie as logged out
+    if (result.status === 200) {
       store[pkg] = { ...entry, loggedOut: true, loggedOutAt: Date.now() };
       await redis.set(COOKIES_KEY, JSON.stringify(store));
     }
 
     return NextResponse.json({
-      ok: logoutStatus === 200,
-      httpStatus: logoutStatus,
-      body: logoutBody,
+      ok: result.status === 200,
+      httpStatus: result.status,
+      endpoint: result.endpoint,
+      body: result.body,
       pkg,
       username: entry.username,
     });
