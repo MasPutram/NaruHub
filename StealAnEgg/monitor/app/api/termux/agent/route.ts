@@ -630,23 +630,6 @@ local function log_ram_status()
   NEXT_RAM_LOG = now + 1800
 end
 
-local LAST_LMK_TS = ""
-local function check_lmk_kills()
-  local raw = shell('su -c "dmesg -T 2>/dev/null | grep -i roblox | tail -5"')
-  if raw == "" then return end
-  for line in raw:gmatch("[^\\n]+") do
-    local t = line:match("^%[([^%]]+)%]") or ""
-    if t ~= "" and t ~= LAST_LMK_TS then
-      local pkg = line:match("(com%.roblox%.[%w_]+)") or "?"
-      local short = pkg:gsub("com.roblox.", "")
-      if line:lower():find("kill") or line:lower():find("oom") or line:lower():find("lowmemory") then
-        log(C.red .. "[" .. ts() .. "] LMK killed " .. short .. ": " .. line:sub(1, 120) .. C.reset)
-      end
-    end
-    local nt = line:match("^%[([^%]]+)%]")
-    if nt then LAST_LMK_TS = nt end
-  end
-end
 
 local function launch_app(pkg, bounds, resize, delay, target, forceKill, skipTrim, silent)
   if not silent then
@@ -1493,7 +1476,6 @@ while true do
       local running = collect_running()
       log_ram_status()
       trim_ram()
-      check_lmk_kills()
       ws_send({
         type = "heartbeat",
         deviceId = DEVICE_ID,
