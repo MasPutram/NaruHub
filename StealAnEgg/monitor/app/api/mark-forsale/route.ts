@@ -41,8 +41,24 @@ export async function POST(req: NextRequest) {
       // signal if the clone is offline; operator re-clicks Siap Jual to re-arm.
       await redis.set(forSaleKickKey(account), "1", { ex: FORSALE_KICK_TTL_S });
     } else {
+      // Restore account + detail data back to dashboard keys before deleting
+      // the catalog copy, so "Kembalikan" doesn't lose data.
+      const catalogRaw = await redis.get<string>(fsKey);
+      if (catalogRaw) {
+        const catalog = typeof catalogRaw === "string" ? JSON.parse(catalogRaw) : catalogRaw;
+        const { detail, markedAt, sourceAccount, ...accData } = catalog;
+        const existingAcc = await redis.get<string>(accountKey(account));
+        if (!existingAcc) {
+          await redis.set(accountKey(account), JSON.stringify(accData));
+        }
+        if (detail) {
+          const existingDetail = await redis.get<string>(detailKey(account));
+          if (!existingDetail) {
+            await redis.set(detailKey(account), JSON.stringify(detail));
+          }
+        }
+      }
       await redis.del(fsKey);
-      // Cancel any pending Kick if Siap Jual is un-toggled before the script sees it.
       await redis.del(forSaleKickKey(account));
     }
     return NextResponse.json({ ok: true, account, forSale: !!forSale });
