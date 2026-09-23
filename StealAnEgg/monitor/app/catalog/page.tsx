@@ -276,6 +276,39 @@ export default function CatalogPage() {
       });
     } catch {}
 
+    let iconIdx: Record<string, string> = {};
+    try {
+      const idxRes = await fetch("/icons/index.json");
+      iconIdx = await idxRes.json();
+    } catch {}
+
+    function isDivine(category: string): boolean {
+      const filename = iconIdx[category];
+      if (!filename) return false;
+      const m = filename.match(/\[([^\]]+)\]/);
+      return m ? m[1] === "Divine" : false;
+    }
+
+    function divineCount(a: Account): number {
+      const pools: Pet[] = [];
+      if (a.detail) {
+        if (a.detail.activePets) pools.push(...a.detail.activePets);
+        if (a.detail.allPets) pools.push(...a.detail.allPets);
+        if (a.detail.growingEggs) pools.push(...a.detail.growingEggs);
+        if (a.detail.backpackEggs) pools.push(...a.detail.backpackEggs);
+      }
+      if (a.topPets) pools.push(...a.topPets);
+      const seen = new Set<string>();
+      let count = 0;
+      for (const p of pools) {
+        const k = `${p.category}|${(p.mutations || []).sort().join("+")}|${p.rate}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        if (isDivine(p.category)) count++;
+      }
+      return count;
+    }
+
     function eggTotal(a: Account): number {
       const d = a.detail;
       if (d) {
@@ -353,6 +386,7 @@ export default function CatalogPage() {
         <td class="c-aktif">${incAktif}</td>
         <td class="c-toppet">${petCell}</td>
         <td class="c-num">${eggTotal(a)}</td>
+        <td class="c-num" style="color:#6d28d9;font-weight:900">${divineCount(a) || "—"}</td>
         <td class="c-mut">${(a.mutationToken || 0) > 0 ? `<span class="mut-pill">${a.mutationToken}</span>` : "—"}</td>
         <td class="c-mut">${(a.scrambleToken || 0) > 0 ? `<span class="mut-pill" style="background:#34d399">${a.scrambleToken}</span>` : "—"}</td>
         <td class="c-price">${a.catalogPrice ? fmtRupiah(a.catalogPrice) : "—"}</td>
@@ -467,15 +501,16 @@ export default function CatalogPage() {
         <div class="rk-tblwrap">
           <table class="rk-tbl">
             <colgroup>
+              <col style="width:7%">
               <col style="width:8%">
-              <col style="width:9%">
-              <col style="width:11%">
-              <col style="width:11%">
-              <col style="width:18%">
+              <col style="width:10%">
+              <col style="width:10%">
+              <col style="width:17%">
+              <col style="width:5%">
               <col style="width:6%">
-              <col style="width:8%">
-              <col style="width:8%">
-              <col style="width:21%">
+              <col style="width:7%">
+              <col style="width:7%">
+              <col style="width:23%">
             </colgroup>
             <thead>
               <tr>
@@ -485,6 +520,7 @@ export default function CatalogPage() {
                 <th>Income Aktif</th>
                 <th>Top Pet</th>
                 <th style="text-align:center">Telur</th>
+                <th style="text-align:center">Divine</th>
                 <th style="text-align:center">Boss</th>
                 <th style="text-align:center">Scramble</th>
                 <th style="text-align:center">Harga</th>
