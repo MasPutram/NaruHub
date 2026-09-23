@@ -876,10 +876,11 @@ function PosterPage() {
 
   const equippedIncome = (activePets || []).reduce((s, p) => s + (p.rate || 0), 0);
 
-  const divinePetCount = allSorted.filter((p) => {
+  const divineAll = [...allSorted, ...growingEggs, ...backpackEggs].filter((p) => {
     const r = petRarity(p.category, iconIdx);
-    return r === "Divine" || r === "Eternal";
-  }).length;
+    return r === "Divine";
+  });
+  const divinePetCount = divineAll.length;
 
   const statItems: { label: string; value: string; accent?: "mut" | "scramble" }[] = [
     { label: "SPEED", value: fmtCompact(summary.speed) },
@@ -888,7 +889,7 @@ function PosterPage() {
     { label: "INCOME AKTIF", value: fmtRate(equippedIncome) },
     { label: "TOTAL PET DI TAS", value: `${allSorted.length} pets` },
     { label: "TOTAL EGG", value: `${totalEggs} eggs` },
-    { label: "PET DIVINE/ETERNAL", value: `${divinePetCount}` },
+    { label: "PET DIVINE", value: `${divinePetCount}` },
     ...(summary.kandangLevel != null
       ? [{ label: "PEN LEVEL", value: `Lv. ${summary.kandangLevel}` }]
       : []),
@@ -1404,6 +1405,32 @@ function PosterPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {divineAll.length > 0 && (
+              <div className="egg-section">
+                <div className="section-header" style={{ background: "#ede9fe", color: "#6d28d9" }}>EGG / PET DIVINE ({divineAll.length})</div>
+                <div className="egg-grid">
+                  {divineAll.sort((a, b) => (b.rate || 0) - (a.rate || 0)).slice(0, 12).map((p, i) => {
+                    const isEgg = eggKeys.has(petKey(p)) || growingEggKeys.has(petKey(p));
+                    return (
+                      <div key={i} className="egg-cell" style={{ borderColor: "#7c3aed" }}>
+                        <PetIcon pet={p} size={70} />
+                        <div style={{ minWidth: 0, overflow: "hidden" }}>
+                          <div className="ename">
+                            {p.mutations && p.mutations.length > 0
+                              ? p.mutations.map((m) => mutDisplayName(m)).join(" + ") + " " + displayName(p.category)
+                              : displayName(p.category)}
+                          </div>
+                          {p.rate ? <div className="erate">{fmtRate(p.rate)}</div> : null}
+                          {isEgg && <span className="egg-badge">TELUR</span>}
+                          {p.weight ? <div className="eweight">{fmtWeight(p.weight)}</div> : null}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
