@@ -439,12 +439,12 @@ local monitorPara = section:AddParagraph({
 	Center = true,
 })
 
-local AUTO_SELL_MIN_RATE = 1_000_000_000
-local AUTO_SELL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Mythic", "Legendary", "Cosmic" }
-local AUTO_SELL_NEVER = { Eternal = true, Divine = true, Titan = true }
+local AUTO_SELL_MIN_RATE = 2_000_000_000
+local AUTO_SELL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Mythic", "Legendary", "Cosmic", "Eternal", "Titan" }
+local AUTO_SELL_NEVER = { Divine = true }
 local autoSellEnabled = false
 section:AddToggle("AutoSellToggle", {
-	Title = "Auto Sell (< 1B/s)",
+	Title = "Auto Sell (< 2B/s, skip Divine)",
 	Default = false,
 	Callback = function(val)
 		autoSellEnabled = val
