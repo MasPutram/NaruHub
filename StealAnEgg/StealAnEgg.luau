@@ -740,7 +740,7 @@ local function collectAccountStats()
 
 	local kandangLevel, treadmillLevel, currentMoney
 	pcall(function()
-		local stats = SaveModule.Get()
+		local stats = SaveModule.Peek()
 		if stats then
 			kandangLevel = stats.BaseUpgradeLevel
 			treadmillLevel = stats.TreadmillUpgradeLevel
@@ -851,7 +851,7 @@ local function reportToMonitor()
 		local scrambleToken = 0
 		local equippedTrail = ""
 		pcall(function()
-			local s = SaveModule.Get()
+			local s = SaveModule.Peek()
 			if not s then return end
 			bossToken = tonumber(s.BossTokens) or 0
 			equippedTrail = tostring(s.EquippedTrail or s.TrailEquipped or "")
@@ -967,7 +967,7 @@ task.spawn(function()
 	-- Strict priority: pen only fires after treadmill is fully maxed.
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		pcall(function()
-			local stats = SaveModule.Get()
+			local stats = SaveModule.Peek()
 			local _, tmCfg = TreadmillClient.GetNextConfig(stats)
 			local tmMaxed = tmCfg == nil
 
@@ -997,7 +997,7 @@ task.spawn(function()
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		pcall(function()
-			local data = SaveModule.Get()
+			local data = SaveModule.Peek()
 			local inv = data.TrailInventory or {}
 			local sortedKeys = {}
 			for key, cfg in pairs(Trails.Directory) do
@@ -1010,7 +1010,7 @@ task.spawn(function()
 			end)
 			for _, key in ipairs(sortedKeys) do
 				local cfg = Trails.Directory[key]
-				data = SaveModule.Get()
+				data = SaveModule.Peek()
 				if not (data.TrailInventory or {})[key] and (data.Money or 0) >= cfg.Price then
 					pcall(function()
 						Remotes.Trailwear.AskPurchase:InvokeServer(key)
@@ -1179,7 +1179,7 @@ task.spawn(function()
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoMutationEggEnabled then
 			pcall(function()
-				local stats = SaveModule.Get()
+				local stats = SaveModule.Peek()
 
 				local candidates = {}
 				for uid, rec in pairs(stats.EggInventory or {}) do
@@ -1435,7 +1435,7 @@ task.spawn(function()
 	local function findMyPlot()
 		local plots = Workspace:FindFirstChild("Plots")
 		if not plots then return nil end
-		local stats = SaveModule.Get()
+		local stats = SaveModule.Peek()
 		local myLevel = stats and stats.BaseUpgradeLevel or 0
 		local candidates = {}
 		for _, plot in ipairs(plots:GetChildren()) do
