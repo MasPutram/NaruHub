@@ -140,6 +140,7 @@ interface Account {
   firstSeen?: number;
   lastSeen?: number;
   forSale?: boolean;
+  deviceId?: string;
 }
 
 interface StolenItem {
@@ -255,14 +256,9 @@ function accountNumber(name: string): number | null {
   return m ? parseInt(m[0], 10) : null;
 }
 
-function deviceBlockStart(num: number | null): number | null {
-  if (num === null || isNaN(num)) return null;
-  return Math.floor((num - 1) / 10) * 10 + 1;
-}
-
-function deviceLabel(name: string): string | null {
-  const start = deviceBlockStart(accountNumber(name));
-  return start === null ? null : "SAE " + start;
+function deviceLabel(deviceId?: string, deviceMap?: Record<string, string>): string | null {
+  if (!deviceId || !deviceMap || !deviceMap[deviceId]) return null;
+  return deviceMap[deviceId];
 }
 
 type TabMode = "all" | "online" | "offline";
@@ -284,6 +280,7 @@ export default function DashboardPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const genMsgs = useRef<Record<string, { text: string; color: string }>>({});
   const [, forceUpdate] = useState(0);
+  const [deviceMap, setDeviceMap] = useState<Record<string, string>>({});
 
   const fetchAccounts = useCallback(async () => {
     try {
@@ -294,19 +291,36 @@ export default function DashboardPage() {
     } catch {}
   }, []);
 
+  const fetchDevices = useCallback(async () => {
+    try {
+      const res = await fetch("/api/termux/devices");
+      const data = await res.json();
+      if (data.ok && data.devices) {
+        const map: Record<string, string> = {};
+        for (const d of data.devices) {
+          if (d.deviceId) map[d.deviceId] = d.customName || d.hostname || d.deviceId;
+        }
+        setDeviceMap(map);
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     setMounted(true);
     fetchAccounts();
+    fetchDevices();
     const id = setInterval(fetchAccounts, 5000);
-    return () => clearInterval(id);
-  }, [fetchAccounts]);
+    const id2 = setInterval(fetchDevices, 30000);
+    return () => { clearInterval(id); clearInterval(id2); };
+  }, [fetchAccounts, fetchDevices]);
 
   function filterByDevice(list: Account[]): Account[] {
     if (!deviceFilter.trim()) return list;
-    const queryNum = accountNumber(deviceFilter.trim());
-    if (queryNum === null) return list;
-    const wantBlock = deviceBlockStart(queryNum);
-    return list.filter((a) => deviceBlockStart(accountNumber(a.sourceAccount)) === wantBlock);
+    const q = deviceFilter.trim().toLowerCase();
+    return list.filter((a) => {
+      const label = deviceLabel(a.deviceId, deviceMap);
+      return label ? label.toLowerCase().includes(q) : false;
+    });
   }
 
   function sortAccounts(list: Account[]): Account[] {
@@ -783,7 +797,7 @@ export default function DashboardPage() {
             <option value="work">Work (Potensi Tertinggi)</option>
           </select>
           <label>Device:</label>
-          <input type="text" placeholder="cth: 21 (SAE 21-30)" value={deviceFilter} onChange={(e) => setDeviceFilter(e.target.value)} />
+          <input type="text" placeholder="cth: 1SAE141" value={deviceFilter} onChange={(e) => setDeviceFilter(e.target.value)} />
           <button className="genallbtn" disabled={genAllRunning || allOnline.length === 0} onClick={generateAll}>Generate All Poster</button>
           {genAllStatus && <span className="genallstatus">{genAllStatus}</span>}
         </div>
@@ -813,6 +827,7 @@ export default function DashboardPage() {
                 genMsg={genMsgs.current[a.sourceAccount]}
                 maxKandang={maxKandang}
                 maxTreadmill={maxTreadmill}
+                deviceMap={deviceMap}
               />
             ))}
           </div>
@@ -844,6 +859,7 @@ export default function DashboardPage() {
                 setTab={setAllDetailTab}
                 onClose={() => setAllDetail(null)}
                 onOpenAccount={(name) => { setAllDetail(null); openDetail(name); }}
+                deviceMap={deviceMap}
               />
             </div>
           </div>
@@ -854,7 +870,7 @@ export default function DashboardPage() {
 }
 
 /* ===== ACCOUNT CARD ===== */
-function AccountCard({ account: a, onOpen, onSell, onModerated, onDelete, deleteConfirm, onDeleteConfirm, onDeleteCancel, genMsg, maxKandang, maxTreadmill }: {
+function AccountCard({ account: a, onOpen, onSell, onModerated, onDelete, deleteConfirm, onDeleteConfirm, onDeleteCancel, genMsg, maxKandang, maxTreadmill, deviceMap }: {
   account: Account;
   onOpen: (name: string) => void;
   onSell: (name: string) => void;
@@ -866,6 +882,7 @@ function AccountCard({ account: a, onOpen, onSell, onModerated, onDelete, delete
   genMsg?: { text: string; color: string };
   maxKandang: number;
   maxTreadmill: number;
+  deviceMap: Record<string, string>;
 }) {
   const isOff = !a.online;
   const eggCount = a.growingEggCount || 0;
@@ -887,7 +904,7 @@ function AccountCard({ account: a, onOpen, onSell, onModerated, onDelete, delete
       <div className="card-top">
         <span className={`status-dot ${isOff ? "off" : "on"}`} />
         <span className="acc-name">{a.sourceAccount}</span>
-        {deviceLabel(a.sourceAccount) && <span className="dev-tag">{deviceLabel(a.sourceAccount)}</span>}
+        {deviceLabel(a.deviceId, deviceMap) && <span className="dev-tag">{deviceLabel(a.deviceId, deviceMap)}</span>}
         <span className={`time-tag ${isOff ? "off" : "on"}`}>
           {isOff ? fmtLastSeen(a.lastSeen) : fmtUptime(a.firstSeen) || "Active"}
         </span>
@@ -1268,12 +1285,13 @@ function DetailModal({ detail, detailTab, setDetailTab, onClose, maxKandang, max
 }
 
 /* ===== ALL ACCOUNTS DETAIL MODAL ===== */
-function AllAccountsDetailModal({ allDetail, tab, setTab, onClose, onOpenAccount }: {
+function AllAccountsDetailModal({ allDetail, tab, setTab, onClose, onOpenAccount, deviceMap }: {
   allDetail: { accounts: Account[]; details: Record<string, AccountDetail>; loading: boolean };
   tab: AllDetailTab;
   setTab: (t: AllDetailTab) => void;
   onClose: () => void;
   onOpenAccount: (name: string) => void;
+  deviceMap: Record<string, string>;
 }) {
   const [idx, setIdx] = useState<Record<string, string>>({});
   useEffect(() => { loadIconIndex().then(setIdx); }, []);
@@ -1424,7 +1442,7 @@ function AllAccountsDetailModal({ allDetail, tab, setTab, onClose, onOpenAccount
                     <div className="aa-row-head">
                       <span className={`status-dot ${a.online ? "on" : "off"}`} />
                       <span className="aa-row-name">{a.sourceAccount}</span>
-                      {deviceLabel(a.sourceAccount) && <span className="dev-tag">{deviceLabel(a.sourceAccount)}</span>}
+                      {deviceLabel(a.deviceId, deviceMap) && <span className="dev-tag">{deviceLabel(a.deviceId, deviceMap)}</span>}
                     </div>
                     <div className="aa-row-stats">
                       <div className="aa-row-stat money"><div className="l">CASH</div><div className="v">{fmtMoney(a.money)}</div></div>
