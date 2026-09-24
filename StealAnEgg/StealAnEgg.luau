@@ -479,6 +479,15 @@ stealSection:AddToggle("AutoHatchToggle", {
 ------------------------------------------------------------
 local upgradeSection = Tabs.Upgrade:AddSection("Auto upgrade")
 
+local autoUpgradeEnabled = true
+upgradeSection:AddToggle("AutoUpgradeToggle", {
+	Title = "Auto Upgrade Kandang & Treadmill",
+	Default = true,
+	Callback = function(val)
+		autoUpgradeEnabled = val
+	end,
+})
+
 ------------------------------------------------------------
 -- Event tab — Dr Scramble
 ------------------------------------------------------------
@@ -949,7 +958,7 @@ local function reportToMonitor()
 end
 
 ------------------------------------------------------------
--- Auto Upgrade Kandang & Treadmill (no UI, runs forever)
+-- Auto Upgrade Kandang & Treadmill (toggle-driven)
 ------------------------------------------------------------
 task.spawn(function()
 	local BaseUpgrade = require(ReplicatedStorage.Client.BaseUpgrade)
@@ -957,6 +966,7 @@ task.spawn(function()
 	local TmRemotes = require(ReplicatedStorage.Shared.Remotes)
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		if not autoUpgradeEnabled then task.wait(2) continue end
 		pcall(function()
 			local stats = SaveModule.Peek()
 			local tmLevel = stats.TreadmillUpgradeLevel or 0
