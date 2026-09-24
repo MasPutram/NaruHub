@@ -440,8 +440,8 @@ local monitorPara = section:AddParagraph({
 })
 
 local AUTO_SELL_MIN_RATE = 2_000_000_000
-local AUTO_SELL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Mythic", "Legendary", "Cosmic", "Titan" }
-local AUTO_SELL_NEVER = { Divine = true, Eternal = true }
+local AUTO_SELL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Mythic", "Legendary", "Cosmic", "Eternal", "Titan" }
+local AUTO_SELL_NEVER = { Divine = true }
 local autoSellEnabled = false
 section:AddToggle("AutoSellToggle", {
 	Title = "Auto Sell (< 2B/s, skip Divine+Eternal)",
@@ -1384,16 +1384,15 @@ task.spawn(function()
 								Mutations = rec.Mutations or {},
 							})
 						end)
-						local weight = 0
-						pcall(function()
-							weight = AssetItems.WeightKg({
-								Category = rec.AssetCategory,
-								Scale = rec.AssetScale or 1,
-								Mutations = rec.Mutations or {},
-							})
-						end)
-						if not AUTO_SELL_NEVER[rarity] and rate > 0 and rate < AUTO_SELL_MIN_RATE and weight < 1_000_000_000 then
-							toSell[#toSell + 1] = uid
+						if rarity == "Divine" then
+						elseif rarity == "Eternal" then
+							if rate > 0 and rate < 1_000_000_000 then
+								toSell[#toSell + 1] = uid
+							end
+						else
+							if rate > 0 and rate < AUTO_SELL_MIN_RATE then
+								toSell[#toSell + 1] = uid
+							end
 						end
 					end
 				end
