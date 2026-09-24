@@ -266,7 +266,6 @@ do
 		Enum.HumanoidStateType.Dead,
 		Enum.HumanoidStateType.FallingDown,
 		Enum.HumanoidStateType.Ragdoll,
-		Enum.HumanoidStateType.Physics,
 	}
 
 	local function setupInstantHeal()
@@ -274,6 +273,8 @@ do
 		if not char then return end
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		if not hum then return end
+		pcall(function() hum.BreakJointsOnDeath = false end)
+		pcall(function() hum.RequiresNeck = false end)
 		for _, s in ipairs(BLOCKED_STATES) do
 			pcall(function() hum:SetStateEnabled(s, false) end)
 		end
@@ -288,6 +289,8 @@ do
 		RunService.Heartbeat:Connect(function()
 			pcall(function()
 				if not hum or not hum.Parent then return end
+				if hum.BreakJointsOnDeath then hum.BreakJointsOnDeath = false end
+				if hum.RequiresNeck then hum.RequiresNeck = false end
 				for _, s in ipairs(BLOCKED_STATES) do
 					if hum:GetStateEnabled(s) then
 						hum:SetStateEnabled(s, false)
@@ -528,7 +531,7 @@ local Fluent = NaruUI.New({
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
-	Version = "v2.0.4",
+	Version = "v2.1.0",
 	TabWidth = 150,
 	Size = UDim2.fromOffset(680, 460),
 	AutoStartMinimized = false,
