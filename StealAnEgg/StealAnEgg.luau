@@ -252,13 +252,31 @@ do
 	end
 	antiHitGuard()
 
-	RunService.Heartbeat:Connect(function()
-		local char = LocalPlayer.Character
+	local function setupAntiGuard(char)
 		if not char then return end
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		if hum and hum.Health < hum.MaxHealth then
-			hum.Health = hum.MaxHealth
-		end
+		local hum = char:WaitForChild("Humanoid", 5)
+		if not hum then return end
+		hum.MaxHealth = 1e9
+		hum.Health = 1e9
+		hum:GetPropertyChangedSignal("Health"):Connect(function()
+			if hum.Health < 1e9 then
+				hum.Health = 1e9
+			end
+		end)
+		hum:GetPropertyChangedSignal("MaxHealth"):Connect(function()
+			if hum.MaxHealth < 1e9 then
+				hum.MaxHealth = 1e9
+			end
+		end)
+	end
+
+	setupAntiGuard(LocalPlayer.Character)
+	LocalPlayer.CharacterAdded:Connect(setupAntiGuard)
+
+	RunService.Heartbeat:Connect(function()
+		pcall(function()
+			antiHitGuard()
+		end)
 	end)
 end
 
@@ -1649,8 +1667,19 @@ task.spawn(function()
 		local tw = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
 			CFrame = CFrame.new(dest),
 		})
+		local camConn
+		local camera = workspace.CurrentCamera
+		if camera then
+			local offset = camera.CFrame.Position - hrp.Position
+			camConn = game:GetService("RunService").RenderStepped:Connect(function()
+				if hrp and hrp.Parent then
+					camera.CFrame = CFrame.new(hrp.Position + offset) * (camera.CFrame - camera.CFrame.Position)
+				end
+			end)
+		end
 		tw:Play()
 		tw.Completed:Wait()
+		if camConn then camConn:Disconnect() end
 	end
 
 	local function stealSafeTween(hrp, targetPos, speed)
