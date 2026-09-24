@@ -315,41 +315,63 @@ end
 ------------------------------------------------------------
 local function findHipToggle()
 	local pg = LocalPlayer:FindFirstChild("PlayerGui")
-	local hip = pg and pg:FindFirstChild("HipHub")
-	if not hip then return nil end
+	if not pg then return nil, nil end
+	local hip = pg:FindFirstChild("HipHub")
+	if not hip then return nil, nil end
 	for _, d in ipairs(hip:GetDescendants()) do
 		if d:IsA("TextLabel") and d.Text == "Auto Treadmill On Return" then
-			local p = d.Parent
-			return p and p:FindFirstChildOfClass("TextButton") or nil
+			local container = d.Parent
+			if not container then continue end
+			local inner = container:FindFirstChildOfClass("TextButton")
+			return inner, container
 		end
 	end
-	return nil
+	return nil, nil
 end
 
 local function hipToggleIsOn(btn)
-	local inner = btn and btn:FindFirstChild("Frame")
-	return inner and inner.Position.X.Scale >= 0.5
+	if not btn then return false end
+	local frame = btn:FindFirstChild("Frame")
+	if frame then return frame.Position.X.Scale >= 0.5 end
+	return btn.BackgroundColor3.G > 0.5
+end
+
+local function fireHipToggle(inner, container)
+	if not firesignal then return false end
+	local fired = false
+	if inner then
+		pcall(function() firesignal(inner.Activated) end)
+		fired = true
+	end
+	if not fired and inner then
+		pcall(function() firesignal(inner.MouseButton1Click) end)
+		fired = true
+	end
+	if not fired and container and container:IsA("TextButton") then
+		pcall(function() firesignal(container.Activated) end)
+		fired = true
+	end
+	return fired
 end
 
 -- Wrap a callback with HIP off/on. Returns whatever `fn` returns.
 local function withHipPaused(fn)
-	local hipBtn = findHipToggle()
-	local hipWasOn = hipBtn and hipToggleIsOn(hipBtn)
+	local inner, container = findHipToggle()
+	local hipWasOn = hipToggleIsOn(inner)
 	local weFiredOff = false
-	if hipWasOn and firesignal then
-		pcall(function() firesignal(hipBtn.MouseButton1Click) end)
-		weFiredOff = true
-		task.wait(0.3)
+	if hipWasOn then
+		weFiredOff = fireHipToggle(inner, container)
+		if weFiredOff then task.wait(0.3) end
 	end
 
 	local ok, result = pcall(fn)
 
-	if weFiredOff and firesignal then
+	if weFiredOff then
 		for _ = 1, 3 do
-			local b = findHipToggle()
+			local b, c = findHipToggle()
 			if not b then break end
 			if hipToggleIsOn(b) then break end
-			pcall(function() firesignal(b.MouseButton1Click) end)
+			fireHipToggle(b, c)
 			task.wait(0.4)
 		end
 	end
@@ -396,13 +418,6 @@ local function findMyPlotShared()
 		if closest then return closest end
 	end
 	return candidates[1]
-end
-
-local function getMyTreadmillPos()
-	local plot = findMyPlotShared()
-	if not plot then return nil end
-	local tm = plot:FindFirstChild("TreadmillBottom")
-	return tm and tm.Position or nil
 end
 
 local function hasHighValueEgg(minRate)
@@ -1279,9 +1294,9 @@ end)
 
 ------------------------------------------------------------
 -- Auto Hunt Experiment (Dr Scramble drone farming)
---   Window active + no high-value egg → hunt drones
---   Window active + egg >= 1B/s       → pause hunt, treadmill (let HipHub steal)
---   Window ends / toggle off          → tween back to own treadmill
+--   Window active + no high-value egg → cancel HIP treadmill → hunt drones
+--   Window active + egg >= 1B/s       → enable HIP treadmill, pause hunt
+--   Window ends / toggle off          → enable HIP treadmill (auto return)
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -1351,14 +1366,6 @@ task.spawn(function()
 		activeTween = nil
 	end
 
-	local function tweenToTreadmill(hrp)
-		local tmPos = getMyTreadmillPos()
-		if not tmPos then return end
-		local char = hrp.Parent
-		local groundY = tmPos.Y + 4
-		tweenTo(hrp, Vector3.new(tmPos.X, groundY, tmPos.Z), RUSH_SPEED)
-	end
-
 	local function findClosestDrone(hrp)
 		local closestId, closestData, closestDist = nil, nil, math.huge
 		for id, drone in pairs(huntDrones) do
@@ -1372,6 +1379,26 @@ task.spawn(function()
 			end
 		end
 		return closestId, closestData, closestDist
+	end
+
+	local function cancelHipTreadmill()
+		local inner, container = findHipToggle()
+		if inner and hipToggleIsOn(inner) then
+			fireHipToggle(inner, container)
+			task.wait(0.3)
+			return true
+		end
+		return false
+	end
+
+	local function enableHipTreadmill()
+		for _ = 1, 3 do
+			local inner, container = findHipToggle()
+			if not inner then break end
+			if hipToggleIsOn(inner) then break end
+			fireHipToggle(inner, container)
+			task.wait(0.4)
+		end
 	end
 
 	local currentAreaIdx = 1
@@ -1388,12 +1415,10 @@ task.spawn(function()
 				if not isActive then
 					if wasHunting or waitingForSteal then
 						stopDroneListener()
+						enableHipTreadmill()
 						wasHunting = false
 						waitingForSteal = false
 						currentAreaIdx = 1
-						local char = LocalPlayer.Character
-						local hrp = char and char:FindFirstChild("HumanoidRootPart")
-						if hrp then tweenToTreadmill(hrp) end
 					end
 					return
 				end
@@ -1410,15 +1435,19 @@ task.spawn(function()
 						wasHunting = false
 					end
 					if not waitingForSteal then
-						tweenToTreadmill(hrp)
+						enableHipTreadmill()
 						waitingForSteal = true
 					end
 					return
 				end
 
-				waitingForSteal = false
+				if waitingForSteal then
+					waitingForSteal = false
+					cancelHipTreadmill()
+				end
 
 				if not wasHunting then
+					cancelHipTreadmill()
 					startDroneListener()
 					if autoHuntExperimentTeleport then
 						tweenTo(hrp, CENTER_POS, RUSH_SPEED)
@@ -1448,11 +1477,9 @@ task.spawn(function()
 		else
 			if wasHunting or waitingForSteal then
 				stopDroneListener()
+				enableHipTreadmill()
 				wasHunting = false
 				waitingForSteal = false
-				local char = LocalPlayer.Character
-				local hrp = char and char:FindFirstChild("HumanoidRootPart")
-				if hrp then tweenToTreadmill(hrp) end
 			end
 		end
 		task.wait(1)
@@ -1835,13 +1862,12 @@ task.spawn(function()
 				local slotKeys = getOurSlotKeys()
 				if #slotKeys == 0 then return end
 
-				local hipBtn = findHipToggle()
-				local hipWasOn = hipBtn and hipToggleIsOn(hipBtn)
+				local hipInner, hipContainer = findHipToggle()
+				local hipWasOn = hipToggleIsOn(hipInner)
 				local weFiredOff = false
-				if hipWasOn and firesignal then
-					pcall(function() firesignal(hipBtn.MouseButton1Click) end)
-					weFiredOff = true
-					task.wait(0.3)
+				if hipWasOn then
+					weFiredOff = fireHipToggle(hipInner, hipContainer)
+					if weFiredOff then task.wait(0.3) end
 				end
 
 				local eggs = getStealableEggs()
@@ -1886,12 +1912,12 @@ task.spawn(function()
 				hrp = char and char:FindFirstChild("HumanoidRootPart")
 				if hrp then hrp.Anchored = false end
 
-				if weFiredOff and firesignal then
+				if weFiredOff then
 					for _ = 1, 3 do
-						local b = findHipToggle()
+						local b, c = findHipToggle()
 						if not b then break end
 						if hipToggleIsOn(b) then break end
-						pcall(function() firesignal(b.MouseButton1Click) end)
+						fireHipToggle(b, c)
 						task.wait(0.4)
 					end
 				end
@@ -2080,13 +2106,12 @@ task.spawn(function()
 				local unplaced = getUnplaced()
 				if #unplaced == 0 then return end
 
-				local hipBtn = findHipToggle()
-				local hipWasOn = hipBtn and hipToggleIsOn(hipBtn)
+				local hipInner, hipContainer = findHipToggle()
+				local hipWasOn = hipToggleIsOn(hipInner)
 				local weFiredOff = false
-				if hipWasOn and firesignal then
-					pcall(function() firesignal(hipBtn.MouseButton1Click) end)
-					weFiredOff = true
-					task.wait(0.3)
+				if hipWasOn then
+					weFiredOff = fireHipToggle(hipInner, hipContainer)
+					if weFiredOff then task.wait(0.3) end
 				end
 
 				teleportToPlot(myPlot)
@@ -2101,15 +2126,12 @@ task.spawn(function()
 					end
 				end
 
-				-- Re-enable HIP AutoTreadmill: we fired 1 OFF earlier, so fire N ONs
-				-- until state comes back to ON (or up to 3 attempts). Re-lookup btn
-				-- in case HIP re-rendered its GUI mid-pass.
-				if weFiredOff and firesignal then
-					for attempt = 1, 3 do
-						local b = findHipToggle()
+				if weFiredOff then
+					for _ = 1, 3 do
+						local b, c = findHipToggle()
 						if not b then break end
 						if hipToggleIsOn(b) then break end
-						pcall(function() firesignal(b.MouseButton1Click) end)
+						fireHipToggle(b, c)
 						task.wait(0.4)
 					end
 				end
