@@ -236,35 +236,28 @@ local LocalPlayer = Players.LocalPlayer
 do
 	local RunService = game:GetService("RunService")
 
-	local function setInvincible(char)
-		if char then
-			char:SetAttribute("InvincibleApplied", true)
-		end
+	local function antiHitGuard()
+		pcall(function()
+			local guardRemotes = require(ReplicatedStorage.Shared.Remotes).GuardPatrol
+			if not guardRemotes then return end
+			if not getconnections then return end
+			for name, remote in pairs(guardRemotes) do
+				if typeof(remote) == "Instance" and remote:IsA("RemoteEvent") then
+					for _, conn in ipairs(getconnections(remote.OnClientEvent)) do
+						conn:Disable()
+					end
+				end
+			end
+		end)
 	end
-	setInvincible(LocalPlayer.Character)
-	LocalPlayer.CharacterAdded:Connect(function(char)
-		task.wait(0.5)
-		setInvincible(char)
-	end)
+	antiHitGuard()
 
 	RunService.Heartbeat:Connect(function()
 		local char = LocalPlayer.Character
 		if not char then return end
 		local hum = char:FindFirstChildOfClass("Humanoid")
-		if hum and hum.Health > 0 and hum.Health < hum.MaxHealth then
+		if hum and hum.Health < hum.MaxHealth then
 			hum.Health = hum.MaxHealth
-		end
-	end)
-
-	pcall(function()
-		local guardRemotes = require(ReplicatedStorage.Shared.Remotes).GuardPatrol
-		if guardRemotes and guardRemotes.ForestStrike then
-			local orig = guardRemotes.ForestStrike
-			local dummy = Instance.new("RemoteEvent")
-			dummy.Name = "ForestStrike"
-			dummy.Parent = orig.Parent
-			orig:Destroy()
-			guardRemotes.ForestStrike = dummy
 		end
 	end)
 end
