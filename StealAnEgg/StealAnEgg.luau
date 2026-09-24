@@ -238,6 +238,13 @@ do
 
 	local function antiHitGuard()
 		pcall(function()
+			local sepLine = Workspace:FindFirstChild("__OBJECTS")
+				and Workspace.__OBJECTS:FindFirstChild("Areas")
+				and Workspace.__OBJECTS.Areas:FindFirstChild("SeparationLine")
+			if sepLine then
+				sepLine.CFrame = CFrame.new(1e6, 0, 0) * sepLine.CFrame.Rotation
+			end
+
 			local guardRemotes = require(ReplicatedStorage.Shared.Remotes).GuardPatrol
 			if not guardRemotes then return end
 			if not getconnections then return end
