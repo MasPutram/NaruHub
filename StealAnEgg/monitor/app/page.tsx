@@ -140,7 +140,6 @@ interface Account {
   firstSeen?: number;
   lastSeen?: number;
   forSale?: boolean;
-  deviceId?: string;
 }
 
 interface StolenItem {
@@ -256,9 +255,8 @@ function accountNumber(name: string): number | null {
   return m ? parseInt(m[0], 10) : null;
 }
 
-function deviceLabel(deviceId?: string, deviceMap?: Record<string, string>): string | null {
-  if (!deviceId || !deviceMap || !deviceMap[deviceId]) return null;
-  return deviceMap[deviceId];
+function deviceLabel(accountName: string, deviceMap: Record<string, string>): string | null {
+  return deviceMap[accountName] || null;
 }
 
 type TabMode = "all" | "online" | "offline";
@@ -298,7 +296,12 @@ export default function DashboardPage() {
       if (data.ok && data.devices) {
         const map: Record<string, string> = {};
         for (const d of data.devices) {
-          if (d.deviceId) map[d.deviceId] = d.customName || d.hostname || d.deviceId;
+          const label = d.customName || d.hostname || d.deviceId;
+          if (!label) continue;
+          for (const pkg of (d.packages || [])) {
+            const username = typeof pkg === "string" ? "" : (pkg.username || "");
+            if (username) map[username] = label;
+          }
         }
         setDeviceMap(map);
       }
@@ -318,7 +321,7 @@ export default function DashboardPage() {
     if (!deviceFilter.trim()) return list;
     const q = deviceFilter.trim().toLowerCase();
     return list.filter((a) => {
-      const label = deviceLabel(a.deviceId, deviceMap);
+      const label = deviceLabel(a.sourceAccount, deviceMap);
       return label ? label.toLowerCase().includes(q) : false;
     });
   }
@@ -904,7 +907,7 @@ function AccountCard({ account: a, onOpen, onSell, onModerated, onDelete, delete
       <div className="card-top">
         <span className={`status-dot ${isOff ? "off" : "on"}`} />
         <span className="acc-name">{a.sourceAccount}</span>
-        {deviceLabel(a.deviceId, deviceMap) && <span className="dev-tag">{deviceLabel(a.deviceId, deviceMap)}</span>}
+        {deviceLabel(a.sourceAccount, deviceMap) && <span className="dev-tag">{deviceLabel(a.sourceAccount, deviceMap)}</span>}
         <span className={`time-tag ${isOff ? "off" : "on"}`}>
           {isOff ? fmtLastSeen(a.lastSeen) : fmtUptime(a.firstSeen) || "Active"}
         </span>
@@ -1442,7 +1445,7 @@ function AllAccountsDetailModal({ allDetail, tab, setTab, onClose, onOpenAccount
                     <div className="aa-row-head">
                       <span className={`status-dot ${a.online ? "on" : "off"}`} />
                       <span className="aa-row-name">{a.sourceAccount}</span>
-                      {deviceLabel(a.deviceId, deviceMap) && <span className="dev-tag">{deviceLabel(a.deviceId, deviceMap)}</span>}
+                      {deviceLabel(a.sourceAccount, deviceMap) && <span className="dev-tag">{deviceLabel(a.sourceAccount, deviceMap)}</span>}
                     </div>
                     <div className="aa-row-stats">
                       <div className="aa-row-stat money"><div className="l">CASH</div><div className="v">{fmtMoney(a.money)}</div></div>
