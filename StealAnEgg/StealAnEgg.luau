@@ -286,6 +286,52 @@ do
 		task.wait(1)
 		setupInstantHeal()
 	end)
+
+	local function setupNoclip()
+		local char = LocalPlayer.Character
+		if not char then return end
+		local elapsed = 0
+		RunService.Heartbeat:Connect(function(dt)
+			elapsed = elapsed + dt
+			if elapsed < 0.15 then return end
+			elapsed = 0
+			pcall(function()
+				local c = LocalPlayer.Character
+				if not c then return end
+				for _, part in pairs(c:GetDescendants()) do
+					if part:IsA("BasePart") then
+						part.CanCollide = false
+					end
+				end
+			end)
+		end)
+	end
+	setupNoclip()
+	LocalPlayer.CharacterAdded:Connect(function()
+		task.wait(1)
+		setupNoclip()
+	end)
+
+	local function setupAntiRagdoll()
+		local char = LocalPlayer.Character
+		if not char then return end
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if not hum then return end
+		hum.StateChanged:Connect(function(_old, new)
+			pcall(function()
+				if new == Enum.HumanoidStateType.FallingDown
+					or new == Enum.HumanoidStateType.Ragdoll
+					or new == Enum.HumanoidStateType.Physics then
+					hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+				end
+			end)
+		end)
+	end
+	setupAntiRagdoll()
+	LocalPlayer.CharacterAdded:Connect(function()
+		task.wait(1)
+		setupAntiRagdoll()
+	end)
 end
 
 local EggState = require(ReplicatedStorage.Client.EggState)
@@ -459,7 +505,7 @@ local Fluent = NaruUI.New({
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
-	Version = "v1.8.0",
+	Version = "v1.9.0",
 	TabWidth = 150,
 	Size = UDim2.fromOffset(680, 460),
 	AutoStartMinimized = false,
