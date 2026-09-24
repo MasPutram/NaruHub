@@ -394,7 +394,6 @@ end
 -- Tabs (Limbo-style layout)
 ------------------------------------------------------------
 local Tabs = {
-	Information = Window:AddTab({ Title = "Information" }),
 	Main        = Window:AddTab({ Title = "Main" }),
 	Upgrade     = Window:AddTab({ Title = "Upgrade" }),
 	Event       = Window:AddTab({ Title = "Event" }),
@@ -402,56 +401,14 @@ local Tabs = {
 }
 
 ------------------------------------------------------------
--- Information tab
-------------------------------------------------------------
-local infoSection = Tabs.Information:AddSection("Account stats")
-
-local usernamePara = infoSection:AddParagraph({
-	Title = "Username",
-	Content = LocalPlayer.Name,
-})
-
-do
-	local Players = game:GetService("Players")
-	local myName = LocalPlayer.Name
-	local myPrefix = myName:match("^(%D+)%d+$")
-
-	local function refreshUsernameList()
-		if not myPrefix then
-			usernamePara:SetContent(myName)
-			return
-		end
-		local matches = {}
-		for _, p in ipairs(Players:GetPlayers()) do
-			local prefix, num = p.Name:match("^(%D+)(%d+)$")
-			if prefix == myPrefix then
-				table.insert(matches, { name = p.Name, num = tonumber(num) or 0 })
-			end
-		end
-		if #matches <= 1 then
-			usernamePara:SetContent(myName)
-			return
-		end
-		table.sort(matches, function(a, b) return a.num < b.num end)
-		local names = {}
-		for _, m in ipairs(matches) do names[#names+1] = m.name end
-		usernamePara:SetContent(table.concat(names, "\n"))
-	end
-
-	Players.PlayerAdded:Connect(function() task.wait(0.5) refreshUsernameList() end)
-	Players.PlayerRemoving:Connect(function() task.wait(0.5) refreshUsernameList() end)
-	task.spawn(refreshUsernameList)
-end
-
-local monitorPara = infoSection:AddParagraph({
-	Title = "Status",
-	Content = "Starting...",
-})
-
-------------------------------------------------------------
 -- Main tab — support system + auto steal
 ------------------------------------------------------------
 local supportSection = Tabs.Main:AddSection("Support system")
+
+local monitorPara = supportSection:AddParagraph({
+	Title = "Trackstat",
+	Content = "Starting...",
+})
 
 supportSection:AddButton({
 	Title = "Leave game (balik ke Roblox home)",
