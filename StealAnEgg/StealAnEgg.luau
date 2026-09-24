@@ -1175,10 +1175,12 @@ task.spawn(function()
 		if activeTween then
 			pcall(function() activeTween:Cancel() end)
 		end
-		local dist = (hrp.Position - targetPos).Magnitude
+		-- Keep character's current Y (ground level) so it doesn't float
+		local groundedTarget = Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z)
+		local dist = (hrp.Position - groundedTarget).Magnitude
 		if dist < 3 then return end
 		local duration = math.clamp(dist / speed, 0.1, 12)
-		local goal = { CFrame = CFrame.new(targetPos) }
+		local goal = { CFrame = CFrame.new(groundedTarget) }
 		local info = TweenInfo.new(duration, Enum.EasingStyle.Linear)
 		activeTween = TweenService:Create(hrp, info, goal)
 		activeTween:Play()
