@@ -459,7 +459,7 @@ local Fluent = NaruUI.New({
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
-	Version = "v1.6.0",
+	Version = "v1.6.1",
 	TabWidth = 150,
 	Size = UDim2.fromOffset(680, 460),
 	AutoStartMinimized = false,
@@ -1909,38 +1909,35 @@ task.spawn(function()
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
 
-					-- Step 2: steal forest egg (initiate carry)
+					-- Step 2: fire carry langsung (no delay, ala HipHub)
 					if forestEgg then
 						local dummySlot = slotKeys[((slotIdx - 1) % #slotKeys) + 1]
-						pcall(function()
-							Remotes.EggWorld.AskFieldEggCarry:InvokeServer({
-								Uid = forestEgg.uid,
-								FirstAreaSlotKey = dummySlot,
-							})
+						task.spawn(function()
+							pcall(function()
+								Remotes.EggWorld.AskFieldEggCarry:InvokeServer({
+									Uid = forestEgg.uid,
+									FirstAreaSlotKey = dummySlot,
+								})
+							end)
 						end)
-						task.wait(0.15)
 					end
 
-					-- Step 3: CFrame ke guard untuk batalin steal
+					-- Step 3: langsung CFrame ke guard (tanpa nunggu response)
 					char = LocalPlayer.Character
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
 					stealTweenTo(hrp, FOREST_GUARD, autoStealSpeed)
-					task.wait(0.3)
 
-					-- Step 4: setelah batal, CFrame ke target egg
+					-- Step 4: langsung CFrame ke target egg
 					char = LocalPlayer.Character
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
 					stealSafeTween(hrp, egg.pos, autoStealSpeed)
-					task.wait(0.2)
 
 					char = LocalPlayer.Character
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
-
 					hrp.Anchored = false
-					task.wait(0.1)
 
 					-- Step 5: steal target egg yang sebenarnya
 					local targetSlot = slotKeys[((slotIdx - 1) % #slotKeys) + 1]
