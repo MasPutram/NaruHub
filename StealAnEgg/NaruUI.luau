@@ -558,7 +558,7 @@ return (function()
 					}, secFrame)
 
 					local noCollapse = secCfg.NoCollapse == true
-					local expanded = noCollapse or (secCfg.DefaultExpanded == true)
+					local expanded = noCollapse or (secCfg.DefaultExpanded ~= false)
 
 					if not noCollapse then
 						local headerBtn = uiNew("TextButton", {
@@ -571,14 +571,15 @@ return (function()
 							LayoutOrder = 0,
 						}, secFrame)
 						uiCorner(8, headerBtn)
-						uiNew("Frame", {
+						local accentBar = uiNew("Frame", {
 							BackgroundColor3 = UI_COL_ACCENT,
 							Size = UDim2.new(0, 3, 0, 16),
 							Position = UDim2.new(0, 12, 0.5, 0),
 							AnchorPoint = Vector2.new(0, 0.5),
 							BorderSizePixel = 0,
 						}, headerBtn)
-						uiNew("TextLabel", {
+						accentBar.Active = false
+						local headerLbl = uiNew("TextLabel", {
 							BackgroundTransparency = 1,
 							Position = UDim2.new(0, 24, 0, 0),
 							Size = UDim2.new(1, -50, 1, 0),
@@ -588,6 +589,7 @@ return (function()
 							TextColor3 = UI_COL_TEXT,
 							Text = title,
 						}, headerBtn)
+						headerLbl.Active = false
 						local chevron = uiNew("TextLabel", {
 							BackgroundTransparency = 1,
 							Position = UDim2.new(1, -30, 0, 0),
@@ -597,6 +599,7 @@ return (function()
 							TextColor3 = UI_COL_ACCENT,
 							Text = expanded and "\226\136\168" or "\226\128\186",
 						}, headerBtn)
+						chevron.Active = false
 
 						headerBtn.MouseButton1Click:Connect(function()
 							expanded = not expanded
