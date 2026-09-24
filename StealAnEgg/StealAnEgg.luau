@@ -504,7 +504,7 @@ local Fluent = NaruUI.New({
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
-	Version = "v2.0.1",
+	Version = "v2.0.2",
 	TabWidth = 150,
 	Size = UDim2.fromOffset(680, 460),
 	AutoStartMinimized = false,
@@ -1404,6 +1404,7 @@ task.spawn(function()
 		huntMoving = true
 		local char = hrp.Parent
 		if not char then huntMoving = false return end
+		local hum = char:FindFirstChildOfClass("Humanoid")
 		local diff = targetPos - hrp.Position
 		local timeout = math.clamp(diff.Magnitude / speed, 0.5, 15)
 		local start = tick()
@@ -1411,14 +1412,20 @@ task.spawn(function()
 			local h = char:FindFirstChild("HumanoidRootPart")
 			if not h then break end
 			local d = targetPos - h.Position
-			local remain = d.Magnitude
+			local flat = Vector3.new(d.X, 0, d.Z)
+			local remain = flat.Magnitude
 			if remain < 6 then break end
+			local dir = flat.Unit
 			local step = math.min(STEP_SIZE, remain)
-			h.CFrame = CFrame.new(h.Position + d.Unit * step) * (h.CFrame - h.CFrame.Position)
-			h.CFrame = CFrame.new(h.CFrame.Position.X, FLOAT_Y, h.CFrame.Position.Z) * (h.CFrame - h.CFrame.Position)
-			h.AssemblyLinearVelocity = Vector3.zero
+			local newPos = Vector3.new(h.Position.X + dir.X * step, FLOAT_Y, h.Position.Z + dir.Z * step)
+			h.CFrame = CFrame.lookAt(newPos, newPos + dir)
+			h.AssemblyLinearVelocity = dir * speed
+			if hum then
+				hum:Move(dir)
+			end
 			task.wait()
 		end
+		if hum then hum:Move(Vector3.zero) end
 		huntMoving = false
 	end
 
