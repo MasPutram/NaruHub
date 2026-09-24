@@ -357,6 +357,83 @@ local function withHipPaused(fn)
 end
 
 ------------------------------------------------------------
+-- Shared: find my plot & treadmill position (dynamic per rejoin)
+------------------------------------------------------------
+local function findMyPlotShared()
+	local plots = Workspace:FindFirstChild("Plots")
+	if not plots then return nil end
+	local stats = SaveModule.Peek()
+	local myLevel = stats and stats.BaseUpgradeLevel or 0
+	local candidates = {}
+	for _, plot in ipairs(plots:GetChildren()) do
+		if plot:GetAttribute("BaseUpgradeLevel") == myLevel then
+			table.insert(candidates, plot)
+		end
+	end
+	if #candidates == 1 then return candidates[1] end
+	if #candidates == 0 then return nil end
+	for _, plot in ipairs(candidates) do
+		local loc = plot:FindFirstChild("LocalOfflineMoneyClaim")
+		if loc then
+			local area = loc:FindFirstChild("OfflineMoneyClaimArea")
+			if area then
+				local bb = area:FindFirstChild("OfflineMoneyClaimBillboard")
+				if bb and bb.Enabled then return plot end
+			end
+		end
+	end
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		local closest, closestDist = nil, math.huge
+		for _, plot in ipairs(candidates) do
+			local cp = plot:FindFirstChild("CenterPoint")
+			if cp then
+				local dist = (hrp.Position - cp.Position).Magnitude
+				if dist < closestDist then closest, closestDist = plot, dist end
+			end
+		end
+		if closest then return closest end
+	end
+	return candidates[1]
+end
+
+local function getMyTreadmillPos()
+	local plot = findMyPlotShared()
+	if not plot then return nil end
+	local tm = plot:FindFirstChild("TreadmillBottom")
+	return tm and tm.Position or nil
+end
+
+local function hasHighValueEgg(minRate)
+	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+	local AreaEggSlotIdentity = require(ReplicatedStorage.Shared.Util.AreaEggSlotIdentity)
+	local ok, result = pcall(function()
+		local snapshot = Remotes.EggWorld.AskFieldEggSnapshot:InvokeServer()
+		if not snapshot or not snapshot.Records then return false end
+		for _, rec in ipairs(snapshot.Records) do
+			if rec.Uid and rec.State == "Slot" and rec.AssetCategory then
+				if not AreaEggSlotIdentity.LooksLikeFirstAreaUid(rec.Uid)
+					or AreaEggSlotIdentity.FirstAreaOwnerUserId(rec.Uid) ~= LocalPlayer.UserId
+				then
+					local rate = 0
+					pcall(function()
+						rate = AssetEarnings.RatePerSecond({
+							Category = rec.AssetCategory,
+							Scale = rec.AssetScale or 1,
+							Mutations = rec.Mutations or {},
+						})
+					end)
+					if rate >= minRate then return true end
+				end
+			end
+		end
+		return false
+	end)
+	return ok and result or false
+end
+
+------------------------------------------------------------
 -- NaruUI Window (clean, status only -- no tabs visible)
 ------------------------------------------------------------
 local Fluent = NaruUI.New({
@@ -596,18 +673,6 @@ scrambleSection:AddToggle("AutoHuntExperimentToggle", {
 	Default = false,
 	Callback = function(val)
 		autoHuntExperimentEnabled = val
-		if val then
-			task.spawn(function()
-				if not firesignal then return end
-				for _ = 1, 3 do
-					local btn = findHipToggle()
-					if not btn then break end
-					if hipToggleIsOn(btn) then break end
-					pcall(function() firesignal(btn.MouseButton1Click) end)
-					task.wait(0.4)
-				end
-			end)
-		end
 	end,
 })
 scrambleSection:AddToggle("AutoHuntExperimentNoTP", {
@@ -1214,10 +1279,9 @@ end)
 
 ------------------------------------------------------------
 -- Auto Hunt Experiment (Dr Scramble drone farming)
--- Behaviour modelled after Limbo Hub analysis:
---   Window active  → cancel HIP treadmill → tween 500s/s to center
---                  → tween to Abyss Ocean → hunt closest drones
---   Window ends    → re-enable HIP treadmill (returns automatically)
+--   Window active + no high-value egg → hunt drones
+--   Window active + egg >= 1B/s       → pause hunt, treadmill (let HipHub steal)
+--   Window ends / toggle off          → tween back to own treadmill
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -1226,6 +1290,8 @@ task.spawn(function()
 	local huntConn = nil
 	local activeTween = nil
 	local wasHunting = false
+	local waitingForSteal = false
+	local HIGH_VALUE_THRESHOLD = 1e9
 
 	local CENTER_POS = Vector3.new(827, 71, -354)
 	local RUSH_SPEED = 500
@@ -1270,20 +1336,6 @@ task.spawn(function()
 		end
 	end
 
-	local rayParams = RaycastParams.new()
-	rayParams.FilterType = Enum.RaycastFilterType.Exclude
-
-	local function getGroundY(pos, char)
-		rayParams.FilterDescendantsInstances = {char}
-		local ray = workspace:Raycast(Vector3.new(pos.X, pos.Y + 50, pos.Z), Vector3.new(0, -200, 0), rayParams)
-		if ray then
-			local hum = char:FindFirstChildOfClass("Humanoid")
-			local hipH = hum and hum.HipHeight or 2.1
-			return ray.Position.Y + hipH + 1
-		end
-		return pos.Y
-	end
-
 	local function tweenTo(hrp, targetPos, speed)
 		if activeTween then
 			pcall(function() activeTween:Cancel() end)
@@ -1297,6 +1349,14 @@ task.spawn(function()
 		activeTween:Play()
 		activeTween.Completed:Wait()
 		activeTween = nil
+	end
+
+	local function tweenToTreadmill(hrp)
+		local tmPos = getMyTreadmillPos()
+		if not tmPos then return end
+		local char = hrp.Parent
+		local groundY = tmPos.Y + 4
+		tweenTo(hrp, Vector3.new(tmPos.X, groundY, tmPos.Z), RUSH_SPEED)
 	end
 
 	local function findClosestDrone(hrp)
@@ -1314,28 +1374,6 @@ task.spawn(function()
 		return closestId, closestData, closestDist
 	end
 
-	local function cancelHipTreadmill()
-		if not firesignal then return false end
-		local btn = findHipToggle()
-		if btn and hipToggleIsOn(btn) then
-			pcall(function() firesignal(btn.MouseButton1Click) end)
-			task.wait(0.3)
-			return true
-		end
-		return false
-	end
-
-	local function enableHipTreadmill()
-		if not firesignal then return end
-		for _ = 1, 3 do
-			local btn = findHipToggle()
-			if not btn then break end
-			if hipToggleIsOn(btn) then break end
-			pcall(function() firesignal(btn.MouseButton1Click) end)
-			task.wait(0.4)
-		end
-	end
-
 	local currentAreaIdx = 1
 	local areaArriveTime = 0
 
@@ -1348,11 +1386,14 @@ task.spawn(function()
 				local isActive = snap.Window and snap.Window.Active == true
 
 				if not isActive then
-					if wasHunting then
+					if wasHunting or waitingForSteal then
 						stopDroneListener()
-						enableHipTreadmill()
 						wasHunting = false
+						waitingForSteal = false
 						currentAreaIdx = 1
+						local char = LocalPlayer.Character
+						local hrp = char and char:FindFirstChild("HumanoidRootPart")
+						if hrp then tweenToTreadmill(hrp) end
 					end
 					return
 				end
@@ -1361,8 +1402,23 @@ task.spawn(function()
 				local hrp = char and char:FindFirstChild("HumanoidRootPart")
 				if not hrp then return end
 
+				local eggAvailable = hasHighValueEgg(HIGH_VALUE_THRESHOLD)
+
+				if eggAvailable then
+					if wasHunting then
+						stopDroneListener()
+						wasHunting = false
+					end
+					if not waitingForSteal then
+						tweenToTreadmill(hrp)
+						waitingForSteal = true
+					end
+					return
+				end
+
+				waitingForSteal = false
+
 				if not wasHunting then
-					cancelHipTreadmill()
 					startDroneListener()
 					if autoHuntExperimentTeleport then
 						tweenTo(hrp, CENTER_POS, RUSH_SPEED)
@@ -1390,10 +1446,13 @@ task.spawn(function()
 				end
 			end)
 		else
-			if wasHunting then
+			if wasHunting or waitingForSteal then
 				stopDroneListener()
-				enableHipTreadmill()
 				wasHunting = false
+				waitingForSteal = false
+				local char = LocalPlayer.Character
+				local hrp = char and char:FindFirstChild("HumanoidRootPart")
+				if hrp then tweenToTreadmill(hrp) end
 			end
 		end
 		task.wait(1)
@@ -1915,42 +1974,7 @@ task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
 
 	local function findMyPlot()
-		local plots = Workspace:FindFirstChild("Plots")
-		if not plots then return nil end
-		local stats = SaveModule.Peek()
-		local myLevel = stats and stats.BaseUpgradeLevel or 0
-		local candidates = {}
-		for _, plot in ipairs(plots:GetChildren()) do
-			if plot:GetAttribute("BaseUpgradeLevel") == myLevel then
-				table.insert(candidates, plot)
-			end
-		end
-		if #candidates == 1 then return candidates[1] end
-		if #candidates == 0 then return nil end
-		for _, plot in ipairs(candidates) do
-			local loc = plot:FindFirstChild("LocalOfflineMoneyClaim")
-			if loc then
-				local area = loc:FindFirstChild("OfflineMoneyClaimArea")
-				if area then
-					local bb = area:FindFirstChild("OfflineMoneyClaimBillboard")
-					if bb and bb.Enabled then return plot end
-				end
-			end
-		end
-		local char = LocalPlayer.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if hrp then
-			local closest, closestDist = nil, math.huge
-			for _, plot in ipairs(candidates) do
-				local cp = plot:FindFirstChild("CenterPoint")
-				if cp then
-					local dist = (hrp.Position - cp.Position).Magnitude
-					if dist < closestDist then closest, closestDist = plot, dist end
-				end
-			end
-			if closest then return closest end
-		end
-		return candidates[1]
+		return findMyPlotShared()
 	end
 
 	local function teleportToPlot(plot)
