@@ -1261,20 +1261,25 @@ task.spawn(function()
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		if not hum then return end
 		local groundY = getGroundY(targetPos, char)
-		local groundedTarget = Vector3.new(targetPos.X, groundY, targetPos.Z)
-		local dist = (hrp.Position - groundedTarget).Magnitude
+		local dest = Vector3.new(targetPos.X, groundY, targetPos.Z)
+		local dist = (hrp.Position - dest).Magnitude
 		if dist < 3 then return end
 		hrp.Anchored = false
-		local oldWS = hum.WalkSpeed
-		hum.WalkSpeed = math.clamp(speed, 50, 250)
-		hum:MoveTo(groundedTarget)
-		local timeout = math.clamp(dist / hum.WalkSpeed, 0.5, 15)
+		local stepSize = 150
+		local timeout = math.clamp(dist / speed, 0.5, 15)
 		local start = tick()
-		while (hrp.Position - groundedTarget).Magnitude > 6 and tick() - start < timeout do
-			hum:MoveTo(groundedTarget)
-			task.wait(0.1)
+		while tick() - start < timeout do
+			local h = char:FindFirstChild("HumanoidRootPart")
+			if not h then return end
+			local diff = dest - h.Position
+			local remain = diff.Magnitude
+			if remain < 6 then break end
+			local move = math.min(stepSize, remain)
+			local dir = diff.Unit
+			h.CFrame = CFrame.new(h.Position + dir * move) * (h.CFrame - h.CFrame.Position)
+			h.AssemblyLinearVelocity = Vector3.zero
+			task.wait()
 		end
-		hum.WalkSpeed = oldWS
 	end
 
 	local function findClosestDrone(hrp)
@@ -1655,23 +1660,26 @@ task.spawn(function()
 	local function stealTweenTo(hrp, targetPos, speed)
 		local char = hrp.Parent
 		if not char then return end
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		if not hum then return end
 		local groundY = stealGroundY(targetPos, char)
 		local dest = Vector3.new(targetPos.X, groundY, targetPos.Z)
 		local dist = (hrp.Position - dest).Magnitude
 		if dist < 3 then return end
 		hrp.Anchored = false
-		local oldWS = hum.WalkSpeed
-		hum.WalkSpeed = math.clamp(speed, 50, 250)
-		hum:MoveTo(dest)
-		local timeout = math.clamp(dist / hum.WalkSpeed, 0.5, 15)
+		local stepSize = 150
+		local timeout = math.clamp(dist / speed, 0.5, 15)
 		local start = tick()
-		while (hrp.Position - dest).Magnitude > 6 and tick() - start < timeout do
-			hum:MoveTo(dest)
-			task.wait(0.1)
+		while tick() - start < timeout do
+			local h = char:FindFirstChild("HumanoidRootPart")
+			if not h then return end
+			local diff = dest - h.Position
+			local remain = diff.Magnitude
+			if remain < 6 then break end
+			local move = math.min(stepSize, remain)
+			local dir = diff.Unit
+			h.CFrame = CFrame.new(h.Position + dir * move) * (h.CFrame - h.CFrame.Position)
+			h.AssemblyLinearVelocity = Vector3.zero
+			task.wait()
 		end
-		hum.WalkSpeed = oldWS
 	end
 
 	local function stealSafeTween(hrp, targetPos, speed)
