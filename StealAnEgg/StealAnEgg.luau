@@ -1354,9 +1354,6 @@ task.spawn(function()
 		huntMoving = true
 		local char = hrp.Parent
 		if not char then huntMoving = false return end
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		local origWS = hum and hum.WalkSpeed or 16
-		if hum then hum.WalkSpeed = 255 end
 		local timeout = math.clamp((hrp.Position - targetPos).Magnitude / speed, 0.5, 15)
 		local start = tick()
 		while tick() - start < timeout and huntMoving do
@@ -1370,7 +1367,6 @@ task.spawn(function()
 			h.AssemblyLinearVelocity = Vector3.zero
 			task.wait()
 		end
-		if hum then hum.WalkSpeed = origWS end
 		huntMoving = false
 	end
 
@@ -1778,16 +1774,10 @@ task.spawn(function()
 	local function stealTweenTo(hrp, targetPos, speed)
 		local char = hrp.Parent
 		if not char then return end
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		local origWS = hum and hum.WalkSpeed or 16
-		if hum then hum.WalkSpeed = 255 end
 		local groundY = stealGroundY(targetPos, char)
 		local dest = Vector3.new(targetPos.X, groundY, targetPos.Z)
 		local dist = (hrp.Position - dest).Magnitude
-		if dist < 3 then
-			if hum then hum.WalkSpeed = origWS end
-			return
-		end
+		if dist < 3 then return end
 		hrp.Anchored = false
 		local timeout = math.clamp(dist / speed, 0.5, 15)
 		local start = tick()
@@ -1802,7 +1792,6 @@ task.spawn(function()
 			h.AssemblyLinearVelocity = Vector3.zero
 			task.wait()
 		end
-		if hum then hum.WalkSpeed = origWS end
 	end
 
 	local function stealSafeTween(hrp, targetPos, speed)
