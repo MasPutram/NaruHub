@@ -317,7 +317,11 @@ do
 				if new == Enum.HumanoidStateType.FallingDown
 					or new == Enum.HumanoidStateType.Ragdoll
 					or new == Enum.HumanoidStateType.Physics then
-					hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+					hum:ChangeState(Enum.HumanoidStateType.Jumping)
+					local hrp = char:FindFirstChild("HumanoidRootPart")
+					if hrp then
+						hrp.AssemblyLinearVelocity = Vector3.new(0, 80, 0)
+					end
 				end
 			end)
 		end)
@@ -500,7 +504,7 @@ local Fluent = NaruUI.New({
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
-	Version = "v2.0.0",
+	Version = "v2.0.1",
 	TabWidth = 150,
 	Size = UDim2.fromOffset(680, 460),
 	AutoStartMinimized = false,
