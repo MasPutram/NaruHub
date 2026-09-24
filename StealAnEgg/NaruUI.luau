@@ -559,6 +559,7 @@ return (function()
 
 					local noCollapse = secCfg.NoCollapse == true
 					local expanded = noCollapse or (secCfg.DefaultExpanded ~= false)
+					local contentHolder
 
 					if not noCollapse then
 						local headerBtn = uiNew("TextButton", {
@@ -601,14 +602,22 @@ return (function()
 						}, headerBtn)
 						chevron.Active = false
 
-						headerBtn.MouseButton1Click:Connect(function()
+						local clickOverlay = uiNew("TextButton", {
+							Size = UDim2.fromScale(1, 1),
+							BackgroundTransparency = 1,
+							Text = "",
+							ZIndex = 10,
+						}, headerBtn)
+						clickOverlay.MouseButton1Click:Connect(function()
 							expanded = not expanded
-							contentHolder.Visible = expanded
+							if contentHolder then
+								contentHolder.Visible = expanded
+							end
 							chevron.Text = expanded and "\226\136\168" or "\226\128\186"
 						end)
 					end
 
-					local contentHolder = uiNew("Frame", {
+					contentHolder = uiNew("Frame", {
 						BackgroundColor3 = UI_COL_ROW,
 						BackgroundTransparency = 0.15,
 						BorderSizePixel = 0,
