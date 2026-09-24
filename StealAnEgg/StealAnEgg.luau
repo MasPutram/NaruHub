@@ -489,6 +489,8 @@ stealSection:AddToggle("AutoHatchToggle", {
 
 local autoStealEnabled = false
 local autoStealTeleport = true
+local autoStealMinValue = 1_000_000_000
+local autoStealSpeed = 500
 stealSection:AddToggle("AutoStealToggle", {
 	Title = "Auto Steal Eggs",
 	Default = false,
@@ -501,6 +503,26 @@ stealSection:AddToggle("AutoStealNoTP", {
 	Default = false,
 	Callback = function(val)
 		autoStealTeleport = not val
+	end,
+})
+stealSection:AddInput("AutoStealThreshold", {
+	Title = "  Value Threshold (M$)",
+	Default = "1000",
+	Placeholder = "0 = Any",
+	Numeric = true,
+	Callback = function(val)
+		local n = tonumber(val) or 0
+		autoStealMinValue = n * 1_000_000
+	end,
+})
+stealSection:AddSlider("AutoStealSpeed", {
+	Title = "  Tween Speed (studs/s)",
+	Default = 500,
+	Min = 100,
+	Max = 2000,
+	Rounding = 0,
+	Callback = function(val)
+		autoStealSpeed = val
 	end,
 })
 
@@ -1665,10 +1687,24 @@ task.spawn(function()
 				if not AreaEggSlotIdentity.LooksLikeFirstAreaUid(rec.Uid)
 					or AreaEggSlotIdentity.FirstAreaOwnerUserId(rec.Uid) ~= LocalPlayer.UserId
 				then
-					table.insert(targets, { uid = rec.Uid, pos = rec.BoundsCFrame.Position })
+					local rate = 0
+					if autoStealMinValue > 0 and rec.AssetCategory then
+						pcall(function()
+							rate = AssetEarnings.RatePerSecond({
+								Category = rec.AssetCategory,
+								Scale = rec.AssetScale or 1,
+								Mutations = rec.Mutations or {},
+							})
+						end)
+						if rate < autoStealMinValue then
+							continue
+						end
+					end
+					table.insert(targets, { uid = rec.Uid, pos = rec.BoundsCFrame.Position, rate = rate })
 				end
 			end
 		end
+		table.sort(targets, function(a, b) return a.rate > b.rate end)
 		return targets
 	end
 
@@ -1701,7 +1737,7 @@ task.spawn(function()
 					if not hrp then break end
 
 					if autoStealTeleport then
-						stealSafeTween(hrp, egg.pos, 500)
+						stealSafeTween(hrp, egg.pos, autoStealSpeed)
 					end
 					task.wait(0.2)
 
