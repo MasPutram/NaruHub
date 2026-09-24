@@ -459,7 +459,7 @@ local Fluent = NaruUI.New({
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
-	Version = "v1.6.1",
+	Version = "v1.6.2",
 	TabWidth = 150,
 	Size = UDim2.fromOffset(680, 460),
 	AutoStartMinimized = false,
@@ -1349,21 +1349,41 @@ task.spawn(function()
 	local STEP_SIZE = 12
 	local huntMoving = false
 
+	local huntRayParams = RaycastParams.new()
+	huntRayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+	local function huntGroundY(pos, char)
+		huntRayParams.FilterDescendantsInstances = {char}
+		local ray = workspace:Raycast(Vector3.new(pos.X, pos.Y + 50, pos.Z), Vector3.new(0, -200, 0), huntRayParams)
+		if ray then
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			return ray.Position.Y + (hum and hum.HipHeight or 2.1) + 1
+		end
+		return pos.Y
+	end
+
 	local function moveTo(hrp, targetPos, speed)
 		if huntMoving then return end
 		huntMoving = true
 		local char = hrp.Parent
 		if not char then huntMoving = false return end
-		local timeout = math.clamp((hrp.Position - targetPos).Magnitude / speed, 0.5, 15)
+		local destXZ = Vector2.new(targetPos.X, targetPos.Z)
+		local startXZ = Vector2.new(hrp.Position.X, hrp.Position.Z)
+		local timeout = math.clamp((startXZ - destXZ).Magnitude / speed, 0.5, 15)
 		local start = tick()
 		while tick() - start < timeout and huntMoving do
 			local h = char:FindFirstChild("HumanoidRootPart")
 			if not h then break end
-			local diff = targetPos - h.Position
-			local remain = diff.Magnitude
+			local curXZ = Vector2.new(h.Position.X, h.Position.Z)
+			local diffXZ = destXZ - curXZ
+			local remain = diffXZ.Magnitude
 			if remain < 6 then break end
 			local step = math.min(STEP_SIZE, remain)
-			h.CFrame = CFrame.new(h.Position + diff.Unit * step) * (h.CFrame - h.CFrame.Position)
+			local dir = diffXZ.Unit
+			local newX = h.Position.X + dir.X * step
+			local newZ = h.Position.Z + dir.Y * step
+			local groundY = huntGroundY(Vector3.new(newX, h.Position.Y, newZ), char)
+			h.CFrame = CFrame.new(newX, groundY, newZ) * (h.CFrame - h.CFrame.Position)
 			h.AssemblyLinearVelocity = Vector3.zero
 			task.wait()
 		end
@@ -1775,9 +1795,9 @@ task.spawn(function()
 	local function stealTweenTo(hrp, targetPos, speed)
 		local char = hrp.Parent
 		if not char then return end
-		local groundY = stealGroundY(targetPos, char)
-		local dest = Vector3.new(targetPos.X, groundY, targetPos.Z)
-		local dist = (hrp.Position - dest).Magnitude
+		local destXZ = Vector2.new(targetPos.X, targetPos.Z)
+		local startXZ = Vector2.new(hrp.Position.X, hrp.Position.Z)
+		local dist = (startXZ - destXZ).Magnitude
 		if dist < 3 then return end
 		hrp.Anchored = false
 		local timeout = math.clamp(dist / speed, 0.5, 15)
@@ -1785,11 +1805,16 @@ task.spawn(function()
 		while tick() - start < timeout do
 			local h = char:FindFirstChild("HumanoidRootPart")
 			if not h then break end
-			local diff = dest - h.Position
-			local remain = diff.Magnitude
+			local curXZ = Vector2.new(h.Position.X, h.Position.Z)
+			local diffXZ = destXZ - curXZ
+			local remain = diffXZ.Magnitude
 			if remain < 6 then break end
 			local step = math.min(12, remain)
-			h.CFrame = CFrame.new(h.Position + diff.Unit * step) * (h.CFrame - h.CFrame.Position)
+			local dir = diffXZ.Unit
+			local newX = h.Position.X + dir.X * step
+			local newZ = h.Position.Z + dir.Y * step
+			local groundY = stealGroundY(Vector3.new(newX, h.Position.Y, newZ), char)
+			h.CFrame = CFrame.new(newX, groundY, newZ) * (h.CFrame - h.CFrame.Position)
 			h.AssemblyLinearVelocity = Vector3.zero
 			task.wait()
 		end
