@@ -259,26 +259,7 @@ do
 	end
 	antiHitGuard()
 
-	local function setupAntiGuard(char)
-		if not char then return end
-		local hum = char:WaitForChild("Humanoid", 5)
-		if not hum then return end
-		hum.MaxHealth = 1e9
-		hum.Health = 1e9
-		hum:GetPropertyChangedSignal("Health"):Connect(function()
-			if hum.Health < 1e9 then
-				hum.Health = 1e9
-			end
-		end)
-		hum:GetPropertyChangedSignal("MaxHealth"):Connect(function()
-			if hum.MaxHealth < 1e9 then
-				hum.MaxHealth = 1e9
-			end
-		end)
-	end
-
-	setupAntiGuard(LocalPlayer.Character)
-	LocalPlayer.CharacterAdded:Connect(setupAntiGuard)
+	antiHitGuard()
 
 	RunService.Heartbeat:Connect(function()
 		pcall(function()
@@ -1285,7 +1266,7 @@ task.spawn(function()
 		if dist < 3 then return end
 		hrp.Anchored = false
 		local oldWS = hum.WalkSpeed
-		hum.WalkSpeed = math.clamp(speed, 50, 300)
+		hum.WalkSpeed = math.clamp(speed, 50, 250)
 		hum:MoveTo(groundedTarget)
 		local timeout = math.clamp(dist / hum.WalkSpeed, 0.5, 15)
 		local start = tick()
@@ -1682,7 +1663,7 @@ task.spawn(function()
 		if dist < 3 then return end
 		hrp.Anchored = false
 		local oldWS = hum.WalkSpeed
-		hum.WalkSpeed = math.clamp(speed, 50, 300)
+		hum.WalkSpeed = math.clamp(speed, 50, 250)
 		hum:MoveTo(dest)
 		local timeout = math.clamp(dist / hum.WalkSpeed, 0.5, 15)
 		local start = tick()
