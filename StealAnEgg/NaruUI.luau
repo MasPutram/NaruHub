@@ -195,6 +195,19 @@ return (function()
 					Text = wcfg.Badge,
 				}, premiumBadge)
 			end
+			if wcfg.Version then
+				uiNew("TextLabel", {
+					BackgroundTransparency = 1,
+					AutomaticSize = Enum.AutomaticSize.X,
+					Size = UDim2.new(0, 0, 0, 18),
+					Font = UI_FONT,
+					TextSize = 12,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					TextColor3 = UI_COL_DIM,
+					Text = wcfg.Version,
+					LayoutOrder = 3,
+				}, titleHolder)
+			end
 
 			local function titleBtn(text, xOffsetFromRight)
 				local btn = uiNew("TextButton", {
