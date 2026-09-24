@@ -1124,16 +1124,16 @@ end)
 
 ------------------------------------------------------------
 -- Auto Hunt Experiment (Dr Scramble drone farming)
--- When Window.Active, teleport to event biome, find drones,
--- stay near them so the game's built-in auto-attack (bat)
--- handles hitting. Drops are collected automatically by the
--- game's own collection loop.
+-- When Window.Active, tween to drones using positions from
+-- Scramble.Drones events. Game auto-attacks within 12 studs
+-- and auto-collects drops.
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	local CS = game:GetService("CollectionService")
+	local TweenService = game:GetService("TweenService")
 	local huntDrones = {}
 	local huntConn = nil
+	local activeTween = nil
 
 	local function startDroneListener()
 		if huntConn then return end
@@ -1164,37 +1164,50 @@ task.spawn(function()
 			huntConn = nil
 		end
 		table.clear(huntDrones)
+		if activeTween then
+			pcall(function() activeTween:Cancel() end)
+			activeTween = nil
+		end
 	end
 
-	local function findClosestDroneModel()
-		local char = LocalPlayer.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if not hrp then return nil end
-		local closest, closestDist = nil, math.huge
-		for _, obj in ipairs(Workspace:GetDescendants()) do
-			if obj.Name == "Hitbox" and obj:IsA("BasePart") and obj.Parent and obj.Parent:IsA("Model") then
-				local hp = obj:GetAttribute("Health")
-				if typeof(hp) == "number" and hp > 0 then
-					local dist = (obj.Position - hrp.Position).Magnitude
-					if dist < closestDist then
-						closest = obj
-						closestDist = dist
-					end
+	local function tweenTo(hrp, targetPos)
+		if activeTween then
+			pcall(function() activeTween:Cancel() end)
+		end
+		local dist = (hrp.Position - targetPos).Magnitude
+		local speed = 120
+		local duration = math.clamp(dist / speed, 0.3, 8)
+		local goal = { CFrame = CFrame.new(targetPos) }
+		local info = TweenInfo.new(duration, Enum.EasingStyle.Linear)
+		activeTween = TweenService:Create(hrp, info, goal)
+		activeTween:Play()
+	end
+
+	local function findClosestDrone(hrp)
+		local closestId, closestData, closestDist = nil, nil, math.huge
+		for id, drone in pairs(huntDrones) do
+			if drone.health > 0 then
+				local dist = (hrp.Position - drone.cframe.Position).Magnitude
+				if dist < closestDist then
+					closestId = id
+					closestData = drone
+					closestDist = dist
 				end
 			end
 		end
-		return closest, closestDist
+		return closestId, closestData, closestDist
 	end
 
 	local eventAreaPositions = {
-		Vector3.new(2166, 68, -363),
-		Vector3.new(2634, 68, -363),
-		Vector3.new(3206, 68, -363),
-		Vector3.new(3928, 68, -363),
-		Vector3.new(4698, 68, -363),
-		Vector3.new(5577, 68, -363),
+		Vector3.new(2166, 74, -363),
+		Vector3.new(2634, 74, -363),
+		Vector3.new(3206, 74, -363),
+		Vector3.new(3928, 74, -363),
+		Vector3.new(4698, 74, -363),
+		Vector3.new(5577, 74, -363),
 	}
 	local currentAreaIdx = 1
+	local areaArriveTime = 0
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoHuntExperimentEnabled then
@@ -1215,13 +1228,19 @@ task.spawn(function()
 				local hrp = char and char:FindFirstChild("HumanoidRootPart")
 				if not hrp then return end
 
-				local hitbox, dist = findClosestDroneModel()
+				local droneId, droneData, droneDist = findClosestDrone(hrp)
 
-				if hitbox and dist > 10 and autoHuntExperimentTeleport then
-					hrp.CFrame = hitbox.CFrame * CFrame.new(0, 0, 5)
-				elseif not hitbox and autoHuntExperimentTeleport then
-					hrp.CFrame = CFrame.new(eventAreaPositions[currentAreaIdx])
-					currentAreaIdx = (currentAreaIdx % #eventAreaPositions) + 1
+				if droneData and autoHuntExperimentTeleport then
+					local targetPos = droneData.cframe.Position + Vector3.new(0, 0, 5)
+					if droneDist > 12 then
+						tweenTo(hrp, targetPos)
+					end
+				elseif not droneData and autoHuntExperimentTeleport then
+					if os.clock() - areaArriveTime > 6 then
+						tweenTo(hrp, eventAreaPositions[currentAreaIdx])
+						currentAreaIdx = (currentAreaIdx % #eventAreaPositions) + 1
+						areaArriveTime = os.clock()
+					end
 				end
 			end)
 		else
