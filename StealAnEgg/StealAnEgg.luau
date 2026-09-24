@@ -1171,12 +1171,27 @@ task.spawn(function()
 		end
 	end
 
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+	local function getGroundY(pos, char)
+		rayParams.FilterDescendantsInstances = {char}
+		local ray = workspace:Raycast(Vector3.new(pos.X, pos.Y + 50, pos.Z), Vector3.new(0, -200, 0), rayParams)
+		if ray then
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			local hipH = hum and hum.HipHeight or 2.1
+			return ray.Position.Y + hipH + 1
+		end
+		return pos.Y
+	end
+
 	local function tweenTo(hrp, targetPos, speed)
 		if activeTween then
 			pcall(function() activeTween:Cancel() end)
 		end
-		-- Keep character's current Y (ground level) so it doesn't float
-		local groundedTarget = Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z)
+		local char = hrp.Parent
+		local groundY = getGroundY(targetPos, char)
+		local groundedTarget = Vector3.new(targetPos.X, groundY, targetPos.Z)
 		local dist = (hrp.Position - groundedTarget).Magnitude
 		if dist < 3 then return end
 		local duration = math.clamp(dist / speed, 0.1, 12)
