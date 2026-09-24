@@ -262,14 +262,21 @@ do
 		end)
 	end)
 
+	local BLOCKED_STATES = {
+		Enum.HumanoidStateType.Dead,
+		Enum.HumanoidStateType.FallingDown,
+		Enum.HumanoidStateType.Ragdoll,
+		Enum.HumanoidStateType.Physics,
+	}
+
 	local function setupInstantHeal()
 		local char = LocalPlayer.Character
 		if not char then return end
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		if not hum then return end
-		pcall(function()
-			hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
-		end)
+		for _, s in ipairs(BLOCKED_STATES) do
+			pcall(function() hum:SetStateEnabled(s, false) end)
+		end
 		hum.HealthChanged:Connect(function(hp)
 			pcall(function()
 				local maxHP = hum.MaxHealth > 0 and hum.MaxHealth or 100
@@ -281,6 +288,11 @@ do
 		RunService.Heartbeat:Connect(function()
 			pcall(function()
 				if not hum or not hum.Parent then return end
+				for _, s in ipairs(BLOCKED_STATES) do
+					if hum:GetStateEnabled(s) then
+						hum:SetStateEnabled(s, false)
+					end
+				end
 				local maxHP = hum.MaxHealth > 0 and hum.MaxHealth or 100
 				if hum.Health < maxHP then
 					hum.Health = maxHP
@@ -516,7 +528,7 @@ local Fluent = NaruUI.New({
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
-	Version = "v2.0.3",
+	Version = "v2.0.4",
 	TabWidth = 150,
 	Size = UDim2.fromOffset(680, 460),
 	AutoStartMinimized = false,
