@@ -1760,6 +1760,7 @@ task.spawn(function()
 	local SAFE_Z = -360
 	local SAFE_Y_FALLBACK = 72
 	local FOREST_NEST = Vector3.new(597, 68, -329)
+	local FOREST_GUARD = Vector3.new(596.6, 69.4, -317.1)
 
 	local function stealGroundY(pos, char)
 		rayParams.FilterDescendantsInstances = {char}
@@ -1811,6 +1812,20 @@ task.spawn(function()
 	end
 
 	local AreaEggSlotIdentity = require(ReplicatedStorage.Shared.Util.AreaEggSlotIdentity)
+
+	local function getForestEgg()
+		local ok, snapshot = pcall(function()
+			return Remotes.EggWorld.AskFieldEggSnapshot:InvokeServer()
+		end)
+		if not ok or not snapshot or not snapshot.Records then return nil end
+		for _, rec in ipairs(snapshot.Records) do
+			if rec.Uid and rec.BoundsCFrame and rec.State == "Slot"
+				and rec.AreaId == "Forest" then
+				return { uid = rec.Uid, pos = rec.BoundsCFrame.Position }
+			end
+		end
+		return nil
+	end
 
 	local function getOurSlotKeys()
 		local keys = {}
@@ -1886,11 +1901,37 @@ task.spawn(function()
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
 
-					stealSafeTween(hrp, FOREST_NEST, autoStealSpeed)
+					-- Step 1: CFrame ke forest egg
+					local forestEgg = getForestEgg()
+					local forestTarget = forestEgg and forestEgg.pos or FOREST_NEST
+					stealSafeTween(hrp, forestTarget, autoStealSpeed)
 					char = LocalPlayer.Character
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
 
+					-- Step 2: steal forest egg (initiate carry)
+					if forestEgg then
+						local dummySlot = slotKeys[((slotIdx - 1) % #slotKeys) + 1]
+						pcall(function()
+							Remotes.EggWorld.AskFieldEggCarry:InvokeServer({
+								Uid = forestEgg.uid,
+								FirstAreaSlotKey = dummySlot,
+							})
+						end)
+						task.wait(0.15)
+					end
+
+					-- Step 3: CFrame ke guard untuk batalin steal
+					char = LocalPlayer.Character
+					hrp = char and char:FindFirstChild("HumanoidRootPart")
+					if not hrp then break end
+					stealTweenTo(hrp, FOREST_GUARD, autoStealSpeed)
+					task.wait(0.3)
+
+					-- Step 4: setelah batal, CFrame ke target egg
+					char = LocalPlayer.Character
+					hrp = char and char:FindFirstChild("HumanoidRootPart")
+					if not hrp then break end
 					stealSafeTween(hrp, egg.pos, autoStealSpeed)
 					task.wait(0.2)
 
@@ -1901,6 +1942,7 @@ task.spawn(function()
 					hrp.Anchored = false
 					task.wait(0.1)
 
+					-- Step 5: steal target egg yang sebenarnya
 					local targetSlot = slotKeys[((slotIdx - 1) % #slotKeys) + 1]
 					slotIdx = slotIdx + 1
 
