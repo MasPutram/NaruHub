@@ -1300,10 +1300,8 @@ end)
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	local TweenService = game:GetService("TweenService")
 	local huntDrones = {}
 	local huntConn = nil
-	local activeTween = nil
 	local wasHunting = false
 	local waitingForSteal = false
 	local HIGH_VALUE_THRESHOLD = 1e9
@@ -1340,30 +1338,44 @@ task.spawn(function()
 	end
 
 	local function stopDroneListener()
+		cancelMove()
 		if huntConn then
 			huntConn:Disconnect()
 			huntConn = nil
 		end
 		table.clear(huntDrones)
-		if activeTween then
-			pcall(function() activeTween:Cancel() end)
-			activeTween = nil
-		end
 	end
 
-	local function tweenTo(hrp, targetPos, speed)
-		if activeTween then
-			pcall(function() activeTween:Cancel() end)
+	local STEP_SIZE = 12
+	local huntMoving = false
+
+	local function moveTo(hrp, targetPos, speed)
+		if huntMoving then return end
+		huntMoving = true
+		local char = hrp.Parent
+		if not char then huntMoving = false return end
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		local origWS = hum and hum.WalkSpeed or 16
+		if hum then hum.WalkSpeed = 255 end
+		local timeout = math.clamp((hrp.Position - targetPos).Magnitude / speed, 0.5, 15)
+		local start = tick()
+		while tick() - start < timeout and huntMoving do
+			local h = char:FindFirstChild("HumanoidRootPart")
+			if not h then break end
+			local diff = targetPos - h.Position
+			local remain = diff.Magnitude
+			if remain < 6 then break end
+			local step = math.min(STEP_SIZE, remain)
+			h.CFrame = CFrame.new(h.Position + diff.Unit * step) * (h.CFrame - h.CFrame.Position)
+			h.AssemblyLinearVelocity = Vector3.zero
+			task.wait()
 		end
-		local dist = (hrp.Position - targetPos).Magnitude
-		if dist < 3 then return end
-		local duration = math.clamp(dist / speed, 0.1, 12)
-		local goal = { CFrame = CFrame.new(targetPos) }
-		local info = TweenInfo.new(duration, Enum.EasingStyle.Linear)
-		activeTween = TweenService:Create(hrp, info, goal)
-		activeTween:Play()
-		activeTween.Completed:Wait()
-		activeTween = nil
+		if hum then hum.WalkSpeed = origWS end
+		huntMoving = false
+	end
+
+	local function cancelMove()
+		huntMoving = false
 	end
 
 	local function findClosestDrone(hrp)
@@ -1450,8 +1462,8 @@ task.spawn(function()
 					cancelHipTreadmill()
 					startDroneListener()
 					if autoHuntExperimentTeleport then
-						tweenTo(hrp, CENTER_POS, RUSH_SPEED)
-						tweenTo(hrp, HUNT_AREAS[1], RUSH_SPEED)
+						moveTo(hrp, CENTER_POS, RUSH_SPEED)
+						moveTo(hrp, HUNT_AREAS[1], RUSH_SPEED)
 					end
 					wasHunting = true
 					areaArriveTime = os.clock()
@@ -1464,12 +1476,12 @@ task.spawn(function()
 				if droneData then
 					local targetPos = droneData.cframe.Position + Vector3.new(0, 0, 5)
 					if droneDist > 12 then
-						tweenTo(hrp, targetPos, DRONE_SPEED)
+						moveTo(hrp, targetPos, DRONE_SPEED)
 					end
 				else
 					if os.clock() - areaArriveTime > 8 then
 						currentAreaIdx = (currentAreaIdx % #HUNT_AREAS) + 1
-						tweenTo(hrp, HUNT_AREAS[currentAreaIdx], RUSH_SPEED)
+						moveTo(hrp, HUNT_AREAS[currentAreaIdx], RUSH_SPEED)
 						areaArriveTime = os.clock()
 					end
 				end
