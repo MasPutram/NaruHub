@@ -1384,7 +1384,15 @@ task.spawn(function()
 								Mutations = rec.Mutations or {},
 							})
 						end)
-						if not AUTO_SELL_NEVER[rarity] and rate > 0 and rate < AUTO_SELL_MIN_RATE then
+						local weight = 0
+						pcall(function()
+							weight = AssetItems.WeightKg({
+								Category = rec.AssetCategory,
+								Scale = rec.AssetScale or 1,
+								Mutations = rec.Mutations or {},
+							})
+						end)
+						if not AUTO_SELL_NEVER[rarity] and rate > 0 and rate < AUTO_SELL_MIN_RATE and weight < 1_000_000_000 then
 							toSell[#toSell + 1] = uid
 						end
 					end
