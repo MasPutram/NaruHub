@@ -1511,7 +1511,7 @@ function AllAccountsDetailModal({ allDetail, tab, setTab, onClose, onOpenAccount
 
         {tab === "work" && (() => {
           const WORK_THRESHOLD = 20_000_000_000;
-          const WORK_PET_CATEGORIES = new Set(["Skeleton Horse", "Pegasus", "Arch Angel", "World Burner"]);
+          const WORK_PET_CATEGORIES = new Set(["Skeleton Horse", "Pegasus", "ArchAngel", "World Burner"]);
           const workGrowing = allGrowingEggs.filter((e) => (e.rate || 0) >= WORK_THRESHOLD);
           const workBackpack = allBackpackEggs.filter((e) => (e.rate || 0) >= WORK_THRESHOLD);
           const workPets = (allPets as (Pet & { _equipped?: boolean; _bag?: boolean; _from?: string })[])
