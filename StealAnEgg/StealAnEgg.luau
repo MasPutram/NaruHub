@@ -1637,17 +1637,42 @@ task.spawn(function()
 		stealTweenTo(hrp, targetPos, speed)
 	end
 
+	local AreaEggSlotIdentity = require(ReplicatedStorage.Shared.Util.AreaEggSlotIdentity)
+
+	local function getOurSlotKeys()
+		local keys = {}
+		pcall(function()
+			local snapshot = Remotes.EggWorld.AskFieldEggSnapshot:InvokeServer()
+			if not snapshot or not snapshot.Records then return end
+			for _, rec in ipairs(snapshot.Records) do
+				if AreaEggSlotIdentity.LooksLikeFirstAreaUid(rec.Uid)
+					and AreaEggSlotIdentity.FirstAreaOwnerUserId(rec.Uid) == LocalPlayer.UserId
+				then
+					local slotKey = AreaEggSlotIdentity.SlotKey(rec.AreaId, rec.NestId)
+					table.insert(keys, slotKey)
+				end
+			end
+		end)
+		return keys
+	end
+
 	local function getStealableEggs()
 		local snapshot = Remotes.EggWorld.AskFieldEggSnapshot:InvokeServer()
 		if not snapshot or not snapshot.Records then return {} end
 		local targets = {}
 		for _, rec in ipairs(snapshot.Records) do
-			if rec.Uid and rec.BoundsCFrame then
-				table.insert(targets, { uid = rec.Uid, pos = rec.BoundsCFrame.Position })
+			if rec.Uid and rec.BoundsCFrame and rec.State == "Slot" then
+				if not AreaEggSlotIdentity.LooksLikeFirstAreaUid(rec.Uid)
+					or AreaEggSlotIdentity.FirstAreaOwnerUserId(rec.Uid) ~= LocalPlayer.UserId
+				then
+					table.insert(targets, { uid = rec.Uid, pos = rec.BoundsCFrame.Position })
+				end
 			end
 		end
 		return targets
 	end
+
+	local slotIdx = 1
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoStealEnabled then
@@ -1655,6 +1680,9 @@ task.spawn(function()
 				local char = LocalPlayer.Character
 				local hrp = char and char:FindFirstChild("HumanoidRootPart")
 				if not hrp then return end
+
+				local slotKeys = getOurSlotKeys()
+				if #slotKeys == 0 then return end
 
 				local hipBtn = findHipToggle()
 				local hipWasOn = hipBtn and hipToggleIsOn(hipBtn)
@@ -1681,16 +1709,16 @@ task.spawn(function()
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
 
+					local targetSlot = slotKeys[((slotIdx - 1) % #slotKeys) + 1]
+					slotIdx = slotIdx + 1
+
 					local ok, result = pcall(function()
 						return Remotes.EggWorld.AskFieldEggCarry:InvokeServer({
 							Uid = egg.uid,
+							FirstAreaSlotKey = targetSlot,
 						})
 					end)
 					if ok and result == true then
-						task.wait(0.5)
-						pcall(function()
-							Remotes.EggWorld.AskFieldEggDrop:InvokeServer({})
-						end)
 						task.wait(0.3)
 					else
 						task.wait(0.1)
