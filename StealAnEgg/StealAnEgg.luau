@@ -236,14 +236,11 @@ local LocalPlayer = Players.LocalPlayer
 do
 	local RunService = game:GetService("RunService")
 
+	getgenv().__naruStealActive = false
+
 	local function antiHitGuard()
 		pcall(function()
-			local sepLine = Workspace:FindFirstChild("__OBJECTS")
-				and Workspace.__OBJECTS:FindFirstChild("Areas")
-				and Workspace.__OBJECTS.Areas:FindFirstChild("SeparationLine")
-			if sepLine then
-				sepLine.CFrame = CFrame.new(1e6, 0, 0) * sepLine.CFrame.Rotation
-			end
+			if getgenv().__naruStealActive then return end
 
 			local guardRemotes = require(ReplicatedStorage.Shared.Remotes).GuardPatrol
 			if not guardRemotes then return end
@@ -257,8 +254,6 @@ do
 			end
 		end)
 	end
-	antiHitGuard()
-
 	antiHitGuard()
 
 	RunService.Heartbeat:Connect(function()
@@ -505,7 +500,7 @@ local Fluent = NaruUI.New({
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
-	Version = "v1.9.0",
+	Version = "v2.0.0",
 	TabWidth = 150,
 	Size = UDim2.fromOffset(680, 460),
 	AutoStartMinimized = false,
@@ -1798,6 +1793,8 @@ end)
 
 ------------------------------------------------------------
 -- Auto Steal (tween to other players' eggs, carry them)
+-- Flow: carry own forest egg → walk past guard → ForestStrike
+--       → guard drops our egg → CFrame to target → carry target
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -1806,22 +1803,22 @@ task.spawn(function()
 	local STEAL_FLOAT_Y = 70.6
 	local FOREST_NEST = Vector3.new(597, 68, -329)
 	local FOREST_GUARD = Vector3.new(596.6, 69.4, -317.1)
+	local GUARD_PAST = Vector3.new(596.6, 69.4, -305)
 
-	local function stealTweenTo(hrp, targetPos, speed)
+	local function stealTweenTo(hrp, targetPos, stepSize)
 		local char = hrp.Parent
 		if not char then return end
 		local diff = targetPos - hrp.Position
 		if diff.Magnitude < 3 then return end
 		hrp.Anchored = false
-		local timeout = math.clamp(diff.Magnitude / speed, 0.5, 15)
 		local start = tick()
-		while tick() - start < timeout do
+		while tick() - start < 15 do
 			local h = char:FindFirstChild("HumanoidRootPart")
 			if not h then break end
 			local d = targetPos - h.Position
 			local remain = d.Magnitude
-			if remain < 6 then break end
-			local step = math.min(12, remain)
+			if remain < 3 then break end
+			local step = math.min(stepSize, remain)
 			h.CFrame = CFrame.new(h.Position + d.Unit * step) * (h.CFrame - h.CFrame.Position)
 			h.CFrame = CFrame.new(h.CFrame.Position.X, STEAL_FLOAT_Y, h.CFrame.Position.Z) * (h.CFrame - h.CFrame.Position)
 			h.AssemblyLinearVelocity = Vector3.zero
@@ -1829,19 +1826,19 @@ task.spawn(function()
 		end
 	end
 
-	local function stealSafeTween(hrp, targetPos, speed)
+	local function stealSafeTween(hrp, targetPos)
 		local char = hrp.Parent
 		local curX = hrp.Position.X
 		local tgtX = targetPos.X
 		if math.abs(curX - tgtX) > 80 then
-			stealTweenTo(hrp, Vector3.new(curX, STEAL_FLOAT_Y, SAFE_Z), speed)
+			stealTweenTo(hrp, Vector3.new(curX, STEAL_FLOAT_Y, SAFE_Z), 12)
 			hrp = char and char:FindFirstChild("HumanoidRootPart")
 			if not hrp then return end
-			stealTweenTo(hrp, Vector3.new(tgtX, STEAL_FLOAT_Y, SAFE_Z), speed)
+			stealTweenTo(hrp, Vector3.new(tgtX, STEAL_FLOAT_Y, SAFE_Z), 12)
 			hrp = char and char:FindFirstChild("HumanoidRootPart")
 			if not hrp then return end
 		end
-		stealTweenTo(hrp, targetPos, speed)
+		stealTweenTo(hrp, targetPos, 12)
 	end
 
 	local AreaEggSlotIdentity = require(ReplicatedStorage.Shared.Util.AreaEggSlotIdentity)
@@ -1853,8 +1850,11 @@ task.spawn(function()
 		if not ok or not snapshot or not snapshot.Records then return nil end
 		for _, rec in ipairs(snapshot.Records) do
 			if rec.Uid and rec.BoundsCFrame and rec.State == "Slot"
-				and rec.AreaId == "Forest" then
-				return { uid = rec.Uid, pos = rec.BoundsCFrame.Position }
+				and rec.AreaId == "Forest"
+				and AreaEggSlotIdentity.LooksLikeFirstAreaUid(rec.Uid)
+				and AreaEggSlotIdentity.FirstAreaOwnerUserId(rec.Uid) == LocalPlayer.UserId
+			then
+				return { uid = rec.Uid, pos = rec.BoundsCFrame.Position, nestId = rec.NestId }
 			end
 		end
 		return nil
@@ -1899,12 +1899,27 @@ task.spawn(function()
 							continue
 						end
 					end
-					table.insert(targets, { uid = rec.Uid, pos = rec.BoundsCFrame.Position, rate = rate })
+					table.insert(targets, { uid = rec.Uid, pos = rec.BoundsCFrame.Position, rate = rate, areaId = rec.AreaId })
 				end
 			end
 		end
 		table.sort(targets, function(a, b) return a.rate > b.rate end)
 		return targets
+	end
+
+	local function enableGuardConnections()
+		pcall(function()
+			local guardRemotes = Remotes.GuardPatrol
+			if not guardRemotes then return end
+			if not getconnections then return end
+			for _, remote in pairs(guardRemotes) do
+				if typeof(remote) == "Instance" and remote:IsA("RemoteEvent") then
+					for _, conn in ipairs(getconnections(remote.OnClientEvent)) do
+						conn:Enable()
+					end
+				end
+			end
+		end)
 	end
 
 	local slotIdx = 1
@@ -1928,51 +1943,76 @@ task.spawn(function()
 				end
 
 				local eggs = getStealableEggs()
+				if #eggs == 0 then
+					if weFiredOff then
+						local b, c = findHipToggle()
+						if b and not hipToggleIsOn(b) then fireHipToggle(b, c) end
+					end
+					return
+				end
+
+				getgenv().__naruStealActive = true
+				enableGuardConnections()
+
+				local struck = false
+				local strikeConn
+				pcall(function()
+					local gp = Remotes.GuardPatrol
+					if gp and gp.ForestStrike then
+						strikeConn = gp.ForestStrike.OnClientEvent:Connect(function()
+							struck = true
+						end)
+					end
+				end)
+
 				for _, egg in ipairs(eggs) do
 					if not autoStealEnabled then break end
 					char = LocalPlayer.Character
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
 
-					-- Step 1: CFrame ke forest egg
 					local forestEgg = getForestEgg()
-					local forestTarget = forestEgg and forestEgg.pos or FOREST_NEST
-					stealSafeTween(hrp, forestTarget, autoStealSpeed)
+					if not forestEgg then break end
+
+					stealSafeTween(hrp, Vector3.new(forestEgg.pos.X, STEAL_FLOAT_Y, forestEgg.pos.Z))
 					char = LocalPlayer.Character
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
 
-					-- Step 2: fire AskFieldEggCarry pada forest egg (instant, ala Limbo)
-					if forestEgg then
-						local dummySlot = slotKeys[((slotIdx - 1) % #slotKeys) + 1]
-						task.spawn(function()
-							pcall(function()
-								Remotes.EggWorld.AskFieldEggCarry:InvokeServer({
-									Uid = forestEgg.uid,
-									FirstAreaSlotKey = dummySlot,
-								})
-							end)
-						end)
+					task.wait(0.5)
+					local carrySlot = AreaEggSlotIdentity.SlotKey("Forest", forestEgg.nestId)
+					local cOk, cRes = pcall(function()
+						return Remotes.EggWorld.AskFieldEggCarry:InvokeServer({
+							Uid = forestEgg.uid,
+							FirstAreaSlotKey = carrySlot,
+						})
+					end)
+					if not cOk or cRes ~= true then continue end
+
+					struck = false
+					stealTweenTo(hrp, FOREST_GUARD, 3)
+					char = LocalPlayer.Character
+					hrp = char and char:FindFirstChild("HumanoidRootPart")
+					if not hrp then break end
+					stealTweenTo(hrp, GUARD_PAST, 3)
+
+					if not struck then
+						for _ = 1, 30 do
+							if struck then break end
+							task.wait(0.1)
+						end
 					end
 
-					-- Step 3: langsung CFrame ke guard (cancel steal)
 					char = LocalPlayer.Character
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
-					stealTweenTo(hrp, FOREST_GUARD, autoStealSpeed)
 
-					-- Step 4: CFrame ke target egg
+					stealSafeTween(hrp, Vector3.new(egg.pos.X, STEAL_FLOAT_Y, egg.pos.Z))
 					char = LocalPlayer.Character
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
-					stealSafeTween(hrp, egg.pos, autoStealSpeed)
 
-					char = LocalPlayer.Character
-					hrp = char and char:FindFirstChild("HumanoidRootPart")
-					if not hrp then break end
-					hrp.Anchored = false
-
-					-- Step 5: fire AskFieldEggCarry pada target egg
+					task.wait(0.5)
 					local targetSlot = slotKeys[((slotIdx - 1) % #slotKeys) + 1]
 					slotIdx = slotIdx + 1
 
@@ -1983,11 +2023,16 @@ task.spawn(function()
 						})
 					end)
 					if ok and result == true then
-						task.wait(0.3)
+						task.wait(1)
 					else
-						task.wait(0.1)
+						task.wait(0.3)
 					end
 				end
+
+				if strikeConn then
+					pcall(function() strikeConn:Disconnect() end)
+				end
+				getgenv().__naruStealActive = false
 
 				char = LocalPlayer.Character
 				hrp = char and char:FindFirstChild("HumanoidRootPart")
