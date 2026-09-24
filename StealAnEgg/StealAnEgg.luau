@@ -266,6 +266,26 @@ do
 			antiHitGuard()
 		end)
 	end)
+
+	local function setupInstantHeal()
+		local char = LocalPlayer.Character
+		if not char then return end
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if not hum then return end
+		hum.HealthChanged:Connect(function(hp)
+			pcall(function()
+				local maxHP = hum.MaxHealth > 0 and hum.MaxHealth or 100
+				if hp < maxHP and hp > 0 then
+					hum.Health = maxHP
+				end
+			end)
+		end)
+	end
+	setupInstantHeal()
+	LocalPlayer.CharacterAdded:Connect(function()
+		task.wait(1)
+		setupInstantHeal()
+	end)
 end
 
 local EggState = require(ReplicatedStorage.Client.EggState)
