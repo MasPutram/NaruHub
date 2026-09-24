@@ -482,6 +482,23 @@ section:AddToggle("AutoBuyScrambledToggle", {
 	end,
 })
 
+local autoHuntExperimentEnabled = false
+local autoHuntExperimentTeleport = true
+section:AddToggle("AutoHuntExperimentToggle", {
+	Title = "Auto Hunt Experiment (Dr Scramble)",
+	Default = false,
+	Callback = function(val)
+		autoHuntExperimentEnabled = val
+	end,
+})
+section:AddToggle("AutoHuntExperimentNoTP", {
+	Title = "  Disable Teleport (Hunt)",
+	Default = false,
+	Callback = function(val)
+		autoHuntExperimentTeleport = not val
+	end,
+})
+
 local autoMutationEggEnabled = false
 section:AddToggle("AutoMutationEggToggle", {
 	Title = "Auto Mutation Egg (Plot, highest b/s first)",
@@ -1103,6 +1120,116 @@ task.spawn(function()
 		end
 		task.wait(30)
 	end
+end)
+
+------------------------------------------------------------
+-- Auto Hunt Experiment (Dr Scramble drone farming)
+-- When Window.Active, teleport to event biome, find drones,
+-- stay near them so the game's built-in auto-attack (bat)
+-- handles hitting. Drops are collected automatically by the
+-- game's own collection loop.
+------------------------------------------------------------
+task.spawn(function()
+	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+	local CS = game:GetService("CollectionService")
+	local huntDrones = {}
+	local huntConn = nil
+
+	local function startDroneListener()
+		if huntConn then return end
+		huntConn = Remotes.Scramble.Drones.OnClientEvent:Connect(function(data)
+			if type(data) ~= "table" then return end
+			if data.Removed then
+				for _, id in ipairs(data.Removed) do
+					huntDrones[id] = nil
+				end
+			end
+			if data.Upserts then
+				for _, drone in ipairs(data.Upserts) do
+					if drone.Id and drone.CFrame then
+						huntDrones[drone.Id] = {
+							cframe = drone.CFrame,
+							health = drone.Health or 0,
+							maxHealth = drone.MaxHealth or 0,
+						}
+					end
+				end
+			end
+		end)
+	end
+
+	local function stopDroneListener()
+		if huntConn then
+			huntConn:Disconnect()
+			huntConn = nil
+		end
+		table.clear(huntDrones)
+	end
+
+	local function findClosestDroneModel()
+		local char = LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if not hrp then return nil end
+		local closest, closestDist = nil, math.huge
+		for _, obj in ipairs(Workspace:GetDescendants()) do
+			if obj.Name == "Hitbox" and obj:IsA("BasePart") and obj.Parent and obj.Parent:IsA("Model") then
+				local hp = obj:GetAttribute("Health")
+				if typeof(hp) == "number" and hp > 0 then
+					local dist = (obj.Position - hrp.Position).Magnitude
+					if dist < closestDist then
+						closest = obj
+						closestDist = dist
+					end
+				end
+			end
+		end
+		return closest, closestDist
+	end
+
+	local eventAreaPositions = {
+		Vector3.new(2166, 68, -363),
+		Vector3.new(2634, 68, -363),
+		Vector3.new(3206, 68, -363),
+		Vector3.new(3928, 68, -363),
+		Vector3.new(4698, 68, -363),
+		Vector3.new(5577, 68, -363),
+	}
+	local currentAreaIdx = 1
+
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		if autoHuntExperimentEnabled then
+			pcall(function()
+				local res = Remotes.Scramble.Request:InvokeServer("State")
+				if not res or not res.Snapshot then return end
+				local snap = res.Snapshot
+				local isActive = snap.Window and snap.Window.Active == true
+
+				if not isActive then
+					stopDroneListener()
+					return
+				end
+
+				startDroneListener()
+
+				local char = LocalPlayer.Character
+				local hrp = char and char:FindFirstChild("HumanoidRootPart")
+				if not hrp then return end
+
+				local hitbox, dist = findClosestDroneModel()
+
+				if hitbox and dist > 10 and autoHuntExperimentTeleport then
+					hrp.CFrame = hitbox.CFrame * CFrame.new(0, 0, 5)
+				elseif not hitbox and autoHuntExperimentTeleport then
+					hrp.CFrame = CFrame.new(eventAreaPositions[currentAreaIdx])
+					currentAreaIdx = (currentAreaIdx % #eventAreaPositions) + 1
+				end
+			end)
+		else
+			stopDroneListener()
+		end
+		task.wait(2)
+	end
+	stopDroneListener()
 end)
 
 ------------------------------------------------------------
