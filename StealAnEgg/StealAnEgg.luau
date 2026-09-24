@@ -234,6 +234,8 @@ local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
 do
+	local RunService = game:GetService("RunService")
+
 	local function setInvincible(char)
 		if char then
 			char:SetAttribute("InvincibleApplied", true)
@@ -243,6 +245,27 @@ do
 	LocalPlayer.CharacterAdded:Connect(function(char)
 		task.wait(0.5)
 		setInvincible(char)
+	end)
+
+	RunService.Heartbeat:Connect(function()
+		local char = LocalPlayer.Character
+		if not char then return end
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if hum and hum.Health > 0 and hum.Health < hum.MaxHealth then
+			hum.Health = hum.MaxHealth
+		end
+	end)
+
+	pcall(function()
+		local guardRemotes = require(ReplicatedStorage.Shared.Remotes).GuardPatrol
+		if guardRemotes and guardRemotes.ForestStrike then
+			local orig = guardRemotes.ForestStrike
+			local dummy = Instance.new("RemoteEvent")
+			dummy.Name = "ForestStrike"
+			dummy.Parent = orig.Parent
+			orig:Destroy()
+			guardRemotes.ForestStrike = dummy
+		end
 	end)
 end
 
@@ -1635,6 +1658,7 @@ task.spawn(function()
 		local dest = Vector3.new(targetPos.X, groundY, targetPos.Z)
 		local dist = (hrp.Position - dest).Magnitude
 		if dist < 3 then return end
+		hrp.Anchored = true
 		local duration = math.clamp(dist / speed, 0.1, 12)
 		local tw = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
 			CFrame = CFrame.new(dest),
@@ -1745,6 +1769,9 @@ task.spawn(function()
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
 
+					hrp.Anchored = false
+					task.wait(0.1)
+
 					local targetSlot = slotKeys[((slotIdx - 1) % #slotKeys) + 1]
 					slotIdx = slotIdx + 1
 
@@ -1760,6 +1787,10 @@ task.spawn(function()
 						task.wait(0.1)
 					end
 				end
+
+				char = LocalPlayer.Character
+				hrp = char and char:FindFirstChild("HumanoidRootPart")
+				if hrp then hrp.Anchored = false end
 
 				if weFiredOff and firesignal then
 					for _ = 1, 3 do
