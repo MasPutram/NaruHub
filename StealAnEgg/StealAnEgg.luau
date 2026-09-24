@@ -596,6 +596,18 @@ scrambleSection:AddToggle("AutoHuntExperimentToggle", {
 	Default = false,
 	Callback = function(val)
 		autoHuntExperimentEnabled = val
+		if val then
+			task.spawn(function()
+				if not firesignal then return end
+				for _ = 1, 3 do
+					local btn = findHipToggle()
+					if not btn then break end
+					if hipToggleIsOn(btn) then break end
+					pcall(function() firesignal(btn.MouseButton1Click) end)
+					task.wait(0.4)
+				end
+			end)
+		end
 	end,
 })
 scrambleSection:AddToggle("AutoHuntExperimentNoTP", {
