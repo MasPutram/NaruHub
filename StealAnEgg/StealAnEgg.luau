@@ -1423,8 +1423,11 @@ task.spawn(function()
 				if not res or not res.Snapshot then return end
 				local snap = res.Snapshot
 				local isActive = snap.Window and snap.Window.Active == true
+				local endsAt = snap.Window and snap.Window.EndsAt or 0
+				local serverNow = workspace:GetServerTimeNow()
+				local timeLeft = endsAt - serverNow
 
-				if not isActive then
+				if not isActive or timeLeft <= 15 then
 					if wasHunting or waitingForSteal then
 						stopDroneListener()
 						enableHipTreadmill()
