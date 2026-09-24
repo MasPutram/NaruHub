@@ -225,13 +225,53 @@ return (function()
 			}, main)
 			local sideList = uiNew("Frame", {
 				BackgroundTransparency = 1,
-				Size = UDim2.new(1, -12, 1, -12),
+				Size = UDim2.new(1, -12, 1, -72),
 				Position = UDim2.fromOffset(6, 6),
+				ClipsDescendants = true,
 			}, sidebar)
 			uiNew("UIListLayout", {
 				Padding = UDim.new(0, 4),
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}, sideList)
+
+			local sideFooter = uiNew("Frame", {
+				Name = "Footer",
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, 56),
+				Position = UDim2.new(0, 0, 1, -56),
+			}, sidebar)
+			uiNew("Frame", {
+				Size = UDim2.new(1, -16, 0, 1),
+				Position = UDim2.new(0, 8, 0, 0),
+				BackgroundColor3 = Color3.fromRGB(34, 34, 36),
+				BorderSizePixel = 0,
+			}, sideFooter)
+			local statusDot = uiNew("Frame", {
+				Size = UDim2.fromOffset(8, 8),
+				Position = UDim2.new(0, 14, 0, 18),
+				BackgroundColor3 = Color3.fromRGB(74, 222, 128),
+			}, sideFooter)
+			uiCorner(4, statusDot)
+			local statusLbl = uiNew("TextLabel", {
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 28, 0, 10),
+				Size = UDim2.new(1, -36, 0, 14),
+				Font = UI_FONT,
+				TextSize = 11,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextColor3 = Color3.fromRGB(74, 222, 128),
+				Text = "Connected",
+			}, sideFooter)
+			local userLbl = uiNew("TextLabel", {
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 28, 0, 28),
+				Size = UDim2.new(1, -36, 0, 16),
+				Font = UI_FONT,
+				TextSize = 13,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextColor3 = UI_COL_DIM,
+				Text = LocalPlayer.Name,
+			}, sideFooter)
 
 			local content = uiNew("Frame", {
 				Name = "Content",
@@ -1174,6 +1214,10 @@ return (function()
 					tb.Bar.Visible = active
 				end
 			end
+
+			Window.StatusDot = statusDot
+			Window.StatusLabel = statusLbl
+			Window.UserLabel = userLbl
 
 			self.Window = Window
 			return Window

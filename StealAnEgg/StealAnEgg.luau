@@ -312,8 +312,8 @@ local Fluent = NaruUI.New({
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
-	TabWidth = 0,
-	Size = UDim2.fromOffset(380, 400),
+	TabWidth = 150,
+	Size = UDim2.fromOffset(680, 460),
 	AutoStartMinimized = false,
 })
 
@@ -390,14 +390,25 @@ do
 	end)
 end
 
-local StatusTab = Window:AddTab({ Title = "" })
-local section = StatusTab:AddSection(LocalPlayer.Name, { NoCollapse = true })
+------------------------------------------------------------
+-- Tabs (Limbo-style layout)
+------------------------------------------------------------
+local Tabs = {
+	Information = Window:AddTab({ Title = "Information" }),
+	Main        = Window:AddTab({ Title = "Main" }),
+	Upgrade     = Window:AddTab({ Title = "Upgrade" }),
+	Event       = Window:AddTab({ Title = "Event" }),
+	Settings    = Window:AddTab({ Title = "Settings" }),
+}
 
-local usernamePara = section:AddParagraph({
+------------------------------------------------------------
+-- Information tab
+------------------------------------------------------------
+local infoSection = Tabs.Information:AddSection("Account stats")
+
+local usernamePara = infoSection:AddParagraph({
 	Title = "Username",
 	Content = LocalPlayer.Name,
-	ContentSize = 14,
-	Center = true,
 })
 
 do
@@ -432,19 +443,33 @@ do
 	task.spawn(refreshUsernameList)
 end
 
-local monitorPara = section:AddParagraph({
+local monitorPara = infoSection:AddParagraph({
 	Title = "Status",
 	Content = "Starting...",
-	ContentSize = 14,
-	Center = true,
 })
+
+------------------------------------------------------------
+-- Main tab — support system + auto steal
+------------------------------------------------------------
+local supportSection = Tabs.Main:AddSection("Support system")
+
+supportSection:AddButton({
+	Title = "Leave game (balik ke Roblox home)",
+	Callback = function()
+		pcall(function()
+			LocalPlayer:Kick("Leave via NaruHub")
+		end)
+	end,
+})
+
+local stealSection = Tabs.Main:AddSection("Auto steal")
 
 local AUTO_SELL_MIN_RATE = 2_000_000_000
 local AUTO_SELL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Mythic", "Legendary", "Cosmic", "Eternal", "Titan" }
 local AUTO_SELL_NEVER = { Divine = true }
 local autoSellEnabled = false
-section:AddToggle("AutoSellToggle", {
-	Title = "Auto Sell (< 2B/s, skip Divine+Eternal)",
+stealSection:AddToggle("AutoSellToggle", {
+	Title = "Auto Sell (< 2B/s, skip Divine)",
 	Default = false,
 	Callback = function(val)
 		autoSellEnabled = val
@@ -457,12 +482,9 @@ section:AddToggle("AutoSellToggle", {
 	end,
 })
 
--- Auto Place is one-shot per toggle activation:
---   ON  -> wait 10s (let HIP settle) then run ONE pass, then rest
---   OFF -> stop rest state, next ON will fire another pass
 local autoPlaceEnabled = false
 local autoPlaceTrigger = 0
-section:AddToggle("AutoPlaceToggle", {
+stealSection:AddToggle("AutoPlaceToggle", {
 	Title = "Auto Place Eggs (1x)",
 	Default = false,
 	Callback = function(val)
@@ -473,35 +495,9 @@ section:AddToggle("AutoPlaceToggle", {
 	end,
 })
 
-local autoBuyScrambledEnabled = false
-section:AddToggle("AutoBuyScrambledToggle", {
-	Title = "Auto Buy Dr Scramble (Token > Treadmill)",
-	Default = false,
-	Callback = function(val)
-		autoBuyScrambledEnabled = val
-	end,
-})
-
-local autoHuntExperimentEnabled = false
-local autoHuntExperimentTeleport = true
-section:AddToggle("AutoHuntExperimentToggle", {
-	Title = "Auto Hunt Experiment (Dr Scramble)",
-	Default = false,
-	Callback = function(val)
-		autoHuntExperimentEnabled = val
-	end,
-})
-section:AddToggle("AutoHuntExperimentNoTP", {
-	Title = "  Disable Teleport (Hunt)",
-	Default = false,
-	Callback = function(val)
-		autoHuntExperimentTeleport = not val
-	end,
-})
-
 local autoMutationEggEnabled = false
-section:AddToggle("AutoMutationEggToggle", {
-	Title = "Auto Mutation Egg (Plot, highest b/s first)",
+stealSection:AddToggle("AutoMutationEggToggle", {
+	Title = "Auto Mutation Egg",
 	Default = false,
 	Callback = function(val)
 		autoMutationEggEnabled = val
@@ -510,7 +506,7 @@ section:AddToggle("AutoMutationEggToggle", {
 
 local autoHatchEnabled = false
 local autoHatchSignal = Instance.new("BindableEvent")
-section:AddToggle("AutoHatchToggle", {
+stealSection:AddToggle("AutoHatchToggle", {
 	Title = "Auto Hatch",
 	Default = false,
 	Callback = function(val)
@@ -521,19 +517,47 @@ section:AddToggle("AutoHatchToggle", {
 	end,
 })
 
--- Manual leave button: click to kick this clone back to Roblox home.
--- Only fires on a deliberate click, never on its own -- no auto-leave path
--- lives in this script (rapid Kick+rejoin cascades trigger the Roblox
--- Funcaptcha and BAC anti-cheat, so we keep the only leave route the
--- operator can take from the dashboard via Siap Jual).
-section:AddButton({
-	Title = "Leave Game (balik ke Roblox home)",
-	Callback = function()
-		pcall(function()
-			LocalPlayer:Kick("Leave via NaruHub")
-		end)
+------------------------------------------------------------
+-- Upgrade tab
+------------------------------------------------------------
+local upgradeSection = Tabs.Upgrade:AddSection("Auto upgrade")
+
+------------------------------------------------------------
+-- Event tab — Dr Scramble
+------------------------------------------------------------
+local scrambleSection = Tabs.Event:AddSection("Dr Scramble")
+
+local autoBuyScrambledEnabled = false
+scrambleSection:AddToggle("AutoBuyScrambledToggle", {
+	Title = "Auto Buy (Token > Treadmill)",
+	Default = false,
+	Callback = function(val)
+		autoBuyScrambledEnabled = val
 	end,
 })
+
+local autoHuntExperimentEnabled = false
+local autoHuntExperimentTeleport = true
+scrambleSection:AddToggle("AutoHuntExperimentToggle", {
+	Title = "Auto Hunt Experiment",
+	Default = false,
+	Callback = function(val)
+		autoHuntExperimentEnabled = val
+	end,
+})
+scrambleSection:AddToggle("AutoHuntExperimentNoTP", {
+	Title = "  Disable Teleport (Hunt)",
+	Default = false,
+	Callback = function(val)
+		autoHuntExperimentTeleport = not val
+	end,
+})
+
+------------------------------------------------------------
+-- Settings tab
+------------------------------------------------------------
+local settingsSection = Tabs.Settings:AddSection("Utilities")
+local performaSection = Tabs.Settings:AddSection("Performa")
 
 Window:SelectTab(1)
 
