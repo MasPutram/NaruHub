@@ -532,23 +532,16 @@ local function getRarity(category)
 	return nil
 end
 
-local function mutationNamesFromString(str)
-	if not str or str == "" then
-		return {}
-	end
-	local ok, arr = pcall(function()
-		return MutationsModule.ExtractMutationsFromString(str)
-	end)
-	if not ok or type(arr) ~= "table" then
-		return {}
-	end
-	local names = {}
-	for _, m in ipairs(arr) do
-		if type(m) == "table" and m.Name then
-			table.insert(names, m.Name)
+local function getMutationsForUid(uid)
+	if not uid then return {} end
+	local ok, result = pcall(function()
+		local snap = SaveModule.Peek()
+		if snap and snap.Inventory and snap.Inventory[uid] then
+			return snap.Inventory[uid].Mutations or {}
 		end
-	end
-	return names
+		return {}
+	end)
+	return (ok and type(result) == "table") and result or {}
 end
 
 local function collectBackpackPets()
@@ -561,7 +554,7 @@ local function collectBackpackPets()
 		if tool:GetAttribute("ItemType") == "Asset" then
 			local category = tool:GetAttribute("Category")
 			local scale = tool:GetAttribute("Scale") or 1
-			local mutations = mutationNamesFromString(tool:GetAttribute("Mutations"))
+			local mutations = getMutationsForUid(tool:GetAttribute("UID"))
 			local rate = 0
 			pcall(function()
 				rate = AssetEarnings.RatePerSecond({
@@ -962,18 +955,19 @@ end
 ------------------------------------------------------------
 task.spawn(function()
 	local BaseUpgrade = require(ReplicatedStorage.Client.BaseUpgrade)
-	local TreadmillClient = require(LocalPlayer.PlayerScripts.GUI.TreadmillUpgrade.Client)
+	local Treadmills = require(ReplicatedStorage.Data.Treadmills)
+	local TmRemotes = require(ReplicatedStorage.Shared.Remotes)
 
-	-- Strict priority: pen only fires after treadmill is fully maxed.
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		pcall(function()
 			local stats = SaveModule.Peek()
-			local _, tmCfg = TreadmillClient.GetNextConfig(stats)
-			local tmMaxed = tmCfg == nil
+			local tmLevel = stats.TreadmillUpgradeLevel or 0
+			local nextTm = Treadmills.GetByUpgradeLevel(tmLevel + 1)
+			local tmMaxed = nextTm == nil
 
 			if not tmMaxed then
-				if TreadmillClient.CanAffordNext(stats) then
-					TreadmillClient.RequestCashUpgrade()
+				if (stats.Money or 0) >= (nextTm.Price or math.huge) then
+					TmRemotes.Treadmill.AskTierRaise:InvokeServer()
 				end
 			else
 				local nextLevel, config = BaseUpgrade.ResolveNextTier(stats)
