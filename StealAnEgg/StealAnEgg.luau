@@ -1633,6 +1633,7 @@ task.spawn(function()
 
 	local SAFE_Z = -360
 	local SAFE_Y_FALLBACK = 72
+	local FOREST_NEST = Vector3.new(597, 68, -329)
 
 	local function stealGroundY(pos, char)
 		rayParams.FilterDescendantsInstances = {char}
@@ -1748,6 +1749,11 @@ task.spawn(function()
 				local eggs = getStealableEggs()
 				for _, egg in ipairs(eggs) do
 					if not autoStealEnabled then break end
+					char = LocalPlayer.Character
+					hrp = char and char:FindFirstChild("HumanoidRootPart")
+					if not hrp then break end
+
+					stealSafeTween(hrp, FOREST_NEST, autoStealSpeed)
 					char = LocalPlayer.Character
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
