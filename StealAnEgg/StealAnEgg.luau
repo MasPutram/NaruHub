@@ -233,6 +233,19 @@ local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
+do
+	local function setInvincible(char)
+		if char then
+			char:SetAttribute("InvincibleApplied", true)
+		end
+	end
+	setInvincible(LocalPlayer.Character)
+	LocalPlayer.CharacterAdded:Connect(function(char)
+		task.wait(0.5)
+		setInvincible(char)
+	end)
+end
+
 local EggState = require(ReplicatedStorage.Client.EggState)
 local AssetEarnings = require(ReplicatedStorage.Shared.Util.AssetEarnings)
 local AssetItems = require(ReplicatedStorage.Shared.Util.AssetItems)
@@ -1581,6 +1594,9 @@ task.spawn(function()
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
+	local SAFE_Z = -360
+	local SAFE_Y_FALLBACK = 72
+
 	local function stealGroundY(pos, char)
 		rayParams.FilterDescendantsInstances = {char}
 		local ray = workspace:Raycast(Vector3.new(pos.X, pos.Y + 50, pos.Z), Vector3.new(0, -200, 0), rayParams)
@@ -1588,7 +1604,7 @@ task.spawn(function()
 			local hum = char:FindFirstChildOfClass("Humanoid")
 			return ray.Position.Y + (hum and hum.HipHeight or 2.1) + 1
 		end
-		return pos.Y
+		return SAFE_Y_FALLBACK
 	end
 
 	local function stealTweenTo(hrp, targetPos, speed)
@@ -1603,6 +1619,22 @@ task.spawn(function()
 		})
 		tw:Play()
 		tw.Completed:Wait()
+	end
+
+	local function stealSafeTween(hrp, targetPos, speed)
+		local char = hrp.Parent
+		local curX = hrp.Position.X
+		local tgtX = targetPos.X
+		if math.abs(curX - tgtX) > 80 then
+			local midY = stealGroundY(Vector3.new((curX + tgtX) / 2, 80, SAFE_Z), char)
+			stealTweenTo(hrp, Vector3.new(curX, midY, SAFE_Z), speed)
+			hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if not hrp then return end
+			stealTweenTo(hrp, Vector3.new(tgtX, midY, SAFE_Z), speed)
+			hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if not hrp then return end
+		end
+		stealTweenTo(hrp, targetPos, speed)
 	end
 
 	local function getStealableEggs()
@@ -1641,9 +1673,13 @@ task.spawn(function()
 					if not hrp then break end
 
 					if autoStealTeleport then
-						stealTweenTo(hrp, egg.pos, 500)
+						stealSafeTween(hrp, egg.pos, 500)
 					end
 					task.wait(0.2)
+
+					char = LocalPlayer.Character
+					hrp = char and char:FindFirstChild("HumanoidRootPart")
+					if not hrp then break end
 
 					local ok, result = pcall(function()
 						return Remotes.EggWorld.AskFieldEggCarry:InvokeServer({
