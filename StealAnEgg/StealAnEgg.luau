@@ -1384,7 +1384,15 @@ task.spawn(function()
 								Mutations = rec.Mutations or {},
 							})
 						end)
-						if rarity == "Divine" then
+						local weight = 0
+						pcall(function()
+							weight = AssetItems.WeightKg({
+								Category = rec.AssetCategory,
+								Scale = rec.AssetScale or 1,
+								Mutations = rec.Mutations or {},
+							})
+						end)
+						if rarity == "Divine" or weight >= 1_000_000_000 then
 						elseif rarity == "Eternal" then
 							if rate > 0 and rate < 1_000_000_000 then
 								toSell[#toSell + 1] = uid
