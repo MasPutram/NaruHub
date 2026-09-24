@@ -459,7 +459,7 @@ local Fluent = NaruUI.New({
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
-	Version = "v1.6.2",
+	Version = "v1.7.0",
 	TabWidth = 150,
 	Size = UDim2.fromOffset(680, 460),
 	AutoStartMinimized = false,
@@ -1337,6 +1337,13 @@ task.spawn(function()
 		end)
 	end
 
+	local STEP_SIZE = 6
+	local huntMoving = false
+
+	local function cancelMove()
+		huntMoving = false
+	end
+
 	local function stopDroneListener()
 		cancelMove()
 		if huntConn then
@@ -1346,18 +1353,17 @@ task.spawn(function()
 		table.clear(huntDrones)
 	end
 
-	local STEP_SIZE = 12
-	local huntMoving = false
-
 	local huntRayParams = RaycastParams.new()
 	huntRayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+	local FLOAT_OFFSET = 3
 
 	local function huntGroundY(pos, char)
 		huntRayParams.FilterDescendantsInstances = {char}
 		local ray = workspace:Raycast(Vector3.new(pos.X, pos.Y + 50, pos.Z), Vector3.new(0, -200, 0), huntRayParams)
 		if ray then
 			local hum = char:FindFirstChildOfClass("Humanoid")
-			return ray.Position.Y + (hum and hum.HipHeight or 2.1) + 1
+			return ray.Position.Y + (hum and hum.HipHeight or 2.1) + FLOAT_OFFSET
 		end
 		return pos.Y
 	end
@@ -1387,10 +1393,6 @@ task.spawn(function()
 			h.AssemblyLinearVelocity = Vector3.zero
 			task.wait()
 		end
-		huntMoving = false
-	end
-
-	local function cancelMove()
 		huntMoving = false
 	end
 
@@ -1772,7 +1774,6 @@ end)
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	local TweenService = game:GetService("TweenService")
 
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -1782,12 +1783,14 @@ task.spawn(function()
 	local FOREST_NEST = Vector3.new(597, 68, -329)
 	local FOREST_GUARD = Vector3.new(596.6, 69.4, -317.1)
 
+	local STEAL_FLOAT = 3
+
 	local function stealGroundY(pos, char)
 		rayParams.FilterDescendantsInstances = {char}
 		local ray = workspace:Raycast(Vector3.new(pos.X, pos.Y + 50, pos.Z), Vector3.new(0, -200, 0), rayParams)
 		if ray then
 			local hum = char:FindFirstChildOfClass("Humanoid")
-			return ray.Position.Y + (hum and hum.HipHeight or 2.1) + 1
+			return ray.Position.Y + (hum and hum.HipHeight or 2.1) + STEAL_FLOAT
 		end
 		return SAFE_Y_FALLBACK
 	end
@@ -1809,7 +1812,7 @@ task.spawn(function()
 			local diffXZ = destXZ - curXZ
 			local remain = diffXZ.Magnitude
 			if remain < 6 then break end
-			local step = math.min(12, remain)
+			local step = math.min(6, remain)
 			local dir = diffXZ.Unit
 			local newX = h.Position.X + dir.X * step
 			local newZ = h.Position.Z + dir.Y * step
@@ -1934,17 +1937,24 @@ task.spawn(function()
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
 
-					-- Step 2: fire carry langsung (no delay, ala HipHub)
-					if forestEgg then
-						local dummySlot = slotKeys[((slotIdx - 1) % #slotKeys) + 1]
-						task.spawn(function()
-							pcall(function()
-								Remotes.EggWorld.AskFieldEggCarry:InvokeServer({
-									Uid = forestEgg.uid,
-									FirstAreaSlotKey = dummySlot,
-								})
-							end)
-						end)
+					-- Step 2: trigger Steal prompt pada forest egg (pencet E)
+					if firesignal then
+						local prompt = nil
+						for _, sp in ipairs(workspace:FindFirstChild("SmartPromptPart"):GetChildren()) do
+							if sp.Name == "CarryAreaEgg" and sp:IsA("ProximityPrompt") then
+								local parent = sp.Parent
+								if parent and parent:IsA("BasePart") then
+									local dist = (parent.Position - hrp.Position).Magnitude
+									if dist < 20 then
+										prompt = sp
+										break
+									end
+								end
+							end
+						end
+						if prompt then
+							pcall(function() firesignal(prompt.Triggered, LocalPlayer) end)
+						end
 					end
 
 					-- Step 3: langsung CFrame ke guard (tanpa nunggu response)
@@ -1964,20 +1974,27 @@ task.spawn(function()
 					if not hrp then break end
 					hrp.Anchored = false
 
-					-- Step 5: steal target egg yang sebenarnya
-					local targetSlot = slotKeys[((slotIdx - 1) % #slotKeys) + 1]
-					slotIdx = slotIdx + 1
-
-					local ok, result = pcall(function()
-						return Remotes.EggWorld.AskFieldEggCarry:InvokeServer({
-							Uid = egg.uid,
-							FirstAreaSlotKey = targetSlot,
-						})
-					end)
-					if ok and result == true then
-						task.wait(0.3)
-					else
-						task.wait(0.1)
+					-- Step 5: trigger Steal prompt pada target egg
+					if firesignal then
+						local prompt = nil
+						for _, sp in ipairs(workspace:FindFirstChild("SmartPromptPart"):GetChildren()) do
+							if sp.Name == "CarryAreaEgg" and sp:IsA("ProximityPrompt") then
+								local parent = sp.Parent
+								if parent and parent:IsA("BasePart") then
+									local dist = (parent.Position - hrp.Position).Magnitude
+									if dist < 20 then
+										prompt = sp
+										break
+									end
+								end
+							end
+						end
+						if prompt then
+							pcall(function() firesignal(prompt.Triggered, LocalPlayer) end)
+							task.wait(0.3)
+						else
+							task.wait(0.1)
+						end
 					end
 				end
 
