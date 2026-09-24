@@ -474,6 +474,23 @@ stealSection:AddToggle("AutoHatchToggle", {
 	end,
 })
 
+local autoStealEnabled = false
+local autoStealTeleport = true
+stealSection:AddToggle("AutoStealToggle", {
+	Title = "Auto Steal Eggs",
+	Default = false,
+	Callback = function(val)
+		autoStealEnabled = val
+	end,
+})
+stealSection:AddToggle("AutoStealNoTP", {
+	Title = "  Disable Teleport (Steal)",
+	Default = false,
+	Callback = function(val)
+		autoStealTeleport = not val
+	end,
+})
+
 ------------------------------------------------------------
 -- Upgrade tab
 ------------------------------------------------------------
@@ -1553,6 +1570,111 @@ task.spawn(function()
 	end
 end)
 
+
+------------------------------------------------------------
+-- Auto Steal (tween to other players' eggs, carry them)
+------------------------------------------------------------
+task.spawn(function()
+	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+	local TweenService = game:GetService("TweenService")
+
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+	local function stealGroundY(pos, char)
+		rayParams.FilterDescendantsInstances = {char}
+		local ray = workspace:Raycast(Vector3.new(pos.X, pos.Y + 50, pos.Z), Vector3.new(0, -200, 0), rayParams)
+		if ray then
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			return ray.Position.Y + (hum and hum.HipHeight or 2.1) + 1
+		end
+		return pos.Y
+	end
+
+	local function stealTweenTo(hrp, targetPos, speed)
+		local char = hrp.Parent
+		local groundY = stealGroundY(targetPos, char)
+		local dest = Vector3.new(targetPos.X, groundY, targetPos.Z)
+		local dist = (hrp.Position - dest).Magnitude
+		if dist < 3 then return end
+		local duration = math.clamp(dist / speed, 0.1, 12)
+		local tw = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
+			CFrame = CFrame.new(dest),
+		})
+		tw:Play()
+		tw.Completed:Wait()
+	end
+
+	local function getStealableEggs()
+		local snapshot = Remotes.EggWorld.AskFieldEggSnapshot:InvokeServer()
+		if not snapshot or not snapshot.Records then return {} end
+		local targets = {}
+		for _, rec in ipairs(snapshot.Records) do
+			if rec.Uid and rec.BoundsCFrame then
+				table.insert(targets, { uid = rec.Uid, pos = rec.BoundsCFrame.Position })
+			end
+		end
+		return targets
+	end
+
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		if autoStealEnabled then
+			pcall(function()
+				local char = LocalPlayer.Character
+				local hrp = char and char:FindFirstChild("HumanoidRootPart")
+				if not hrp then return end
+
+				local hipBtn = findHipToggle()
+				local hipWasOn = hipBtn and hipToggleIsOn(hipBtn)
+				local weFiredOff = false
+				if hipWasOn and firesignal then
+					pcall(function() firesignal(hipBtn.MouseButton1Click) end)
+					weFiredOff = true
+					task.wait(0.3)
+				end
+
+				local eggs = getStealableEggs()
+				for _, egg in ipairs(eggs) do
+					if not autoStealEnabled then break end
+					char = LocalPlayer.Character
+					hrp = char and char:FindFirstChild("HumanoidRootPart")
+					if not hrp then break end
+
+					if autoStealTeleport then
+						stealTweenTo(hrp, egg.pos, 500)
+					end
+					task.wait(0.2)
+
+					local ok, result = pcall(function()
+						return Remotes.EggWorld.AskFieldEggCarry:InvokeServer({
+							Uid = egg.uid,
+						})
+					end)
+					if ok and result == true then
+						task.wait(0.5)
+						pcall(function()
+							Remotes.EggWorld.AskFieldEggDrop:InvokeServer({})
+						end)
+						task.wait(0.3)
+					else
+						task.wait(0.1)
+					end
+				end
+
+				if weFiredOff and firesignal then
+					for _ = 1, 3 do
+						local b = findHipToggle()
+						if not b then break end
+						if hipToggleIsOn(b) then break end
+						pcall(function() firesignal(b.MouseButton1Click) end)
+						task.wait(0.4)
+					end
+				end
+			end)
+		end
+		task.wait(3)
+	end
+end)
 
 ------------------------------------------------------------
 -- Auto Sell inventory backlog (< 1B/s, unplaced only, never Divine/Titan)
