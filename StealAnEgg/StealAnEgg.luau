@@ -1124,9 +1124,10 @@ end)
 
 ------------------------------------------------------------
 -- Auto Hunt Experiment (Dr Scramble drone farming)
--- When Window.Active, tween to drones using positions from
--- Scramble.Drones events. Game auto-attacks within 12 studs
--- and auto-collects drops.
+-- Behaviour modelled after Limbo Hub analysis:
+--   Window active  → cancel HIP treadmill → tween 500s/s to center
+--                  → tween to Abyss Ocean → hunt closest drones
+--   Window ends    → re-enable HIP treadmill (returns automatically)
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -1134,6 +1135,15 @@ task.spawn(function()
 	local huntDrones = {}
 	local huntConn = nil
 	local activeTween = nil
+	local wasHunting = false
+
+	local CENTER_POS = Vector3.new(827, 71, -354)
+	local RUSH_SPEED = 500
+	local DRONE_SPEED = 80
+	local HUNT_AREAS = {
+		Vector3.new(2166, 74, -363),
+		Vector3.new(2634, 74, -363),
+	}
 
 	local function startDroneListener()
 		if huntConn then return end
@@ -1170,17 +1180,19 @@ task.spawn(function()
 		end
 	end
 
-	local function tweenTo(hrp, targetPos)
+	local function tweenTo(hrp, targetPos, speed)
 		if activeTween then
 			pcall(function() activeTween:Cancel() end)
 		end
 		local dist = (hrp.Position - targetPos).Magnitude
-		local speed = 120
-		local duration = math.clamp(dist / speed, 0.3, 8)
+		if dist < 3 then return end
+		local duration = math.clamp(dist / speed, 0.1, 12)
 		local goal = { CFrame = CFrame.new(targetPos) }
 		local info = TweenInfo.new(duration, Enum.EasingStyle.Linear)
 		activeTween = TweenService:Create(hrp, info, goal)
 		activeTween:Play()
+		activeTween.Completed:Wait()
+		activeTween = nil
 	end
 
 	local function findClosestDrone(hrp)
@@ -1198,14 +1210,28 @@ task.spawn(function()
 		return closestId, closestData, closestDist
 	end
 
-	local eventAreaPositions = {
-		Vector3.new(2166, 74, -363),
-		Vector3.new(2634, 74, -363),
-		Vector3.new(3206, 74, -363),
-		Vector3.new(3928, 74, -363),
-		Vector3.new(4698, 74, -363),
-		Vector3.new(5577, 74, -363),
-	}
+	local function cancelHipTreadmill()
+		if not firesignal then return false end
+		local btn = findHipToggle()
+		if btn and hipToggleIsOn(btn) then
+			pcall(function() firesignal(btn.MouseButton1Click) end)
+			task.wait(0.3)
+			return true
+		end
+		return false
+	end
+
+	local function enableHipTreadmill()
+		if not firesignal then return end
+		for _ = 1, 3 do
+			local btn = findHipToggle()
+			if not btn then break end
+			if hipToggleIsOn(btn) then break end
+			pcall(function() firesignal(btn.MouseButton1Click) end)
+			task.wait(0.4)
+		end
+	end
+
 	local currentAreaIdx = 1
 	local areaArriveTime = 0
 
@@ -1218,35 +1244,55 @@ task.spawn(function()
 				local isActive = snap.Window and snap.Window.Active == true
 
 				if not isActive then
-					stopDroneListener()
+					if wasHunting then
+						stopDroneListener()
+						enableHipTreadmill()
+						wasHunting = false
+						currentAreaIdx = 1
+					end
 					return
 				end
-
-				startDroneListener()
 
 				local char = LocalPlayer.Character
 				local hrp = char and char:FindFirstChild("HumanoidRootPart")
 				if not hrp then return end
 
-				local droneId, droneData, droneDist = findClosestDrone(hrp)
+				if not wasHunting then
+					cancelHipTreadmill()
+					startDroneListener()
+					if autoHuntExperimentTeleport then
+						tweenTo(hrp, CENTER_POS, RUSH_SPEED)
+						tweenTo(hrp, HUNT_AREAS[1], RUSH_SPEED)
+					end
+					wasHunting = true
+					areaArriveTime = os.clock()
+				end
 
-				if droneData and autoHuntExperimentTeleport then
+				if not autoHuntExperimentTeleport then return end
+
+				local _, droneData, droneDist = findClosestDrone(hrp)
+
+				if droneData then
 					local targetPos = droneData.cframe.Position + Vector3.new(0, 0, 5)
 					if droneDist > 12 then
-						tweenTo(hrp, targetPos)
+						tweenTo(hrp, targetPos, DRONE_SPEED)
 					end
-				elseif not droneData and autoHuntExperimentTeleport then
-					if os.clock() - areaArriveTime > 6 then
-						tweenTo(hrp, eventAreaPositions[currentAreaIdx])
-						currentAreaIdx = (currentAreaIdx % #eventAreaPositions) + 1
+				else
+					if os.clock() - areaArriveTime > 8 then
+						currentAreaIdx = (currentAreaIdx % #HUNT_AREAS) + 1
+						tweenTo(hrp, HUNT_AREAS[currentAreaIdx], RUSH_SPEED)
 						areaArriveTime = os.clock()
 					end
 				end
 			end)
 		else
-			stopDroneListener()
+			if wasHunting then
+				stopDroneListener()
+				enableHipTreadmill()
+				wasHunting = false
+			end
 		end
-		task.wait(2)
+		task.wait(1)
 	end
 	stopDroneListener()
 end)
