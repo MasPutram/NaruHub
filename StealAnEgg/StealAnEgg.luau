@@ -511,7 +511,6 @@ stealSection:AddToggle("AutoHatchToggle", {
 })
 
 local autoStealEnabled = false
-local autoStealTeleport = true
 local autoStealMinValue = 1_000_000_000
 local autoStealSpeed = 500
 stealSection:AddToggle("AutoStealToggle", {
@@ -519,13 +518,6 @@ stealSection:AddToggle("AutoStealToggle", {
 	Default = false,
 	Callback = function(val)
 		autoStealEnabled = val
-	end,
-})
-stealSection:AddToggle("AutoStealNoTP", {
-	Title = "  Disable Teleport (Steal)",
-	Default = false,
-	Callback = function(val)
-		autoStealTeleport = not val
 	end,
 })
 stealSection:AddInput("AutoStealThreshold", {
@@ -1760,9 +1752,7 @@ task.spawn(function()
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
 
-					if autoStealTeleport then
-						stealSafeTween(hrp, egg.pos, autoStealSpeed)
-					end
+					stealSafeTween(hrp, egg.pos, autoStealSpeed)
 					task.wait(0.2)
 
 					char = LocalPlayer.Character
