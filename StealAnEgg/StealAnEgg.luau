@@ -459,7 +459,7 @@ local Fluent = NaruUI.New({
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
-	Version = "v1.7.1",
+	Version = "v1.8.0",
 	TabWidth = 150,
 	Size = UDim2.fromOffset(680, 460),
 	AutoStartMinimized = false,
@@ -1337,7 +1337,8 @@ task.spawn(function()
 		end)
 	end
 
-	local STEP_SIZE = 6
+	local STEP_SIZE = 12
+	local FLOAT_Y = 70.6
 	local huntMoving = false
 
 	local function cancelMove()
@@ -1353,53 +1354,26 @@ task.spawn(function()
 		table.clear(huntDrones)
 	end
 
-	local huntRayParams = RaycastParams.new()
-	huntRayParams.FilterType = Enum.RaycastFilterType.Exclude
-
-	local FLOAT_OFFSET = 3
-
-	local function huntGroundY(pos, char)
-		huntRayParams.FilterDescendantsInstances = {char}
-		local ray = workspace:Raycast(Vector3.new(pos.X, pos.Y + 50, pos.Z), Vector3.new(0, -200, 0), huntRayParams)
-		if ray then
-			local hum = char:FindFirstChildOfClass("Humanoid")
-			return ray.Position.Y + (hum and hum.HipHeight or 2.1) + FLOAT_OFFSET
-		end
-		return pos.Y
-	end
-
 	local function moveTo(hrp, targetPos, speed)
 		if huntMoving then return end
 		huntMoving = true
 		local char = hrp.Parent
 		if not char then huntMoving = false return end
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		local destXZ = Vector2.new(targetPos.X, targetPos.Z)
-		local startXZ = Vector2.new(hrp.Position.X, hrp.Position.Z)
-		local ws = hum and hum.WalkSpeed or 16
-		local timeout = math.clamp((startXZ - destXZ).Magnitude / speed, 0.5, 15)
+		local diff = targetPos - hrp.Position
+		local timeout = math.clamp(diff.Magnitude / speed, 0.5, 15)
 		local start = tick()
 		while tick() - start < timeout and huntMoving do
 			local h = char:FindFirstChild("HumanoidRootPart")
 			if not h then break end
-			if not hum or hum.Health <= 0 then break end
-			local curXZ = Vector2.new(h.Position.X, h.Position.Z)
-			local diffXZ = destXZ - curXZ
-			local remain = diffXZ.Magnitude
+			local d = targetPos - h.Position
+			local remain = d.Magnitude
 			if remain < 6 then break end
 			local step = math.min(STEP_SIZE, remain)
-			local dir = diffXZ.Unit
-			local dir3 = Vector3.new(dir.X, 0, dir.Y).Unit
-			local newX = h.Position.X + dir.X * step
-			local newZ = h.Position.Z + dir.Y * step
-			local groundY = huntGroundY(Vector3.new(newX, h.Position.Y, newZ), char)
-			h.CFrame = CFrame.new(newX, groundY, newZ) * CFrame.lookAt(Vector3.zero, dir3)
-			h.AssemblyLinearVelocity = dir3 * ws
-			hum:Move(dir3)
+			h.CFrame = CFrame.new(h.Position + d.Unit * step) * (h.CFrame - h.CFrame.Position)
+			h.CFrame = CFrame.new(h.CFrame.Position.X, FLOAT_Y, h.CFrame.Position.Z) * (h.CFrame - h.CFrame.Position)
+			h.AssemblyLinearVelocity = Vector3.zero
 			task.wait()
 		end
-		if hum then hum:Move(Vector3.zero) end
-		if hrp and hrp.Parent then hrp.AssemblyLinearVelocity = Vector3.zero end
 		huntMoving = false
 	end
 
@@ -1782,59 +1756,31 @@ end)
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
 
-	local rayParams = RaycastParams.new()
-	rayParams.FilterType = Enum.RaycastFilterType.Exclude
-
 	local SAFE_Z = -360
-	local SAFE_Y_FALLBACK = 72
+	local STEAL_FLOAT_Y = 70.6
 	local FOREST_NEST = Vector3.new(597, 68, -329)
 	local FOREST_GUARD = Vector3.new(596.6, 69.4, -317.1)
-
-	local STEAL_FLOAT = 3
-
-	local function stealGroundY(pos, char)
-		rayParams.FilterDescendantsInstances = {char}
-		local ray = workspace:Raycast(Vector3.new(pos.X, pos.Y + 50, pos.Z), Vector3.new(0, -200, 0), rayParams)
-		if ray then
-			local hum = char:FindFirstChildOfClass("Humanoid")
-			return ray.Position.Y + (hum and hum.HipHeight or 2.1) + STEAL_FLOAT
-		end
-		return SAFE_Y_FALLBACK
-	end
 
 	local function stealTweenTo(hrp, targetPos, speed)
 		local char = hrp.Parent
 		if not char then return end
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		local destXZ = Vector2.new(targetPos.X, targetPos.Z)
-		local startXZ = Vector2.new(hrp.Position.X, hrp.Position.Z)
-		local dist = (startXZ - destXZ).Magnitude
-		if dist < 3 then return end
+		local diff = targetPos - hrp.Position
+		if diff.Magnitude < 3 then return end
 		hrp.Anchored = false
-		local ws = hum and hum.WalkSpeed or 16
-		local timeout = math.clamp(dist / speed, 0.5, 15)
+		local timeout = math.clamp(diff.Magnitude / speed, 0.5, 15)
 		local start = tick()
 		while tick() - start < timeout do
 			local h = char:FindFirstChild("HumanoidRootPart")
 			if not h then break end
-			if not hum or hum.Health <= 0 then break end
-			local curXZ = Vector2.new(h.Position.X, h.Position.Z)
-			local diffXZ = destXZ - curXZ
-			local remain = diffXZ.Magnitude
+			local d = targetPos - h.Position
+			local remain = d.Magnitude
 			if remain < 6 then break end
-			local step = math.min(6, remain)
-			local dir = diffXZ.Unit
-			local dir3 = Vector3.new(dir.X, 0, dir.Y).Unit
-			local newX = h.Position.X + dir.X * step
-			local newZ = h.Position.Z + dir.Y * step
-			local groundY = stealGroundY(Vector3.new(newX, h.Position.Y, newZ), char)
-			h.CFrame = CFrame.new(newX, groundY, newZ) * CFrame.lookAt(Vector3.zero, dir3)
-			h.AssemblyLinearVelocity = dir3 * ws
-			hum:Move(dir3)
+			local step = math.min(12, remain)
+			h.CFrame = CFrame.new(h.Position + d.Unit * step) * (h.CFrame - h.CFrame.Position)
+			h.CFrame = CFrame.new(h.CFrame.Position.X, STEAL_FLOAT_Y, h.CFrame.Position.Z) * (h.CFrame - h.CFrame.Position)
+			h.AssemblyLinearVelocity = Vector3.zero
 			task.wait()
 		end
-		if hum then hum:Move(Vector3.zero) end
-		if hrp and hrp.Parent then hrp.AssemblyLinearVelocity = Vector3.zero end
 	end
 
 	local function stealSafeTween(hrp, targetPos, speed)
@@ -1842,11 +1788,10 @@ task.spawn(function()
 		local curX = hrp.Position.X
 		local tgtX = targetPos.X
 		if math.abs(curX - tgtX) > 80 then
-			local midY = stealGroundY(Vector3.new((curX + tgtX) / 2, 80, SAFE_Z), char)
-			stealTweenTo(hrp, Vector3.new(curX, midY, SAFE_Z), speed)
+			stealTweenTo(hrp, Vector3.new(curX, STEAL_FLOAT_Y, SAFE_Z), speed)
 			hrp = char and char:FindFirstChild("HumanoidRootPart")
 			if not hrp then return end
-			stealTweenTo(hrp, Vector3.new(tgtX, midY, SAFE_Z), speed)
+			stealTweenTo(hrp, Vector3.new(tgtX, STEAL_FLOAT_Y, SAFE_Z), speed)
 			hrp = char and char:FindFirstChild("HumanoidRootPart")
 			if not hrp then return end
 		end
@@ -1951,33 +1896,26 @@ task.spawn(function()
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
 
-					-- Step 2: trigger Steal prompt pada forest egg (pencet E)
-					if firesignal then
-						local prompt = nil
-						for _, sp in ipairs(workspace:FindFirstChild("SmartPromptPart"):GetChildren()) do
-							if sp.Name == "CarryAreaEgg" and sp:IsA("ProximityPrompt") then
-								local parent = sp.Parent
-								if parent and parent:IsA("BasePart") then
-									local dist = (parent.Position - hrp.Position).Magnitude
-									if dist < 20 then
-										prompt = sp
-										break
-									end
-								end
-							end
-						end
-						if prompt then
-							pcall(function() firesignal(prompt.Triggered, LocalPlayer) end)
-						end
+					-- Step 2: fire AskFieldEggCarry pada forest egg (instant, ala Limbo)
+					if forestEgg then
+						local dummySlot = slotKeys[((slotIdx - 1) % #slotKeys) + 1]
+						task.spawn(function()
+							pcall(function()
+								Remotes.EggWorld.AskFieldEggCarry:InvokeServer({
+									Uid = forestEgg.uid,
+									FirstAreaSlotKey = dummySlot,
+								})
+							end)
+						end)
 					end
 
-					-- Step 3: langsung CFrame ke guard (tanpa nunggu response)
+					-- Step 3: langsung CFrame ke guard (cancel steal)
 					char = LocalPlayer.Character
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
 					stealTweenTo(hrp, FOREST_GUARD, autoStealSpeed)
 
-					-- Step 4: langsung CFrame ke target egg
+					-- Step 4: CFrame ke target egg
 					char = LocalPlayer.Character
 					hrp = char and char:FindFirstChild("HumanoidRootPart")
 					if not hrp then break end
@@ -1988,27 +1926,20 @@ task.spawn(function()
 					if not hrp then break end
 					hrp.Anchored = false
 
-					-- Step 5: trigger Steal prompt pada target egg
-					if firesignal then
-						local prompt = nil
-						for _, sp in ipairs(workspace:FindFirstChild("SmartPromptPart"):GetChildren()) do
-							if sp.Name == "CarryAreaEgg" and sp:IsA("ProximityPrompt") then
-								local parent = sp.Parent
-								if parent and parent:IsA("BasePart") then
-									local dist = (parent.Position - hrp.Position).Magnitude
-									if dist < 20 then
-										prompt = sp
-										break
-									end
-								end
-							end
-						end
-						if prompt then
-							pcall(function() firesignal(prompt.Triggered, LocalPlayer) end)
-							task.wait(0.3)
-						else
-							task.wait(0.1)
-						end
+					-- Step 5: fire AskFieldEggCarry pada target egg
+					local targetSlot = slotKeys[((slotIdx - 1) % #slotKeys) + 1]
+					slotIdx = slotIdx + 1
+
+					local ok, result = pcall(function()
+						return Remotes.EggWorld.AskFieldEggCarry:InvokeServer({
+							Uid = egg.uid,
+							FirstAreaSlotKey = targetSlot,
+						})
+					end)
+					if ok and result == true then
+						task.wait(0.3)
+					else
+						task.wait(0.1)
 					end
 				end
 
