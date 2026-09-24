@@ -459,7 +459,7 @@ local Fluent = NaruUI.New({
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
-	Version = "v1.7.0",
+	Version = "v1.7.1",
 	TabWidth = 150,
 	Size = UDim2.fromOffset(680, 460),
 	AutoStartMinimized = false,
@@ -1373,26 +1373,33 @@ task.spawn(function()
 		huntMoving = true
 		local char = hrp.Parent
 		if not char then huntMoving = false return end
+		local hum = char:FindFirstChildOfClass("Humanoid")
 		local destXZ = Vector2.new(targetPos.X, targetPos.Z)
 		local startXZ = Vector2.new(hrp.Position.X, hrp.Position.Z)
+		local ws = hum and hum.WalkSpeed or 16
 		local timeout = math.clamp((startXZ - destXZ).Magnitude / speed, 0.5, 15)
 		local start = tick()
 		while tick() - start < timeout and huntMoving do
 			local h = char:FindFirstChild("HumanoidRootPart")
 			if not h then break end
+			if not hum or hum.Health <= 0 then break end
 			local curXZ = Vector2.new(h.Position.X, h.Position.Z)
 			local diffXZ = destXZ - curXZ
 			local remain = diffXZ.Magnitude
 			if remain < 6 then break end
 			local step = math.min(STEP_SIZE, remain)
 			local dir = diffXZ.Unit
+			local dir3 = Vector3.new(dir.X, 0, dir.Y).Unit
 			local newX = h.Position.X + dir.X * step
 			local newZ = h.Position.Z + dir.Y * step
 			local groundY = huntGroundY(Vector3.new(newX, h.Position.Y, newZ), char)
-			h.CFrame = CFrame.new(newX, groundY, newZ) * (h.CFrame - h.CFrame.Position)
-			h.AssemblyLinearVelocity = Vector3.zero
+			h.CFrame = CFrame.new(newX, groundY, newZ) * CFrame.lookAt(Vector3.zero, dir3)
+			h.AssemblyLinearVelocity = dir3 * ws
+			hum:Move(dir3)
 			task.wait()
 		end
+		if hum then hum:Move(Vector3.zero) end
+		if hrp and hrp.Parent then hrp.AssemblyLinearVelocity = Vector3.zero end
 		huntMoving = false
 	end
 
@@ -1798,29 +1805,36 @@ task.spawn(function()
 	local function stealTweenTo(hrp, targetPos, speed)
 		local char = hrp.Parent
 		if not char then return end
+		local hum = char:FindFirstChildOfClass("Humanoid")
 		local destXZ = Vector2.new(targetPos.X, targetPos.Z)
 		local startXZ = Vector2.new(hrp.Position.X, hrp.Position.Z)
 		local dist = (startXZ - destXZ).Magnitude
 		if dist < 3 then return end
 		hrp.Anchored = false
+		local ws = hum and hum.WalkSpeed or 16
 		local timeout = math.clamp(dist / speed, 0.5, 15)
 		local start = tick()
 		while tick() - start < timeout do
 			local h = char:FindFirstChild("HumanoidRootPart")
 			if not h then break end
+			if not hum or hum.Health <= 0 then break end
 			local curXZ = Vector2.new(h.Position.X, h.Position.Z)
 			local diffXZ = destXZ - curXZ
 			local remain = diffXZ.Magnitude
 			if remain < 6 then break end
 			local step = math.min(6, remain)
 			local dir = diffXZ.Unit
+			local dir3 = Vector3.new(dir.X, 0, dir.Y).Unit
 			local newX = h.Position.X + dir.X * step
 			local newZ = h.Position.Z + dir.Y * step
 			local groundY = stealGroundY(Vector3.new(newX, h.Position.Y, newZ), char)
-			h.CFrame = CFrame.new(newX, groundY, newZ) * (h.CFrame - h.CFrame.Position)
-			h.AssemblyLinearVelocity = Vector3.zero
+			h.CFrame = CFrame.new(newX, groundY, newZ) * CFrame.lookAt(Vector3.zero, dir3)
+			h.AssemblyLinearVelocity = dir3 * ws
+			hum:Move(dir3)
 			task.wait()
 		end
+		if hum then hum:Move(Vector3.zero) end
+		if hrp and hrp.Parent then hrp.AssemblyLinearVelocity = Vector3.zero end
 	end
 
 	local function stealSafeTween(hrp, targetPos, speed)
