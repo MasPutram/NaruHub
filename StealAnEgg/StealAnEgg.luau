@@ -267,10 +267,22 @@ do
 		if not char then return end
 		local hum = char:FindFirstChildOfClass("Humanoid")
 		if not hum then return end
+		pcall(function()
+			hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+		end)
 		hum.HealthChanged:Connect(function(hp)
 			pcall(function()
 				local maxHP = hum.MaxHealth > 0 and hum.MaxHealth or 100
-				if hp < maxHP and hp > 0 then
+				if hp < maxHP then
+					hum.Health = maxHP
+				end
+			end)
+		end)
+		RunService.Heartbeat:Connect(function()
+			pcall(function()
+				if not hum or not hum.Parent then return end
+				local maxHP = hum.MaxHealth > 0 and hum.MaxHealth or 100
+				if hum.Health < maxHP then
 					hum.Health = maxHP
 				end
 			end)
@@ -504,7 +516,7 @@ local Fluent = NaruUI.New({
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
-	Version = "v2.0.2",
+	Version = "v2.0.3",
 	TabWidth = 150,
 	Size = UDim2.fromOffset(680, 460),
 	AutoStartMinimized = false,
