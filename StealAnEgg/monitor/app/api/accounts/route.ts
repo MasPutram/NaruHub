@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { redis, ONLINE_TIMEOUT_S, forSaleKey } from "@/lib/redis";
+import { redis, ONLINE_TIMEOUT_S, forSaleKey, ACCOUNT_DEVICE_MAP_KEY } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +38,13 @@ export async function GET() {
       };
     }).filter(Boolean);
 
-    return NextResponse.json({ accounts: rows });
+    let deviceMap: Record<string, string> = {};
+    try {
+      const mapRaw = await redis.get<string>(ACCOUNT_DEVICE_MAP_KEY);
+      if (mapRaw) deviceMap = typeof mapRaw === "string" ? JSON.parse(mapRaw) : mapRaw;
+    } catch {}
+
+    return NextResponse.json({ accounts: rows, deviceMap });
   } catch (e: any) {
     return NextResponse.json({ accounts: [], error: e.message }, { status: 500 });
   }

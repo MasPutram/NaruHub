@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, termuxDeviceKey, termuxDeviceMetaKey, TERMUX_DEVICE_TTL_S, deviceAccountsKey, DEVICE_ACCOUNTS_TTL_S } from "@/lib/redis";
+import { redis, termuxDeviceKey, termuxDeviceMetaKey, TERMUX_DEVICE_TTL_S, deviceAccountsKey, DEVICE_ACCOUNTS_TTL_S, ACCOUNT_DEVICE_MAP_KEY } from "@/lib/redis";
 
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
@@ -116,6 +116,27 @@ export async function POST(req: NextRequest) {
     };
     if (device.customName) snapshot.customName = device.customName;
     await redis.set(termuxDeviceMetaKey(deviceId), JSON.stringify(snapshot));
+
+    // Persist account → device hostname mapping (no TTL) so the dashboard
+    // can show device labels even when the agent is offline.
+    const hostname = device.customName || device.hostname;
+    if (hostname && hostname !== "unknown" && Array.isArray(device.packages)) {
+      try {
+        const mapRaw = await redis.get<string>(ACCOUNT_DEVICE_MAP_KEY);
+        const map: Record<string, string> = mapRaw
+          ? (typeof mapRaw === "string" ? JSON.parse(mapRaw) : mapRaw)
+          : {};
+        let changed = false;
+        for (const pkg of device.packages) {
+          const username = typeof pkg === "string" ? "" : (pkg.username || "");
+          if (username && map[username] !== hostname) {
+            map[username] = hostname;
+            changed = true;
+          }
+        }
+        if (changed) await redis.set(ACCOUNT_DEVICE_MAP_KEY, JSON.stringify(map));
+      } catch {}
+    }
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {

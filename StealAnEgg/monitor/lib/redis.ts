@@ -97,6 +97,8 @@ export const LAST_LAUNCH_TTL_S = 60 * 60; // 1h
 
 export const PET_ICON_TTL_S = 60 * 60 * 24 * 30; // 30 days
 
+export const ACCOUNT_DEVICE_MAP_KEY = "account-device-map";
+
 export function termuxCommandQueueKey(deviceId: string) {
   return `termux:cmdqueue:${deviceId}`;
 }

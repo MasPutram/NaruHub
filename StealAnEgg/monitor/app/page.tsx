@@ -286,36 +286,16 @@ export default function DashboardPage() {
       const data = await res.json();
       const all = (data.accounts || []).filter((a: Account) => !a.forSale);
       setAccounts(all);
-    } catch {}
-  }, []);
-
-  const fetchDevices = useCallback(async () => {
-    try {
-      const res = await fetch("/api/termux/devices");
-      const data = await res.json();
-      if (data.ok && data.devices) {
-        const map: Record<string, string> = {};
-        for (const d of data.devices) {
-          const label = d.customName || d.hostname || d.deviceId;
-          if (!label) continue;
-          for (const pkg of (d.packages || [])) {
-            const username = typeof pkg === "string" ? "" : (pkg.username || "");
-            if (username) map[username] = label;
-          }
-        }
-        setDeviceMap(map);
-      }
+      if (data.deviceMap) setDeviceMap(data.deviceMap);
     } catch {}
   }, []);
 
   useEffect(() => {
     setMounted(true);
     fetchAccounts();
-    fetchDevices();
     const id = setInterval(fetchAccounts, 5000);
-    const id2 = setInterval(fetchDevices, 30000);
-    return () => { clearInterval(id); clearInterval(id2); };
-  }, [fetchAccounts, fetchDevices]);
+    return () => clearInterval(id);
+  }, [fetchAccounts]);
 
   function filterByDevice(list: Account[]): Account[] {
     if (!deviceFilter.trim()) return list;
