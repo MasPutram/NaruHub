@@ -577,7 +577,7 @@ local AUTO_SELL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Mythic", "Le
 local AUTO_SELL_NEVER = { Divine = true }
 local autoSellEnabled = false
 section:AddToggle("AutoSellToggle", {
-	Title = "Auto Sell (< 2B/s, skip Divine+Eternal)",
+	Title = "Sell Auto (< 2B/s, skip Divine+Eternal)",
 	Default = false,
 	Callback = function(val)
 		autoSellEnabled = val
@@ -596,7 +596,7 @@ section:AddToggle("AutoSellToggle", {
 local autoPlaceEnabled = false
 local autoPlaceTrigger = 0
 section:AddToggle("AutoPlaceToggle", {
-	Title = "Auto Place Eggs (1x)",
+	Title = "Place Egg Auto (1x)",
 	Default = false,
 	Callback = function(val)
 		autoPlaceEnabled = val
@@ -608,7 +608,7 @@ section:AddToggle("AutoPlaceToggle", {
 
 local autoBuyScrambledEnabled = false
 section:AddToggle("AutoBuyScrambledToggle", {
-	Title = "Auto Buy Dr Scramble (Token > Treadmill)",
+	Title = "Buy Dr Scramble Auto (Token > Treadmill)",
 	Default = false,
 	Callback = function(val)
 		autoBuyScrambledEnabled = val
@@ -617,7 +617,7 @@ section:AddToggle("AutoBuyScrambledToggle", {
 
 local autoMutationEggEnabled = false
 section:AddToggle("AutoMutationEggToggle", {
-	Title = "Auto Mutation Egg (Plot, highest b/s first)",
+	Title = "Mutate Egg Auto (Plot, highest b/s first)",
 	Default = false,
 	Callback = function(val)
 		autoMutationEggEnabled = val
@@ -627,7 +627,7 @@ section:AddToggle("AutoMutationEggToggle", {
 local autoHatchEnabled = false
 local autoHatchSignal = Instance.new("BindableEvent")
 section:AddToggle("AutoHatchToggle", {
-	Title = "Auto Hatch",
+	Title = "Hatch Auto",
 	Default = false,
 	Callback = function(val)
 		autoHatchEnabled = val
