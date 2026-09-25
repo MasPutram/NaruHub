@@ -149,8 +149,8 @@ return (function()
 			local titleHolder = uiNew("Frame", {
 				Name = "TitleHolder",
 				BackgroundTransparency = 1,
-				Position = UDim2.new(0, 80, 0, 0),
-				Size = UDim2.new(1, -100, 1, 0),
+				Position = UDim2.new(0, 20, 0, 0),
+				Size = UDim2.new(1, -150, 1, 0),
 			}, titleBar)
 			uiNew("UIListLayout", {
 				FillDirection = Enum.FillDirection.Horizontal,
@@ -195,24 +195,11 @@ return (function()
 					Text = wcfg.Badge,
 				}, premiumBadge)
 			end
-			if wcfg.Version then
-				uiNew("TextLabel", {
-					BackgroundTransparency = 1,
-					AutomaticSize = Enum.AutomaticSize.X,
-					Size = UDim2.new(0, 0, 0, 18),
-					Font = UI_FONT,
-					TextSize = 12,
-					TextXAlignment = Enum.TextXAlignment.Left,
-					TextColor3 = UI_COL_DIM,
-					Text = wcfg.Version,
-					LayoutOrder = 3,
-				}, titleHolder)
-			end
 
-			local function titleBtn(text, xOffsetFromLeft)
+			local function titleBtn(text, xOffsetFromRight)
 				local btn = uiNew("TextButton", {
 					Size = UDim2.fromOffset(28, 28),
-					Position = UDim2.new(0, xOffsetFromLeft, 0.5, 0),
+					Position = UDim2.new(1, xOffsetFromRight, 0.5, 0),
 					AnchorPoint = Vector2.new(0, 0.5),
 					BackgroundColor3 = UI_COL_ROW,
 					BackgroundTransparency = 0.2,
@@ -226,8 +213,8 @@ return (function()
 				return btn
 			end
 
-			local closeBtn = titleBtn("\226\156\149", 8)
-			local minBtn = titleBtn("\226\128\148", 44)
+			local closeBtn = titleBtn("\226\156\149", -36)
+			local minBtn = titleBtn("\226\128\148", -72)
 
 			local sidebar = uiNew("Frame", {
 				Name = "Sidebar",
@@ -238,53 +225,13 @@ return (function()
 			}, main)
 			local sideList = uiNew("Frame", {
 				BackgroundTransparency = 1,
-				Size = UDim2.new(1, -12, 1, -72),
+				Size = UDim2.new(1, -12, 1, -12),
 				Position = UDim2.fromOffset(6, 6),
-				ClipsDescendants = true,
 			}, sidebar)
 			uiNew("UIListLayout", {
 				Padding = UDim.new(0, 4),
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}, sideList)
-
-			local sideFooter = uiNew("Frame", {
-				Name = "Footer",
-				BackgroundTransparency = 1,
-				Size = UDim2.new(1, 0, 0, 56),
-				Position = UDim2.new(0, 0, 1, -56),
-			}, sidebar)
-			uiNew("Frame", {
-				Size = UDim2.new(1, -16, 0, 1),
-				Position = UDim2.new(0, 8, 0, 0),
-				BackgroundColor3 = Color3.fromRGB(34, 34, 36),
-				BorderSizePixel = 0,
-			}, sideFooter)
-			local statusDot = uiNew("Frame", {
-				Size = UDim2.fromOffset(8, 8),
-				Position = UDim2.new(0, 14, 0, 18),
-				BackgroundColor3 = Color3.fromRGB(74, 222, 128),
-			}, sideFooter)
-			uiCorner(4, statusDot)
-			local statusLbl = uiNew("TextLabel", {
-				BackgroundTransparency = 1,
-				Position = UDim2.new(0, 28, 0, 10),
-				Size = UDim2.new(1, -36, 0, 14),
-				Font = UI_FONT,
-				TextSize = 11,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				TextColor3 = Color3.fromRGB(74, 222, 128),
-				Text = "Connected",
-			}, sideFooter)
-			local userLbl = uiNew("TextLabel", {
-				BackgroundTransparency = 1,
-				Position = UDim2.new(0, 28, 0, 28),
-				Size = UDim2.new(1, -36, 0, 16),
-				Font = UI_FONT,
-				TextSize = 13,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				TextColor3 = UI_COL_DIM,
-				Text = LocalPlayer.Name,
-			}, sideFooter)
 
 			local content = uiNew("Frame", {
 				Name = "Content",
@@ -571,8 +518,7 @@ return (function()
 					}, secFrame)
 
 					local noCollapse = secCfg.NoCollapse == true
-					local expanded = noCollapse or (secCfg.DefaultExpanded ~= false)
-					local contentHolder
+					local expanded = noCollapse or (secCfg.DefaultExpanded == true)
 
 					if not noCollapse then
 						local headerBtn = uiNew("TextButton", {
@@ -585,15 +531,14 @@ return (function()
 							LayoutOrder = 0,
 						}, secFrame)
 						uiCorner(8, headerBtn)
-						local accentBar = uiNew("Frame", {
+						uiNew("Frame", {
 							BackgroundColor3 = UI_COL_ACCENT,
 							Size = UDim2.new(0, 3, 0, 16),
 							Position = UDim2.new(0, 12, 0.5, 0),
 							AnchorPoint = Vector2.new(0, 0.5),
 							BorderSizePixel = 0,
 						}, headerBtn)
-						accentBar.Active = false
-						local headerLbl = uiNew("TextLabel", {
+						uiNew("TextLabel", {
 							BackgroundTransparency = 1,
 							Position = UDim2.new(0, 24, 0, 0),
 							Size = UDim2.new(1, -50, 1, 0),
@@ -603,7 +548,6 @@ return (function()
 							TextColor3 = UI_COL_TEXT,
 							Text = title,
 						}, headerBtn)
-						headerLbl.Active = false
 						local chevron = uiNew("TextLabel", {
 							BackgroundTransparency = 1,
 							Position = UDim2.new(1, -30, 0, 0),
@@ -613,24 +557,15 @@ return (function()
 							TextColor3 = UI_COL_ACCENT,
 							Text = expanded and "\226\136\168" or "\226\128\186",
 						}, headerBtn)
-						chevron.Active = false
 
-						local clickOverlay = uiNew("TextButton", {
-							Size = UDim2.fromScale(1, 1),
-							BackgroundTransparency = 1,
-							Text = "",
-							ZIndex = 10,
-						}, headerBtn)
-						clickOverlay.MouseButton1Click:Connect(function()
+						headerBtn.MouseButton1Click:Connect(function()
 							expanded = not expanded
-							if contentHolder then
-								contentHolder.Visible = expanded
-							end
+							contentHolder.Visible = expanded
 							chevron.Text = expanded and "\226\136\168" or "\226\128\186"
 						end)
 					end
 
-					contentHolder = uiNew("Frame", {
+					local contentHolder = uiNew("Frame", {
 						BackgroundColor3 = UI_COL_ROW,
 						BackgroundTransparency = 0.15,
 						BorderSizePixel = 0,
@@ -1239,10 +1174,6 @@ return (function()
 					tb.Bar.Visible = active
 				end
 			end
-
-			Window.StatusDot = statusDot
-			Window.StatusLabel = statusLbl
-			Window.UserLabel = userLbl
 
 			self.Window = Window
 			return Window
