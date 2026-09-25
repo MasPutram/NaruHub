@@ -154,6 +154,23 @@ export function autoexecDeployedKey(deviceId: string) {
   return `autoexec:deployed:${deviceId}`;
 }
 
+// ── Anime Dice ──────────────────────────────────────────────────────────
+export function adAccountKey(name: string) {
+  return `ad:account:${name}`;
+}
+
+export function adDetailKey(name: string) {
+  return `ad:detail:${name}`;
+}
+
+export function adForSaleKey(name: string) {
+  return `ad:forsale:${name}`;
+}
+
+export function adForSaleKickKey(name: string) {
+  return `ad:forsalekick:${name}`;
+}
+
 
 type SetOptions = { ex?: number };
 
