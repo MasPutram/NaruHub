@@ -214,17 +214,17 @@ export default function AnimeDicePage() {
         .ad-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
         .ad-head-left .eyebrow { color: var(--accent2); font-size: 11px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 4px; }
         .ad-head-left h1 { font-size: 24px; margin: 0; font-weight: 900; }
-        .conn-badge { display: flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--card-border); border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 700; color: var(--green); }
+        .conn-badge { display: flex; align-items: center; gap: 6px; background: var(--surface); border: none; border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 700; color: var(--green); }
         .conn-badge .cdot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
 
         .summary-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 24px; }
-        .sum-card { background: var(--card); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px 16px; border-left: 3px solid var(--dim); }
+        .sum-card { background: var(--card); border: none; border-radius: 12px; padding: 14px 16px; border-left: 3px solid var(--dim); }
         .sum-card .slabel { font-size: 10px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; margin-bottom: 6px; }
         .sum-card .sval { font-size: 22px; font-weight: 900; }
         .sum-card .ssub { font-size: 11px; color: var(--dim); margin-top: 2px; }
 
         .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
-        .tabs { display: flex; background: var(--surface); border: 1px solid var(--card-border); border-radius: 10px; overflow: hidden; }
+        .tabs { display: flex; background: var(--surface); border: none; border-radius: 10px; overflow: hidden; }
         .tab { padding: 8px 18px; font-size: 12px; font-weight: 800; letter-spacing: .5px; cursor: pointer; color: var(--dim); background: transparent; border: none; transition: all .15s; display: flex; align-items: center; gap: 6px; }
         .tab:hover { color: var(--ink); }
         .tab.active { background: var(--accent); color: #1a1030; }
@@ -233,12 +233,12 @@ export default function AnimeDicePage() {
         .tab .tcount { font-size: 10px; font-weight: 900; opacity: .8; }
         .tool-sep { width: 1px; height: 28px; background: var(--card-border); }
         .toolbar label { color: var(--dim); font-size: 11px; font-weight: 800; }
-        .toolbar select { background: var(--card); color: var(--ink); border: 1px solid var(--card-border); border-radius: 8px; padding: 7px 12px; font-size: 12px; font-weight: 700; }
+        .toolbar select { background: var(--card); color: var(--ink); border: none; border-radius: 8px; padding: 7px 12px; font-size: 12px; font-weight: 700; }
         .toolbar select:focus { outline: none; border-color: var(--accent); }
 
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
 
-        .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 14px; padding: 16px; cursor: pointer; transition: all .15s; position: relative; }
+        .card { background: var(--card); border: 1px solid transparent; border-radius: 14px; padding: 16px; cursor: pointer; transition: all .15s; position: relative; }
         .card:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,0,0,.3); }
         .card.is-offline { opacity: .5; }
         .card.is-offline:hover { opacity: .8; border-color: var(--dim); }
