@@ -662,6 +662,7 @@ return (function()
 						local r = row(30)
 						uiNew("TextLabel", {
 							BackgroundTransparency = 1,
+							Position = UDim2.new(0, 48, 0, 0),
 							Size = UDim2.new(1, -56, 1, 0),
 							Font = UI_FONT,
 							TextSize = 14,
@@ -671,8 +672,8 @@ return (function()
 						}, r)
 						local pill = uiNew("Frame", {
 							Size = UDim2.fromOffset(40, 22),
-							Position = UDim2.new(1, 0, 0.5, 0),
-							AnchorPoint = Vector2.new(1, 0.5),
+							Position = UDim2.new(0, 0, 0.5, 0),
+							AnchorPoint = Vector2.new(0, 0.5),
 							BackgroundColor3 = tcfg2.Default and UI_COL_ACCENT or UI_COL_OFF,
 						}, r)
 						uiCorner(11, pill)
