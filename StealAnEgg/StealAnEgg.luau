@@ -231,109 +231,113 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
-do
-	local RunService = game:GetService("RunService")
-
-	getgenv().__naruStealActive = false
-
-	local function antiHitGuard()
-		pcall(function()
-			if getgenv().__naruStealActive then return end
-
-			local guardRemotes = require(ReplicatedStorage.Shared.Remotes).GuardPatrol
-			if not guardRemotes then return end
-			if not getconnections then return end
-			for name, remote in pairs(guardRemotes) do
-				if typeof(remote) == "Instance" and remote:IsA("RemoteEvent") then
-					for _, conn in ipairs(getconnections(remote.OnClientEvent)) do
-						conn:Disable()
-					end
-				end
-			end
-		end)
+------------------------------------------------------------
+-- Auto FPS Booster (runs on load — no toggle)
+--  * Hides pets, placed eggs, plot visuals, floating money,
+--    treadmill effects & popups
+--  * Kills particle emitters, beams, trails on non-character parts
+--  * Removes Lighting effects (blur, bloom, colorcorrection)
+------------------------------------------------------------
+task.spawn(function()
+	local myChar
+	local function isMine(inst)
+		myChar = myChar or LocalPlayer.Character
+		return myChar and inst:IsDescendantOf(myChar)
 	end
-	antiHitGuard()
 
-	RunService.Heartbeat:Connect(function()
-		pcall(function()
-			antiHitGuard()
-		end)
-	end)
+	local HIDE_MODEL_NAMES = {
+		"PetHolders", "Pets", "PlacedEggRenders", "OwnedPets",
+		"FloatingMoney", "MoneyPopups", "TreadmillFX", "TreadmillPopups",
+		"Fences", "PlotVisuals", "PlotDecor",
+	}
+	local hideSet = {}
+	for _, n in ipairs(HIDE_MODEL_NAMES) do hideSet[n] = true end
 
-	local BLOCKED_STATES = {
-		Enum.HumanoidStateType.Dead,
-		Enum.HumanoidStateType.FallingDown,
-		Enum.HumanoidStateType.Ragdoll,
+	local FX_CLASSES = {
+		ParticleEmitter = true,
+		Beam = true,
+		Trail = true,
+		Smoke = true,
+		Fire = true,
+		Sparkles = true,
+		Explosion = true,
 	}
 
-	local function setupInstantHeal()
-		local char = LocalPlayer.Character
-		if not char then return end
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		if not hum then return end
-		pcall(function() hum.BreakJointsOnDeath = false end)
-		pcall(function() hum.RequiresNeck = false end)
-		for _, s in ipairs(BLOCKED_STATES) do
-			pcall(function() hum:SetStateEnabled(s, false) end)
+	local function killFX(inst)
+		if isMine(inst) then return end
+		if FX_CLASSES[inst.ClassName] then
+			pcall(function() inst.Enabled = false end)
+		elseif inst:IsA("BillboardGui") then
+			local n = inst.Name:lower()
+			if n:find("money") or n:find("popup") or n:find("float") or n:find("cash") or n:find("earning") then
+				pcall(function() inst.Enabled = false end)
+			end
 		end
-		hum.HealthChanged:Connect(function(hp)
-			pcall(function()
-				local maxHP = hum.MaxHealth > 0 and hum.MaxHealth or 100
-				if hp < maxHP then
-					hum.Health = maxHP
-				end
-			end)
-		end)
-		RunService.Heartbeat:Connect(function()
-			pcall(function()
-				if not hum or not hum.Parent then return end
-				if hum.BreakJointsOnDeath then hum.BreakJointsOnDeath = false end
-				if hum.RequiresNeck then hum.RequiresNeck = false end
-				for _, s in ipairs(BLOCKED_STATES) do
-					if hum:GetStateEnabled(s) then
-						hum:SetStateEnabled(s, false)
-					end
-				end
-				local maxHP = hum.MaxHealth > 0 and hum.MaxHealth or 100
-				if hum.Health < maxHP then
-					hum.Health = maxHP
-				end
-			end)
-		end)
 	end
-	setupInstantHeal()
-	LocalPlayer.CharacterAdded:Connect(function()
-		task.wait(1)
-		setupInstantHeal()
+
+	local function hideModel(inst)
+		if isMine(inst) then return end
+		if hideSet[inst.Name] then
+			for _, d in ipairs(inst:GetDescendants()) do
+				if d:IsA("BasePart") then
+					pcall(function() d.Transparency = 1; d.CanCollide = false end)
+				elseif d:IsA("Decal") or d:IsA("Texture") then
+					pcall(function() d.Transparency = 1 end)
+				elseif FX_CLASSES[d.ClassName] then
+					pcall(function() d.Enabled = false end)
+				end
+			end
+		end
+	end
+
+	local function killLightingFX()
+		for _, fx in ipairs(Lighting:GetChildren()) do
+			if fx:IsA("BlurEffect") or fx:IsA("BloomEffect")
+				or fx:IsA("ColorCorrectionEffect") or fx:IsA("SunRaysEffect")
+				or fx:IsA("DepthOfFieldEffect") then
+				pcall(function() fx.Enabled = false end)
+			end
+		end
+	end
+
+	-- Initial sweep
+	for _, inst in ipairs(Workspace:GetDescendants()) do
+		pcall(killFX, inst)
+	end
+	for _, child in ipairs(Workspace:GetChildren()) do
+		pcall(hideModel, child)
+	end
+	killLightingFX()
+
+	-- Continuous watch (new spawns)
+	Workspace.DescendantAdded:Connect(function(inst)
+		pcall(killFX, inst)
+	end)
+	Workspace.ChildAdded:Connect(function(child)
+		task.wait(0.2)
+		pcall(hideModel, child)
+	end)
+	Lighting.ChildAdded:Connect(function()
+		task.wait()
+		killLightingFX()
 	end)
 
-	local function setupAntiRagdoll()
-		local char = LocalPlayer.Character
-		if not char then return end
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		if not hum then return end
-		hum.StateChanged:Connect(function(_old, new)
+	-- Periodic re-sweep for models that respawn contents
+	task.spawn(function()
+		while true do
+			task.wait(10)
 			pcall(function()
-				if new == Enum.HumanoidStateType.FallingDown
-					or new == Enum.HumanoidStateType.Ragdoll
-					or new == Enum.HumanoidStateType.Physics then
-					hum:ChangeState(Enum.HumanoidStateType.Jumping)
-					local hrp = char:FindFirstChild("HumanoidRootPart")
-					if hrp then
-						hrp.AssemblyLinearVelocity = Vector3.new(0, 80, 0)
-					end
+				for _, child in ipairs(Workspace:GetChildren()) do
+					hideModel(child)
 				end
 			end)
-		end)
-	end
-	setupAntiRagdoll()
-	LocalPlayer.CharacterAdded:Connect(function()
-		task.wait(1)
-		setupAntiRagdoll()
+		end
 	end)
-end
+end)
 
 local EggState = require(ReplicatedStorage.Client.EggState)
 local AssetEarnings = require(ReplicatedStorage.Shared.Util.AssetEarnings)
@@ -362,137 +366,45 @@ end
 ------------------------------------------------------------
 local function findHipToggle()
 	local pg = LocalPlayer:FindFirstChild("PlayerGui")
-	if not pg then return nil, nil end
-	local hip = pg:FindFirstChild("HipHub")
-	if not hip then return nil, nil end
+	local hip = pg and pg:FindFirstChild("HipHub")
+	if not hip then return nil end
 	for _, d in ipairs(hip:GetDescendants()) do
 		if d:IsA("TextLabel") and d.Text == "Auto Treadmill On Return" then
-			local container = d.Parent
-			if not container then continue end
-			local inner = container:FindFirstChildOfClass("TextButton")
-			return inner, container
+			local p = d.Parent
+			return p and p:FindFirstChildOfClass("TextButton") or nil
 		end
 	end
-	return nil, nil
+	return nil
 end
 
 local function hipToggleIsOn(btn)
-	if not btn then return false end
-	local frame = btn:FindFirstChild("Frame")
-	if frame then return frame.Position.X.Scale >= 0.5 end
-	return btn.BackgroundColor3.G > 0.5
-end
-
-local function fireHipToggle(inner, container)
-	if not firesignal then return false end
-	local fired = false
-	if inner then
-		pcall(function() firesignal(inner.Activated) end)
-		fired = true
-	end
-	if not fired and inner then
-		pcall(function() firesignal(inner.MouseButton1Click) end)
-		fired = true
-	end
-	if not fired and container and container:IsA("TextButton") then
-		pcall(function() firesignal(container.Activated) end)
-		fired = true
-	end
-	return fired
+	local inner = btn and btn:FindFirstChild("Frame")
+	return inner and inner.Position.X.Scale >= 0.5
 end
 
 -- Wrap a callback with HIP off/on. Returns whatever `fn` returns.
 local function withHipPaused(fn)
-	local inner, container = findHipToggle()
-	local hipWasOn = hipToggleIsOn(inner)
+	local hipBtn = findHipToggle()
+	local hipWasOn = hipBtn and hipToggleIsOn(hipBtn)
 	local weFiredOff = false
-	if hipWasOn then
-		weFiredOff = fireHipToggle(inner, container)
-		if weFiredOff then task.wait(0.3) end
+	if hipWasOn and firesignal then
+		pcall(function() firesignal(hipBtn.MouseButton1Click) end)
+		weFiredOff = true
+		task.wait(0.3)
 	end
 
 	local ok, result = pcall(fn)
 
-	if weFiredOff then
+	if weFiredOff and firesignal then
 		for _ = 1, 3 do
-			local b, c = findHipToggle()
+			local b = findHipToggle()
 			if not b then break end
 			if hipToggleIsOn(b) then break end
-			fireHipToggle(b, c)
+			pcall(function() firesignal(b.MouseButton1Click) end)
 			task.wait(0.4)
 		end
 	end
 	return ok, result
-end
-
-------------------------------------------------------------
--- Shared: find my plot & treadmill position (dynamic per rejoin)
-------------------------------------------------------------
-local function findMyPlotShared()
-	local plots = Workspace:FindFirstChild("Plots")
-	if not plots then return nil end
-	local stats = SaveModule.Peek()
-	local myLevel = stats and stats.BaseUpgradeLevel or 0
-	local candidates = {}
-	for _, plot in ipairs(plots:GetChildren()) do
-		if plot:GetAttribute("BaseUpgradeLevel") == myLevel then
-			table.insert(candidates, plot)
-		end
-	end
-	if #candidates == 1 then return candidates[1] end
-	if #candidates == 0 then return nil end
-	for _, plot in ipairs(candidates) do
-		local loc = plot:FindFirstChild("LocalOfflineMoneyClaim")
-		if loc then
-			local area = loc:FindFirstChild("OfflineMoneyClaimArea")
-			if area then
-				local bb = area:FindFirstChild("OfflineMoneyClaimBillboard")
-				if bb and bb.Enabled then return plot end
-			end
-		end
-	end
-	local char = LocalPlayer.Character
-	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	if hrp then
-		local closest, closestDist = nil, math.huge
-		for _, plot in ipairs(candidates) do
-			local cp = plot:FindFirstChild("CenterPoint")
-			if cp then
-				local dist = (hrp.Position - cp.Position).Magnitude
-				if dist < closestDist then closest, closestDist = plot, dist end
-			end
-		end
-		if closest then return closest end
-	end
-	return candidates[1]
-end
-
-local function hasHighValueEgg(minRate)
-	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	local AreaEggSlotIdentity = require(ReplicatedStorage.Shared.Util.AreaEggSlotIdentity)
-	local ok, result = pcall(function()
-		local snapshot = Remotes.EggWorld.AskFieldEggSnapshot:InvokeServer()
-		if not snapshot or not snapshot.Records then return false end
-		for _, rec in ipairs(snapshot.Records) do
-			if rec.Uid and rec.State == "Slot" and rec.AssetCategory then
-				if not AreaEggSlotIdentity.LooksLikeFirstAreaUid(rec.Uid)
-					or AreaEggSlotIdentity.FirstAreaOwnerUserId(rec.Uid) ~= LocalPlayer.UserId
-				then
-					local rate = 0
-					pcall(function()
-						rate = AssetEarnings.RatePerSecond({
-							Category = rec.AssetCategory,
-							Scale = rec.AssetScale or 1,
-							Mutations = rec.Mutations or {},
-						})
-					end)
-					if rate >= minRate then return true end
-				end
-			end
-		end
-		return false
-	end)
-	return ok and result or false
 end
 
 ------------------------------------------------------------
@@ -506,9 +418,8 @@ local Fluent = NaruUI.New({
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
-	Version = "v2.2.0",
-	TabWidth = 150,
-	Size = UDim2.fromOffset(680, 460),
+	TabWidth = 0,
+	Size = UDim2.fromOffset(380, 400),
 	AutoStartMinimized = false,
 })
 
@@ -585,43 +496,61 @@ do
 	end)
 end
 
-------------------------------------------------------------
--- Tabs (Limbo-style layout)
-------------------------------------------------------------
-local Tabs = {
-	Main        = Window:AddTab({ Title = "Main" }),
-	Upgrade     = Window:AddTab({ Title = "Upgrade" }),
-	Event       = Window:AddTab({ Title = "Event" }),
-	Settings    = Window:AddTab({ Title = "Settings" }),
-}
+local StatusTab = Window:AddTab({ Title = "" })
+local section = StatusTab:AddSection(LocalPlayer.Name, { NoCollapse = true })
 
-------------------------------------------------------------
--- Main tab — support system + auto steal
-------------------------------------------------------------
-local supportSection = Tabs.Main:AddSection("Support system")
+local usernamePara = section:AddParagraph({
+	Title = "Username",
+	Content = LocalPlayer.Name,
+	ContentSize = 14,
+	Center = true,
+})
 
-local monitorPara = supportSection:AddParagraph({
-	Title = "Trackstat",
+do
+	local Players = game:GetService("Players")
+	local myName = LocalPlayer.Name
+	local myPrefix = myName:match("^(%D+)%d+$")
+
+	local function refreshUsernameList()
+		if not myPrefix then
+			usernamePara:SetContent(myName)
+			return
+		end
+		local matches = {}
+		for _, p in ipairs(Players:GetPlayers()) do
+			local prefix, num = p.Name:match("^(%D+)(%d+)$")
+			if prefix == myPrefix then
+				table.insert(matches, { name = p.Name, num = tonumber(num) or 0 })
+			end
+		end
+		if #matches <= 1 then
+			usernamePara:SetContent(myName)
+			return
+		end
+		table.sort(matches, function(a, b) return a.num < b.num end)
+		local names = {}
+		for _, m in ipairs(matches) do names[#names+1] = m.name end
+		usernamePara:SetContent(table.concat(names, "\n"))
+	end
+
+	Players.PlayerAdded:Connect(function() task.wait(0.5) refreshUsernameList() end)
+	Players.PlayerRemoving:Connect(function() task.wait(0.5) refreshUsernameList() end)
+	task.spawn(refreshUsernameList)
+end
+
+local monitorPara = section:AddParagraph({
+	Title = "Status",
 	Content = "Starting...",
+	ContentSize = 14,
+	Center = true,
 })
-
-supportSection:AddButton({
-	Title = "Leave game (balik ke Roblox home)",
-	Callback = function()
-		pcall(function()
-			LocalPlayer:Kick("Leave via NaruHub")
-		end)
-	end,
-})
-
-local stealSection = Tabs.Main:AddSection("Auto steal")
 
 local AUTO_SELL_MIN_RATE = 2_000_000_000
 local AUTO_SELL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Mythic", "Legendary", "Cosmic", "Eternal", "Titan" }
 local AUTO_SELL_NEVER = { Divine = true }
 local autoSellEnabled = false
-stealSection:AddToggle("AutoSellToggle", {
-	Title = "Auto Sell (< 2B/s, skip Divine)",
+section:AddToggle("AutoSellToggle", {
+	Title = "Auto Sell (< 2B/s, skip Divine+Eternal)",
 	Default = false,
 	Callback = function(val)
 		autoSellEnabled = val
@@ -634,9 +563,12 @@ stealSection:AddToggle("AutoSellToggle", {
 	end,
 })
 
+-- Auto Place is one-shot per toggle activation:
+--   ON  -> wait 10s (let HIP settle) then run ONE pass, then rest
+--   OFF -> stop rest state, next ON will fire another pass
 local autoPlaceEnabled = false
 local autoPlaceTrigger = 0
-stealSection:AddToggle("AutoPlaceToggle", {
+section:AddToggle("AutoPlaceToggle", {
 	Title = "Auto Place Eggs (1x)",
 	Default = false,
 	Callback = function(val)
@@ -647,9 +579,18 @@ stealSection:AddToggle("AutoPlaceToggle", {
 	end,
 })
 
+local autoBuyScrambledEnabled = false
+section:AddToggle("AutoBuyScrambledToggle", {
+	Title = "Auto Buy Dr Scramble (Token > Treadmill)",
+	Default = false,
+	Callback = function(val)
+		autoBuyScrambledEnabled = val
+	end,
+})
+
 local autoMutationEggEnabled = false
-stealSection:AddToggle("AutoMutationEggToggle", {
-	Title = "Auto Mutation Egg",
+section:AddToggle("AutoMutationEggToggle", {
+	Title = "Auto Mutation Egg (Plot, highest b/s first)",
 	Default = false,
 	Callback = function(val)
 		autoMutationEggEnabled = val
@@ -658,7 +599,7 @@ stealSection:AddToggle("AutoMutationEggToggle", {
 
 local autoHatchEnabled = false
 local autoHatchSignal = Instance.new("BindableEvent")
-stealSection:AddToggle("AutoHatchToggle", {
+section:AddToggle("AutoHatchToggle", {
 	Title = "Auto Hatch",
 	Default = false,
 	Callback = function(val)
@@ -669,87 +610,19 @@ stealSection:AddToggle("AutoHatchToggle", {
 	end,
 })
 
-local autoStealEnabled = false
-local autoStealMinValue = 1_000_000_000
-local autoStealSpeed = 500
-stealSection:AddToggle("AutoStealToggle", {
-	Title = "Auto Steal Eggs",
-	Default = false,
-	Callback = function(val)
-		autoStealEnabled = val
+-- Manual leave button: click to kick this clone back to Roblox home.
+-- Only fires on a deliberate click, never on its own -- no auto-leave path
+-- lives in this script (rapid Kick+rejoin cascades trigger the Roblox
+-- Funcaptcha and BAC anti-cheat, so we keep the only leave route the
+-- operator can take from the dashboard via Siap Jual).
+section:AddButton({
+	Title = "Leave Game (balik ke Roblox home)",
+	Callback = function()
+		pcall(function()
+			LocalPlayer:Kick("Leave via NaruHub")
+		end)
 	end,
 })
-stealSection:AddInput("AutoStealThreshold", {
-	Title = "  Value Threshold (M$)",
-	Default = "1000",
-	Placeholder = "0 = Any",
-	Numeric = true,
-	Callback = function(val)
-		local n = tonumber(val) or 0
-		autoStealMinValue = n * 1_000_000
-	end,
-})
-stealSection:AddSlider("AutoStealSpeed", {
-	Title = "  Tween Speed (studs/s)",
-	Default = 500,
-	Min = 100,
-	Max = 2000,
-	Rounding = 0,
-	Callback = function(val)
-		autoStealSpeed = val
-	end,
-})
-
-------------------------------------------------------------
--- Upgrade tab
-------------------------------------------------------------
-local upgradeSection = Tabs.Upgrade:AddSection("Auto upgrade")
-
-local autoUpgradeEnabled = true
-upgradeSection:AddToggle("AutoUpgradeToggle", {
-	Title = "Auto Upgrade Kandang & Treadmill",
-	Default = true,
-	Callback = function(val)
-		autoUpgradeEnabled = val
-	end,
-})
-
-------------------------------------------------------------
--- Event tab — Dr Scramble
-------------------------------------------------------------
-local scrambleSection = Tabs.Event:AddSection("Dr Scramble")
-
-local autoBuyScrambledEnabled = false
-scrambleSection:AddToggle("AutoBuyScrambledToggle", {
-	Title = "Auto Buy (Token > Treadmill)",
-	Default = false,
-	Callback = function(val)
-		autoBuyScrambledEnabled = val
-	end,
-})
-
-local autoHuntExperimentEnabled = false
-local autoHuntExperimentTeleport = true
-scrambleSection:AddToggle("AutoHuntExperimentToggle", {
-	Title = "Auto Hunt Experiment",
-	Default = false,
-	Callback = function(val)
-		autoHuntExperimentEnabled = val
-	end,
-})
-scrambleSection:AddToggle("AutoHuntExperimentNoTP", {
-	Title = "  Disable Teleport (Hunt)",
-	Default = false,
-	Callback = function(val)
-		autoHuntExperimentTeleport = not val
-	end,
-})
-
-------------------------------------------------------------
--- Settings tab
-------------------------------------------------------------
-local settingsSection = Tabs.Settings:AddSection("Utilities")
-local performaSection = Tabs.Settings:AddSection("Performa")
 
 Window:SelectTab(1)
 
@@ -1184,7 +1057,7 @@ local function reportToMonitor()
 end
 
 ------------------------------------------------------------
--- Auto Upgrade Kandang & Treadmill (toggle-driven)
+-- Auto Upgrade Kandang & Treadmill (no UI, runs forever)
 ------------------------------------------------------------
 task.spawn(function()
 	local BaseUpgrade = require(ReplicatedStorage.Client.BaseUpgrade)
@@ -1192,7 +1065,6 @@ task.spawn(function()
 	local TmRemotes = require(ReplicatedStorage.Shared.Remotes)
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		if not autoUpgradeEnabled then task.wait(2) continue end
 		pcall(function()
 			local stats = SaveModule.Peek()
 			local tmLevel = stats.TreadmillUpgradeLevel or 0
@@ -1337,271 +1209,6 @@ task.spawn(function()
 		end
 		task.wait(30)
 	end
-end)
-
-------------------------------------------------------------
--- Auto Hunt Experiment (Dr Scramble drone farming)
---   Window active + no high-value egg → cancel HIP treadmill → hunt drones
---   Window active + egg >= 1B/s       → enable HIP treadmill, pause hunt
---   Window ends soon (<=45s) or off   → enable HIP treadmill (auto return)
---   Auto-equip bat before hunting
-------------------------------------------------------------
-task.spawn(function()
-	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	local huntDrones = {}
-	local huntConn = nil
-	local wasHunting = false
-	local waitingForSteal = false
-	local HIGH_VALUE_THRESHOLD = 1e9
-	local RETURN_BUFFER_SECONDS = 45
-
-	local CENTER_POS = Vector3.new(827, 71, -354)
-	local RUSH_SPEED = 500
-	local DRONE_SPEED = 80
-	local HUNT_AREAS = {
-		Vector3.new(2166, 74, -363),
-		Vector3.new(2634, 74, -363),
-	}
-
-	local function findBatTool()
-		local containers = { LocalPlayer:FindFirstChildOfClass("Backpack"), LocalPlayer.Character }
-		for _, container in ipairs(containers) do
-			if container then
-				for _, tool in ipairs(container:GetChildren()) do
-					if tool:IsA("Tool") then
-						local n = tool.Name:lower()
-						local itemType = tool:GetAttribute("ItemType")
-						if n:find("bat") or itemType == "Bat" or itemType == "ScrambleBat" then
-							return tool
-						end
-					end
-				end
-			end
-		end
-		return nil
-	end
-
-	local function equipBat()
-		local char = LocalPlayer.Character
-		if not char then return false end
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		if not hum then return false end
-		local held = char:FindFirstChildOfClass("Tool")
-		if held then
-			local n = held.Name:lower()
-			local it = held:GetAttribute("ItemType")
-			if n:find("bat") or it == "Bat" or it == "ScrambleBat" then
-				return true
-			end
-		end
-		local bat = findBatTool()
-		if not bat then return false end
-		if bat.Parent == char then return true end
-		pcall(function() hum:EquipTool(bat) end)
-		return char:FindFirstChild(bat.Name) ~= nil
-	end
-
-	local function startDroneListener()
-		if huntConn then return end
-		huntConn = Remotes.Scramble.Drones.OnClientEvent:Connect(function(data)
-			if type(data) ~= "table" then return end
-			if data.Removed then
-				for _, id in ipairs(data.Removed) do
-					huntDrones[id] = nil
-				end
-			end
-			if data.Upserts then
-				for _, drone in ipairs(data.Upserts) do
-					if drone.Id and drone.CFrame then
-						huntDrones[drone.Id] = {
-							cframe = drone.CFrame,
-							health = drone.Health or 0,
-							maxHealth = drone.MaxHealth or 0,
-						}
-					end
-				end
-			end
-		end)
-	end
-
-	local STEP_SIZE = 12
-	local FLOAT_Y = 70.6
-	local huntMoving = false
-
-	local function cancelMove()
-		huntMoving = false
-	end
-
-	local function stopDroneListener()
-		cancelMove()
-		if huntConn then
-			huntConn:Disconnect()
-			huntConn = nil
-		end
-		table.clear(huntDrones)
-	end
-
-	local function moveTo(hrp, targetPos, speed)
-		if huntMoving then return end
-		huntMoving = true
-		local char = hrp.Parent
-		if not char then huntMoving = false return end
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		local diff = targetPos - hrp.Position
-		local timeout = math.clamp(diff.Magnitude / speed, 0.5, 15)
-		local start = tick()
-		while tick() - start < timeout and huntMoving do
-			local h = char:FindFirstChild("HumanoidRootPart")
-			if not h then break end
-			local d = targetPos - h.Position
-			local flat = Vector3.new(d.X, 0, d.Z)
-			local remain = flat.Magnitude
-			if remain < 6 then break end
-			local dir = flat.Unit
-			local step = math.min(STEP_SIZE, remain)
-			local newPos = Vector3.new(h.Position.X + dir.X * step, FLOAT_Y, h.Position.Z + dir.Z * step)
-			h.CFrame = CFrame.lookAt(newPos, newPos + dir)
-			h.AssemblyLinearVelocity = dir * speed
-			if hum then
-				hum:Move(dir)
-			end
-			task.wait()
-		end
-		if hum then hum:Move(Vector3.zero) end
-		huntMoving = false
-	end
-
-	local function findClosestDrone(hrp)
-		local closestId, closestData, closestDist = nil, nil, math.huge
-		for id, drone in pairs(huntDrones) do
-			if drone.health > 0 then
-				local dist = (hrp.Position - drone.cframe.Position).Magnitude
-				if dist < closestDist then
-					closestId = id
-					closestData = drone
-					closestDist = dist
-				end
-			end
-		end
-		return closestId, closestData, closestDist
-	end
-
-	local function cancelHipTreadmill()
-		local inner, container = findHipToggle()
-		if inner and hipToggleIsOn(inner) then
-			fireHipToggle(inner, container)
-			task.wait(0.3)
-			return true
-		end
-		return false
-	end
-
-	local function enableHipTreadmill()
-		for _ = 1, 3 do
-			local inner, container = findHipToggle()
-			if not inner then break end
-			if hipToggleIsOn(inner) then break end
-			fireHipToggle(inner, container)
-			task.wait(0.4)
-		end
-	end
-
-	local currentAreaIdx = 1
-	local areaArriveTime = 0
-
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		if autoHuntExperimentEnabled then
-			pcall(function()
-				local res = Remotes.Scramble.Request:InvokeServer("State")
-				if not res or not res.Snapshot then return end
-				local snap = res.Snapshot
-				local isActive = snap.Window and snap.Window.Active == true
-				local endsAt = snap.Window and snap.Window.EndsAt or 0
-				local serverNow = workspace:GetServerTimeNow()
-				local timeLeft = endsAt - serverNow
-
-				if not isActive or timeLeft <= RETURN_BUFFER_SECONDS then
-					if wasHunting or waitingForSteal then
-						stopDroneListener()
-						enableHipTreadmill()
-						wasHunting = false
-						waitingForSteal = false
-						currentAreaIdx = 1
-					end
-					return
-				end
-
-				local char = LocalPlayer.Character
-				local hrp = char and char:FindFirstChild("HumanoidRootPart")
-				if not hrp then return end
-
-				local eggAvailable = hasHighValueEgg(HIGH_VALUE_THRESHOLD)
-
-				if eggAvailable then
-					if wasHunting then
-						stopDroneListener()
-						wasHunting = false
-					end
-					if not waitingForSteal then
-						enableHipTreadmill()
-						waitingForSteal = true
-					end
-					return
-				end
-
-				if waitingForSteal then
-					waitingForSteal = false
-					cancelHipTreadmill()
-				end
-
-				if not wasHunting then
-					cancelHipTreadmill()
-					startDroneListener()
-					equipBat()
-					if autoHuntExperimentTeleport then
-						moveTo(hrp, CENTER_POS, RUSH_SPEED)
-						moveTo(hrp, HUNT_AREAS[1], RUSH_SPEED)
-					end
-					wasHunting = true
-					areaArriveTime = os.clock()
-				end
-
-				if wasHunting then
-					local held = char:FindFirstChildOfClass("Tool")
-					local ok = held and (held.Name:lower():find("bat")
-						or held:GetAttribute("ItemType") == "Bat"
-						or held:GetAttribute("ItemType") == "ScrambleBat")
-					if not ok then equipBat() end
-				end
-
-				if not autoHuntExperimentTeleport then return end
-
-				local _, droneData, droneDist = findClosestDrone(hrp)
-
-				if droneData then
-					local targetPos = droneData.cframe.Position + Vector3.new(0, 0, 5)
-					if droneDist > 12 then
-						moveTo(hrp, targetPos, DRONE_SPEED)
-					end
-				else
-					if os.clock() - areaArriveTime > 8 then
-						currentAreaIdx = (currentAreaIdx % #HUNT_AREAS) + 1
-						moveTo(hrp, HUNT_AREAS[currentAreaIdx], RUSH_SPEED)
-						areaArriveTime = os.clock()
-					end
-				end
-			end)
-		else
-			if wasHunting or waitingForSteal then
-				stopDroneListener()
-				enableHipTreadmill()
-				wasHunting = false
-				waitingForSteal = false
-			end
-		end
-		task.wait(1)
-	end
-	stopDroneListener()
 end)
 
 ------------------------------------------------------------
@@ -1854,268 +1461,6 @@ end)
 
 
 ------------------------------------------------------------
--- Auto Steal (tween to other players' eggs, carry them)
--- Flow: carry own forest egg → walk past guard → ForestStrike
---       → guard drops our egg → CFrame to target → carry target
-------------------------------------------------------------
-task.spawn(function()
-	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-
-	local SAFE_Z = -360
-	local STEAL_FLOAT_Y = 70.6
-	local FOREST_NEST = Vector3.new(597, 68, -329)
-	local FOREST_GUARD = Vector3.new(596.6, 69.4, -317.1)
-	local GUARD_PAST = Vector3.new(596.6, 69.4, -305)
-
-	local function stealTweenTo(hrp, targetPos, stepSize)
-		local char = hrp.Parent
-		if not char then return end
-		local diff = targetPos - hrp.Position
-		if diff.Magnitude < 3 then return end
-		hrp.Anchored = false
-		local start = tick()
-		while tick() - start < 15 do
-			local h = char:FindFirstChild("HumanoidRootPart")
-			if not h then break end
-			local d = targetPos - h.Position
-			local remain = d.Magnitude
-			if remain < 3 then break end
-			local step = math.min(stepSize, remain)
-			h.CFrame = CFrame.new(h.Position + d.Unit * step) * (h.CFrame - h.CFrame.Position)
-			h.CFrame = CFrame.new(h.CFrame.Position.X, STEAL_FLOAT_Y, h.CFrame.Position.Z) * (h.CFrame - h.CFrame.Position)
-			h.AssemblyLinearVelocity = Vector3.zero
-			task.wait()
-		end
-	end
-
-	local function stealSafeTween(hrp, targetPos)
-		local char = hrp.Parent
-		local curX = hrp.Position.X
-		local tgtX = targetPos.X
-		if math.abs(curX - tgtX) > 80 then
-			stealTweenTo(hrp, Vector3.new(curX, STEAL_FLOAT_Y, SAFE_Z), 12)
-			hrp = char and char:FindFirstChild("HumanoidRootPart")
-			if not hrp then return end
-			stealTweenTo(hrp, Vector3.new(tgtX, STEAL_FLOAT_Y, SAFE_Z), 12)
-			hrp = char and char:FindFirstChild("HumanoidRootPart")
-			if not hrp then return end
-		end
-		stealTweenTo(hrp, targetPos, 12)
-	end
-
-	local AreaEggSlotIdentity = require(ReplicatedStorage.Shared.Util.AreaEggSlotIdentity)
-
-	local function getForestEgg()
-		local ok, snapshot = pcall(function()
-			return Remotes.EggWorld.AskFieldEggSnapshot:InvokeServer()
-		end)
-		if not ok or not snapshot or not snapshot.Records then return nil end
-		for _, rec in ipairs(snapshot.Records) do
-			if rec.Uid and rec.BoundsCFrame and rec.State == "Slot"
-				and rec.AreaId == "Forest"
-				and AreaEggSlotIdentity.LooksLikeFirstAreaUid(rec.Uid)
-				and AreaEggSlotIdentity.FirstAreaOwnerUserId(rec.Uid) == LocalPlayer.UserId
-			then
-				return { uid = rec.Uid, pos = rec.BoundsCFrame.Position, nestId = rec.NestId }
-			end
-		end
-		return nil
-	end
-
-	local function getOurSlotKeys()
-		local keys = {}
-		pcall(function()
-			local snapshot = Remotes.EggWorld.AskFieldEggSnapshot:InvokeServer()
-			if not snapshot or not snapshot.Records then return end
-			for _, rec in ipairs(snapshot.Records) do
-				if AreaEggSlotIdentity.LooksLikeFirstAreaUid(rec.Uid)
-					and AreaEggSlotIdentity.FirstAreaOwnerUserId(rec.Uid) == LocalPlayer.UserId
-				then
-					local slotKey = AreaEggSlotIdentity.SlotKey(rec.AreaId, rec.NestId)
-					table.insert(keys, slotKey)
-				end
-			end
-		end)
-		return keys
-	end
-
-	local function getStealableEggs()
-		local snapshot = Remotes.EggWorld.AskFieldEggSnapshot:InvokeServer()
-		if not snapshot or not snapshot.Records then return {} end
-		local targets = {}
-		for _, rec in ipairs(snapshot.Records) do
-			if rec.Uid and rec.BoundsCFrame and rec.State == "Slot" then
-				if not AreaEggSlotIdentity.LooksLikeFirstAreaUid(rec.Uid)
-					or AreaEggSlotIdentity.FirstAreaOwnerUserId(rec.Uid) ~= LocalPlayer.UserId
-				then
-					local rate = 0
-					if autoStealMinValue > 0 and rec.AssetCategory then
-						pcall(function()
-							rate = AssetEarnings.RatePerSecond({
-								Category = rec.AssetCategory,
-								Scale = rec.AssetScale or 1,
-								Mutations = rec.Mutations or {},
-							})
-						end)
-						if rate < autoStealMinValue then
-							continue
-						end
-					end
-					table.insert(targets, { uid = rec.Uid, pos = rec.BoundsCFrame.Position, rate = rate, areaId = rec.AreaId })
-				end
-			end
-		end
-		table.sort(targets, function(a, b) return a.rate > b.rate end)
-		return targets
-	end
-
-	local function enableGuardConnections()
-		pcall(function()
-			local guardRemotes = Remotes.GuardPatrol
-			if not guardRemotes then return end
-			if not getconnections then return end
-			for _, remote in pairs(guardRemotes) do
-				if typeof(remote) == "Instance" and remote:IsA("RemoteEvent") then
-					for _, conn in ipairs(getconnections(remote.OnClientEvent)) do
-						conn:Enable()
-					end
-				end
-			end
-		end)
-	end
-
-	local slotIdx = 1
-
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		if autoStealEnabled then
-			pcall(function()
-				local char = LocalPlayer.Character
-				local hrp = char and char:FindFirstChild("HumanoidRootPart")
-				if not hrp then return end
-
-				local slotKeys = getOurSlotKeys()
-				if #slotKeys == 0 then return end
-
-				local hipInner, hipContainer = findHipToggle()
-				local hipWasOn = hipToggleIsOn(hipInner)
-				local weFiredOff = false
-				if hipWasOn then
-					weFiredOff = fireHipToggle(hipInner, hipContainer)
-					if weFiredOff then task.wait(0.3) end
-				end
-
-				local eggs = getStealableEggs()
-				if #eggs == 0 then
-					if weFiredOff then
-						local b, c = findHipToggle()
-						if b and not hipToggleIsOn(b) then fireHipToggle(b, c) end
-					end
-					return
-				end
-
-				getgenv().__naruStealActive = true
-				enableGuardConnections()
-
-				local struck = false
-				local strikeConn
-				pcall(function()
-					local gp = Remotes.GuardPatrol
-					if gp and gp.ForestStrike then
-						strikeConn = gp.ForestStrike.OnClientEvent:Connect(function()
-							struck = true
-						end)
-					end
-				end)
-
-				for _, egg in ipairs(eggs) do
-					if not autoStealEnabled then break end
-					char = LocalPlayer.Character
-					hrp = char and char:FindFirstChild("HumanoidRootPart")
-					if not hrp then break end
-
-					local forestEgg = getForestEgg()
-					if not forestEgg then break end
-
-					stealSafeTween(hrp, Vector3.new(forestEgg.pos.X, STEAL_FLOAT_Y, forestEgg.pos.Z))
-					char = LocalPlayer.Character
-					hrp = char and char:FindFirstChild("HumanoidRootPart")
-					if not hrp then break end
-
-					task.wait(0.5)
-					local carrySlot = AreaEggSlotIdentity.SlotKey("Forest", forestEgg.nestId)
-					local cOk, cRes = pcall(function()
-						return Remotes.EggWorld.AskFieldEggCarry:InvokeServer({
-							Uid = forestEgg.uid,
-							FirstAreaSlotKey = carrySlot,
-						})
-					end)
-					if not cOk or cRes ~= true then continue end
-
-					struck = false
-					stealTweenTo(hrp, FOREST_GUARD, 3)
-					char = LocalPlayer.Character
-					hrp = char and char:FindFirstChild("HumanoidRootPart")
-					if not hrp then break end
-					stealTweenTo(hrp, GUARD_PAST, 3)
-
-					if not struck then
-						for _ = 1, 30 do
-							if struck then break end
-							task.wait(0.1)
-						end
-					end
-
-					char = LocalPlayer.Character
-					hrp = char and char:FindFirstChild("HumanoidRootPart")
-					if not hrp then break end
-
-					stealSafeTween(hrp, Vector3.new(egg.pos.X, STEAL_FLOAT_Y, egg.pos.Z))
-					char = LocalPlayer.Character
-					hrp = char and char:FindFirstChild("HumanoidRootPart")
-					if not hrp then break end
-
-					task.wait(0.5)
-					local targetSlot = slotKeys[((slotIdx - 1) % #slotKeys) + 1]
-					slotIdx = slotIdx + 1
-
-					local ok, result = pcall(function()
-						return Remotes.EggWorld.AskFieldEggCarry:InvokeServer({
-							Uid = egg.uid,
-							FirstAreaSlotKey = targetSlot,
-						})
-					end)
-					if ok and result == true then
-						task.wait(1)
-					else
-						task.wait(0.3)
-					end
-				end
-
-				if strikeConn then
-					pcall(function() strikeConn:Disconnect() end)
-				end
-				getgenv().__naruStealActive = false
-
-				char = LocalPlayer.Character
-				hrp = char and char:FindFirstChild("HumanoidRootPart")
-				if hrp then hrp.Anchored = false end
-
-				if weFiredOff then
-					for _ = 1, 3 do
-						local b, c = findHipToggle()
-						if not b then break end
-						if hipToggleIsOn(b) then break end
-						fireHipToggle(b, c)
-						task.wait(0.4)
-					end
-				end
-			end)
-		end
-		task.wait(3)
-	end
-end)
-
-------------------------------------------------------------
 -- Auto Sell inventory backlog (< 1B/s, unplaced only, never Divine/Titan)
 -- Requires equip (AskWearTool) then SellPet on the held UID.
 ------------------------------------------------------------
@@ -2188,7 +1533,42 @@ task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
 
 	local function findMyPlot()
-		return findMyPlotShared()
+		local plots = Workspace:FindFirstChild("Plots")
+		if not plots then return nil end
+		local stats = SaveModule.Peek()
+		local myLevel = stats and stats.BaseUpgradeLevel or 0
+		local candidates = {}
+		for _, plot in ipairs(plots:GetChildren()) do
+			if plot:GetAttribute("BaseUpgradeLevel") == myLevel then
+				table.insert(candidates, plot)
+			end
+		end
+		if #candidates == 1 then return candidates[1] end
+		if #candidates == 0 then return nil end
+		for _, plot in ipairs(candidates) do
+			local loc = plot:FindFirstChild("LocalOfflineMoneyClaim")
+			if loc then
+				local area = loc:FindFirstChild("OfflineMoneyClaimArea")
+				if area then
+					local bb = area:FindFirstChild("OfflineMoneyClaimBillboard")
+					if bb and bb.Enabled then return plot end
+				end
+			end
+		end
+		local char = LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			local closest, closestDist = nil, math.huge
+			for _, plot in ipairs(candidates) do
+				local cp = plot:FindFirstChild("CenterPoint")
+				if cp then
+					local dist = (hrp.Position - cp.Position).Magnitude
+					if dist < closestDist then closest, closestDist = plot, dist end
+				end
+			end
+			if closest then return closest end
+		end
+		return candidates[1]
 	end
 
 	local function teleportToPlot(plot)
@@ -2294,12 +1674,13 @@ task.spawn(function()
 				local unplaced = getUnplaced()
 				if #unplaced == 0 then return end
 
-				local hipInner, hipContainer = findHipToggle()
-				local hipWasOn = hipToggleIsOn(hipInner)
+				local hipBtn = findHipToggle()
+				local hipWasOn = hipBtn and hipToggleIsOn(hipBtn)
 				local weFiredOff = false
-				if hipWasOn then
-					weFiredOff = fireHipToggle(hipInner, hipContainer)
-					if weFiredOff then task.wait(0.3) end
+				if hipWasOn and firesignal then
+					pcall(function() firesignal(hipBtn.MouseButton1Click) end)
+					weFiredOff = true
+					task.wait(0.3)
 				end
 
 				teleportToPlot(myPlot)
@@ -2314,12 +1695,15 @@ task.spawn(function()
 					end
 				end
 
-				if weFiredOff then
-					for _ = 1, 3 do
-						local b, c = findHipToggle()
+				-- Re-enable HIP AutoTreadmill: we fired 1 OFF earlier, so fire N ONs
+				-- until state comes back to ON (or up to 3 attempts). Re-lookup btn
+				-- in case HIP re-rendered its GUI mid-pass.
+				if weFiredOff and firesignal then
+					for attempt = 1, 3 do
+						local b = findHipToggle()
 						if not b then break end
 						if hipToggleIsOn(b) then break end
-						fireHipToggle(b, c)
+						pcall(function() firesignal(b.MouseButton1Click) end)
 						task.wait(0.4)
 					end
 				end
