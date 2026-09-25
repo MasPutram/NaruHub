@@ -417,7 +417,7 @@ local function reportToMonitor()
 		}
 
 		local body = HttpService:JSONEncode(payload)
-		local reqUrl = SERVER_BASE_URL .. "/api/monitor/anime-dice"
+		local reqUrl = SERVER_BASE_URL .. "/api/anime-dice/monitor"
 		local okReq, res = pcall(function()
 			return request({
 				Url = reqUrl,
