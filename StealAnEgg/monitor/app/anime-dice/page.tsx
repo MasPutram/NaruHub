@@ -204,7 +204,7 @@ export default function AnimeDicePage() {
     <>
       <style>{`
         :root {
-          --bg: #0a0a14; --surface: #10101c; --card: #141422; --card-border: #1e1e32;
+          --bg: #0a0a14; --surface: #10101c; --card: #141422; --card-border: #16162a;
           --ink: #e8e8f0; --dim: #6b6b88; --accent: #818cf8; --accent2: #a855f7;
           --green: #34d399; --gold: #fbbf24; --red: #ef4444;
         }
@@ -218,7 +218,7 @@ export default function AnimeDicePage() {
         .conn-badge .cdot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
 
         .summary-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 24px; }
-        .sum-card { background: var(--card); border: none; border-radius: 12px; padding: 14px 16px; border-left: 3px solid var(--dim); }
+        .sum-card { background: var(--card); border: none; border-radius: 12px; padding: 14px 16px; border-left: 3px solid transparent; }
         .sum-card .slabel { font-size: 10px; font-weight: 800; letter-spacing: .8px; text-transform: uppercase; margin-bottom: 6px; }
         .sum-card .sval { font-size: 22px; font-weight: 900; }
         .sum-card .ssub { font-size: 11px; color: var(--dim); margin-top: 2px; }
