@@ -231,16 +231,15 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
-local Lighting = game:GetService("Lighting")
-local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
 ------------------------------------------------------------
--- Auto FPS Booster (runs on load — no toggle)
---  * Hides pets, placed eggs, plot visuals, floating money,
---    treadmill effects & popups
---  * Kills particle emitters, beams, trails on non-character parts
---  * Removes Lighting effects (blur, bloom, colorcorrection)
+-- Auto Performance Booster (runs on load — no toggle)
+--   Targets 4 sources of lag:
+--   1. All pets (Workspace pet models)
+--   2. All growing/placed eggs
+--   3. Floating money BillboardGuis
+--   4. WALL RIGHT + WALL LEFT (huge collision walls between areas)
 ------------------------------------------------------------
 task.spawn(function()
 	local myChar
@@ -249,91 +248,119 @@ task.spawn(function()
 		return myChar and inst:IsDescendantOf(myChar)
 	end
 
-	local HIDE_MODEL_NAMES = {
-		"PetHolders", "Pets", "PlacedEggRenders", "OwnedPets",
-		"FloatingMoney", "MoneyPopups", "TreadmillFX", "TreadmillPopups",
-		"Fences", "PlotVisuals", "PlotDecor",
-	}
-	local hideSet = {}
-	for _, n in ipairs(HIDE_MODEL_NAMES) do hideSet[n] = true end
+	local function hideBasePart(p)
+		pcall(function()
+			p.Transparency = 1
+			for _, d in ipairs(p:GetDescendants()) do
+				if d:IsA("Decal") or d:IsA("Texture") then
+					d.Transparency = 1
+				elseif d:IsA("ParticleEmitter") or d:IsA("Beam") or d:IsA("Trail")
+					or d:IsA("Smoke") or d:IsA("Fire") or d:IsA("Sparkles") then
+					d.Enabled = false
+				elseif d:IsA("SurfaceGui") or d:IsA("BillboardGui") then
+					d.Enabled = false
+				elseif d:IsA("Light") then
+					d.Enabled = false
+				end
+			end
+		end)
+	end
 
-	local FX_CLASSES = {
-		ParticleEmitter = true,
-		Beam = true,
-		Trail = true,
-		Smoke = true,
-		Fire = true,
-		Sparkles = true,
-		Explosion = true,
-	}
-
-	local function killFX(inst)
-		if isMine(inst) then return end
-		if FX_CLASSES[inst.ClassName] then
-			pcall(function() inst.Enabled = false end)
-		elseif inst:IsA("BillboardGui") then
-			local n = inst.Name:lower()
-			if n:find("money") or n:find("popup") or n:find("float") or n:find("cash") or n:find("earning") then
-				pcall(function() inst.Enabled = false end)
+	local function hideModelParts(model)
+		if isMine(model) then return end
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("BasePart") then
+				hideBasePart(d)
+			elseif d:IsA("ParticleEmitter") or d:IsA("Beam") or d:IsA("Trail")
+				or d:IsA("Smoke") or d:IsA("Fire") or d:IsA("Sparkles") then
+				pcall(function() d.Enabled = false end)
+			elseif d:IsA("SurfaceGui") or d:IsA("BillboardGui") then
+				pcall(function() d.Enabled = false end)
 			end
 		end
 	end
 
-	local function hideModel(inst)
-		if isMine(inst) then return end
-		if hideSet[inst.Name] then
-			for _, d in ipairs(inst:GetDescendants()) do
-				if d:IsA("BasePart") then
-					pcall(function() d.Transparency = 1; d.CanCollide = false end)
-				elseif d:IsA("Decal") or d:IsA("Texture") then
-					pcall(function() d.Transparency = 1 end)
-				elseif FX_CLASSES[d.ClassName] then
-					pcall(function() d.Enabled = false end)
+	local PET_PARENT_NAMES = { PetHolders = true, Pets = true, ActivePets = true, PetRenders = true }
+	local EGG_PARENT_NAMES = { PlacedEggRenders = true, GrowingEggs = true, EggRenders = true, PlacedEggs = true }
+
+	-- 1 + 2. Pets and growing eggs (hide contents inside these container folders)
+	local function processContainer(container, kind)
+		if not container then return end
+		for _, item in ipairs(container:GetChildren()) do
+			hideModelParts(item)
+		end
+		container.ChildAdded:Connect(function(item)
+			task.wait(0.1)
+			hideModelParts(item)
+		end)
+	end
+
+	for _, child in ipairs(Workspace:GetChildren()) do
+		if PET_PARENT_NAMES[child.Name] or EGG_PARENT_NAMES[child.Name] then
+			processContainer(child)
+		end
+	end
+
+	-- 3. Floating money BillboardGuis (workspace + PlayerGui)
+	local function hideMoneyGui(inst)
+		if not inst:IsA("BillboardGui") then return end
+		local n = inst.Name:lower()
+		if n:find("money") or n:find("cash") or n:find("float") or n:find("popup") or n:find("earning") then
+			pcall(function() inst.Enabled = false end)
+		end
+	end
+
+	for _, inst in ipairs(Workspace:GetDescendants()) do
+		hideMoneyGui(inst)
+	end
+	Workspace.DescendantAdded:Connect(function(inst)
+		hideMoneyGui(inst)
+	end)
+
+	-- Hide PlayerGui money screens
+	local pg = LocalPlayer:FindFirstChild("PlayerGui")
+	if pg then
+		local moneyScreen = pg:FindFirstChild("OfflineMoneyInPlot")
+		if moneyScreen then pcall(function() moneyScreen.Enabled = false end) end
+	end
+
+	-- 4. WALL RIGHT + WALL LEFT (large walls between areas — huge triangle count)
+	local function hideWalls()
+		for _, obj in ipairs(Workspace:GetDescendants()) do
+			if (obj.Name == "WALL RIGHT" or obj.Name == "WALL LEFT") and not isMine(obj) then
+				if obj:IsA("Model") then
+					hideModelParts(obj)
+				elseif obj:IsA("BasePart") then
+					hideBasePart(obj)
 				end
 			end
 		end
 	end
-
-	local function killLightingFX()
-		for _, fx in ipairs(Lighting:GetChildren()) do
-			if fx:IsA("BlurEffect") or fx:IsA("BloomEffect")
-				or fx:IsA("ColorCorrectionEffect") or fx:IsA("SunRaysEffect")
-				or fx:IsA("DepthOfFieldEffect") then
-				pcall(function() fx.Enabled = false end)
+	hideWalls()
+	Workspace.DescendantAdded:Connect(function(obj)
+		if obj.Name == "WALL RIGHT" or obj.Name == "WALL LEFT" then
+			task.wait(0.1)
+			if obj:IsA("Model") then
+				hideModelParts(obj)
+			elseif obj:IsA("BasePart") then
+				hideBasePart(obj)
 			end
 		end
-	end
-
-	-- Initial sweep
-	for _, inst in ipairs(Workspace:GetDescendants()) do
-		pcall(killFX, inst)
-	end
-	for _, child in ipairs(Workspace:GetChildren()) do
-		pcall(hideModel, child)
-	end
-	killLightingFX()
-
-	-- Continuous watch (new spawns)
-	Workspace.DescendantAdded:Connect(function(inst)
-		pcall(killFX, inst)
-	end)
-	Workspace.ChildAdded:Connect(function(child)
-		task.wait(0.2)
-		pcall(hideModel, child)
-	end)
-	Lighting.ChildAdded:Connect(function()
-		task.wait()
-		killLightingFX()
 	end)
 
-	-- Periodic re-sweep for models that respawn contents
+	-- Periodic re-sweep every 15s (in case game re-adds items or resets transparency)
 	task.spawn(function()
 		while true do
-			task.wait(10)
+			task.wait(15)
 			pcall(function()
 				for _, child in ipairs(Workspace:GetChildren()) do
-					hideModel(child)
+					if PET_PARENT_NAMES[child.Name] or EGG_PARENT_NAMES[child.Name] then
+						for _, item in ipairs(child:GetChildren()) do
+							hideModelParts(item)
+						end
+					end
 				end
+				hideWalls()
 			end)
 		end
 	end)
@@ -499,14 +526,51 @@ end
 local StatusTab = Window:AddTab({ Title = "" })
 local section = StatusTab:AddSection(LocalPlayer.Name, { NoCollapse = true })
 
-local fpsBoosterPara = section:AddParagraph({
-	Title = "FPS Booster",
-	Content = "ON  (auto hide pets, eggs, effects)",
+local usernamePara = section:AddParagraph({
+	Title = "Username",
+	Content = LocalPlayer.Name,
 	ContentSize = 14,
 	Center = true,
 })
 
-local monitorPara = { SetContent = function() end }
+do
+	local Players = game:GetService("Players")
+	local myName = LocalPlayer.Name
+	local myPrefix = myName:match("^(%D+)%d+$")
+
+	local function refreshUsernameList()
+		if not myPrefix then
+			usernamePara:SetContent(myName)
+			return
+		end
+		local matches = {}
+		for _, p in ipairs(Players:GetPlayers()) do
+			local prefix, num = p.Name:match("^(%D+)(%d+)$")
+			if prefix == myPrefix then
+				table.insert(matches, { name = p.Name, num = tonumber(num) or 0 })
+			end
+		end
+		if #matches <= 1 then
+			usernamePara:SetContent(myName)
+			return
+		end
+		table.sort(matches, function(a, b) return a.num < b.num end)
+		local names = {}
+		for _, m in ipairs(matches) do names[#names+1] = m.name end
+		usernamePara:SetContent(table.concat(names, "\n"))
+	end
+
+	Players.PlayerAdded:Connect(function() task.wait(0.5) refreshUsernameList() end)
+	Players.PlayerRemoving:Connect(function() task.wait(0.5) refreshUsernameList() end)
+	task.spawn(refreshUsernameList)
+end
+
+local monitorPara = section:AddParagraph({
+	Title = "Status",
+	Content = "Starting...",
+	ContentSize = 14,
+	Center = true,
+})
 
 local AUTO_SELL_MIN_RATE = 2_000_000_000
 local AUTO_SELL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Mythic", "Legendary", "Cosmic", "Eternal", "Titan" }
