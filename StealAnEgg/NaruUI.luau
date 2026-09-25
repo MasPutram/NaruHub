@@ -149,8 +149,8 @@ return (function()
 			local titleHolder = uiNew("Frame", {
 				Name = "TitleHolder",
 				BackgroundTransparency = 1,
-				Position = UDim2.new(0, 20, 0, 0),
-				Size = UDim2.new(1, -150, 1, 0),
+				Position = UDim2.new(0, 80, 0, 0),
+				Size = UDim2.new(1, -100, 1, 0),
 			}, titleBar)
 			uiNew("UIListLayout", {
 				FillDirection = Enum.FillDirection.Horizontal,
@@ -209,10 +209,10 @@ return (function()
 				}, titleHolder)
 			end
 
-			local function titleBtn(text, xOffsetFromRight)
+			local function titleBtn(text, xOffsetFromLeft)
 				local btn = uiNew("TextButton", {
 					Size = UDim2.fromOffset(28, 28),
-					Position = UDim2.new(1, xOffsetFromRight, 0.5, 0),
+					Position = UDim2.new(0, xOffsetFromLeft, 0.5, 0),
 					AnchorPoint = Vector2.new(0, 0.5),
 					BackgroundColor3 = UI_COL_ROW,
 					BackgroundTransparency = 0.2,
@@ -226,8 +226,8 @@ return (function()
 				return btn
 			end
 
-			local closeBtn = titleBtn("\226\156\149", -36)
-			local minBtn = titleBtn("\226\128\148", -72)
+			local closeBtn = titleBtn("\226\156\149", 8)
+			local minBtn = titleBtn("\226\128\148", 44)
 
 			local sidebar = uiNew("Frame", {
 				Name = "Sidebar",
