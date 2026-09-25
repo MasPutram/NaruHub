@@ -499,51 +499,14 @@ end
 local StatusTab = Window:AddTab({ Title = "" })
 local section = StatusTab:AddSection(LocalPlayer.Name, { NoCollapse = true })
 
-local usernamePara = section:AddParagraph({
-	Title = "Username",
-	Content = LocalPlayer.Name,
+local fpsBoosterPara = section:AddParagraph({
+	Title = "FPS Booster",
+	Content = "ON  (auto hide pets, eggs, effects)",
 	ContentSize = 14,
 	Center = true,
 })
 
-do
-	local Players = game:GetService("Players")
-	local myName = LocalPlayer.Name
-	local myPrefix = myName:match("^(%D+)%d+$")
-
-	local function refreshUsernameList()
-		if not myPrefix then
-			usernamePara:SetContent(myName)
-			return
-		end
-		local matches = {}
-		for _, p in ipairs(Players:GetPlayers()) do
-			local prefix, num = p.Name:match("^(%D+)(%d+)$")
-			if prefix == myPrefix then
-				table.insert(matches, { name = p.Name, num = tonumber(num) or 0 })
-			end
-		end
-		if #matches <= 1 then
-			usernamePara:SetContent(myName)
-			return
-		end
-		table.sort(matches, function(a, b) return a.num < b.num end)
-		local names = {}
-		for _, m in ipairs(matches) do names[#names+1] = m.name end
-		usernamePara:SetContent(table.concat(names, "\n"))
-	end
-
-	Players.PlayerAdded:Connect(function() task.wait(0.5) refreshUsernameList() end)
-	Players.PlayerRemoving:Connect(function() task.wait(0.5) refreshUsernameList() end)
-	task.spawn(refreshUsernameList)
-end
-
-local monitorPara = section:AddParagraph({
-	Title = "Status",
-	Content = "Starting...",
-	ContentSize = 14,
-	Center = true,
-})
+local monitorPara = { SetContent = function() end }
 
 local AUTO_SELL_MIN_RATE = 2_000_000_000
 local AUTO_SELL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Mythic", "Legendary", "Cosmic", "Eternal", "Titan" }
