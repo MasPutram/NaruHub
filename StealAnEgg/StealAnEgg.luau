@@ -309,31 +309,6 @@ do
 		setupInstantHeal()
 	end)
 
-	local function setupNoclip()
-		local char = LocalPlayer.Character
-		if not char then return end
-		local elapsed = 0
-		RunService.Heartbeat:Connect(function(dt)
-			elapsed = elapsed + dt
-			if elapsed < 0.15 then return end
-			elapsed = 0
-			pcall(function()
-				local c = LocalPlayer.Character
-				if not c then return end
-				for _, part in pairs(c:GetDescendants()) do
-					if part:IsA("BasePart") then
-						part.CanCollide = false
-					end
-				end
-			end)
-		end)
-	end
-	setupNoclip()
-	LocalPlayer.CharacterAdded:Connect(function()
-		task.wait(1)
-		setupNoclip()
-	end)
-
 	local function setupAntiRagdoll()
 		local char = LocalPlayer.Character
 		if not char then return end
@@ -531,7 +506,7 @@ local Fluent = NaruUI.New({
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
 	Badge = "PREMIUM",
-	Version = "v2.1.0",
+	Version = "v2.2.0",
 	TabWidth = 150,
 	Size = UDim2.fromOffset(680, 460),
 	AutoStartMinimized = false,
@@ -1368,7 +1343,8 @@ end)
 -- Auto Hunt Experiment (Dr Scramble drone farming)
 --   Window active + no high-value egg → cancel HIP treadmill → hunt drones
 --   Window active + egg >= 1B/s       → enable HIP treadmill, pause hunt
---   Window ends / toggle off          → enable HIP treadmill (auto return)
+--   Window ends soon (<=45s) or off   → enable HIP treadmill (auto return)
+--   Auto-equip bat before hunting
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -1377,6 +1353,7 @@ task.spawn(function()
 	local wasHunting = false
 	local waitingForSteal = false
 	local HIGH_VALUE_THRESHOLD = 1e9
+	local RETURN_BUFFER_SECONDS = 45
 
 	local CENTER_POS = Vector3.new(827, 71, -354)
 	local RUSH_SPEED = 500
@@ -1385,6 +1362,44 @@ task.spawn(function()
 		Vector3.new(2166, 74, -363),
 		Vector3.new(2634, 74, -363),
 	}
+
+	local function findBatTool()
+		local containers = { LocalPlayer:FindFirstChildOfClass("Backpack"), LocalPlayer.Character }
+		for _, container in ipairs(containers) do
+			if container then
+				for _, tool in ipairs(container:GetChildren()) do
+					if tool:IsA("Tool") then
+						local n = tool.Name:lower()
+						local itemType = tool:GetAttribute("ItemType")
+						if n:find("bat") or itemType == "Bat" or itemType == "ScrambleBat" then
+							return tool
+						end
+					end
+				end
+			end
+		end
+		return nil
+	end
+
+	local function equipBat()
+		local char = LocalPlayer.Character
+		if not char then return false end
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if not hum then return false end
+		local held = char:FindFirstChildOfClass("Tool")
+		if held then
+			local n = held.Name:lower()
+			local it = held:GetAttribute("ItemType")
+			if n:find("bat") or it == "Bat" or it == "ScrambleBat" then
+				return true
+			end
+		end
+		local bat = findBatTool()
+		if not bat then return false end
+		if bat.Parent == char then return true end
+		pcall(function() hum:EquipTool(bat) end)
+		return char:FindFirstChild(bat.Name) ~= nil
+	end
 
 	local function startDroneListener()
 		if huntConn then return end
@@ -1505,7 +1520,7 @@ task.spawn(function()
 				local serverNow = workspace:GetServerTimeNow()
 				local timeLeft = endsAt - serverNow
 
-				if not isActive or timeLeft <= 15 then
+				if not isActive or timeLeft <= RETURN_BUFFER_SECONDS then
 					if wasHunting or waitingForSteal then
 						stopDroneListener()
 						enableHipTreadmill()
@@ -1542,12 +1557,21 @@ task.spawn(function()
 				if not wasHunting then
 					cancelHipTreadmill()
 					startDroneListener()
+					equipBat()
 					if autoHuntExperimentTeleport then
 						moveTo(hrp, CENTER_POS, RUSH_SPEED)
 						moveTo(hrp, HUNT_AREAS[1], RUSH_SPEED)
 					end
 					wasHunting = true
 					areaArriveTime = os.clock()
+				end
+
+				if wasHunting then
+					local held = char:FindFirstChildOfClass("Tool")
+					local ok = held and (held.Name:lower():find("bat")
+						or held:GetAttribute("ItemType") == "Bat"
+						or held:GetAttribute("ItemType") == "ScrambleBat")
+					if not ok then equipBat() end
 				end
 
 				if not autoHuntExperimentTeleport then return end
