@@ -1,32 +1,6 @@
 --!nocheck
--- NaruHub | Monitoring Anime Dice v1.0.0 (ultra-lightweight)
+-- NaruHub | Monitoring Anime Dice v1.1.0 (ultra-lightweight)
 -- Monitoring only -- no auto-roll/sell/equip, baca data → POST ke dashboard.
-
-------------------------------------------------------------
--- Cleanup dari run sebelumnya
-------------------------------------------------------------
-do
-	local containers = {}
-	local ok, hui = pcall(function()
-		return gethui and gethui()
-	end)
-	if ok and hui then
-		table.insert(containers, hui)
-	end
-	local coreGui = game:GetService("CoreGui")
-	table.insert(containers, coreGui)
-	local robloxGui = coreGui:FindFirstChild("RobloxGui")
-	if robloxGui then
-		table.insert(containers, robloxGui)
-	end
-	for _, container in ipairs(containers) do
-		for _, child in ipairs(container:GetChildren()) do
-			if child.Name == "AnimeDiceGUI" or child.Name == "AnimeDiceDropdown" or child.Name == "NaruHubAnimeDice" then
-				child:Destroy()
-			end
-		end
-	end
-end
 
 ------------------------------------------------------------
 -- Key Gate
@@ -200,21 +174,18 @@ if not GRANTED_VIA_GLOBAL then return end
 ------------------------------------------------------------
 -- NaruUI (loaded from GitHub)
 ------------------------------------------------------------
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
 local httpGet = game.HttpGet or HttpGet
 local _naruSrc = httpGet(game, "https://raw.githubusercontent.com/MasPutram/NaruHub/main/NaruUI/NaruUI.luau?v=" .. tostring(tick()))
-local _naruFn, _naruErr = loadstring(_naruSrc)
-if not _naruFn then
-	error("NaruUI loadstring failed: " .. tostring(_naruErr))
-end
-local NaruUI = _naruFn()
+local NaruUI = loadstring(_naruSrc)()
 
 ------------------------------------------------------------
 -- Game data access
 ------------------------------------------------------------
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
-local LocalPlayer = Players.LocalPlayer
 
 local DataController = require(ReplicatedStorage.Framework.Features.Data.DataController)
 local EntryRegistry = require(ReplicatedStorage.Framework.Features.Inventory.EntryRegistry)
@@ -451,86 +422,19 @@ local function reportToMonitor()
 end
 
 ------------------------------------------------------------
--- NaruUI Window (status only)
+-- NaruUI Window (new API — all config in NaruUI.New)
 ------------------------------------------------------------
 local Fluent = NaruUI.New({
-	BrandColor = Color3.fromRGB(255, 100, 100),
-	ConfigPrefix = "AnimeDice",
-})
-
-local Window = Fluent:CreateWindow({
-	Title = "NaruHub | AnimeDice v1.0.0",
+	Title = "NaruHub | Anime Dice v1.1.0",
 	Badge = "MONITOR",
-	TabWidth = 0,
+	ConfigPrefix = "AnimeDice",
+	BrandColor = Color3.fromRGB(255, 100, 100),
 	Size = UDim2.fromOffset(380, 300),
 	AutoStartMinimized = false,
 })
 
-do
-	local hui = (gethui and gethui()) or game:GetService("CoreGui")
-	for _, o in ipairs(hui:GetChildren()) do
-		if o.Name == "AnimeDiceMinBtn" then pcall(function() o:Destroy() end) end
-	end
-
-	task.spawn(function()
-		local wiredLogo
-		while Fluent.GUI and Fluent.GUI.Parent do
-			local lc = hui:FindFirstChild("AnimeDiceLauncher")
-			if lc then
-				if not lc.Enabled then lc.Enabled = true end
-				local logo = lc:FindFirstChild("Logo")
-				if logo then
-					if logo.Position ~= UDim2.fromOffset(4, 88) then
-						logo.Position = UDim2.fromOffset(4, 88)
-					end
-				end
-				if logo and logo ~= wiredLogo then
-					wiredLogo = logo
-					if getconnections then
-						local ok, conns = pcall(function()
-							return getconnections(logo.MouseButton1Click)
-						end)
-						if ok and conns then
-							for _, c in ipairs(conns) do
-								pcall(function()
-									if c.Disable then c:Disable()
-									elseif c.Disconnect then c:Disconnect() end
-								end)
-							end
-						end
-					end
-					logo.MouseButton1Click:Connect(function()
-						if Fluent.GUI and Fluent.GUI.Enabled then
-							if Window.Minimize then Window.Minimize() end
-						else
-							if Window.Restore then Window.Restore() end
-						end
-					end)
-				end
-			end
-			task.wait(0.3)
-		end
-	end)
-end
-
-do
-	if Fluent.GUI then Fluent.GUI.DisplayOrder = -1000 end
-	local hui = (gethui and gethui()) or game:GetService("CoreGui")
-	local function pushLauncher()
-		local lc = hui:FindFirstChild("AnimeDiceLauncher")
-		if lc then lc.DisplayOrder = -999 end
-	end
-	pushLauncher()
-	hui.ChildAdded:Connect(function(c)
-		if c.Name == "AnimeDiceLauncher" then
-			task.wait()
-			pushLauncher()
-		end
-	end)
-end
-
-local StatusTab = Window:AddTab({ Title = "" })
-local section = StatusTab:AddSection(LocalPlayer.Name, { NoCollapse = true })
+local Tab = Fluent:AddTab({ Title = "" })
+local section = Tab:AddSection(LocalPlayer.Name, { NoCollapse = true })
 
 local usernamePara = section:AddParagraph({
 	Title = "Username",
