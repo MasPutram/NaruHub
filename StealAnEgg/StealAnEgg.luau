@@ -1094,19 +1094,25 @@ task.spawn(function()
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		pcall(function()
 			local stats = SaveModule.Peek()
+			if not stats then return end
+
+			-- Try TM upgrade
 			local tmLevel = stats.TreadmillUpgradeLevel or 0
 			local nextTm = Treadmills.GetByUpgradeLevel(tmLevel + 1)
-			local tmMaxed = nextTm == nil
-
-			if not tmMaxed then
-				if (stats.Money or 0) >= (nextTm.Price or math.huge) then
+			if nextTm and (stats.Money or 0) >= (nextTm.Price or math.huge) then
+				pcall(function()
 					TmRemotes.Treadmill.AskTierRaise:InvokeServer()
-				end
-			else
-				local nextLevel, config = BaseUpgrade.ResolveNextTier(stats)
-				if nextLevel and config and BaseUpgrade.IsNextTierAffordable(stats) then
+				end)
+			end
+
+			-- Try Kandang upgrade IN THE SAME ITERATION (parallel, not sequential).
+			-- Re-peek so we see the money debit from the TM buy above (if any).
+			local stats2 = SaveModule.Peek() or stats
+			local nextLevel, config = BaseUpgrade.ResolveNextTier(stats2)
+			if nextLevel and config and BaseUpgrade.IsNextTierAffordable(stats2) then
+				pcall(function()
 					BaseUpgrade.PurchaseNextTier()
-				end
+				end)
 			end
 		end)
 		task.wait(5)
