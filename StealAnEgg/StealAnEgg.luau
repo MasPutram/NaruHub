@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.0.1"
+local VERSION = "v3.0.2"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -1359,12 +1359,23 @@ task.spawn(function()
 			pcall(function()
 				local stats = SaveModule.Peek()
 
+				-- Check which tokens we actually own. No point teleporting to
+				-- a pet just to skip its only remaining mutation phase because
+				-- we don't have that token type.
+				local haveScrambled = findMutationTool("Scrambled") ~= nil
+				local haveBoss = findMutationTool("Boss") ~= nil
+				if not haveScrambled and not haveBoss then return end
+
 				local candidates = {}
 				for uid, rec in pairs(stats.EggInventory or {}) do
 					if type(rec) == "table" and rec.Placement ~= nil then
 						local hasScrambled = hasMutation(rec, "Scrambled")
 						local hasBoss = hasMutation(rec, "Boss")
-						if not (hasScrambled and hasBoss) then
+						-- Only add pet if there's at least one missing
+						-- mutation we CAN actually apply (own the token).
+						local canApplyScrambled = not hasScrambled and haveScrambled
+						local canApplyBoss = not hasBoss and haveBoss
+						if canApplyScrambled or canApplyBoss then
 							local rate = 0
 							pcall(function()
 								rate = AssetEarnings.RatePerSecond({
@@ -1373,9 +1384,7 @@ task.spawn(function()
 									Mutations = rec.Mutations or {},
 								})
 							end)
-							local needed = "Scrambled"
-							if hasScrambled then needed = "Boss" end
-							table.insert(candidates, { uid = uid, rate = rate, needed = needed, rec = rec })
+							table.insert(candidates, { uid = uid, rate = rate, rec = rec })
 						end
 					end
 				end
