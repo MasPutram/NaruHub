@@ -1100,7 +1100,10 @@ task.spawn(function()
 
 			if not tmMaxed then
 				if (stats.Money or 0) >= (nextTm.Price or math.huge) then
-					TmRemotes.Treadmill.AskTierRaise:InvokeServer()
+					-- AskTierRaise server-side does osyrisrblx_t string type
+					-- check on arg[1]; passing nil throws and pcall eats it
+					-- silently. The arg is the treadmill's internal id.
+					TmRemotes.Treadmill.AskTierRaise:InvokeServer(nextTm._id)
 				end
 			else
 				local nextLevel, config = BaseUpgrade.ResolveNextTier(stats)
