@@ -5,3 +5,6 @@ __pycache__/
 
 # Berisi bearer token Potassium MCP - jangan commit
 .mcp.json
+
+# Random reference PDFs / scratch files that shouldn't ship in repo
+*.pdf
