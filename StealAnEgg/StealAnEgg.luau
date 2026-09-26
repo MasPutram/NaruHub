@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.0.2"
+local VERSION = "v3.0.3"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -621,7 +621,7 @@ local AUTO_SELL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Mythic", "Le
 local AUTO_SELL_NEVER = { Divine = true }
 local autoSellEnabled = false
 section:AddToggle("AutoSellToggle", {
-	Title = "Sell Auto (< 2B/s, skip Divine+Eternal)",
+	Title = "Sell Auto (< 2B/s, skip Divine + weight>=1B)",
 	Default = false,
 	Callback = function(val)
 		autoSellEnabled = val
@@ -1538,7 +1538,7 @@ end)
 
 
 ------------------------------------------------------------
--- Auto Sell inventory backlog (< 1B/s, unplaced only, never Divine/Titan)
+-- Auto Sell inventory backlog (< 2B/s, unplaced only, skip Divine + weight>=1B)
 -- Requires equip (AskWearTool) then SellPet on the held UID.
 ------------------------------------------------------------
 task.spawn(function()
@@ -1570,10 +1570,7 @@ task.spawn(function()
 							})
 						end)
 						if rarity == "Divine" or weight >= 1_000_000_000 then
-						elseif rarity == "Eternal" then
-							if rate > 0 and rate < 1_000_000_000 then
-								toSell[#toSell + 1] = uid
-							end
+							-- skip: Divine ga pernah dijual, weight >= 1B kg juga skip
 						else
 							if rate > 0 and rate < AUTO_SELL_MIN_RATE then
 								toSell[#toSell + 1] = uid
