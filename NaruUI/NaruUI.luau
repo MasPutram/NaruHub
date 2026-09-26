@@ -66,7 +66,7 @@ return (function()
 		local UI_COL_DIM = Color3.fromRGB(145, 145, 148)
 		local UI_COL_ACCENT = BRAND
 		local UI_COL_ACCENT_DIM = Color3.fromRGB(
-			math.floor(BRAND.R * 255 * 0.24), math.floor(BRAND.G * 255 * 0.24), math.floor(BRAND.B * 255 * 0.24))
+			math.floor(BRAND.R * 255 * 0.36), math.floor(BRAND.G * 255 * 0.36), math.floor(BRAND.B * 255 * 0.36))
 		local UI_COL_OFF = Color3.fromRGB(48, 48, 50)
 
 		local function uiNew(class, props, parent)
