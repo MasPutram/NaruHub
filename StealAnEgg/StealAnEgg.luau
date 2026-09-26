@@ -1811,4 +1811,22 @@ task.spawn(function()
 	end
 end)
 
-monitorPara:SetContent("Monitor loop disabled")
+------------------------------------------------------------
+-- Auto-start monitoring loop
+------------------------------------------------------------
+task.spawn(function()
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		local ok, err = reportToMonitor()
+		local ping = 0
+		pcall(function()
+			ping = math.floor((LocalPlayer:GetNetworkPing() or 0) * 1000)
+		end)
+		local pingStr = ping > 0 and (" " .. ping .. "ms") or ""
+		if ok then
+			monitorPara:SetContent("OK" .. pingStr)
+		else
+			monitorPara:SetContent("Gagal" .. pingStr)
+		end
+		task.wait(15)
+	end
+end)
