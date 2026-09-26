@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.0"
+local VERSION = "v3.0.1"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -416,7 +416,9 @@ local function withHipPaused(fn)
 	local hipWasOn = hipBtn and hipToggleIsOn(hipBtn)
 	local weFiredOff = false
 	if hipWasOn and firesignal then
-		pcall(function() firesignal(hipBtn.MouseButton1Click) end)
+		-- HIP handler binds to Activated, not MouseButton1Click. Firing
+		-- MouseButton1Click silently does nothing.
+		pcall(function() firesignal(hipBtn.Activated) end)
 		weFiredOff = true
 		task.wait(0.3)
 	end
@@ -428,7 +430,7 @@ local function withHipPaused(fn)
 			local b = findHipToggle()
 			if not b then break end
 			if hipToggleIsOn(b) then break end
-			pcall(function() firesignal(b.MouseButton1Click) end)
+			pcall(function() firesignal(b.Activated) end)
 			task.wait(0.4)
 		end
 	end
@@ -455,7 +457,7 @@ local function setHipToggleState(shouldBeOn)
 		if not b then return end
 		local isOn = hipToggleIsOn(b)
 		if isOn == shouldBeOn then return end
-		pcall(function() firesignal(b.MouseButton1Click) end)
+		pcall(function() firesignal(b.Activated) end)
 		task.wait(0.3)
 	end
 end
@@ -1744,7 +1746,7 @@ task.spawn(function()
 				local hipWasOn = hipBtn and hipToggleIsOn(hipBtn)
 				local weFiredOff = false
 				if hipWasOn and firesignal then
-					pcall(function() firesignal(hipBtn.MouseButton1Click) end)
+					pcall(function() firesignal(hipBtn.Activated) end)
 					weFiredOff = true
 					task.wait(0.3)
 				end
@@ -1769,7 +1771,7 @@ task.spawn(function()
 						local b = findHipToggle()
 						if not b then break end
 						if hipToggleIsOn(b) then break end
-						pcall(function() firesignal(b.MouseButton1Click) end)
+						pcall(function() firesignal(b.Activated) end)
 						task.wait(0.4)
 					end
 				end
