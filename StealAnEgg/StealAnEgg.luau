@@ -1354,31 +1354,21 @@ task.spawn(function()
 					for _, targetMut in ipairs(mutationsToApply) do
 						if not autoMutationEggEnabled then break end
 
-						local curMut = targetMut
-						local tool = findMutationTool(curMut)
+						-- No fallback: if we don't have the token for THIS
+						-- mutation, skip it. Using the wrong token on a pet
+						-- that already has that mutation makes the server
+						-- return Mutated=false forever, so we'd get stuck.
+						local tool = findMutationTool(targetMut)
 						if not tool then
-							local alt = curMut == "Scrambled" and "Boss" or "Scrambled"
-							tool = findMutationTool(alt)
-							if tool then curMut = alt end
+							continue
 						end
-						if not tool then break end
 
 						equipTool(tool)
 						task.wait(0.5)
 
 						while autoMutationEggEnabled do
-							tool = findMutationTool(curMut)
-							if not tool then
-								local alt = curMut == "Scrambled" and "Boss" or "Scrambled"
-								tool = findMutationTool(alt)
-								if tool then
-									curMut = alt
-									equipTool(tool)
-									task.wait(0.5)
-								else
-									break
-								end
-							end
+							tool = findMutationTool(targetMut)
+							if not tool then break end  -- ran out mid-retry
 
 							local result
 							pcall(function()
@@ -1387,7 +1377,7 @@ task.spawn(function()
 							if type(result) == "table" and result.Mutated then
 								break
 							end
-							task.wait(5)
+							task.wait(1)  -- fast retry: 10%/tick → avg ~10s
 						end
 					end
 				end
