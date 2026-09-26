@@ -37,10 +37,16 @@ export async function GET(req: NextRequest) {
       upgrades: data.upgrades || {},
       gamepasses: data.gamepasses || {},
       topUnits: data.topUnits || [],
+      allUnits: data.allUnits || [],
+      backpack: data.backpack || [],
+      slots: data.slots || [],
+      towerSquad: data.towerSquad || { squad: [], equipped: null },
+      upgradesList: data.upgradesList || [],
       unitsCount: data.unitsCount ?? 0,
       unitTypesCount: data.unitTypesCount ?? 0,
       discoveredCount: data.discoveredCount ?? 0,
       slotsCount: data.slotsCount ?? 0,
+      totalItemCount: data.totalItemCount ?? 0,
     });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });

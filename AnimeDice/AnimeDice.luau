@@ -231,11 +231,12 @@ local function collectInventory()
 	local allEntries = EntryRegistry:allEntries()
 
 	local units = {}
-	local totalCount = 0
+	local backpack = {}
+	local totalUnitCount = 0
+	local totalItemCount = 0
 
 	for id, entry in pairs(inv) do
 		if type(entry) == "table" and entry.name then
-			totalCount += (entry.amount or 1)
 			local cfg = allEntries[entry.name]
 			local rarity = cfg and cfg.rarity or "Unknown"
 			local variant = cfg and cfg.variant or nil
@@ -243,6 +244,7 @@ local function collectInventory()
 			local order = cfg and cfg.order or 0
 
 			if kind == "Unit" then
+				totalUnitCount += (entry.amount or 1)
 				table.insert(units, {
 					id = id,
 					name = entry.name,
@@ -254,6 +256,14 @@ local function collectInventory()
 					mutation = entry.attributes and entry.attributes.mutation or nil,
 					level = entry.attributes and entry.attributes.level or nil,
 				})
+			else
+				totalItemCount += (entry.amount or 1)
+				table.insert(backpack, {
+					name = entry.name,
+					amount = entry.amount or 1,
+					kind = kind,
+					rarity = rarity,
+				})
 			end
 		end
 	end
@@ -263,7 +273,11 @@ local function collectInventory()
 		return a.order > b.order
 	end)
 
-	return units, totalCount
+	table.sort(backpack, function(a, b)
+		return (a.amount or 0) > (b.amount or 0)
+	end)
+
+	return units, totalUnitCount, backpack, totalItemCount
 end
 
 local function collectOwnedDice()
@@ -332,12 +346,108 @@ local function collectGamepasses()
 	return result
 end
 
-local function countSlots()
+local function collectSlots()
+	local ok, result = pcall(function()
+		local X = DataController.___X
+		local slots = X.Slots or {}
+		local inv = X.Inventory or {}
+		local allEntries = EntryRegistry:allEntries()
+		local list = {}
+
+		for slotKey, slotVal in pairs(slots) do
+			local unitId = nil
+			local balance = nil
+
+			if type(slotVal) == "table" then
+				unitId = slotVal.unitId or slotVal.UnitId or slotVal.unit or slotVal[1]
+				balance = slotVal.balance or slotVal.Balance or slotVal.money or nil
+			elseif type(slotVal) == "string" then
+				unitId = slotVal
+			end
+
+			local slotInfo = { slot = tonumber(slotKey) or slotKey, balance = balance }
+
+			if unitId then
+				local entry = type(unitId) == "string" and inv[unitId] or nil
+				if entry and entry.name then
+					local cfg = allEntries[entry.name]
+					slotInfo.name = entry.name
+					slotInfo.rarity = cfg and cfg.rarity or "Unknown"
+					slotInfo.variant = cfg and cfg.variant or nil
+					slotInfo.level = entry.attributes and entry.attributes.level or nil
+					slotInfo.mutation = entry.attributes and entry.attributes.mutation or nil
+				end
+			end
+
+			table.insert(list, slotInfo)
+		end
+
+		table.sort(list, function(a, b)
+			return (tonumber(a.slot) or 0) < (tonumber(b.slot) or 0)
+		end)
+
+		return list
+	end)
+
+	return ok and result or {}
+end
+
+local function collectTowerSquad()
+	local ok, result = pcall(function()
+		local X = DataController.___X
+		local inv = X.Inventory or {}
+		local allEntries = EntryRegistry:allEntries()
+
+		local function resolveUnit(unitId)
+			if not unitId or type(unitId) ~= "string" then return nil end
+			local entry = inv[unitId]
+			if not entry or not entry.name then return nil end
+			local cfg = allEntries[entry.name]
+			return {
+				name = entry.name,
+				rarity = cfg and cfg.rarity or "Unknown",
+				variant = cfg and cfg.variant or nil,
+				level = entry.attributes and entry.attributes.level or nil,
+				mutation = entry.attributes and entry.attributes.mutation or nil,
+			}
+		end
+
+		local squadData = X.TowerSquad or X.CombatSquad or X.BattleSquad or X.Squad or {}
+		local squad = {}
+		if type(squadData) == "table" then
+			for idx, val in pairs(squadData) do
+				local uid = type(val) == "table" and (val.unitId or val[1]) or val
+				local u = resolveUnit(uid)
+				if u then
+					u.slot = idx
+					table.insert(squad, u)
+				end
+			end
+		end
+
+		local equipped = nil
+		local eqId = X.EquippedFighter or X.EquippedUnit or X.Fighter or nil
+		if eqId then
+			equipped = resolveUnit(type(eqId) == "table" and (eqId.unitId or eqId[1]) or eqId)
+		end
+
+		return { squad = squad, equipped = equipped }
+	end)
+
+	return ok and result or { squad = {}, equipped = nil }
+end
+
+local function collectUpgradesList()
 	local X = DataController.___X
-	local slots = X.Slots or {}
-	local count = 0
-	for _ in pairs(slots) do count += 1 end
-	return count
+	local upgrades = X.Upgrades or {}
+	local list = {}
+	for name, unlocked in pairs(upgrades) do
+		if unlocked then
+			table.insert(list, name)
+		end
+	end
+	table.sort(list)
+	return list
 end
 
 ------------------------------------------------------------
@@ -346,17 +456,31 @@ end
 local function reportToMonitor()
 	local ok, err = pcall(function()
 		local stats = collectAccountStats()
-		local units, totalInventory = collectInventory()
+		local units, totalUnitCount, backpackItems, totalItemCount = collectInventory()
 		local ownedDice = collectOwnedDice()
 		local upgradesSummary = collectUpgradesSummary()
+		local upgradesList = collectUpgradesList()
 		local discoveredCount = countDiscovered()
 		local gamepasses = collectGamepasses()
-		local slotsCount = countSlots()
+		local slots = collectSlots()
+		local towerSquad = collectTowerSquad()
 
 		local topUnits = {}
 		for i = 1, math.min(5, #units) do
 			local u = units[i]
 			table.insert(topUnits, {
+				name = u.name,
+				rarity = u.rarity,
+				variant = u.variant,
+				mutation = u.mutation,
+				level = u.level,
+				amount = u.amount,
+			})
+		end
+
+		local allUnits = {}
+		for _, u in ipairs(units) do
+			table.insert(allUnits, {
 				name = u.name,
 				rarity = u.rarity,
 				variant = u.variant,
@@ -376,15 +500,21 @@ local function reportToMonitor()
 			autoRoll = stats.autoRoll,
 			autoSell = stats.autoSell,
 			vip = stats.vip,
-			unitsCount = totalInventory,
+			unitsCount = totalUnitCount,
 			unitTypesCount = #units,
 			discoveredCount = discoveredCount,
-			slotsCount = slotsCount,
+			slotsCount = #slots,
 			ownedDiceCount = #ownedDice,
 			ownedDice = ownedDice,
 			gamepasses = gamepasses,
 			topUnits = topUnits,
 			upgrades = upgradesSummary,
+			allUnits = allUnits,
+			backpack = backpackItems,
+			slots = slots,
+			towerSquad = towerSquad,
+			upgradesList = upgradesList,
+			totalItemCount = totalItemCount,
 		}
 
 		local body = HttpService:JSONEncode(payload)

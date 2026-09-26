@@ -33,15 +33,47 @@ interface ADAccount {
   forSale?: boolean;
 }
 
+interface BackpackItem {
+  name: string;
+  amount: number;
+  kind: string;
+  rarity: string;
+}
+
+interface SlotData {
+  slot: number | string;
+  name?: string;
+  rarity?: string;
+  variant?: string | null;
+  level?: number | null;
+  mutation?: string | null;
+  balance?: number | null;
+}
+
+interface TowerUnit {
+  name: string;
+  rarity: string;
+  variant?: string | null;
+  level?: number | null;
+  mutation?: string | null;
+  slot?: number | string;
+}
+
 interface ADDetail {
   ownedDice: string[];
   upgrades: Record<string, number>;
   gamepasses: Record<string, boolean>;
   topUnits: Unit[];
+  allUnits: Unit[];
+  backpack: BackpackItem[];
+  slots: SlotData[];
+  towerSquad: { squad: TowerUnit[]; equipped: TowerUnit | null };
+  upgradesList: string[];
   unitsCount: number;
   unitTypesCount: number;
   discoveredCount: number;
   slotsCount: number;
+  totalItemCount: number;
 }
 
 const RARITY_COLORS: Record<string, string> = {
@@ -118,7 +150,7 @@ function accountNumber(name: string): number | null {
 }
 
 type TabMode = "all" | "online" | "offline";
-type DetailTab = "units" | "upgrades" | "dice" | "backpack";
+type DetailTab = "units" | "slots" | "tower" | "backpack" | "upgrades";
 
 export default function AnimeDicePage() {
   const [mounted, setMounted] = useState(false);
@@ -328,6 +360,74 @@ export default function AnimeDicePage() {
         .modal-body { padding: 20px 24px; max-height: 60vh; overflow-y: auto; }
         .detail-empty { color: var(--dim); font-size: 13px; padding: 30px 0; text-align: center; }
 
+        /* Modal account bar */
+        .modal-account-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; background: var(--card); border-bottom: 1px solid rgba(255,255,255,.04); gap: 12px; flex-wrap: wrap; }
+        .mab-left { display: flex; align-items: center; gap: 10px; }
+        .mab-name { font-size: 15px; font-weight: 900; color: var(--ink); }
+        .mab-status { font-size: 10px; font-weight: 800; padding: 3px 10px; border-radius: 5px; }
+        .mab-status.on { background: rgba(52,211,153,.12); color: var(--green); }
+        .mab-status.off { background: rgba(239,68,68,.1); color: var(--red); }
+        .mab-dice { font-size: 11px; font-weight: 700; }
+        .mab-vip { font-size: 10px; font-weight: 800; padding: 3px 10px; border-radius: 5px; background: rgba(251,191,36,.12); color: var(--gold); }
+        .mab-stats { display: flex; gap: 16px; }
+        .mab-stat { font-size: 13px; font-weight: 800; display: flex; gap: 6px; }
+        .mab-sl { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; }
+        .mh-count { font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 6px; background: rgba(34,211,238,.12); color: var(--cyan); margin-left: 10px; letter-spacing: .5px; }
+
+        /* Section headers */
+        .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 6px; }
+        .section-header > span:first-child { font-size: 12px; font-weight: 800; color: var(--accent); letter-spacing: .5px; text-transform: uppercase; }
+        .section-desc { font-size: 11px; color: var(--dim); font-weight: 600; }
+        .section-right { font-size: 11px; color: var(--dim); font-weight: 700; }
+
+        /* Slot cards */
+        .slot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+        .slot-card { background: var(--card); border: 1px solid #1e1e38; border-radius: 12px; padding: 16px; transition: border-color .15s; }
+        .slot-card:hover { border-color: #2a2a50; }
+        .slot-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+        .slot-badge { font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 6px; background: rgba(129,140,248,.08); color: var(--accent); letter-spacing: .3px; }
+        .slot-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .slot-name { font-size: 15px; font-weight: 800; color: var(--ink); margin-bottom: 8px; }
+        .slot-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+        .slot-balance { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.04); }
+        .slot-bl { font-size: 9px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .3px; }
+        .slot-bv { font-size: 16px; font-weight: 900; color: var(--green); }
+        .slot-empty { color: var(--dim); font-size: 13px; font-weight: 600; padding: 20px 0; text-align: center; }
+
+        /* Tower squad */
+        .equipped-section { margin-bottom: 16px; }
+        .equipped-card { background: linear-gradient(135deg, rgba(129,140,248,.06), rgba(168,85,247,.06)), var(--card); border: 1px solid rgba(129,140,248,.2); border-radius: 14px; padding: 18px; }
+        .eq-name { font-size: 18px; font-weight: 900; color: var(--ink); margin-bottom: 8px; }
+        .eq-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+        .eq-level { font-size: 12px; font-weight: 700; color: var(--dim); }
+        .tower-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+        .tower-card { background: var(--card); border: 1px solid #1e1e38; border-radius: 12px; padding: 16px; }
+        .tower-card:hover { border-color: #2a2a50; }
+        .tower-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .tower-name { font-size: 15px; font-weight: 800; color: var(--ink); margin-bottom: 6px; }
+        .tower-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+
+        /* Backpack items */
+        .bp-cats { display: flex; gap: 0; flex-wrap: wrap; }
+        .bp-cat { padding: 6px 14px; font-size: 11px; font-weight: 800; cursor: pointer; color: var(--dim); background: none; border: none; border-radius: 16px; transition: all .15s; }
+        .bp-cat:hover { color: var(--ink); }
+        .bp-cat.active { background: var(--red); color: #fff; }
+        .bp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+        .bp-card { background: var(--card); border: 1px solid #1e1e38; border-radius: 10px; padding: 12px 14px; transition: border-color .15s; }
+        .bp-card:hover { border-color: #2a2a50; }
+        .bp-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+        .bp-name { font-size: 13px; font-weight: 700; color: var(--ink); }
+        .bp-amount { font-size: 12px; font-weight: 800; color: var(--dim); background: rgba(255,255,255,.04); padding: 2px 8px; border-radius: 4px; }
+        .bp-kind { font-size: 11px; font-weight: 600; }
+
+        /* Upgrade pills */
+        .up-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+        .up-pill { font-size: 12px; font-weight: 700; padding: 8px 14px; border-radius: 8px; background: rgba(129,140,248,.06); border: 1px solid rgba(129,140,248,.15); color: var(--accent); }
+
+        /* Dice active tag */
+        .active-dice { border-width: 2px !important; box-shadow: 0 0 8px rgba(129,140,248,.2); }
+        .dice-active-tag { font-size: 8px; font-weight: 900; padding: 2px 6px; border-radius: 3px; background: var(--accent); color: #0b0b14; margin-left: 4px; }
+
         /* Unit cards in detail */
         .ugrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
         .ucard { background: var(--card); border: 1px solid #1e1e38; border-radius: 12px; padding: 14px; transition: border-color .15s; }
@@ -535,7 +635,12 @@ function DetailModal({ detail, tab, setTab, onClose }: {
   tab: DetailTab; setTab: (t: DetailTab) => void; onClose: () => void;
 }) {
   const acc = detail.account;
+  const d = detail.data;
   const isOnline = acc?.online ?? false;
+
+  const unitCount = d?.allUnits?.length || d?.topUnits?.length || 0;
+  const itemCount = (d?.totalItemCount ?? 0) || (d?.backpack?.length ?? 0);
+  const totalThings = unitCount + itemCount;
 
   return (
     <>
@@ -545,38 +650,49 @@ function DetailModal({ detail, tab, setTab, onClose }: {
           <span className={`mh-dot ${isOnline ? "on" : "off"}`} />
         </div>
         <div className="mh-info">
-          <div className="mh-name">{detail.name}</div>
-          <div className="mh-sub">{acc?.dice ? `${acc.dice} Dice` : ""} {acc?.vip ? " · VIP" : ""}</div>
+          <div className="mh-name">
+            TELEMETRY & INVENTORY
+            {totalThings > 0 && <span className="mh-count">{unitCount} UNITS &bull; {itemCount} ITEMS</span>}
+          </div>
+          <div className="mh-sub">Inspect units, plot generators, combat squad, items & upgrades.</div>
         </div>
-        <span className={`mh-badge ${isOnline ? "on" : "off"}`}>{isOnline ? "ONLINE" : "OFFLINE"}</span>
         <button className="modal-close" onClick={onClose}>&times;</button>
       </div>
 
       {detail.loading ? (
         <div style={{ padding: 40, textAlign: "center", color: "var(--dim)" }}>Loading...</div>
-      ) : !detail.data ? (
+      ) : !d ? (
         <div style={{ padding: 40, textAlign: "center", color: "var(--dim)" }}>No detail data available.</div>
       ) : (
         <>
-          <div className="modal-stats">
-            <div className="ms"><div className="ms-l">Money</div><div className="ms-v" style={{ color: "var(--green)" }}>{fmtMoney(acc?.money)}</div></div>
-            <div className="ms"><div className="ms-l">Rebirth</div><div className="ms-v" style={{ color: "var(--accent2)" }}>R{acc?.rebirth ?? 0}</div></div>
-            <div className="ms"><div className="ms-l">Rolls</div><div className="ms-v" style={{ color: "var(--accent)" }}>{fmtNum(acc?.rolls)}</div></div>
-            <div className="ms"><div className="ms-l">Units</div><div className="ms-v" style={{ color: "var(--cyan)" }}>{detail.data.unitsCount}</div></div>
-            <div className="ms"><div className="ms-l">Discovered</div><div className="ms-v">{detail.data.discoveredCount}</div></div>
-            <div className="ms"><div className="ms-l">Slots</div><div className="ms-v">{detail.data.slotsCount}</div></div>
+          <div className="modal-account-bar">
+            <div className="mab-left">
+              <span className="mab-name">{detail.name}</span>
+              <span className={`mab-status ${isOnline ? "on" : "off"}`}>{isOnline ? "ONLINE" : "OFFLINE"}</span>
+              {acc?.dice && <span className="mab-dice" style={{ color: diceColor(acc.dice) }}>{acc.dice} Dice</span>}
+              {acc?.vip && <span className="mab-vip">VIP</span>}
+            </div>
+            <div className="mab-stats">
+              <span className="mab-stat"><span className="mab-sl">Money</span> <span style={{ color: "var(--green)" }}>{fmtMoney(acc?.money)}</span></span>
+              <span className="mab-stat"><span className="mab-sl">Rebirth</span> <span style={{ color: "var(--accent2)" }}>R{acc?.rebirth ?? 0}</span></span>
+              <span className="mab-stat"><span className="mab-sl">Rolls</span> <span style={{ color: "var(--accent)" }}>{fmtNum(acc?.rolls)}</span></span>
+            </div>
           </div>
 
           <div className="modal-tabs">
-            <button className={`mtab ${tab === "units" ? "active" : ""}`} onClick={() => setTab("units")}>Units Roster ({(detail.data?.topUnits || []).length})</button>
-            <button className={`mtab ${tab === "upgrades" ? "active" : ""}`} onClick={() => setTab("upgrades")}>Upgrades & Dice</button>
-            <button className={`mtab ${tab === "backpack" ? "active" : ""}`} onClick={() => setTab("backpack")}>Gamepasses</button>
+            <button className={`mtab ${tab === "units" ? "active" : ""}`} onClick={() => setTab("units")}>&#x2694; Units Roster ({unitCount})</button>
+            <button className={`mtab ${tab === "slots" ? "active" : ""}`} onClick={() => setTab("slots")}>&#x2699; Plot Generators ({d.slots?.length || 0})</button>
+            <button className={`mtab ${tab === "tower" ? "active" : ""}`} onClick={() => setTab("tower")}>&#x1F3F0; Tower Squad ({d.towerSquad?.squad?.length || 0})</button>
+            <button className={`mtab ${tab === "backpack" ? "active" : ""}`} onClick={() => setTab("backpack")}>&#x1F392; Backpack Items ({d.backpack?.length || 0})</button>
+            <button className={`mtab ${tab === "upgrades" ? "active" : ""}`} onClick={() => setTab("upgrades")}>&#x2B50; Upgrades & Dice</button>
           </div>
 
           <div className="modal-body">
-            {tab === "units" && <UnitsTab units={detail.data?.topUnits || []} />}
-            {tab === "upgrades" && <UpgradesDiceTab upgrades={detail.data?.upgrades || {}} dice={detail.data?.ownedDice || []} />}
-            {tab === "backpack" && <GamepassesTab gamepasses={detail.data?.gamepasses || {}} />}
+            {tab === "units" && <UnitsTab units={d.allUnits?.length ? d.allUnits : d.topUnits || []} />}
+            {tab === "slots" && <SlotsTab slots={d.slots || []} />}
+            {tab === "tower" && <TowerTab data={d.towerSquad || { squad: [], equipped: null }} />}
+            {tab === "backpack" && <BackpackTab items={d.backpack || []} gamepasses={d.gamepasses || {}} />}
+            {tab === "upgrades" && <UpgradesDiceTab upgrades={d.upgrades || {}} upgradesList={d.upgradesList || []} dice={d.ownedDice || []} activeDice={acc?.dice || ""} />}
           </div>
         </>
       )}
@@ -592,12 +708,12 @@ function UnitsTab({ units }: { units: Unit[] }) {
     : units;
   return (
     <>
-      <input className="search-input" style={{ width: "100%", marginBottom: 14 }} placeholder="Search unit, trait, mutation..." value={filter} onChange={(e) => setFilter(e.target.value)} />
+      <input className="search-input" style={{ width: "100%", marginBottom: 14 }} placeholder="Search unit, rarity, mutation..." value={filter} onChange={(e) => setFilter(e.target.value)} />
       <div className="ugrid">
         {filtered.map((u, i) => {
           const rc = rarityColor(u.rarity);
           return (
-            <div key={i} className="ucard">
+            <div key={i} className="ucard" style={{ borderColor: rc + "25" }}>
               <div className="ucard-top">
                 {u.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{u.variant === "Titanic" ? "S" : u.variant === "Huge" ? "A+" : u.variant[0]}</span>}
                 {u.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {u.level}</span>}
@@ -620,14 +736,212 @@ function UnitsTab({ units }: { units: Unit[] }) {
   );
 }
 
-function UpgradesDiceTab({ upgrades, dice }: { upgrades: Record<string, number>; dice: string[] }) {
+function SlotsTab({ slots }: { slots: SlotData[] }) {
+  if (slots.length === 0) return <div className="detail-empty">No plot generator data available.</div>;
+  return (
+    <>
+      <div className="section-header">
+        <span>&#x2699; PLOT MONEY GENERATORS ({slots.length} PRODUCTION SLOTS)</span>
+        <span className="section-desc">Units placed on the plot continuously generate money.</span>
+      </div>
+      <div className="slot-grid">
+        {slots.map((s, i) => {
+          const rc = s.rarity ? rarityColor(s.rarity) : "var(--dim)";
+          return (
+            <div key={i} className="slot-card">
+              <div className="slot-header">
+                <span className="slot-badge">SLOT #{typeof s.slot === "number" ? s.slot : i + 1}</span>
+                {s.name && <span className="slot-dot" style={{ background: "var(--green)" }} />}
+                {!s.name && <span className="slot-dot" style={{ background: "var(--dim)" }} />}
+              </div>
+              {s.name ? (
+                <>
+                  <div className="slot-name">{s.name}</div>
+                  <div className="slot-tags">
+                    {s.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{s.variant === "Titanic" ? "S" : s.variant === "Huge" ? "A+" : s.variant[0]}</span>}
+                    {s.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {s.level}</span>}
+                    <span className="ub" style={{ background: rc + "20", color: rc }}>{(s.rarity || "").toUpperCase()}</span>
+                    {s.mutation && (() => {
+                      const ms = MUTATION_STYLES[s.mutation];
+                      return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{s.mutation}</span>;
+                    })()}
+                  </div>
+                  {s.balance != null && (
+                    <div className="slot-balance">
+                      <span className="slot-bl">SLOT BALANCE</span>
+                      <span className="slot-bv">{fmtMoney(s.balance)}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="slot-empty">Empty Slot</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function TowerTab({ data }: { data: { squad: TowerUnit[]; equipped: TowerUnit | null } }) {
+  if (!data.equipped && data.squad.length === 0) return <div className="detail-empty">No tower squad data available.</div>;
+  return (
+    <>
+      {data.equipped && (
+        <div className="equipped-section">
+          <div className="section-header">
+            <span>&#x2694; EQUIPPED FIGHTER (Click to Manage)</span>
+          </div>
+          <div className="equipped-card">
+            <div className="eq-name">{data.equipped.variant ? `${data.equipped.variant} ` : ""}{data.equipped.name}</div>
+            <div className="eq-tags">
+              {data.equipped.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{data.equipped.variant === "Titanic" ? "GRADE S" : data.equipped.variant.toUpperCase()}</span>}
+              <span className="ub" style={{ background: rarityColor(data.equipped.rarity) + "20", color: rarityColor(data.equipped.rarity) }}>{data.equipped.rarity.toUpperCase()}</span>
+              {data.equipped.mutation && (() => {
+                const ms = MUTATION_STYLES[data.equipped.mutation!];
+                return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{data.equipped.mutation}</span>;
+              })()}
+            </div>
+            {data.equipped.level != null && <div className="eq-level">Lv. {data.equipped.level}</div>}
+          </div>
+        </div>
+      )}
+
+      {data.squad.length > 0 && (
+        <>
+          <div className="section-header" style={{ marginTop: 16 }}>
+            <span>&#x1F3F0; TOWER COMBAT BATTLE SQUAD ({data.squad.length} FIGHTERS)</span>
+            <span className="section-desc">Units dispatched to climb Infinity, Cursed, Dragon, and Pirate Towers.</span>
+          </div>
+          <div className="tower-grid">
+            {data.squad.map((u, i) => {
+              const rc = rarityColor(u.rarity);
+              return (
+                <div key={i} className="tower-card">
+                  <div className="tower-header">
+                    <span className="slot-badge">FIGHTER #{typeof u.slot === "number" ? u.slot : i + 1}</span>
+                    <span className="ub" style={{ background: rc + "20", color: rc }}>{u.rarity.toUpperCase()}</span>
+                  </div>
+                  <div className="tower-name">{u.variant ? `${u.variant} ` : ""}{u.name}</div>
+                  <div className="tower-tags">
+                    {u.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{u.variant === "Titanic" ? "S" : u.variant[0]}</span>}
+                    {u.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {u.level}</span>}
+                    {u.mutation && (() => {
+                      const ms = MUTATION_STYLES[u.mutation!];
+                      return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{u.mutation}</span>;
+                    })()}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+const BACKPACK_CATEGORIES: Record<string, string> = {
+  Currency: "Currencies",
+  "Damage Potion": "Damage Boosts",
+  "Income Potion": "Income Boosts",
+  "Luck Potion": "Luck Boosts",
+  "Reroll Potion": "Rerolls",
+};
+
+function getCategory(kind: string): string {
+  return BACKPACK_CATEGORIES[kind] || kind;
+}
+
+function BackpackTab({ items, gamepasses }: { items: BackpackItem[]; gamepasses: Record<string, boolean> }) {
+  const [filter, setFilter] = useState("");
+  const [cat, setCat] = useState("All");
+
+  const categories = ["All", ...Array.from(new Set(items.map((it) => getCategory(it.kind)))).sort()];
+
+  const filtered = items.filter((it) => {
+    if (cat !== "All" && getCategory(it.kind) !== cat) return false;
+    if (filter.trim() && !it.name.toLowerCase().includes(filter.toLowerCase())) return false;
+    return true;
+  });
+
+  const gpEntries = Object.entries(gamepasses);
+
+  return (
+    <>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
+        <input className="search-input" style={{ width: 220 }} placeholder="Search potions, currencies, boosts..." value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <div className="bp-cats">
+          {categories.map((c) => (
+            <button key={c} className={`bp-cat ${cat === c ? "active" : ""}`} onClick={() => setCat(c)}>
+              {c === "All" ? `All (${items.length})` : c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {filtered.length > 0 ? (
+        <div className="bp-grid">
+          {filtered.map((it, i) => (
+            <div key={i} className="bp-card">
+              <div className="bp-top">
+                <span className="bp-name">{it.name}</span>
+                <span className="bp-amount">x{it.amount.toLocaleString()}</span>
+              </div>
+              <span className="bp-kind" style={{ color: rarityColor(it.rarity) }}>{getCategory(it.kind)}</span>
+            </div>
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <div className="detail-empty">No backpack item data available.</div>
+      ) : (
+        <div className="detail-empty">No items match your filter.</div>
+      )}
+
+      {gpEntries.length > 0 && (
+        <>
+          <div className="section-header" style={{ marginTop: 20 }}>
+            <span>&#x1F3AB; GAMEPASSES ({gpEntries.length})</span>
+          </div>
+          <div className="gp-list">
+            {gpEntries.map(([name, owned]) => (
+              <div key={name} className="gp-row">
+                <span className={`gp-dot ${owned ? "on" : "off"}`} />
+                <span className="gp-name">{name}</span>
+                <span className={`gp-status ${owned ? "on" : "off"}`}>{owned ? "OWNED" : "NOT OWNED"}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function UpgradesDiceTab({ upgrades, upgradesList, dice, activeDice }: { upgrades: Record<string, number>; upgradesList: string[]; dice: string[]; activeDice: string }) {
+  const hasDetailedList = upgradesList.length > 0;
   const entries = Object.entries(upgrades);
   return (
     <>
-      {entries.length > 0 && (
+      {hasDetailedList ? (
         <>
-          <div style={{ fontSize: 12, fontWeight: 800, color: "var(--dim)", marginBottom: 10, letterSpacing: ".5px" }}>UPGRADES</div>
-          <div className="upgrid" style={{ marginBottom: 20 }}>
+          <div className="section-header">
+            <span>&#x2B50; UNLOCKED SKILL & STAT UPGRADES ({upgradesList.length} ACTIVE)</span>
+            <span className="section-right">Permanent game boosts & multipliers</span>
+          </div>
+          <div className="up-pills">
+            {upgradesList.map((name) => (
+              <span key={name} className="up-pill">&#x2714; {name}</span>
+            ))}
+          </div>
+        </>
+      ) : entries.length > 0 ? (
+        <>
+          <div className="section-header">
+            <span>&#x2B50; UPGRADES</span>
+          </div>
+          <div className="upgrid">
             {entries.map(([name, level]) => (
               <div key={name} className="upcard">
                 <span className="up-name">{name}</span>
@@ -636,35 +950,29 @@ function UpgradesDiceTab({ upgrades, dice }: { upgrades: Record<string, number>;
             ))}
           </div>
         </>
-      )}
+      ) : null}
+
       {dice.length > 0 && (
         <>
-          <div style={{ fontSize: 12, fontWeight: 800, color: "var(--dim)", marginBottom: 10, letterSpacing: ".5px" }}>OWNED DICE ({dice.length})</div>
+          <div className="section-header" style={{ marginTop: 20 }}>
+            <span>&#x1F3B2; OWNED DICE SKINS COLLECTION ({dice.length} UNLOCKED)</span>
+            {activeDice && <span className="section-right">Active: {activeDice}</span>}
+          </div>
           <div className="dgrid">
             {dice.map((d) => {
               const c = diceColor(d);
-              return <span key={d} className="dchip" style={{ color: c, borderColor: c + "25", background: c + "08" }}>&#x1F3B2; {d}</span>;
+              const isActive = d === activeDice;
+              return (
+                <span key={d} className={`dchip ${isActive ? "active-dice" : ""}`} style={{ color: c, borderColor: c + "25", background: c + "08" }}>
+                  &#x1F3B2; {d} {isActive && <span className="dice-active-tag">ACTIVE</span>}
+                </span>
+              );
             })}
           </div>
         </>
       )}
-      {entries.length === 0 && dice.length === 0 && <div className="detail-empty">No upgrade or dice data.</div>}
-    </>
-  );
-}
 
-function GamepassesTab({ gamepasses }: { gamepasses: Record<string, boolean> }) {
-  const entries = Object.entries(gamepasses);
-  if (entries.length === 0) return <div className="detail-empty">No gamepass data.</div>;
-  return (
-    <div className="gp-list">
-      {entries.map(([name, owned]) => (
-        <div key={name} className="gp-row">
-          <span className={`gp-dot ${owned ? "on" : "off"}`} />
-          <span className="gp-name">{name}</span>
-          <span className={`gp-status ${owned ? "on" : "off"}`}>{owned ? "OWNED" : "NOT OWNED"}</span>
-        </div>
-      ))}
-    </div>
+      {(hasDetailedList ? false : entries.length === 0) && dice.length === 0 && <div className="detail-empty">No upgrade or dice data.</div>}
+    </>
   );
 }
