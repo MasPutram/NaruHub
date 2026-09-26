@@ -31,6 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
+local VERSION = "v3.0"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -485,7 +486,7 @@ local Fluent = NaruUI.New({
 
 local Window = Fluent:CreateWindow({
 	Title = "NaruHub | StealAnEgg",
-	Badge = "PREMIUM",
+	Badge = "PREMIUM " .. VERSION,
 	TabWidth = 0,
 	Size = UDim2.fromOffset(380, 400),
 	AutoStartMinimized = false,
