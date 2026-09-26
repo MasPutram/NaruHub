@@ -867,7 +867,10 @@ local function collectAccountStats()
 	local kandangLevel, treadmillLevel, currentMoney
 	pcall(function()
 		local stats = SaveModule.Peek()
-		if stats then
+		-- Require Money to be a number (not nil) — treat everything else as
+		-- "SaveModule not ready" so we don't send a partial payload that
+		-- overwrites the dashboard's cached Cash/PEN/TM with null.
+		if stats and type(stats.Money) == "number" then
 			kandangLevel = stats.BaseUpgradeLevel
 			treadmillLevel = stats.TreadmillUpgradeLevel
 			currentMoney = stats.Money
@@ -875,6 +878,22 @@ local function collectAccountStats()
 	end)
 
 	return runSpeed, moneyPerSecond, kandangLevel, treadmillLevel, currentMoney
+end
+
+-- Wait for SaveModule.Peek() to return valid data (has .Money) — polled by
+-- the monitor loop before the first send.
+local function waitForSaveReady(timeoutSec)
+	timeoutSec = timeoutSec or 30
+	local deadline = os.clock() + timeoutSec
+	while os.clock() < deadline do
+		local ok, ready = pcall(function()
+			local s = SaveModule.Peek()
+			return s and type(s.Money) == "number"
+		end)
+		if ok and ready then return true end
+		task.wait(0.5)
+	end
+	return false
 end
 
 ------------------------------------------------------------
@@ -1815,7 +1834,19 @@ end)
 -- Auto-start monitoring loop
 ------------------------------------------------------------
 task.spawn(function()
+	-- Wait until SaveModule finishes loading before the first report so
+	-- Cash/PEN/TM don't get sent as null on early startup.
+	monitorPara:SetContent("Menunggu SaveModule...")
+	waitForSaveReady(30)
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		-- If SaveModule is momentarily nil mid-session (e.g. mid-teleport),
+		-- skip this iteration instead of sending a partial payload. Retry next tick.
+		local stats = SaveModule.Peek()
+		if not (stats and type(stats.Money) == "number") then
+			monitorPara:SetContent("Skip (SaveModule kosong)")
+			task.wait(5)
+			continue
+		end
 		local ok, err = reportToMonitor()
 		local ping = 0
 		pcall(function()
