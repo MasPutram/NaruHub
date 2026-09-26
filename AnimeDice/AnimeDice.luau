@@ -201,7 +201,7 @@ if not GRANTED_VIA_GLOBAL then return end
 -- NaruUI (loaded from GitHub)
 ------------------------------------------------------------
 local httpGet = game.HttpGet or HttpGet
-local _naruSrc = httpGet(game, "https://raw.githubusercontent.com/MasPutram/NaruHub/main/ui-template/NaruUI.luau?v=" .. tostring(tick()))
+local _naruSrc = httpGet(game, "https://raw.githubusercontent.com/MasPutram/NaruHub/main/NaruUI/NaruUI.luau?v=" .. tostring(tick()))
 local _naruFn, _naruErr = loadstring(_naruSrc)
 if not _naruFn then
 	error("NaruUI loadstring failed: " .. tostring(_naruErr))
