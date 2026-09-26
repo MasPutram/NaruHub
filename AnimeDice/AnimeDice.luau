@@ -555,15 +555,19 @@ end
 -- NaruUI Window (new API — all config in NaruUI.New)
 ------------------------------------------------------------
 local Fluent = NaruUI.New({
-	Title = "NaruHub | Anime Dice v1.1.0",
-	Badge = "MONITOR",
 	ConfigPrefix = "AnimeDice",
 	BrandColor = Color3.fromRGB(255, 100, 100),
+})
+
+local Window = Fluent:CreateWindow({
+	Title = "NaruHub | Anime Dice v1.2.0",
+	Badge = "MONITOR",
+	TabWidth = 0,
 	Size = UDim2.fromOffset(380, 300),
 	AutoStartMinimized = false,
 })
 
-local Tab = Fluent:AddTab({ Title = "" })
+local Tab = Window:AddTab({ Title = "" })
 local section = Tab:AddSection(LocalPlayer.Name, { NoCollapse = true })
 
 local usernamePara = section:AddParagraph({
