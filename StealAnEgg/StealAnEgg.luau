@@ -435,6 +435,47 @@ local function withHipPaused(fn)
 end
 
 ------------------------------------------------------------
+-- Global HIP pause tracker
+-- Any feature that needs HIP's "Auto Treadmill On Return" to STAY off
+-- for its entire runtime (Auto Sell / Place / Mutate / Hatch) registers
+-- itself here. Refcounted: HIP turns off on the first holder and turns
+-- back on when the last holder releases.
+--
+-- The per-operation withHipPaused() wrapper and the inline HIP flip in
+-- Auto Place both no-op while any holder is active, because they check
+-- `hipWasOn` before firing and HIP is already off.
+------------------------------------------------------------
+local hipPauseHolders = {}
+
+local function setHipToggleState(shouldBeOn)
+	if not firesignal then return end
+	for _ = 1, 3 do
+		local b = findHipToggle()
+		if not b then return end
+		local isOn = hipToggleIsOn(b)
+		if isOn == shouldBeOn then return end
+		pcall(function() firesignal(b.MouseButton1Click) end)
+		task.wait(0.3)
+	end
+end
+
+local function setHipPause(feature, hold)
+	local wasEmpty = next(hipPauseHolders) == nil
+	if hold then
+		hipPauseHolders[feature] = true
+	else
+		hipPauseHolders[feature] = nil
+	end
+	local isEmpty = next(hipPauseHolders) == nil
+
+	if wasEmpty and not isEmpty then
+		task.spawn(setHipToggleState, false)  -- 0 -> 1 holders: turn HIP OFF
+	elseif not wasEmpty and isEmpty then
+		task.spawn(setHipToggleState, true)   -- 1 -> 0 holders: turn HIP ON
+	end
+end
+
+------------------------------------------------------------
 -- NaruUI Window (clean, status only -- no tabs visible)
 ------------------------------------------------------------
 local Fluent = NaruUI.New({
@@ -581,6 +622,7 @@ section:AddToggle("AutoSellToggle", {
 	Default = false,
 	Callback = function(val)
 		autoSellEnabled = val
+		setHipPause("sell", val)
 		task.spawn(function()
 			local Remotes = require(ReplicatedStorage.Shared.Remotes)
 			pcall(function()
@@ -600,6 +642,7 @@ section:AddToggle("AutoPlaceToggle", {
 	Default = false,
 	Callback = function(val)
 		autoPlaceEnabled = val
+		setHipPause("place", val)
 		if val then
 			autoPlaceTrigger = autoPlaceTrigger + 1
 		end
@@ -621,6 +664,7 @@ section:AddToggle("AutoMutationEggToggle", {
 	Default = false,
 	Callback = function(val)
 		autoMutationEggEnabled = val
+		setHipPause("mutate", val)
 	end,
 })
 
@@ -631,6 +675,7 @@ section:AddToggle("AutoHatchToggle", {
 	Default = false,
 	Callback = function(val)
 		autoHatchEnabled = val
+		setHipPause("hatch", val)
 		if val and autoHatchSignal then
 			autoHatchSignal:Fire()
 		end
