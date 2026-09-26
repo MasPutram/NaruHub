@@ -182,13 +182,19 @@ return (function()
 			if wcfg.Badge then
 				local premiumBadge = uiNew("Frame", {
 					BackgroundColor3 = UI_COL_ACCENT_DIM,
-					Size = UDim2.fromOffset(66, 18),
+					AutomaticSize = Enum.AutomaticSize.X,
+					Size = UDim2.fromOffset(0, 18),
 					LayoutOrder = 2,
 				}, titleHolder)
 				uiCorner(4, premiumBadge)
+				uiNew("UIPadding", {
+					PaddingLeft = UDim.new(0, 8),
+					PaddingRight = UDim.new(0, 8),
+				}, premiumBadge)
 				uiNew("TextLabel", {
 					BackgroundTransparency = 1,
-					Size = UDim2.fromScale(1, 1),
+					AutomaticSize = Enum.AutomaticSize.X,
+					Size = UDim2.new(0, 0, 1, 0),
 					Font = UI_FONT_BOLD,
 					TextSize = 11,
 					TextColor3 = UI_COL_ACCENT,
