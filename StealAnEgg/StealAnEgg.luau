@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.0.3"
+local VERSION = "v3.0.4"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -394,12 +394,19 @@ end
 ------------------------------------------------------------
 local function findHipToggle()
 	local pg = LocalPlayer:FindFirstChild("PlayerGui")
-	local hip = pg and pg:FindFirstChild("HipHub")
-	if not hip then return nil end
-	for _, d in ipairs(hip:GetDescendants()) do
-		if d:IsA("TextLabel") and d.Text == "Auto Treadmill On Return" then
-			local p = d.Parent
-			return p and p:FindFirstChildOfClass("TextButton") or nil
+	if not pg then return nil end
+	-- Scan every ScreenGui, not just one named "HipHub". HipHub Lite (and
+	-- possibly other forks) uses a different top-level name but keeps the
+	-- same "Auto Treadmill On Return" label on the row.
+	for _, gui in ipairs(pg:GetChildren()) do
+		if gui:IsA("ScreenGui") then
+			for _, d in ipairs(gui:GetDescendants()) do
+				if d:IsA("TextLabel") and d.Text == "Auto Treadmill On Return" then
+					local p = d.Parent
+					local btn = p and p:FindFirstChildOfClass("TextButton")
+					if btn then return btn end
+				end
+			end
 		end
 	end
 	return nil
