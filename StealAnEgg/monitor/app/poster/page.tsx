@@ -817,15 +817,10 @@ function PosterPage() {
   const shownInActiveKeys = new Set(rightPanelShown.map(petKey));
 
   const alreadyShownKeys = new Set([...Array.from(featuredKeys), ...topPicks.map(petKey), ...rightPanelShown.map(petKey)]);
-  const mutGroups = groupByMutation(allSorted);
-  const groupsShown = mutGroups.map(([name, items]) => [
-    name,
-    [...items].sort((a, b) => (b.rate || 0) - (a.rate || 0)).filter((p) => !alreadyShownKeys.has(petKey(p))).slice(0, 6),
-  ] as [string, Pet[]]).filter(([, items]) => items.length > 0).slice(0, 6);
-  const groupShownKeys = new Set<string>();
-  for (const [, items] of groupsShown) {
-    for (const p of items) groupShownKeys.add(petKey(p));
-  }
+  const mutPetsFlat = allSorted
+    .filter((p) => p.mutations && p.mutations.length > 0 && !alreadyShownKeys.has(petKey(p)))
+    .sort((a, b) => (b.rate || 0) - (a.rate || 0));
+  const groupShownKeys = new Set(mutPetsFlat.map(petKey));
 
   // Telur yang udah kepromosi ke card utama / Paling Gacor / panel ACTIVE
   // ga usah dobel muncul lagi di section "sedang tumbuh" / "di tas".
@@ -1032,7 +1027,7 @@ function PosterPage() {
           margin-bottom: 12px;
         }
         .mut-group-label { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
-        .mut-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 6px; }
+        .mut-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 6px; }
         .mut-cell {
           background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 6px 8px;
           display: flex; align-items: center; gap: 8px; min-height: 72px;
@@ -1111,12 +1106,9 @@ function PosterPage() {
         .poster-divine-full {
           width: 100%;
         }
-        .divine-list {
-          display: grid; grid-template-columns: 1fr; gap: 0;
-          background: #fff; border: 1px solid #cbd5e1; border-radius: 16px;
-          padding: 10px 16px;
+        .divine-grid {
+          display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
         }
-        .divine-list .pet-row { padding: 8px 0; }
 
         .account-tag {
           position: absolute; bottom: 12px; right: 16px;
@@ -1337,42 +1329,6 @@ function PosterPage() {
               );
             })()}
 
-            {groupsShown.length > 0 && (
-              <>
-                <div className="section-header">PET MUTASI LAIN</div>
-                {groupsShown.map(([groupName, items]) => {
-                  const originalCount = mutGroups.find(([n]) => n === groupName)?.[1].length ?? items.length;
-                  return (
-                    <div key={groupName}>
-                      <div className="mut-group-label" style={mutTextStyle(groupName.split(" + ")[0])}>
-                        {groupName} ({originalCount})
-                      </div>
-                      <div className="mut-grid">
-                        {items.map((p, i) => (
-                          <div key={i} className="mut-cell">
-                            <PetIcon pet={p} size={60} />
-                            <div style={{ minWidth: 0, overflow: "hidden" }}>
-                              <div className="mrate">{fmtRate(p.rate)}</div>
-                              <div className="mname">{p.name || displayName(p.category)}</div>
-                              {p.weight ? <div className="mweight">{fmtWeight(p.weight)}</div> : null}
-                              {p.mutations && p.mutations.length > 0 && (
-                                <div style={{ display: "flex", gap: 3, marginTop: 2, flexWrap: "wrap" }}>
-                                  {p.mutations.map((m, mi) => (
-                                    <span key={mi} className="mut-tag" style={{ ...mutBadgeStyle(m), fontSize: 8, padding: "1px 6px" }}>
-                                      {mutDisplayName(m)}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </>
-            )}
 
 
           </div>
@@ -1444,6 +1400,33 @@ function PosterPage() {
             )}
           </div>
 
+          {mutPetsFlat.length > 0 && (
+            <div className="poster-divine-full">
+              <div className="section-header">PET MUTASI LAIN</div>
+              <div className="mut-grid">
+                {mutPetsFlat.map((p, i) => (
+                  <div key={i} className="mut-cell">
+                    <PetIcon pet={p} size={56} />
+                    <div style={{ minWidth: 0, overflow: "hidden" }}>
+                      <div className="mrate">{fmtRate(p.rate)}</div>
+                      <div className="mname">{p.name || displayName(p.category)}</div>
+                      {p.weight ? <div className="mweight">{fmtWeight(p.weight)}</div> : null}
+                      {p.mutations && p.mutations.length > 0 && (
+                        <div style={{ display: "flex", gap: 3, marginTop: 2, flexWrap: "wrap" }}>
+                          {p.mutations.map((m, mi) => (
+                            <span key={mi} className="mut-tag" style={{ ...mutBadgeStyle(m), fontSize: 8, padding: "1px 6px" }}>
+                              {mutDisplayName(m)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {(growingEggsRemaining.length > 0 || backpackEggsRemaining.length > 0) && (
             <div className="poster-bottom">
               {growingEggsRemaining.length > 0 && (
@@ -1499,24 +1482,25 @@ function PosterPage() {
           {divineAll.length > 0 && (
             <div className="poster-divine-full">
               <div className="section-header" style={{ background: "#fefce8", color: "#a16207" }}>EGG / PET DIVINE ({divineAll.length})</div>
-              <div className="divine-list">
+              <div className="divine-grid">
                 {divineAll.sort((a, b) => (b.rate || 0) - (a.rate || 0)).map((p, i) => {
                   const isEgg = eggKeys.has(petKey(p)) || growingEggKeys.has(petKey(p));
                   return (
-                    <div key={i} className="pet-row">
-                      <PetIcon pet={p} size={48} />
-                      <div className="pet-info">
-                        <div className="piname">{p.name || displayName(p.category)}</div>
-                        <div className="pirate">{fmtRate(p.rate)}</div>
-                        {p.weight ? <div className="piweight">{fmtWeight(p.weight)}</div> : null}
-                        <div className="pet-badges">
-                          {isEgg && <span className="egg-badge">TELUR</span>}
-                          {p.mutations && p.mutations.length > 0 && (
-                            <div className="mut-tag" style={mutBadgeStyle(p.mutations[0])}>
-                              {p.mutations.map((m) => mutDisplayName(m)).join(" + ")}
-                            </div>
-                          )}
-                        </div>
+                    <div key={i} className="egg-cell" style={{ borderColor: "#ca8a04" }}>
+                      <PetIcon pet={p} size={56} />
+                      <div style={{ minWidth: 0, overflow: "hidden" }}>
+                        <div className="ename">{p.name || displayName(p.category)}</div>
+                        {p.rate ? <div className="erate">{fmtRate(p.rate)}</div> : null}
+                        {isEgg && <span className="egg-badge">TELUR</span>}
+                        {p.mutations && p.mutations.length > 0 && (
+                          <div style={{ display: "flex", gap: 3, marginTop: 2, flexWrap: "wrap" }}>
+                            {p.mutations.map((m, mi) => (
+                              <span key={mi} className="mut-tag" style={{ ...mutBadgeStyle(m), fontSize: 8, padding: "1px 6px" }}>
+                                {mutDisplayName(m)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
