@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.0.5"
+local VERSION = "v3.0.6"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -417,31 +417,11 @@ local function hipToggleIsOn(btn)
 	return inner and inner.Position.X.Scale >= 0.5
 end
 
--- Wrap a callback with HIP off/on. Returns whatever `fn` returns.
+-- Wrap a callback — HIP is already managed by setHipPause() refcount.
+-- This wrapper just runs the function; the toggle callback already
+-- called setHipPause("sell"/etc, true) before we get here.
 local function withHipPaused(fn)
-	local hipBtn = findHipToggle()
-	local hipWasOn = hipBtn and hipToggleIsOn(hipBtn)
-	local weFiredOff = false
-	if hipWasOn and firesignal then
-		-- HIP handler binds to Activated, not MouseButton1Click. Firing
-		-- MouseButton1Click silently does nothing.
-		pcall(function() firesignal(hipBtn.Activated) end)
-		weFiredOff = true
-		task.wait(0.3)
-	end
-
-	local ok, result = pcall(fn)
-
-	if weFiredOff and firesignal then
-		for _ = 1, 3 do
-			local b = findHipToggle()
-			if not b then break end
-			if hipToggleIsOn(b) then break end
-			pcall(function() firesignal(b.Activated) end)
-			task.wait(0.4)
-		end
-	end
-	return ok, result
+	return pcall(fn)
 end
 
 ------------------------------------------------------------
@@ -451,21 +431,21 @@ end
 -- itself here. Refcounted: HIP turns off on the first holder and turns
 -- back on when the last holder releases.
 --
--- The per-operation withHipPaused() wrapper and the inline HIP flip in
--- Auto Place both no-op while any holder is active, because they check
--- `hipWasOn` before firing and HIP is already off.
+-- withHipPaused() and Auto Place no longer flip HIP themselves —
+-- all HIP control goes through setHipPause() to avoid race conditions
+-- on cloud phones where duplicate flips cause the toggle to stick.
 ------------------------------------------------------------
 local hipPauseHolders = {}
 
 local function setHipToggleState(shouldBeOn)
 	if not firesignal then return end
-	for _ = 1, 3 do
+	for _ = 1, 5 do
 		local b = findHipToggle()
-		if not b then return end
+		if not b then task.wait(0.5) continue end
 		local isOn = hipToggleIsOn(b)
 		if isOn == shouldBeOn then return end
 		pcall(function() firesignal(b.Activated) end)
-		task.wait(0.3)
+		task.wait(0.5)
 	end
 end
 
@@ -1755,15 +1735,7 @@ task.spawn(function()
 				local unplaced = getUnplaced()
 				if #unplaced == 0 then return end
 
-				local hipBtn = findHipToggle()
-				local hipWasOn = hipBtn and hipToggleIsOn(hipBtn)
-				local weFiredOff = false
-				if hipWasOn and firesignal then
-					pcall(function() firesignal(hipBtn.Activated) end)
-					weFiredOff = true
-					task.wait(0.3)
-				end
-
+				-- HIP is already OFF via setHipPause("place", true) from toggle callback
 				teleportToPlot(myPlot)
 				task.wait(1)
 				local ok = tryPlaceAll(buildGrid(), unplaced)
@@ -1776,19 +1748,7 @@ task.spawn(function()
 					end
 				end
 
-				-- Re-enable HIP AutoTreadmill: we fired 1 OFF earlier, so fire N ONs
-				-- until state comes back to ON (or up to 3 attempts). Re-lookup btn
-				-- in case HIP re-rendered its GUI mid-pass.
-				if weFiredOff and firesignal then
-					for attempt = 1, 3 do
-						local b = findHipToggle()
-						if not b then break end
-						if hipToggleIsOn(b) then break end
-						pcall(function() firesignal(b.Activated) end)
-						task.wait(0.4)
-					end
-				end
-
+				-- HIP re-enable is handled by setHipPause("place", false) when toggle turns off
 			end)
 			-- Auto turn OFF the toggle so UI matches the "done" state
 			pcall(function()
