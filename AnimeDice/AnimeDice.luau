@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Monitoring Anime Dice v1.1.0 (ultra-lightweight)
+-- NaruHub | Monitoring Anime Dice v1.3.0 (ultra-lightweight)
 -- Monitoring only -- no auto-roll/sell/equip, baca data → POST ke dashboard.
 
 ------------------------------------------------------------
@@ -230,6 +230,24 @@ local function collectInventory()
 	local inv = X.Inventory or {}
 	local allEntries = EntryRegistry:allEntries()
 
+	local slotUnitIds = {}
+	local slotsData = X.Slots or {}
+	for slotKey, slotVal in pairs(slotsData) do
+		if type(slotVal) == "table" and slotVal.unitId then
+			slotUnitIds[slotVal.unitId] = tonumber(slotKey) or slotKey
+		end
+	end
+
+	local towerUnitIds = {}
+	local towerData = X.TowerTeam or {}
+	if type(towerData) == "table" then
+		for _, uid in pairs(towerData) do
+			if type(uid) == "string" then
+				towerUnitIds[uid] = true
+			end
+		end
+	end
+
 	local units = {}
 	local backpack = {}
 	local totalUnitCount = 0
@@ -245,6 +263,22 @@ local function collectInventory()
 
 			if kind == "Unit" then
 				totalUnitCount += (entry.amount or 1)
+
+				local income, damage, chance, health
+				if cfg then
+					pcall(function() income = cfg:income() end)
+					pcall(function() damage = cfg:damage() end)
+					pcall(function() chance = cfg:chance() end)
+					pcall(function() health = cfg:health() end)
+				end
+
+				local placed = nil
+				if slotUnitIds[id] then
+					placed = "slot"
+				elseif towerUnitIds[id] then
+					placed = "tower"
+				end
+
 				table.insert(units, {
 					id = id,
 					name = entry.name,
@@ -255,6 +289,11 @@ local function collectInventory()
 					tier = RARITY_TIER[rarity] or 0,
 					mutation = entry.attributes and entry.attributes.mutation or nil,
 					level = entry.attributes and entry.attributes.level or nil,
+					income = income,
+					damage = damage,
+					chance = chance,
+					health = health,
+					placed = placed,
 				})
 			else
 				totalItemCount += (entry.amount or 1)
@@ -412,7 +451,7 @@ local function collectTowerSquad()
 			}
 		end
 
-		local squadData = X.TowerSquad or X.CombatSquad or X.BattleSquad or X.Squad or {}
+		local squadData = X.TowerTeam or {}
 		local squad = {}
 		if type(squadData) == "table" then
 			for idx, val in pairs(squadData) do
@@ -426,7 +465,7 @@ local function collectTowerSquad()
 		end
 
 		local equipped = nil
-		local eqId = X.EquippedFighter or X.EquippedUnit or X.Fighter or nil
+		local eqId = X.EquippedGear or nil
 		if eqId then
 			equipped = resolveUnit(type(eqId) == "table" and (eqId.unitId or eqId[1]) or eqId)
 		end
@@ -487,6 +526,11 @@ local function reportToMonitor()
 				mutation = u.mutation,
 				level = u.level,
 				amount = u.amount,
+				income = u.income,
+				damage = u.damage,
+				chance = u.chance,
+				health = u.health,
+				placed = u.placed,
 			})
 		end
 
@@ -560,7 +604,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v1.2.0",
+	Title = "NaruHub | Anime Dice v1.3.0",
 	Badge = "MONITOR",
 	TabWidth = 0,
 	Size = UDim2.fromOffset(380, 300),
