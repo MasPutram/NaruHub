@@ -812,30 +812,8 @@ function PosterPage() {
   const featuredKeys = new Set(topPicks.map(petKey));
   if (featured) featuredKeys.add(petKey(featured));
 
-  const rightPanelPets: Pet[] = [];
-  const rightSeen = new Set<string>();
-  for (const p of activePetsSorted) {
-    const k = petKey(p);
-    if (!featuredKeys.has(k) && !rightSeen.has(k)) {
-      rightSeen.add(k);
-      rightPanelPets.push(p);
-    }
-  }
-  for (const p of allSorted) {
-    if ((p.rate || 0) <= NOTABLE_THRESHOLD) continue;
-    const k = petKey(p);
-    if (!featuredKeys.has(k) && !rightSeen.has(k)) {
-      rightSeen.add(k);
-      rightPanelPets.push(p);
-    }
-  }
-  rightPanelPets.sort((a, b) => {
-    const ra = rarityRank(a.category, iconIdx);
-    const rb = rarityRank(b.category, iconIdx);
-    if (ra !== rb) return ra - rb;
-    return (b.rate || 0) - (a.rate || 0);
-  });
-  const rightPanelShown = rightPanelPets.slice(0, 8);
+  const rightPanelPets = activePetsSorted.filter((p) => !featuredKeys.has(petKey(p)));
+  const rightPanelShown = rightPanelPets;
   const shownInActiveKeys = new Set(rightPanelShown.map(petKey));
 
   const alreadyShownKeys = new Set([...Array.from(featuredKeys), ...topPicks.map(petKey), ...rightPanelShown.map(petKey)]);
@@ -882,14 +860,14 @@ function PosterPage() {
   });
   const divinePetCount = divineAll.length;
 
-  const statItems: { label: string; value: string; accent?: "mut" | "scramble" }[] = [
-    { label: "SPEED", value: fmtCompact(summary.speed) },
+  const statItems: { label: string; value: string; accent?: string }[] = [
+    { label: "SPEED", value: fmtCompact(summary.speed), accent: "speed" },
     { label: "CASH", value: fmtMoney(summary.money) },
-    { label: `POTENSI ${activeLimit} PET AKTIF`, value: fmtRate(potentialActiveRate) },
+    { label: `POTENSI ${activeLimit} PET AKTIF`, value: fmtRate(potentialActiveRate), accent: "potensi" },
     { label: "INCOME AKTIF", value: fmtRate(equippedIncome) },
     { label: "TOTAL PET DI TAS", value: `${allSorted.length} pets` },
     { label: "TOTAL EGG", value: `${totalEggs} eggs` },
-    { label: "PET DIVINE", value: `${divinePetCount}` },
+    { label: "PET DIVINE", value: `${divinePetCount}`, accent: "divine" },
     ...(summary.kandangLevel != null
       ? [{ label: "PEN LEVEL", value: `Lv. ${summary.kandangLevel}` }]
       : []),
@@ -902,7 +880,7 @@ function PosterPage() {
     ...(Number(summary.scrambleToken) > 0
       ? [{ label: "TOKEN SCRAMBLE", value: "× " + Math.round(Number(summary.scrambleToken)), accent: "scramble" as const }]
       : []),
-    { label: "TRAIL", value: summary.trail || "-" },
+    { label: "TRAIL", value: summary.trail || "-", accent: "trail" },
   ];
 
   const initials = accountInitials(accountName);
@@ -956,9 +934,21 @@ function PosterPage() {
         .stat-cell.mut-cell-stat { background: #f5f3ff; border-color: #7c3aed; }
         .stat-cell.mut-cell-stat .slabel { color: #7c3aed; }
         .stat-cell.mut-cell-stat .sval { color: #6d28d9; }
-        .stat-cell.scramble-cell-stat { background: #ecfdf5; border-color: #059669; }
-        .stat-cell.scramble-cell-stat .slabel { color: #059669; }
-        .stat-cell.scramble-cell-stat .sval { color: #047857; }
+        .stat-cell.scramble-cell-stat { background: #ecfdf5; border-color: #166534; }
+        .stat-cell.scramble-cell-stat .slabel { color: #166534; }
+        .stat-cell.scramble-cell-stat .sval { color: #14532d; }
+        .stat-cell.speed-cell-stat { background: #eff6ff; border-color: #2563eb; }
+        .stat-cell.speed-cell-stat .slabel { color: #2563eb; }
+        .stat-cell.speed-cell-stat .sval { color: #1d4ed8; }
+        .stat-cell.potensi-cell-stat { background: #fef2f2; border-color: #dc2626; }
+        .stat-cell.potensi-cell-stat .slabel { color: #dc2626; }
+        .stat-cell.potensi-cell-stat .sval { color: #b91c1c; }
+        .stat-cell.divine-cell-stat { background: #fefce8; border-color: #ca8a04; }
+        .stat-cell.divine-cell-stat .slabel { color: #ca8a04; }
+        .stat-cell.divine-cell-stat .sval { color: #a16207; }
+        .stat-cell.trail-cell-stat { background: #eff6ff; border-color: #2563eb; }
+        .stat-cell.trail-cell-stat .slabel { color: #2563eb; }
+        .stat-cell.trail-cell-stat .sval { color: #1d4ed8; }
 
         .top3 { display: flex; gap: 14px; margin-bottom: 18px; }
         .pick-card {
@@ -1041,11 +1031,11 @@ function PosterPage() {
           text-align: center; font-size: 16px; font-weight: 800; color: #1e293b;
           margin-bottom: 12px;
         }
-        .mut-group-label { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
-        .mut-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+        .mut-group-label { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+        .mut-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 6px; }
         .mut-cell {
-          background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 8px;
-          display: flex; align-items: center; gap: 8px; min-height: 86px;
+          background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 6px 8px;
+          display: flex; align-items: center; gap: 8px; min-height: 72px;
         }
         .mut-cell .mrate { font-size: 14px; font-weight: 800; color: #16a34a; }
         .mut-cell .mname { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1070,6 +1060,7 @@ function PosterPage() {
           border-bottom: 1px solid #e2e8f0;
         }
         .pet-row:last-child { border-bottom: none; }
+        .pet-row-top3 { background: #fefce8; border-left: 3px solid #ca8a04; }
         .pet-info { min-width: 0; flex: 1; }
         .pet-info .piname { font-size: 15px; font-weight: 800; color: #1e293b; }
         .pet-info .pirate { font-size: 14px; font-weight: 700; color: #16a34a; }
@@ -1256,7 +1247,7 @@ function PosterPage() {
 
             <div className="stat-grid">
               {statItems.map((s, i) => (
-                <div key={i} className={`stat-cell${s.accent === "mut" ? " mut-cell-stat" : ""}${s.accent === "scramble" ? " scramble-cell-stat" : ""}`}>
+                <div key={i} className={`stat-cell${s.accent ? ` ${s.accent}-cell-stat` : ""}`}>
                   <div className="slabel">{s.label}</div>
                   <div className="sval">{s.value}</div>
                 </div>
@@ -1345,11 +1336,20 @@ function PosterPage() {
                       <div className="mut-grid">
                         {items.map((p, i) => (
                           <div key={i} className="mut-cell">
-                            <PetIcon pet={p} size={70} />
+                            <PetIcon pet={p} size={60} />
                             <div style={{ minWidth: 0, overflow: "hidden" }}>
                               <div className="mrate">{fmtRate(p.rate)}</div>
                               <div className="mname">{p.name || displayName(p.category)}</div>
                               {p.weight ? <div className="mweight">{fmtWeight(p.weight)}</div> : null}
+                              {p.mutations && p.mutations.length > 0 && (
+                                <div style={{ display: "flex", gap: 3, marginTop: 2, flexWrap: "wrap" }}>
+                                  {p.mutations.map((m, mi) => (
+                                    <span key={mi} className="mut-tag" style={{ ...mutBadgeStyle(m), fontSize: 8, padding: "1px 6px" }}>
+                                      {mutDisplayName(m)}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -1409,31 +1409,6 @@ function PosterPage() {
               </div>
             )}
 
-            {divineAll.length > 0 && (
-              <div className="egg-section">
-                <div className="section-header" style={{ background: "#ede9fe", color: "#6d28d9" }}>EGG / PET DIVINE ({divineAll.length})</div>
-                <div className="egg-grid">
-                  {divineAll.sort((a, b) => (b.rate || 0) - (a.rate || 0)).slice(0, 12).map((p, i) => {
-                    const isEgg = eggKeys.has(petKey(p)) || growingEggKeys.has(petKey(p));
-                    return (
-                      <div key={i} className="egg-cell" style={{ borderColor: "#7c3aed" }}>
-                        <PetIcon pet={p} size={70} />
-                        <div style={{ minWidth: 0, overflow: "hidden" }}>
-                          <div className="ename">
-                            {p.mutations && p.mutations.length > 0
-                              ? p.mutations.map((m) => mutDisplayName(m)).join(" + ") + " " + displayName(p.category)
-                              : displayName(p.category)}
-                          </div>
-                          {p.rate ? <div className="erate">{fmtRate(p.rate)}</div> : null}
-                          {isEgg && <span className="egg-badge">TELUR</span>}
-                          {p.weight ? <div className="eweight">{fmtWeight(p.weight)}</div> : null}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* RIGHT COLUMN */}
@@ -1449,7 +1424,7 @@ function PosterPage() {
                 {rightPanelShown.map((p, i) => {
                   const rowRarity = petRarity(p.category, iconIdx);
                   return (
-                  <div key={i} className="pet-row">
+                  <div key={i} className={`pet-row${i < 3 ? " pet-row-top3" : ""}`}>
                     <PetIcon pet={p} size={48} />
                     <div className="pet-info">
                       <div className="piname">{p.name || displayName(p.category)}</div>
@@ -1479,19 +1454,37 @@ function PosterPage() {
               </div>
             )}
 
-            <div className="inventory-box">
-              <div className="inv-label">TOTAL PET DI TAS</div>
-              <div className="inv-row">
-                <span className="inv-count">{allSorted.length}</span>
-                {inactiveTotalRate > 0 && (
-                  <span className="inv-total">total {fmtRate(inactiveTotalRate)}</span>
-                )}
-              </div>
-              <div className="inv-label" style={{ marginTop: 8 }}>TOTAL EGG</div>
-              <div className="inv-row">
-                <span className="inv-count">{totalEggs}</span>
-              </div>
-            </div>
+            {divineAll.length > 0 && (
+              <>
+                <div className="right-header" style={{ background: "#fefce8", borderColor: "#ca8a04" }}>
+                  <div style={{ width: 18, height: 18, background: "#ca8a04", borderRadius: "50%" }} />
+                  <div className="count" style={{ color: "#a16207" }}>EGG / PET DIVINE ({divineAll.length})</div>
+                </div>
+                <div className="pet-list">
+                  {divineAll.sort((a, b) => (b.rate || 0) - (a.rate || 0)).map((p, i) => {
+                    const isEgg = eggKeys.has(petKey(p)) || growingEggKeys.has(petKey(p));
+                    return (
+                      <div key={i} className="pet-row">
+                        <PetIcon pet={p} size={48} />
+                        <div className="pet-info">
+                          <div className="piname">{p.name || displayName(p.category)}</div>
+                          <div className="pirate">{fmtRate(p.rate)}</div>
+                          {p.weight ? <div className="piweight">{fmtWeight(p.weight)}</div> : null}
+                          <div className="pet-badges">
+                            {isEgg && <span className="egg-badge">TELUR</span>}
+                            {p.mutations && p.mutations.length > 0 && (
+                              <div className="mut-tag" style={mutBadgeStyle(p.mutations[0])}>
+                                {p.mutations.map((m) => mutDisplayName(m)).join(" + ")}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
 
             <div className="price-box">
               <div className="price-label">{isSold ? "TERJUAL" : "PRICE ACC"}</div>
