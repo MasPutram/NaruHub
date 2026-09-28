@@ -813,7 +813,7 @@ function PosterPage() {
   if (featured) featuredKeys.add(petKey(featured));
 
   const rightPanelPets = activePetsSorted.filter((p) => !featuredKeys.has(petKey(p)));
-  const rightPanelShown = rightPanelPets;
+  const rightPanelShown = rightPanelPets.slice(0, 8);
   const shownInActiveKeys = new Set(rightPanelShown.map(petKey));
 
   const alreadyShownKeys = new Set([...Array.from(featuredKeys), ...topPicks.map(petKey), ...rightPanelShown.map(petKey)]);
@@ -1060,7 +1060,6 @@ function PosterPage() {
           border-bottom: 1px solid #e2e8f0;
         }
         .pet-row:last-child { border-bottom: none; }
-        .pet-row-top3 { background: #fefce8; border-left: 3px solid #ca8a04; }
         .pet-info { min-width: 0; flex: 1; }
         .pet-info .piname { font-size: 15px; font-weight: 800; color: #1e293b; }
         .pet-info .pirate { font-size: 14px; font-weight: 700; color: #16a34a; }
@@ -1424,7 +1423,7 @@ function PosterPage() {
                 {rightPanelShown.map((p, i) => {
                   const rowRarity = petRarity(p.category, iconIdx);
                   return (
-                  <div key={i} className={`pet-row${i < 3 ? " pet-row-top3" : ""}`}>
+                  <div key={i} className="pet-row">
                     <PetIcon pet={p} size={48} />
                     <div className="pet-info">
                       <div className="piname">{p.name || displayName(p.category)}</div>
