@@ -1400,6 +1400,36 @@ function PosterPage() {
             )}
           </div>
 
+          {divineAll.length > 0 && (
+            <div className="poster-divine-full">
+              <div className="section-header" style={{ background: "#fefce8", color: "#a16207" }}>EGG / PET DIVINE ({divineAll.length})</div>
+              <div className="divine-grid">
+                {divineAll.sort((a, b) => (b.rate || 0) - (a.rate || 0)).map((p, i) => {
+                  const isEgg = eggKeys.has(petKey(p)) || growingEggKeys.has(petKey(p));
+                  return (
+                    <div key={i} className="egg-cell" style={{ borderColor: "#ca8a04" }}>
+                      <PetIcon pet={p} size={56} />
+                      <div style={{ minWidth: 0, overflow: "hidden" }}>
+                        <div className="ename">{p.name || displayName(p.category)}</div>
+                        {p.rate ? <div className="erate">{fmtRate(p.rate)}</div> : null}
+                        {isEgg && <span className="egg-badge">TELUR</span>}
+                        {p.mutations && p.mutations.length > 0 && (
+                          <div style={{ display: "flex", gap: 3, marginTop: 2, flexWrap: "wrap" }}>
+                            {p.mutations.map((m, mi) => (
+                              <span key={mi} className="mut-tag" style={{ ...mutBadgeStyle(m), fontSize: 8, padding: "1px 6px" }}>
+                                {mutDisplayName(m)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {mutPetsFlat.length > 0 && (
             <div className="poster-divine-full">
               <div className="section-header">PET MUTASI LAIN</div>
@@ -1476,36 +1506,6 @@ function PosterPage() {
                   </div>
                 </div>
               )}
-            </div>
-          )}
-
-          {divineAll.length > 0 && (
-            <div className="poster-divine-full">
-              <div className="section-header" style={{ background: "#fefce8", color: "#a16207" }}>EGG / PET DIVINE ({divineAll.length})</div>
-              <div className="divine-grid">
-                {divineAll.sort((a, b) => (b.rate || 0) - (a.rate || 0)).map((p, i) => {
-                  const isEgg = eggKeys.has(petKey(p)) || growingEggKeys.has(petKey(p));
-                  return (
-                    <div key={i} className="egg-cell" style={{ borderColor: "#ca8a04" }}>
-                      <PetIcon pet={p} size={56} />
-                      <div style={{ minWidth: 0, overflow: "hidden" }}>
-                        <div className="ename">{p.name || displayName(p.category)}</div>
-                        {p.rate ? <div className="erate">{fmtRate(p.rate)}</div> : null}
-                        {isEgg && <span className="egg-badge">TELUR</span>}
-                        {p.mutations && p.mutations.length > 0 && (
-                          <div style={{ display: "flex", gap: 3, marginTop: 2, flexWrap: "wrap" }}>
-                            {p.mutations.map((m, mi) => (
-                              <span key={mi} className="mut-tag" style={{ ...mutBadgeStyle(m), fontSize: 8, padding: "1px 6px" }}>
-                                {mutDisplayName(m)}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
             </div>
           )}
 
