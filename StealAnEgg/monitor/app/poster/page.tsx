@@ -913,7 +913,7 @@ function PosterPage() {
         .poster {
           width: 1080px; min-height: 600px; background: #DFE7F0; padding: 32px;
           font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #1e293b;
-          display: flex; gap: 16px;
+          display: flex; flex-wrap: wrap; gap: 16px;
         }
         .left { width: 608px; flex-shrink: 0; }
         .right { width: 392px; flex-shrink: 0; }
@@ -1102,6 +1102,21 @@ function PosterPage() {
         .egg-cell .erate { font-size: 13px; font-weight: 800; color: #16a34a; }
         .egg-cell .etime { font-size: 12px; font-weight: 700; color: #2563eb; }
         .egg-cell .eweight { font-size: 10px; color: #64748b; }
+
+        .poster-bottom {
+          width: 100%; display: flex; gap: 16px;
+        }
+        .poster-bottom .egg-section { flex: 1; margin-bottom: 0; }
+
+        .poster-divine-full {
+          width: 100%;
+        }
+        .divine-list {
+          display: grid; grid-template-columns: 1fr; gap: 0;
+          background: #fff; border: 1px solid #cbd5e1; border-radius: 16px;
+          padding: 10px 16px;
+        }
+        .divine-list .pet-row { padding: 8px 0; }
 
         .account-tag {
           position: absolute; bottom: 12px; right: 16px;
@@ -1359,54 +1374,6 @@ function PosterPage() {
               </>
             )}
 
-            {growingEggsRemaining.length > 0 && (
-              <div className="egg-section">
-                <div className="section-header">TELUR YANG SEDANG TUMBUH</div>
-                <div className="egg-grid">
-                  {growingEggsRemaining.slice(0, 9).map((e, i) => (
-                    <div key={i} className="egg-cell">
-                      <PetIcon pet={e} size={70} />
-                      <div style={{ minWidth: 0, overflow: "hidden" }}>
-                        <div className="ename">
-                          {e.mutations && e.mutations.length > 0
-                            ? e.mutations.map((m) => mutDisplayName(m)).join(" + ") + " " + displayName(e.category)
-                            : displayName(e.category)}
-                        </div>
-                        {e.ready ? (
-                          <div className="erate">SIAP MENETAS!</div>
-                        ) : (
-                          <div className="etime">{fmtDuration(e.remainingSeconds)}</div>
-                        )}
-                        {e.rate ? <div className="erate">{fmtRate(e.rate)}</div> : null}
-                        {e.weight ? <div className="eweight">{fmtWeight(e.weight)}</div> : null}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {backpackEggsRemaining.length > 0 && (
-              <div className="egg-section">
-                <div className="section-header">TELUR DI TAS (BELUM DITARUH)</div>
-                <div className="egg-grid">
-                  {backpackEggsRemaining.slice(0, 9).map((e, i) => (
-                    <div key={i} className="egg-cell">
-                      <PetIcon pet={e} size={70} />
-                      <div style={{ minWidth: 0, overflow: "hidden" }}>
-                        <div className="ename">
-                          {e.mutations && e.mutations.length > 0
-                            ? e.mutations.map((m) => mutDisplayName(m)).join(" + ") + " " + displayName(e.category)
-                            : displayName(e.category)}
-                        </div>
-                        {e.rate ? <div className="erate">{fmtRate(e.rate)}</div> : null}
-                        {e.weight ? <div className="eweight">{fmtWeight(e.weight)}</div> : null}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
           </div>
 
@@ -1453,38 +1420,6 @@ function PosterPage() {
               </div>
             )}
 
-            {divineAll.length > 0 && (
-              <>
-                <div className="right-header" style={{ background: "#fefce8", borderColor: "#ca8a04" }}>
-                  <div style={{ width: 18, height: 18, background: "#ca8a04", borderRadius: "50%" }} />
-                  <div className="count" style={{ color: "#a16207" }}>EGG / PET DIVINE ({divineAll.length})</div>
-                </div>
-                <div className="pet-list">
-                  {divineAll.sort((a, b) => (b.rate || 0) - (a.rate || 0)).map((p, i) => {
-                    const isEgg = eggKeys.has(petKey(p)) || growingEggKeys.has(petKey(p));
-                    return (
-                      <div key={i} className="pet-row">
-                        <PetIcon pet={p} size={48} />
-                        <div className="pet-info">
-                          <div className="piname">{p.name || displayName(p.category)}</div>
-                          <div className="pirate">{fmtRate(p.rate)}</div>
-                          {p.weight ? <div className="piweight">{fmtWeight(p.weight)}</div> : null}
-                          <div className="pet-badges">
-                            {isEgg && <span className="egg-badge">TELUR</span>}
-                            {p.mutations && p.mutations.length > 0 && (
-                              <div className="mut-tag" style={mutBadgeStyle(p.mutations[0])}>
-                                {p.mutations.map((m) => mutDisplayName(m)).join(" + ")}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-
             <div className="price-box">
               <div className="price-label">{isSold ? "TERJUAL" : "PRICE ACC"}</div>
               {isSold && soldPrice > 0 ? (
@@ -1508,6 +1443,87 @@ function PosterPage() {
               </div>
             )}
           </div>
+
+          {(growingEggsRemaining.length > 0 || backpackEggsRemaining.length > 0) && (
+            <div className="poster-bottom">
+              {growingEggsRemaining.length > 0 && (
+                <div className="egg-section">
+                  <div className="section-header">TELUR YANG SEDANG TUMBUH</div>
+                  <div className="egg-grid">
+                    {growingEggsRemaining.slice(0, 9).map((e, i) => (
+                      <div key={i} className="egg-cell">
+                        <PetIcon pet={e} size={70} />
+                        <div style={{ minWidth: 0, overflow: "hidden" }}>
+                          <div className="ename">
+                            {e.mutations && e.mutations.length > 0
+                              ? e.mutations.map((m) => mutDisplayName(m)).join(" + ") + " " + displayName(e.category)
+                              : displayName(e.category)}
+                          </div>
+                          {e.ready ? (
+                            <div className="erate">SIAP MENETAS!</div>
+                          ) : (
+                            <div className="etime">{fmtDuration(e.remainingSeconds)}</div>
+                          )}
+                          {e.rate ? <div className="erate">{fmtRate(e.rate)}</div> : null}
+                          {e.weight ? <div className="eweight">{fmtWeight(e.weight)}</div> : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {backpackEggsRemaining.length > 0 && (
+                <div className="egg-section">
+                  <div className="section-header">TELUR DI TAS (BELUM DITARUH)</div>
+                  <div className="egg-grid">
+                    {backpackEggsRemaining.slice(0, 9).map((e, i) => (
+                      <div key={i} className="egg-cell">
+                        <PetIcon pet={e} size={70} />
+                        <div style={{ minWidth: 0, overflow: "hidden" }}>
+                          <div className="ename">
+                            {e.mutations && e.mutations.length > 0
+                              ? e.mutations.map((m) => mutDisplayName(m)).join(" + ") + " " + displayName(e.category)
+                              : displayName(e.category)}
+                          </div>
+                          {e.rate ? <div className="erate">{fmtRate(e.rate)}</div> : null}
+                          {e.weight ? <div className="eweight">{fmtWeight(e.weight)}</div> : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {divineAll.length > 0 && (
+            <div className="poster-divine-full">
+              <div className="section-header" style={{ background: "#fefce8", color: "#a16207" }}>EGG / PET DIVINE ({divineAll.length})</div>
+              <div className="divine-list">
+                {divineAll.sort((a, b) => (b.rate || 0) - (a.rate || 0)).map((p, i) => {
+                  const isEgg = eggKeys.has(petKey(p)) || growingEggKeys.has(petKey(p));
+                  return (
+                    <div key={i} className="pet-row">
+                      <PetIcon pet={p} size={48} />
+                      <div className="pet-info">
+                        <div className="piname">{p.name || displayName(p.category)}</div>
+                        <div className="pirate">{fmtRate(p.rate)}</div>
+                        {p.weight ? <div className="piweight">{fmtWeight(p.weight)}</div> : null}
+                        <div className="pet-badges">
+                          {isEgg && <span className="egg-badge">TELUR</span>}
+                          {p.mutations && p.mutations.length > 0 && (
+                            <div className="mut-tag" style={mutBadgeStyle(p.mutations[0])}>
+                              {p.mutations.map((m) => mutDisplayName(m)).join(" + ")}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {owner.trim() && (
             <div className="watermark-layer">
