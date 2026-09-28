@@ -965,7 +965,7 @@ function UnitCardContent({ u, rc, ownerTag }: { u: Unit; rc: string; ownerTag?: 
     <div className="ucard" style={{ borderColor: rc + "25" }}>
       <div className="ucard-top">
         {ownerTag && <span className="ub" style={{ background: "rgba(34,211,238,.08)", color: "var(--cyan)", fontSize: 8 }}>@{ownerTag}</span>}
-        {u.grade && <span className="ub" style={{ background: "rgba(251,191,36,.12)", color: "var(--gold)", fontWeight: 900 }}>{u.grade}</span>}
+        {u.grade && !u.variant && <span className="ub" style={{ background: "rgba(251,191,36,.12)", color: "var(--gold)", fontWeight: 900 }}>{u.grade}</span>}
         {u.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{u.variant === "Titanic" ? "S" : u.variant === "Huge" ? "A+" : u.variant[0]}</span>}
         {u.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {u.level}</span>}
         <span className="ub" style={{ background: rc + "20", color: rc }}>{u.rarity.toUpperCase()}</span>
@@ -1014,7 +1014,7 @@ function SlotCardContent({ s, rc }: { s: SlotData; rc: string }) {
     <>
       <div className="slot-name">{s.name}</div>
       <div className="slot-tags">
-        {s.grade && <span className="ub" style={{ background: "rgba(251,191,36,.12)", color: "var(--gold)", fontWeight: 900 }}>{s.grade}</span>}
+        {s.grade && !s.variant && <span className="ub" style={{ background: "rgba(251,191,36,.12)", color: "var(--gold)", fontWeight: 900 }}>{s.grade}</span>}
         {s.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{s.variant === "Titanic" ? "S" : s.variant === "Huge" ? "A+" : s.variant[0]}</span>}
         {s.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {s.level}</span>}
         <span className="ub" style={{ background: rc + "20", color: rc }}>{(s.rarity || "").toUpperCase()}</span>
