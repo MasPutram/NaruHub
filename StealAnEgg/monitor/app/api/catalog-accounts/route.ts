@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { redis } from "@/lib/redis";
+import { redis, ACCOUNT_DEVICE_MAP_KEY } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +14,13 @@ export async function GET() {
       keys.push(...batch);
     } while (cursor !== "0");
 
+    const deviceMapRaw = await redis.get<string>(ACCOUNT_DEVICE_MAP_KEY);
+    const deviceMap: Record<string, string> = deviceMapRaw
+      ? typeof deviceMapRaw === "string" ? JSON.parse(deviceMapRaw) : deviceMapRaw
+      : {};
+
     if (keys.length === 0) {
-      return NextResponse.json({ accounts: [] });
+      return NextResponse.json({ accounts: [], deviceMap });
     }
 
     const values: any[] = await redis.mget(...keys);
@@ -32,8 +37,8 @@ export async function GET() {
       };
     }).filter(Boolean);
 
-    return NextResponse.json({ accounts: rows });
+    return NextResponse.json({ accounts: rows, deviceMap });
   } catch (e: any) {
-    return NextResponse.json({ accounts: [], error: e.message }, { status: 500 });
+    return NextResponse.json({ accounts: [], deviceMap: {}, error: e.message }, { status: 500 });
   }
 }

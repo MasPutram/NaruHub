@@ -8,6 +8,21 @@ interface Pet {
   name?: string;
   rate: number;
   mutations?: string[];
+  weight?: number;
+  ready?: boolean;
+  remainingSeconds?: number;
+  rarity?: string;
+  uid?: string;
+  _equipped?: boolean;
+  _bag?: boolean;
+  _from?: string;
+}
+
+interface ToolItem {
+  category?: string;
+  name?: string;
+  count?: number;
+  itemType?: string;
 }
 
 interface Account {
@@ -15,6 +30,7 @@ interface Account {
   money: number | null;
   speed: number | null;
   incomeAktif: number | null;
+  incomePotensi: number | null;
   incomeEggBackpack: number | null;
   incomeEggSedangTumbuh: number | null;
   highValuePetTotal: number | null;
@@ -22,6 +38,7 @@ interface Account {
   treadmillLevel: number | null;
   petsCount: number;
   stolenCount: number;
+  bossToken?: number | null;
   mutationToken?: number | null;
   scrambleToken?: number | null;
   trail?: string | null;
@@ -40,6 +57,8 @@ interface Account {
     allPets?: Pet[];
     growingEggs?: Pet[];
     backpackEggs?: Pet[];
+    stolenItems?: Pet[];
+    tools?: ToolItem[];
   };
 }
 
@@ -91,7 +110,8 @@ function deviceBlockStart(num: number | null): number | null {
   return Math.floor((num - 1) / 10) * 10 + 1;
 }
 
-function deviceLabel(name: string): string | null {
+function deviceLabel(name: string, devMap?: Record<string, string>): string | null {
+  if (devMap && devMap[name]) return devMap[name];
   const start = deviceBlockStart(accountNumber(name));
   return start === null ? null : "SAE " + start;
 }
@@ -104,6 +124,183 @@ function mutColor(mut: string): string {
   if (m.includes("titanium")) return "#64748b";
   return "#6366f1";
 }
+
+let iconIndex: Record<string, string> | null = null;
+let iconIndexPromise: Promise<Record<string, string>> | null = null;
+function loadIconIndex(): Promise<Record<string, string>> {
+  if (iconIndex) return Promise.resolve(iconIndex);
+  if (!iconIndexPromise) {
+    iconIndexPromise = fetch("/icons/index.json")
+      .then((r) => r.json())
+      .then((data) => { iconIndex = data; return data; })
+      .catch(() => { iconIndex = {}; return {}; });
+  }
+  return iconIndexPromise;
+}
+function petIconUrl(category: string, index: Record<string, string>): string | null {
+  const filename = index[category];
+  if (filename) return `/icons/normal/${encodeURIComponent(filename)}`;
+  return null;
+}
+function petRarity(category: string, index: Record<string, string>): string | null {
+  const filename = index[category];
+  if (!filename) return null;
+  const m = filename.match(/\[([^\]]+)\]/);
+  return m ? m[1] : null;
+}
+function rarityColor(rarity: string | null): string {
+  switch (rarity) {
+    case "Divine": return "#e879f9";
+    case "Eternal": return "#f97316";
+    case "Secret": return "#ef4444";
+    case "Cosmic": return "#22d3ee";
+    case "Mythic": return "#a78bfa";
+    case "Legendary": return "#fbbf24";
+    case "Epic": return "#818cf8";
+    case "Rare": return "#34d399";
+    case "Uncommon": return "#94a3b8";
+    default: return "var(--dim)";
+  }
+}
+function mutationClass(name: string): string {
+  const k = String(name || "").trim().toLowerCase();
+  if (!k) return "pg-mutation mut-default";
+  if (/^gold/.test(k)) return "pg-mutation mut-golden";
+  if (/^silver/.test(k)) return "pg-mutation mut-silver";
+  if (/^rainbow/.test(k)) return "pg-mutation mut-rainbow";
+  if (/^fract/.test(k) || k === "boss fractured") return "pg-mutation mut-fractured";
+  if (/^boss/.test(k)) return "pg-mutation mut-boss";
+  if (/^sakura/.test(k)) return "pg-mutation mut-sakura";
+  if (/^froz/.test(k) || k === "ice") return "pg-mutation mut-frozen";
+  if (/^magma/.test(k) || k === "lava") return "pg-mutation mut-magma";
+  if (/^candy/.test(k)) return "pg-mutation mut-candy";
+  if (/^shock/.test(k)) return "pg-mutation mut-shocked";
+  if (/^scare/.test(k)) return "pg-mutation mut-scared";
+  if (/^alpha/.test(k)) return "pg-mutation mut-alpha";
+  if (k === "2x" || /^double/.test(k)) return "pg-mutation mut-2x";
+  return "pg-mutation mut-default";
+}
+function fmtCompactNum(v: number | null | undefined): string {
+  if (v == null) return "-";
+  const n = Number(v);
+  const abs = Math.abs(n);
+  if (abs >= 1e12) return (n / 1e12).toFixed(1) + "T";
+  if (abs >= 1e9) return (n / 1e9).toFixed(1) + "B";
+  if (abs >= 1e6) return (n / 1e6).toFixed(1) + "M";
+  if (abs >= 1e3) return (n / 1e3).toFixed(1) + "K";
+  return n.toLocaleString("en-US");
+}
+function fmtEggTimer(secs: number): string {
+  if (secs <= 0) return "0s";
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  const s = Math.floor(secs % 60);
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function PetIcon({ category, name, size = 32 }: { category: string; name: string; size?: number }) {
+  const [index, setIndex] = useState<Record<string, string>>({});
+  useEffect(() => { loadIconIndex().then(setIndex); }, []);
+  const staticSrc = petIconUrl(category, index);
+  const fallbackSrc = `/api/pet-icon?category=${encodeURIComponent(category)}`;
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setSrc(staticSrc); setFailed(false); }, [staticSrc]);
+  if (!src || failed) {
+    if (!staticSrc && !failed && category) {
+      return <img src={fallbackSrc} alt={name} width={size} height={size} style={{ borderRadius: 6, objectFit: "contain", background: "#1c1c2b", flexShrink: 0 }} onError={() => setFailed(true)} />;
+    }
+    return <div style={{ width: size, height: size, borderRadius: 6, background: "#262640", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.35, color: "var(--dim)", flexShrink: 0 }}>{(name || "?")[0]}</div>;
+  }
+  return <img src={src} alt={name} width={size} height={size} style={{ borderRadius: 6, objectFit: "contain", background: "#1c1c2b", flexShrink: 0 }} onError={() => { if (staticSrc && !failed) setSrc(fallbackSrc); else setFailed(true); }} />;
+}
+
+function PetGrid({ pets, idx, showBadges = false }: { pets: Pet[]; idx: Record<string, string>; showBadges?: boolean }) {
+  const sorted = [...(pets || [])].sort((a, b) => (b.rate || 0) - (a.rate || 0));
+  if (sorted.length === 0) return <div className="detail-empty">Kosong.</div>;
+  return (
+    <div className="pet-grid">
+      {sorted.map((p, i) => {
+        const rar = petRarity(p.category, idx);
+        const rc = rarityColor(rar);
+        return (
+          <div key={i} className="pg-card">
+            {showBadges && (rar || p._equipped || p._bag) && (
+              <div className="pg-badges">
+                {rar && <span className="pg-badge-rarity" style={{ background: rc + "22", color: rc, border: `1px solid ${rc}66` }}>{rar.toUpperCase()}</span>}
+                {p._equipped && <span className="pg-badge-role equipped">EQUIPPED</span>}
+                {p._bag && !p._equipped && <span className="pg-badge-role bag">BAG</span>}
+              </div>
+            )}
+            <PetIcon category={p.category} name={p.name || p.category} size={36} />
+            <div className="pg-info">
+              <div className="pg-name">{p.name || p.category}</div>
+              <div className="pg-meta">
+                <span className="pg-rate">{fmtRate(p.rate)}</span>
+                {!showBadges && rar && <span className="pg-rarity" style={{ background: rc + "18", color: rc, border: `1px solid ${rc}33` }}>{rar}</span>}
+                {p.weight != null && <span className="pg-weight-inline">{Number(p.weight).toLocaleString()} Kg</span>}
+                {(Array.isArray(p.mutations) ? p.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{m}</span>)}
+              </div>
+              {showBadges && p.uid && <div className="pg-uid">UID: {String(p.uid).slice(0, 8)}</div>}
+              {p._from && <div className="pg-from">{p._from}</div>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function GrowingEggGrid({ eggs, idx }: { eggs: Pet[]; idx: Record<string, string> }) {
+  if (!eggs || eggs.length === 0) return <div className="detail-empty">Tidak ada telur yang sedang tumbuh.</div>;
+  const sorted = [...eggs].sort((a, b) => (a.remainingSeconds ?? 9999999) - (b.remainingSeconds ?? 9999999));
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
+      {sorted.map((egg, i) => {
+        const isReady = egg.ready || (egg.remainingSeconds != null && egg.remainingSeconds <= 0);
+        const remaining = egg.remainingSeconds ?? 0;
+        const totalTime = 8 * 3600;
+        const elapsed = totalTime - remaining;
+        const pct = isReady ? 100 : Math.min(100, Math.max(0, Math.round((elapsed / totalTime) * 100)));
+        const rar = petRarity(egg.category, idx);
+        const rc = rarityColor(rar);
+        const circumference = 2 * Math.PI * 17;
+        const strokeDashoffset = circumference - (pct / 100) * circumference;
+        const ringColor = isReady ? "var(--gold)" : "var(--green)";
+        return (
+          <div key={i} className={`egg-card ${isReady ? "ready" : ""}`}>
+            <div className="egg-timer-ring">
+              <svg width="44" height="44" viewBox="0 0 44 44">
+                <circle cx="22" cy="22" r="17" fill="none" stroke="var(--card-border)" strokeWidth="3" />
+                <circle cx="22" cy="22" r="17" fill="none" stroke={ringColor} strokeWidth="3" strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={strokeDashoffset} style={{ transition: "stroke-dashoffset .5s" }} />
+              </svg>
+              <span className="etr-text" style={{ color: ringColor }}>{pct}%</span>
+            </div>
+            <PetIcon category={egg.category} name={egg.name || egg.category} size={36} />
+            <div className="egg-info">
+              <div className="egg-name">{egg.name || egg.category}</div>
+              <div className="egg-sub">
+                <span className="egg-rate">{fmtRate(egg.rate)}</span>
+                {rar && <span className="pg-rarity" style={{ background: rc + "18", color: rc, border: `1px solid ${rc}33` }}>{rar}</span>}
+                {(Array.isArray(egg.mutations) ? egg.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{m}</span>)}
+              </div>
+              <div style={{ marginTop: 3, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                {isReady ? (
+                  <span className="egg-ready-badge">SIAP MENETAS</span>
+                ) : (
+                  <span className="egg-time-label" style={{ color: "var(--green)" }}>{fmtEggTimer(remaining)} tersisa</span>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+type DetailTab = "pets" | "eggs" | "stolen" | "tools";
 
 const POTENSI_EQUIP = 19;
 
@@ -153,6 +350,7 @@ type TabMode = "catalog" | "sold";
 export default function CatalogPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [soldAccounts, setSoldAccounts] = useState<Account[]>([]);
+  const [deviceMap, setDeviceMap] = useState<Record<string, string>>({});
   const [sortMode, setSortMode] = useState<SortMode>("name");
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
@@ -218,6 +416,13 @@ export default function CatalogPage() {
   const [summaryFilterMutation, setSummaryFilterMutation] = useState(false);
   type SummarySort = "nomor" | "speed_desc" | "income_desc" | "harga_asc" | "harga_desc";
   const [summarySort, setSummarySort] = useState<SummarySort>("nomor");
+
+  const [detailOpen, setDetailOpen] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<DetailTab>("pets");
+  const [iconIdx, setIconIdx] = useState<Record<string, string>>({});
+  const [rarityFilter, setRarityFilter] = useState<string>("ALL");
+  useEffect(() => { loadIconIndex().then(setIconIdx); }, []);
+  useEffect(() => { setRarityFilter("ALL"); }, [detailTab]);
 
   // Build + capture a single PNG that lists every catalog account (code | speed |
   // income potensi | total telur | mutasi | harga) with a police-line style
@@ -779,6 +984,7 @@ export default function CatalogPage() {
       const res = await fetch("/api/catalog-accounts");
       const data = await res.json();
       setAccounts(data.accounts || []);
+      if (data.deviceMap) setDeviceMap(data.deviceMap);
     } catch {}
   }, []);
 
@@ -807,7 +1013,7 @@ export default function CatalogPage() {
       list = list.filter(
         (a) =>
           a.sourceAccount.toLowerCase().includes(q) ||
-          (deviceLabel(a.sourceAccount) || "").toLowerCase().includes(q)
+          (deviceLabel(a.sourceAccount, deviceMap) || "").toLowerCase().includes(q)
       );
     }
     const minP = Number(minPrice) * 1000;
@@ -985,15 +1191,6 @@ export default function CatalogPage() {
         .cc-stat.cc-scramble .cslabel { color: #fff; }
         .cc-stat.cc-scramble .csval { color: #fff; font-weight: 800; }
 
-        .cc-pets { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 14px; }
-        .cc-pet {
-          background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 8px;
-          padding: 4px 8px; text-align: center; min-width: 80px; flex-shrink: 0;
-        }
-        .cc-pet .cpname { font-size: 10px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 72px; }
-        .cc-pet .cprate { font-size: 10px; color: var(--gold); font-weight: 700; }
-        .cc-pet .cpmut { font-size: 8px; font-weight: 700; }
-
         .btn-download-all {
           background: #8b5cf6; color: #fff; border: none; border-radius: 10px;
           padding: 10px 24px; font-size: 13px; font-weight: 800; cursor: pointer;
@@ -1051,6 +1248,121 @@ export default function CatalogPage() {
         .catalog-table a { color: var(--accent); text-decoration: none; font-weight: 700; }
         .catalog-table a:hover { text-decoration: underline; }
         .catalog-table .tsold { color: var(--red); font-weight: 800; }
+
+        .cc-stat.cc-potensi .csval { color: var(--green); }
+        .cc-stat.cc-trail .csval { color: var(--accent2); font-size: 13px; }
+        .catalog-card { cursor: pointer; }
+        .catalog-card.sold-card { cursor: default; }
+
+        .cc-pets { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 14px; }
+        .cc-pet {
+          background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 8px;
+          padding: 4px 8px; display: flex; align-items: center; gap: 6px; min-width: 80px; flex-shrink: 0;
+        }
+        .cc-pet-info { min-width: 0; }
+        .cc-pet .cpname { font-size: 10px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 72px; }
+        .cc-pet .cprate { font-size: 10px; color: var(--gold); font-weight: 700; }
+        .cc-pet .cpmut { font-size: 8px; font-weight: 700; }
+
+        .detail-modal {
+          background: var(--card); border: 1px solid var(--card-border); border-radius: 16px;
+          width: 90vw; max-width: 900px; max-height: 90vh; overflow-y: auto;
+          padding: 0;
+        }
+        .dm-header {
+          display: flex; align-items: center; gap: 10px; padding: 18px 24px;
+          border-bottom: 1px solid var(--card-border); position: sticky; top: 0;
+          background: var(--card); z-index: 10;
+        }
+        .dm-name { font-size: 20px; font-weight: 800; }
+        .dm-stats {
+          display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+          gap: 8px; padding: 16px 24px;
+        }
+        .dms {
+          background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 10px;
+          padding: 8px 12px;
+        }
+        .dms-label { font-size: 10px; color: var(--dim); font-weight: 700; letter-spacing: .5px; }
+        .dms-val { font-size: 16px; font-weight: 800; margin-top: 2px; }
+        .dm-tabs {
+          display: flex; gap: 0; padding: 0 24px; border-bottom: 1px solid var(--card-border);
+        }
+        .dm-tab {
+          background: none; border: none; color: var(--dim); font-size: 13px; font-weight: 700;
+          padding: 12px 18px; cursor: pointer; border-bottom: 2px solid transparent;
+          transition: all .15s;
+        }
+        .dm-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .dm-tab:hover { color: var(--ink); }
+        .dm-body { padding: 16px 24px; }
+
+        .rarity-chips { display: flex; gap: 6px; padding: 12px 24px 0; flex-wrap: wrap; }
+        .rchip {
+          background: none; border: 1px solid var(--card-border); border-radius: 20px;
+          color: var(--dim); font-size: 11px; font-weight: 700; padding: 4px 12px;
+          cursor: pointer; transition: all .15s;
+        }
+        .rchip.active { font-weight: 800; }
+        .rchip:hover { border-color: var(--accent); }
+        .rchip-count { opacity: .6; margin-left: 3px; }
+        .value-bar {
+          padding: 6px 24px; font-size: 12px; color: var(--dim); font-weight: 700;
+        }
+
+        .pet-grid {
+          display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          gap: 8px;
+        }
+        .pg-card {
+          display: flex; align-items: center; gap: 10px; background: #1c1c2b;
+          border: 1px solid var(--card-border); border-radius: 10px; padding: 8px 12px;
+        }
+        .pg-badges { display: flex; gap: 4px; margin-bottom: 2px; flex-wrap: wrap; }
+        .pg-badge-rarity { font-size: 9px; font-weight: 800; padding: 1px 6px; border-radius: 4px; }
+        .pg-badge-role { font-size: 9px; font-weight: 800; padding: 1px 6px; border-radius: 4px; }
+        .pg-badge-role.equipped { background: rgba(52,211,153,.15); color: var(--green); border: 1px solid rgba(52,211,153,.4); }
+        .pg-badge-role.bag { background: rgba(148,163,184,.1); color: var(--dim); border: 1px solid rgba(148,163,184,.3); }
+        .pg-info { min-width: 0; flex: 1; }
+        .pg-name { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pg-meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+        .pg-rate { font-size: 11px; color: var(--gold); font-weight: 700; }
+        .pg-rarity { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+        .pg-weight-inline { font-size: 10px; color: var(--dim); }
+        .pg-uid { font-size: 9px; color: var(--dim); margin-top: 2px; font-family: monospace; }
+        .pg-from { font-size: 10px; color: var(--accent2); margin-top: 2px; }
+
+        .pg-mutation { font-size: 9px; font-weight: 800; padding: 1px 6px; border-radius: 4px; }
+        .mut-default { background: rgba(139,92,246,.15); color: #a78bfa; }
+        .mut-golden { background: rgba(202,138,4,.15); color: #ca8a04; }
+        .mut-silver { background: rgba(148,163,184,.15); color: #94a3b8; }
+        .mut-rainbow { background: rgba(147,51,234,.15); color: #9333ea; }
+        .mut-fractured { background: rgba(239,68,68,.15); color: #ef4444; }
+        .mut-boss { background: rgba(249,115,22,.15); color: #f97316; }
+        .mut-sakura { background: rgba(244,114,182,.15); color: #f472b6; }
+        .mut-frozen { background: rgba(56,189,248,.15); color: #38bdf8; }
+        .mut-magma { background: rgba(239,68,68,.15); color: #dc2626; }
+        .mut-candy { background: rgba(244,114,182,.15); color: #ec4899; }
+        .mut-shocked { background: rgba(250,204,21,.15); color: #eab308; }
+        .mut-scared { background: rgba(134,239,172,.15); color: #4ade80; }
+        .mut-alpha { background: rgba(99,102,241,.15); color: #6366f1; }
+        .mut-2x { background: rgba(251,191,36,.15); color: #f59e0b; }
+
+        .egg-card {
+          display: flex; align-items: center; gap: 10px; background: #1c1c2b;
+          border: 1px solid var(--card-border); border-radius: 10px; padding: 10px 14px;
+        }
+        .egg-card.ready { border-color: var(--gold); }
+        .egg-timer-ring { position: relative; width: 44px; height: 44px; flex-shrink: 0; }
+        .etr-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; }
+        .egg-info { min-width: 0; flex: 1; }
+        .egg-name { font-size: 13px; font-weight: 700; }
+        .egg-sub { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+        .egg-rate { font-size: 11px; color: var(--gold); font-weight: 700; }
+        .egg-ready-badge { font-size: 10px; font-weight: 800; color: var(--gold); background: rgba(251,191,36,.12); padding: 1px 8px; border-radius: 4px; }
+        .egg-time-label { font-size: 10px; font-weight: 700; }
+
+        .detail-empty { color: var(--dim); text-align: center; padding: 40px 20px; font-size: 13px; }
 
         .empty { color: var(--dim); text-align: center; padding: 60px 28px; font-size: 14px; }
 
@@ -1333,7 +1645,7 @@ export default function CatalogPage() {
       ) : viewMode === "grid" ? (
         <div className="catalog-grid">
           {visible.map((a) => (
-            <div key={a.sourceAccount} className={`catalog-card ${a.sold ? "sold-card" : ""}`}>
+            <div key={a.sourceAccount} className={`catalog-card ${a.sold ? "sold-card" : ""}`} onClick={() => { if (!a.sold) { setDetailOpen(a.sourceAccount); setDetailTab("pets"); } }}>
               {a.sold && (
                 <>
                   <div className="sold-overlay">
@@ -1352,7 +1664,8 @@ export default function CatalogPage() {
                     type="checkbox"
                     className="cc-select"
                     checked={!!selectedAccountIds[a.sourceAccount]}
-                    onChange={(e) => setSelectedAccountIds((prev) => ({ ...prev, [a.sourceAccount]: e.target.checked }))}
+                    onChange={(e) => { e.stopPropagation(); setSelectedAccountIds((prev) => ({ ...prev, [a.sourceAccount]: e.target.checked })); }}
+                    onClick={(e) => e.stopPropagation()}
                     title="Pilih untuk set harga massal"
                     style={{ width: 18, height: 18, accentColor: "var(--accent)", cursor: "pointer", marginRight: 2 }}
                   />
@@ -1368,8 +1681,8 @@ export default function CatalogPage() {
                 )}
                 <span className={`cc-dot ${a.online ? "on" : "off"}`} />
                 <span className="cc-name">{a.sourceAccount}</span>
-                {deviceLabel(a.sourceAccount) && (
-                  <span className="cc-device">{deviceLabel(a.sourceAccount)}</span>
+                {deviceLabel(a.sourceAccount, deviceMap) && (
+                  <span className="cc-device">{deviceLabel(a.sourceAccount, deviceMap)}</span>
                 )}
                 <span className="cc-status">{a.online ? "Online" : "Offline"}</span>
               </div>
@@ -1377,7 +1690,7 @@ export default function CatalogPage() {
               <div className="cc-stats">
                 <div className="cc-stat speed">
                   <div className="cslabel">SPEED</div>
-                  <div className="csval">{fmtCompact(a.speed)}</div>
+                  <div className="csval">{fmtCompactNum(a.speed)}</div>
                 </div>
                 <div className="cc-stat money">
                   <div className="cslabel">CASH</div>
@@ -1387,24 +1700,30 @@ export default function CatalogPage() {
                   <div className="cslabel">INCOME AKTIF</div>
                   <div className="csval">{fmtMoney(a.incomeAktif)}/s</div>
                 </div>
-                <div className="cc-stat">
-                  <div className="cslabel">KANDANG</div>
-                  <div className="csval">{a.kandangLevel != null ? `Lv. ${a.kandangLevel}` : "-"}</div>
+                <div className="cc-stat cc-potensi">
+                  <div className="cslabel">INCOME POTENSI</div>
+                  <div className="csval">{fmtMoney(a.incomePotensi || potensiEquip(a))}/s</div>
                 </div>
                 <div className="cc-stat">
-                  <div className="cslabel">TREADMILL</div>
-                  <div className="csval">{a.treadmillLevel != null ? `Lv. ${a.treadmillLevel}` : "-"}</div>
+                  <div className="cslabel">PEN &amp; TM</div>
+                  <div className="csval">{a.kandangLevel != null ? `Lv.${a.kandangLevel}` : "-"} &amp; {a.treadmillLevel != null ? `Lv.${a.treadmillLevel}` : "-"}</div>
                 </div>
                 <div className="cc-stat">
                   <div className="cslabel">TOTAL EGG</div>
                   <div className="csval">{(() => { const eg = (a.growingEggCount || 0) + (a.backpackEggCount || 0); const ed = (a.detail?.growingEggs?.length || 0) + (a.detail?.backpackEggs?.length || 0); return eg || ed || a.stolenCount || 0; })()}</div>
                 </div>
+                {a.trail && (
+                  <div className="cc-stat cc-trail">
+                    <div className="cslabel">TRAIL</div>
+                    <div className="csval">{a.trail}</div>
+                  </div>
+                )}
                 <div className="cc-stat cc-mut">
-                  <div className="cslabel">TOKEN MUTASI</div>
+                  <div className="cslabel">&#x1F9EC; TOKEN MUTASI</div>
                   <div className="csval">{a.mutationToken ?? 0}</div>
                 </div>
                 <div className="cc-stat cc-scramble">
-                  <div className="cslabel">TOKEN SCRAMBLE</div>
+                  <div className="cslabel">&#x1F500; TOKEN SCRAMBLE</div>
                   <div className="csval">{a.scrambleToken != null ? a.scrambleToken : "—"}</div>
                 </div>
               </div>
@@ -1413,13 +1732,16 @@ export default function CatalogPage() {
                 <div className="cc-pets">
                   {a.topPets.slice(0, 5).map((p, i) => (
                     <div key={i} className="cc-pet">
-                      <div className="cpname">{p.name || p.category}</div>
-                      <div className="cprate">{fmtRate(p.rate)}</div>
-                      {p.mutations && p.mutations.length > 0 && (
-                        <div className="cpmut" style={{ color: mutColor(p.mutations[0]) }}>
-                          {p.mutations.map((m) => m.toUpperCase()).join("+")}
-                        </div>
-                      )}
+                      <PetIcon category={p.category} name={p.name || p.category} size={24} />
+                      <div className="cc-pet-info">
+                        <div className="cpname">{p.name || p.category}</div>
+                        <div className="cprate">{fmtRate(p.rate)}</div>
+                        {p.mutations && p.mutations.length > 0 && (
+                          <div className="cpmut" style={{ color: mutColor(p.mutations[0]) }}>
+                            {p.mutations.map((m) => m.toUpperCase()).join("+")}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1429,7 +1751,8 @@ export default function CatalogPage() {
                 <div className="cc-price-row">
                   <button
                     className="cc-price-btn"
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setPriceEditing(a.sourceAccount);
                       setPriceInput(String(a.catalogPrice || ""));
                       // Seed rate fields from the last bulk-rate values so the
@@ -1445,7 +1768,7 @@ export default function CatalogPage() {
                 </div>
               )}
 
-              <div className="cc-actions" style={{ position: "relative", zIndex: 15 }}>
+              <div className="cc-actions" style={{ position: "relative", zIndex: 15 }} onClick={(e) => e.stopPropagation()}>
                 <a
                   className="btn-poster"
                   href={`/poster?account=${encodeURIComponent(a.sourceAccount)}${a.sold ? `&sold=1&soldPrice=${a.soldPrice || 0}` : ""}${a.catalogPrice ? `&catalogPrice=${a.catalogPrice}` : ""}`}
@@ -1545,7 +1868,7 @@ export default function CatalogPage() {
                 </td>
                 <td className="tname">{a.sourceAccount}</td>
                 <td style={{ color: "var(--accent2)", fontSize: 11 }}>
-                  {deviceLabel(a.sourceAccount) || "-"}
+                  {deviceLabel(a.sourceAccount, deviceMap) || "-"}
                 </td>
                 <td style={{ color: "var(--accent)" }}>{fmtCompact(a.speed)}</td>
                 <td style={{ color: "var(--gold)" }}>{fmtMoney(a.money)}</td>
@@ -1989,6 +2312,138 @@ export default function CatalogPage() {
                   {priceSaving ? "Menyimpan..." : "Simpan Harga"}
                 </button>
               </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {detailOpen && (() => {
+        const acc = [...accounts, ...soldAccounts].find((a) => a.sourceAccount === detailOpen);
+        if (!acc) return null;
+        const d = acc.detail;
+        const RARITY_ORDER = ["Eternal", "Divine", "Secret", "Cosmic", "Mythic", "Legendary", "Epic", "Rare", "Uncommon", "Common"];
+        const petsForTab = (): (Pet & { _equipped?: boolean; _bag?: boolean })[] => {
+          if (!d) return [];
+          if (detailTab === "pets") {
+            const activeUids = new Set((d.activePets || []).map((p) => p.uid).filter(Boolean));
+            const merged: (Pet & { _equipped?: boolean; _bag?: boolean })[] = [];
+            for (const p of (d.activePets || [])) merged.push({ ...p, _equipped: true });
+            for (const p of (d.allPets || [])) {
+              if (p.uid && activeUids.has(p.uid)) continue;
+              merged.push({ ...p, _bag: true });
+            }
+            return merged;
+          }
+          if (detailTab === "eggs") {
+            const merged: (Pet & { _equipped?: boolean; _bag?: boolean })[] = [];
+            for (const e of (d.growingEggs || [])) merged.push(e);
+            for (const e of (d.backpackEggs || [])) merged.push({ ...e, _bag: true });
+            return merged;
+          }
+          return [];
+        };
+        const allItems = petsForTab();
+        const rarityCounts: Record<string, number> = { ALL: allItems.length };
+        for (const p of allItems) {
+          const r = petRarity(p.category, iconIdx) || "Unknown";
+          rarityCounts[r] = (rarityCounts[r] || 0) + 1;
+        }
+        const rarityOptions = ["ALL", ...RARITY_ORDER.filter((r) => rarityCounts[r] > 0)];
+        if (rarityCounts["Unknown"] > 0) rarityOptions.push("Unknown");
+        const filteredItems = rarityFilter === "ALL" ? allItems : allItems.filter((p) => (petRarity(p.category, iconIdx) || "Unknown") === rarityFilter);
+        const totalValueRate = filteredItems.reduce((s, p) => s + (Number(p.rate) || 0), 0);
+        const petCount = (d?.activePets?.length ?? 0) + (d?.allPets?.length ?? 0) - (d?.activePets?.filter((p) => p.uid && (d?.allPets || []).some((a) => a.uid === p.uid)).length ?? 0);
+        const eggCount = (d?.growingEggs?.length ?? 0) + (d?.backpackEggs?.length ?? 0);
+        const stolenCount = d?.stolenItems?.length ?? 0;
+        const toolsCount = d?.tools?.length ?? 0;
+        const potensiVal = (() => {
+          if (!d) return 0;
+          const limit = d.activeLimit || 19;
+          const all = [...(d.activePets || []), ...(d.allPets || []), ...(d.growingEggs || []), ...(d.backpackEggs || [])];
+          const seen = new Set<string>();
+          const deduped: Pet[] = [];
+          for (const p of all) {
+            const k = p.uid || `${p.category}|${(p.mutations || []).sort().join("+")}|${p.rate}`;
+            if (!seen.has(k)) { seen.add(k); deduped.push(p); }
+          }
+          deduped.sort((a, b) => (b.rate || 0) - (a.rate || 0));
+          let total = 0;
+          for (let i = 0; i < Math.min(limit, deduped.length); i++) total += deduped[i].rate || 0;
+          return total;
+        })();
+        return (
+          <div className="modal-backdrop" onClick={() => setDetailOpen(null)}>
+            <div className="detail-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="dm-header">
+                <span className="dm-name">{acc.sourceAccount}</span>
+                {deviceLabel(acc.sourceAccount, deviceMap) && <span className="cc-device">{deviceLabel(acc.sourceAccount, deviceMap)}</span>}
+                <button className="modal-close" onClick={() => setDetailOpen(null)}>&times;</button>
+              </div>
+              {!d ? (
+                <div style={{ padding: 40, textAlign: "center", color: "var(--dim)" }}>Belum ada data detail untuk akun ini.</div>
+              ) : (
+                <>
+                  <div className="dm-stats">
+                    <div className="dms"><div className="dms-label">CASH</div><div className="dms-val" style={{ color: "var(--gold)" }}>{fmtMoney(acc.money)}</div></div>
+                    <div className="dms"><div className="dms-label">INCOME AKTIF</div><div className="dms-val" style={{ color: "var(--accent2)" }}>{fmtMoney(d.activePets ? d.activePets.reduce((s: number, p: Pet) => s + (p.rate || 0), 0) : acc.incomeAktif)}/s</div></div>
+                    <div className="dms"><div className="dms-label">SPEED</div><div className="dms-val" style={{ color: "var(--accent)" }}>{fmtCompactNum(acc.speed)}</div></div>
+                    <div className="dms"><div className="dms-label">PEN &amp; TM</div><div className="dms-val">{acc.kandangLevel != null ? `Lv.${acc.kandangLevel}` : "-"} &amp; {acc.treadmillLevel != null ? `Lv.${acc.treadmillLevel}` : "-"}</div></div>
+                    <div className="dms"><div className="dms-label">ACTIVE LIMIT</div><div className="dms-val">{d.activeLimit ?? "-"}</div></div>
+                    <div className="dms"><div className="dms-label">INCOME POTENSI</div><div className="dms-val" style={{ color: "var(--green)" }}>{fmtMoney(potensiVal)}/s</div></div>
+                    <div className="dms"><div className="dms-label">TOKEN MUTASI</div><div className="dms-val" style={{ color: "#a78bfa" }}>{acc.mutationToken ?? 0}</div></div>
+                    <div className="dms"><div className="dms-label">TOKEN SCRAMBLE</div><div className="dms-val" style={{ color: "var(--green)" }}>{acc.scrambleToken != null ? acc.scrambleToken : "—"}</div></div>
+                    {acc.trail && <div className="dms"><div className="dms-label">TRAIL</div><div className="dms-val" style={{ color: "var(--accent2)" }}>{acc.trail}</div></div>}
+                  </div>
+                  <div className="dm-tabs">
+                    <button className={`dm-tab ${detailTab === "pets" ? "active" : ""}`} onClick={() => setDetailTab("pets")}>&#x1F43E; PETS ({petCount})</button>
+                    <button className={`dm-tab ${detailTab === "eggs" ? "active" : ""}`} onClick={() => setDetailTab("eggs")} style={(d.growingEggs?.length ?? 0) > 0 ? { color: "var(--green)" } : undefined}>&#x1F95A; EGGS ({eggCount})</button>
+                    <button className={`dm-tab ${detailTab === "stolen" ? "active" : ""}`} onClick={() => setDetailTab("stolen")}>&#x1F3AF; STOLEN ({stolenCount})</button>
+                    <button className={`dm-tab ${detailTab === "tools" ? "active" : ""}`} onClick={() => setDetailTab("tools")}>&#x1F6E0;&#xFE0F; TOOLS ({toolsCount})</button>
+                  </div>
+                  {(detailTab === "pets" || detailTab === "eggs") && allItems.length > 0 && (
+                    <>
+                      <div className="rarity-chips">
+                        {rarityOptions.map((r) => {
+                          const isActive = rarityFilter === r;
+                          const rc = r === "ALL" ? "var(--accent2)" : rarityColor(r);
+                          return (
+                            <button key={r} className={`rchip ${isActive ? "active" : ""}`} onClick={() => setRarityFilter(r)} style={isActive ? { borderColor: rc, color: rc, background: rc + "18" } : undefined}>
+                              {r.toUpperCase()} <span className="rchip-count">{rarityCounts[r] || 0}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="value-bar">VALUE: {fmtRate(totalValueRate)}</div>
+                    </>
+                  )}
+                  <div className="dm-body">
+                    {detailTab === "pets" && <PetGrid pets={filteredItems as Pet[]} idx={iconIdx} showBadges />}
+                    {detailTab === "eggs" && (
+                      <>
+                        {(d.growingEggs?.length ?? 0) > 0 && <GrowingEggGrid eggs={d.growingEggs!.filter((e) => rarityFilter === "ALL" || (petRarity(e.category, iconIdx) || "Unknown") === rarityFilter)} idx={iconIdx} />}
+                        {(d.backpackEggs?.length ?? 0) > 0 && <PetGrid pets={d.backpackEggs!.filter((e) => rarityFilter === "ALL" || (petRarity(e.category, iconIdx) || "Unknown") === rarityFilter).map((e) => ({ ...e, _bag: true } as any))} idx={iconIdx} showBadges />}
+                        {(d.growingEggs?.length ?? 0) === 0 && (d.backpackEggs?.length ?? 0) === 0 && <div className="detail-empty">Belum ada telur.</div>}
+                      </>
+                    )}
+                    {detailTab === "stolen" && (stolenCount === 0 ? <div className="detail-empty">Belum ada pet stolen.</div> : <PetGrid pets={(d.stolenItems || []) as unknown as Pet[]} idx={iconIdx} showBadges />)}
+                    {detailTab === "tools" && (toolsCount === 0 ? <div className="detail-empty">Belum ada tools.</div> : (
+                      <div className="pet-grid">
+                        {(d.tools || []).map((t, i) => (
+                          <div key={i} className="pg-card">
+                            <div className="pg-info">
+                              <div className="pg-name">{t.name || t.category || "Tool"}</div>
+                              <div className="pg-meta">
+                                {t.itemType && <span className="pg-rarity" style={{ background: "rgba(148,163,184,.15)", color: "var(--dim)", border: "1px solid rgba(148,163,184,.3)" }}>{t.itemType}</span>}
+                                {t.count != null && <span className="pg-rate">&times;{t.count}</span>}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         );
