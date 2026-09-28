@@ -9,6 +9,14 @@ interface Unit {
   mutation: string | null;
   level: number | null;
   amount: number;
+  trait?: string | null;
+  grade?: string | null;
+  locked?: boolean | null;
+  income?: number | null;
+  damage?: number | null;
+  chance?: number | null;
+  health?: number | null;
+  placed?: "slot" | "tower" | null;
 }
 
 interface ADAccount {
@@ -48,6 +56,11 @@ interface SlotData {
   level?: number | null;
   mutation?: string | null;
   balance?: number | null;
+  income?: number | null;
+  chance?: number | null;
+  damage?: number | null;
+  trait?: string | null;
+  grade?: string | null;
 }
 
 interface TowerUnit {
@@ -57,6 +70,11 @@ interface TowerUnit {
   level?: number | null;
   mutation?: string | null;
   slot?: number | string;
+  trait?: string | null;
+  grade?: string | null;
+  income?: number | null;
+  damage?: number | null;
+  chance?: number | null;
 }
 
 interface ADDetail {
@@ -422,6 +440,10 @@ export default function AnimeDicePage() {
         .slot-bl { font-size: 9px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .3px; }
         .slot-bv { font-size: 16px; font-weight: 900; color: var(--green); }
         .slot-empty { color: var(--dim); font-size: 13px; font-weight: 600; padding: 20px 0; text-align: center; }
+        .slot-stats { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+        .slot-stat-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
+        .slot-stat-l { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .3px; }
+        .slot-stat-v { font-size: 13px; font-weight: 800; color: var(--ink); }
 
         /* Tower squad */
         .equipped-section { margin-bottom: 16px; }
@@ -818,34 +840,13 @@ function CombinedUnitsTab({ units }: { units: (Unit & { owner: string })[] }) {
   const [filter, setFilter] = useState("");
   if (units.length === 0) return <div className="detail-empty">No unit data available.</div>;
   const filtered = filter.trim()
-    ? units.filter((u) => u.name.toLowerCase().includes(filter.toLowerCase()) || u.rarity.toLowerCase().includes(filter.toLowerCase()) || (u.mutation || "").toLowerCase().includes(filter.toLowerCase()) || u.owner.toLowerCase().includes(filter.toLowerCase()))
+    ? units.filter((u) => u.name.toLowerCase().includes(filter.toLowerCase()) || u.rarity.toLowerCase().includes(filter.toLowerCase()) || (u.mutation || "").toLowerCase().includes(filter.toLowerCase()) || (u.trait || "").toLowerCase().includes(filter.toLowerCase()) || u.owner.toLowerCase().includes(filter.toLowerCase()))
     : units;
   return (
     <>
-      <input className="search-input" style={{ width: "100%", marginBottom: 14 }} placeholder="Search unit, rarity, mutation, account..." value={filter} onChange={(e) => setFilter(e.target.value)} />
+      <input className="search-input" style={{ width: "100%", marginBottom: 14 }} placeholder="Search unit, rarity, mutation, trait, account..." value={filter} onChange={(e) => setFilter(e.target.value)} />
       <div className="ugrid">
-        {filtered.map((u, i) => {
-          const rc = rarityColor(u.rarity);
-          return (
-            <div key={i} className="ucard" style={{ borderColor: rc + "25" }}>
-              <div className="ucard-top">
-                <span className="ub" style={{ background: "rgba(34,211,238,.08)", color: "var(--cyan)", fontSize: 8 }}>@{u.owner}</span>
-                {u.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{u.variant === "Titanic" ? "S" : u.variant === "Huge" ? "A+" : u.variant[0]}</span>}
-                {u.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {u.level}</span>}
-                <span className="ub" style={{ background: rc + "20", color: rc }}>{u.rarity.toUpperCase()}</span>
-              </div>
-              <div className="ucard-name" style={{ color: rc }}>{u.variant ? `${u.variant} ` : ""}{u.name}</div>
-              <div className="ucard-meta">
-                {u.mutation && (() => {
-                  const ms = MUTATION_STYLES[u.mutation];
-                  return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{u.mutation}</span>;
-                })()}
-                {!u.mutation && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>No Mutation</span>}
-                <span className="ucard-amount">x{u.amount}</span>
-              </div>
-            </div>
-          );
-        })}
+        {filtered.map((u, i) => <UnitCardContent key={i} u={u} rc={rarityColor(u.rarity)} ownerTag={u.owner} />)}
       </div>
     </>
   );
@@ -867,28 +868,7 @@ function CombinedSlotsTab({ slots }: { slots: (SlotData & { owner: string })[] }
                 <span className="slot-badge">SLOT #{typeof s.slot === "number" ? s.slot : i + 1}</span>
                 <span className="ub" style={{ background: "rgba(34,211,238,.08)", color: "var(--cyan)", fontSize: 8 }}>@{s.owner}</span>
               </div>
-              {s.name ? (
-                <>
-                  <div className="slot-name">{s.name}</div>
-                  <div className="slot-tags">
-                    {s.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{s.variant === "Titanic" ? "S" : s.variant === "Huge" ? "A+" : s.variant[0]}</span>}
-                    {s.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {s.level}</span>}
-                    <span className="ub" style={{ background: rc + "20", color: rc }}>{(s.rarity || "").toUpperCase()}</span>
-                    {s.mutation && (() => {
-                      const ms = MUTATION_STYLES[s.mutation];
-                      return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{s.mutation}</span>;
-                    })()}
-                  </div>
-                  {s.balance != null && (
-                    <div className="slot-balance">
-                      <span className="slot-bl">SLOT BALANCE</span>
-                      <span className="slot-bv">{fmtMoney(s.balance)}</span>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="slot-empty">Empty Slot</div>
-              )}
+              <SlotCardContent s={s} rc={rc} />
             </div>
           );
         })}
@@ -980,39 +960,92 @@ function CombinedBackpackTab({ items }: { items: (BackpackItem & { owner: string
   );
 }
 
+function UnitCardContent({ u, rc, ownerTag }: { u: Unit; rc: string; ownerTag?: string }) {
+  return (
+    <div className="ucard" style={{ borderColor: rc + "25" }}>
+      <div className="ucard-top">
+        {ownerTag && <span className="ub" style={{ background: "rgba(34,211,238,.08)", color: "var(--cyan)", fontSize: 8 }}>@{ownerTag}</span>}
+        {u.grade && <span className="ub" style={{ background: "rgba(251,191,36,.12)", color: "var(--gold)", fontWeight: 900 }}>{u.grade}</span>}
+        {u.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{u.variant === "Titanic" ? "S" : u.variant === "Huge" ? "A+" : u.variant[0]}</span>}
+        {u.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {u.level}</span>}
+        <span className="ub" style={{ background: rc + "20", color: rc }}>{u.rarity.toUpperCase()}</span>
+        {u.placed && <span className="ub" style={{ background: u.placed === "slot" ? "rgba(52,211,153,.1)" : "rgba(251,191,36,.1)", color: u.placed === "slot" ? "var(--green)" : "var(--gold)" }}>{u.placed === "slot" ? "PLOT" : "TOWER"}</span>}
+        {u.locked && <span className="ub" style={{ background: "rgba(239,68,68,.1)", color: "var(--red)" }}>LOCKED</span>}
+      </div>
+      <div className="ucard-name" style={{ color: rc }}>{u.variant ? `${u.variant} ` : ""}{u.name}</div>
+      <div className="ucard-meta">
+        {u.mutation && (() => {
+          const ms = MUTATION_STYLES[u.mutation];
+          return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{u.mutation}</span>;
+        })()}
+        {!u.mutation && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>No Mutation</span>}
+        {u.trait && <span className="ub" style={{ background: "rgba(168,85,247,.1)", color: "var(--accent2)" }}>{u.trait}</span>}
+        <span className="ucard-amount">x{u.amount}</span>
+      </div>
+      {(u.income != null || u.damage != null || u.chance != null) && (
+        <div className="slot-stats" style={{ marginTop: 6 }}>
+          {u.income != null && <div className="slot-stat-row"><span className="slot-stat-l">Speed</span><span className="slot-stat-v" style={{ color: "var(--green)" }}>${fmtMoney(u.income)}/s</span></div>}
+          {u.damage != null && <div className="slot-stat-row"><span className="slot-stat-l">Damage</span><span className="slot-stat-v" style={{ color: "var(--red)" }}>{fmtMoney(u.damage)}</span></div>}
+          {u.chance != null && <div className="slot-stat-row"><span className="slot-stat-l">Chance</span><span className="slot-stat-v">1 in {fmtMoney(u.chance)}</span></div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function UnitsTab({ units }: { units: Unit[] }) {
   const [filter, setFilter] = useState("");
   if (units.length === 0) return <div className="detail-empty">No unit data available.</div>;
   const filtered = filter.trim()
-    ? units.filter((u) => u.name.toLowerCase().includes(filter.toLowerCase()) || u.rarity.toLowerCase().includes(filter.toLowerCase()) || (u.mutation || "").toLowerCase().includes(filter.toLowerCase()))
+    ? units.filter((u) => u.name.toLowerCase().includes(filter.toLowerCase()) || u.rarity.toLowerCase().includes(filter.toLowerCase()) || (u.mutation || "").toLowerCase().includes(filter.toLowerCase()) || (u.trait || "").toLowerCase().includes(filter.toLowerCase()))
     : units;
   return (
     <>
-      <input className="search-input" style={{ width: "100%", marginBottom: 14 }} placeholder="Search unit, rarity, mutation..." value={filter} onChange={(e) => setFilter(e.target.value)} />
+      <input className="search-input" style={{ width: "100%", marginBottom: 14 }} placeholder="Search unit, rarity, mutation, trait..." value={filter} onChange={(e) => setFilter(e.target.value)} />
       <div className="ugrid">
-        {filtered.map((u, i) => {
-          const rc = rarityColor(u.rarity);
-          return (
-            <div key={i} className="ucard" style={{ borderColor: rc + "25" }}>
-              <div className="ucard-top">
-                {u.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{u.variant === "Titanic" ? "S" : u.variant === "Huge" ? "A+" : u.variant[0]}</span>}
-                {u.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {u.level}</span>}
-                <span className="ub" style={{ background: rc + "20", color: rc }}>{u.rarity.toUpperCase()}</span>
-              </div>
-              <div className="ucard-name" style={{ color: rc }}>{u.variant ? `${u.variant} ` : ""}{u.name}</div>
-              <div className="ucard-meta">
-                {u.mutation && (() => {
-                  const ms = MUTATION_STYLES[u.mutation];
-                  return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{u.mutation}</span>;
-                })()}
-                {!u.mutation && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>No Mutation</span>}
-                <span className="ucard-amount">x{u.amount}</span>
-              </div>
-            </div>
-          );
-        })}
+        {filtered.map((u, i) => <UnitCardContent key={i} u={u} rc={rarityColor(u.rarity)} />)}
       </div>
     </>
+  );
+}
+
+function SlotCardContent({ s, rc }: { s: SlotData; rc: string }) {
+  return s.name ? (
+    <>
+      <div className="slot-name">{s.name}</div>
+      <div className="slot-tags">
+        {s.grade && <span className="ub" style={{ background: "rgba(251,191,36,.12)", color: "var(--gold)", fontWeight: 900 }}>{s.grade}</span>}
+        {s.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{s.variant === "Titanic" ? "S" : s.variant === "Huge" ? "A+" : s.variant[0]}</span>}
+        {s.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {s.level}</span>}
+        <span className="ub" style={{ background: rc + "20", color: rc }}>{(s.rarity || "").toUpperCase()}</span>
+        {s.mutation && (() => {
+          const ms = MUTATION_STYLES[s.mutation];
+          return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{s.mutation}</span>;
+        })()}
+      </div>
+      <div className="slot-stats">
+        {s.chance != null && (
+          <div className="slot-stat-row"><span className="slot-stat-l">Chance</span><span className="slot-stat-v">1 in {fmtMoney(s.chance)}</span></div>
+        )}
+        {s.income != null && (
+          <div className="slot-stat-row"><span className="slot-stat-l">Speed</span><span className="slot-stat-v" style={{ color: "var(--green)" }}>${fmtMoney(s.income)}/s</span></div>
+        )}
+        {s.damage != null && (
+          <div className="slot-stat-row"><span className="slot-stat-l">Damage</span><span className="slot-stat-v" style={{ color: "var(--red)" }}>{fmtMoney(s.damage)}</span></div>
+        )}
+        {s.trait && (
+          <div className="slot-stat-row"><span className="slot-stat-l">Trait</span><span className="slot-stat-v" style={{ color: "var(--accent2)" }}>{s.trait}</span></div>
+        )}
+      </div>
+      {s.balance != null && (
+        <div className="slot-balance">
+          <span className="slot-bl">SLOT BALANCE</span>
+          <span className="slot-bv">{fmtMoney(s.balance)}</span>
+        </div>
+      )}
+    </>
+  ) : (
+    <div className="slot-empty">Empty Slot</div>
   );
 }
 
@@ -1034,28 +1067,7 @@ function SlotsTab({ slots }: { slots: SlotData[] }) {
                 {s.name && <span className="slot-dot" style={{ background: "var(--green)" }} />}
                 {!s.name && <span className="slot-dot" style={{ background: "var(--dim)" }} />}
               </div>
-              {s.name ? (
-                <>
-                  <div className="slot-name">{s.name}</div>
-                  <div className="slot-tags">
-                    {s.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{s.variant === "Titanic" ? "S" : s.variant === "Huge" ? "A+" : s.variant[0]}</span>}
-                    {s.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {s.level}</span>}
-                    <span className="ub" style={{ background: rc + "20", color: rc }}>{(s.rarity || "").toUpperCase()}</span>
-                    {s.mutation && (() => {
-                      const ms = MUTATION_STYLES[s.mutation];
-                      return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{s.mutation}</span>;
-                    })()}
-                  </div>
-                  {s.balance != null && (
-                    <div className="slot-balance">
-                      <span className="slot-bl">SLOT BALANCE</span>
-                      <span className="slot-bv">{fmtMoney(s.balance)}</span>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="slot-empty">Empty Slot</div>
-              )}
+              <SlotCardContent s={s} rc={rc} />
             </div>
           );
         })}
