@@ -1610,17 +1610,46 @@ export default function CatalogPage() {
                   <button
                     className="btn-download-all"
                     style={{ background: "var(--red)", color: "#fff", fontWeight: 800 }}
-                    onClick={async () => {
+                    onClick={() => {
                       const targets = soldAccounts.filter((a) => selectedSoldIds[a.sourceAccount]);
                       if (targets.length === 0) return;
-                      for (let i = 0; i < targets.length; i++) {
-                        const a = targets[i];
-                        setBatchProgress({ current: i + 1, total: targets.length, account: a.sourceAccount });
-                        const url = `/poster?account=${encodeURIComponent(a.sourceAccount)}&sold=1&soldPrice=${a.soldPrice || 0}&autoDownload=1`;
-                        window.open(url, "_blank");
-                        await new Promise((r) => setTimeout(r, 800));
+                      if (batchProgress) return;
+                      setBatchProgress({ current: 0, total: targets.length, account: "" });
+
+                      let idx2 = 0;
+                      const iframe = document.createElement("iframe");
+                      iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:1200px;height:2000px;border:none;opacity:0;pointer-events:none;";
+                      document.body.appendChild(iframe);
+
+                      function onMsg(ev: MessageEvent) {
+                        if (ev.data?.type === "poster-ready" || ev.data?.type === "poster-error") {
+                          if (ev.data.type === "poster-ready" && ev.data.dataUrl) {
+                            const link = document.createElement("a");
+                            const digits = (ev.data.account as string).match(/(\d+)$/)?.[1] || "";
+                            const price = Number(ev.data.price) || 0;
+                            const priceSuffix = price > 0 ? `-${Math.round(price / 1000)}k` : "";
+                            link.download = `Blekok-${digits}${priceSuffix}.png`;
+                            link.href = ev.data.dataUrl;
+                            link.click();
+                          }
+                          idx2++;
+                          if (idx2 < targets.length) {
+                            loadNextSold();
+                          } else {
+                            window.removeEventListener("message", onMsg);
+                            document.body.removeChild(iframe);
+                            setBatchProgress(null);
+                          }
+                        }
                       }
-                      setBatchProgress(null);
+                      window.addEventListener("message", onMsg);
+
+                      function loadNextSold() {
+                        const a = targets[idx2];
+                        setBatchProgress({ current: idx2 + 1, total: targets.length, account: a.sourceAccount });
+                        iframe.src = `/poster?account=${encodeURIComponent(a.sourceAccount)}&sold=1&soldPrice=${a.soldPrice || 0}&autoDownload=1`;
+                      }
+                      loadNextSold();
                     }}
                   >
                     Download Poster ({selectedCount} akun)
