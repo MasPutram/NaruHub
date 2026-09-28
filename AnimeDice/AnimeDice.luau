@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Monitoring Anime Dice v1.3.0 (ultra-lightweight)
+-- NaruHub | Monitoring Anime Dice v1.4.0 (ultra-lightweight)
 -- Monitoring only -- no auto-roll/sell/equip, baca data → POST ke dashboard.
 
 ------------------------------------------------------------
@@ -279,6 +279,7 @@ local function collectInventory()
 					placed = "tower"
 				end
 
+				local attrs = entry.attributes or {}
 				table.insert(units, {
 					id = id,
 					name = entry.name,
@@ -287,8 +288,11 @@ local function collectInventory()
 					variant = variant,
 					order = order,
 					tier = RARITY_TIER[rarity] or 0,
-					mutation = entry.attributes and entry.attributes.mutation or nil,
-					level = entry.attributes and entry.attributes.level or nil,
+					mutation = attrs.mutation,
+					level = attrs.level,
+					trait = attrs.trait,
+					grade = attrs.grade,
+					locked = attrs.locked or nil,
 					income = income,
 					damage = damage,
 					chance = chance,
@@ -410,11 +414,19 @@ local function collectSlots()
 				local entry = type(unitId) == "string" and inv[unitId] or nil
 				if entry and entry.name then
 					local cfg = allEntries[entry.name]
+					local attrs = entry.attributes or {}
 					slotInfo.name = entry.name
 					slotInfo.rarity = cfg and cfg.rarity or "Unknown"
 					slotInfo.variant = cfg and cfg.variant or nil
-					slotInfo.level = entry.attributes and entry.attributes.level or nil
-					slotInfo.mutation = entry.attributes and entry.attributes.mutation or nil
+					slotInfo.level = attrs.level
+					slotInfo.mutation = attrs.mutation
+					slotInfo.trait = attrs.trait
+					slotInfo.grade = attrs.grade
+					if cfg then
+						pcall(function() slotInfo.income = cfg:income() end)
+						pcall(function() slotInfo.chance = cfg:chance() end)
+						pcall(function() slotInfo.damage = cfg:damage() end)
+					end
 				end
 			end
 
@@ -525,6 +537,9 @@ local function reportToMonitor()
 				variant = u.variant,
 				mutation = u.mutation,
 				level = u.level,
+				trait = u.trait,
+				grade = u.grade,
+				locked = u.locked,
 				amount = u.amount,
 				income = u.income,
 				damage = u.damage,
@@ -604,7 +619,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v1.3.0",
+	Title = "NaruHub | Anime Dice v1.4.0",
 	Badge = "MONITOR",
 	TabWidth = 0,
 	Size = UDim2.fromOffset(380, 300),
