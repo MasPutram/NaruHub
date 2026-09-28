@@ -151,6 +151,19 @@ function accountNumber(name: string): number | null {
 
 type TabMode = "all" | "online" | "offline";
 type DetailTab = "units" | "slots" | "tower" | "backpack" | "upgrades";
+type CombinedTab = "units" | "slots" | "tower" | "backpack";
+
+interface CombinedDetail {
+  account: string;
+  data: ADDetail;
+}
+
+interface CombinedState {
+  open: boolean;
+  loading: boolean;
+  details: CombinedDetail[];
+  tab: CombinedTab;
+}
 
 export default function AnimeDicePage() {
   const [mounted, setMounted] = useState(false);
@@ -160,6 +173,7 @@ export default function AnimeDicePage() {
   const [search, setSearch] = useState("");
   const [detail, setDetail] = useState<{ name: string; data: ADDetail | null; loading: boolean; account: ADAccount | null } | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("units");
+  const [combined, setCombined] = useState<CombinedState>({ open: false, loading: false, details: [], tab: "units" });
 
   const fetchAccounts = useCallback(async () => {
     try {
@@ -213,6 +227,21 @@ export default function AnimeDicePage() {
   const totalRebirths = allOnline.reduce((s, a) => s + (Number(a.rebirth) || 0), 0);
   const totalRolls = allOnline.reduce((s, a) => s + (Number(a.rolls) || 0), 0);
   const totalUnits = allOnline.reduce((s, a) => s + (a.unitsCount || 0), 0);
+
+  async function openCombined() {
+    setCombined({ open: true, loading: true, details: [], tab: "units" });
+    try {
+      const res = await fetch("/api/anime-dice/all-details");
+      const body = await res.json();
+      if (res.ok && body.ok) {
+        setCombined((prev) => ({ ...prev, loading: false, details: body.details || [] }));
+      } else {
+        setCombined((prev) => ({ ...prev, loading: false }));
+      }
+    } catch {
+      setCombined((prev) => ({ ...prev, loading: false }));
+    }
+  }
 
   async function openDetail(name: string) {
     const acc = accounts.find((a) => a.sourceAccount === name) || null;
@@ -497,6 +526,7 @@ export default function AnimeDicePage() {
               totalUnits={totalUnits}
               onlineCount={allOnline.length}
               totalCount={filtered.length}
+              onClick={openCombined}
             />
             {displayed.map((a) => (
               <AccountCard key={a.sourceAccount} account={a} onOpen={openDetail} />
@@ -511,16 +541,24 @@ export default function AnimeDicePage() {
             </div>
           </div>
         )}
+
+        {combined.open && (
+          <div className="overlay" onClick={(e) => { if ((e.target as HTMLElement).classList.contains("overlay")) setCombined((p) => ({ ...p, open: false })); }}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <CombinedModal combined={combined} setCombined={setCombined} accounts={accounts} onClose={() => setCombined((p) => ({ ...p, open: false }))} />
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
 }
 
-function CombinedCard({ accounts, totalMoney, totalRebirths, totalRolls, totalUnits, onlineCount, totalCount }: {
-  accounts: ADAccount[]; totalMoney: number; totalRebirths: number; totalRolls: number; totalUnits: number; onlineCount: number; totalCount: number;
+function CombinedCard({ accounts, totalMoney, totalRebirths, totalRolls, totalUnits, onlineCount, totalCount, onClick }: {
+  accounts: ADAccount[]; totalMoney: number; totalRebirths: number; totalRolls: number; totalUnits: number; onlineCount: number; totalCount: number; onClick: () => void;
 }) {
   return (
-    <div className="combined">
+    <div className="combined" onClick={onClick}>
       <div className="comb-top">
         <div className="comb-avatar">&#x1F465;</div>
         <div className="comb-info">
@@ -586,14 +624,18 @@ function AccountCard({ account: a, onOpen }: { account: ADAccount; onOpen: (name
         )}
       </div>
 
-      <div className="acard-main">
+      <div className="acard-main" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
         <div className="acard-stat">
-          <div className="as-label">Balance Money</div>
+          <div className="as-label">Balance</div>
           <div className="as-value money">{fmtMoney(a.money)}</div>
         </div>
-        <div className="acard-stat" style={{ textAlign: "right" }}>
-          <div className="as-label">Rebirth Level</div>
+        <div className="acard-stat" style={{ textAlign: "center" }}>
+          <div className="as-label">Rebirth</div>
           <div className="as-value rebirth">R{a.rebirth ?? 0}</div>
+        </div>
+        <div className="acard-stat" style={{ textAlign: "right" }}>
+          <div className="as-label">Session Rolls</div>
+          <div className="as-value" style={{ color: "var(--accent)" }}>{fmtNum(a.rolls)}</div>
         </div>
       </div>
 
@@ -695,6 +737,244 @@ function DetailModal({ detail, tab, setTab, onClose }: {
             {tab === "upgrades" && <UpgradesDiceTab upgrades={d.upgrades || {}} upgradesList={d.upgradesList || []} dice={d.ownedDice || []} activeDice={acc?.dice || ""} />}
           </div>
         </>
+      )}
+    </>
+  );
+}
+
+function CombinedModal({ combined, setCombined, accounts, onClose }: {
+  combined: CombinedState;
+  setCombined: (fn: (p: CombinedState) => CombinedState) => void;
+  accounts: ADAccount[];
+  onClose: () => void;
+}) {
+  const tab = combined.tab;
+  const onlineCount = accounts.filter((a) => a.online).length;
+
+  const allUnits: (Unit & { owner: string })[] = [];
+  const allSlots: (SlotData & { owner: string })[] = [];
+  const allTower: (TowerUnit & { owner: string })[] = [];
+  const allBackpack: (BackpackItem & { owner: string })[] = [];
+
+  for (const d of combined.details) {
+    const units = d.data.allUnits?.length ? d.data.allUnits : d.data.topUnits || [];
+    for (const u of units) allUnits.push({ ...u, owner: d.account });
+    for (const s of (d.data.slots || [])) allSlots.push({ ...s, owner: d.account });
+    for (const t of (d.data.towerSquad?.squad || [])) allTower.push({ ...t, owner: d.account });
+    if (d.data.towerSquad?.equipped) allTower.push({ ...d.data.towerSquad.equipped, owner: d.account });
+    for (const b of (d.data.backpack || [])) allBackpack.push({ ...b, owner: d.account });
+  }
+
+  return (
+    <>
+      <div className="modal-head">
+        <div className="mh-avatar" style={{ background: "linear-gradient(135deg, var(--cyan), var(--accent))" }}>
+          <span style={{ fontSize: 20 }}>&#x1F465;</span>
+        </div>
+        <div className="mh-info">
+          <div className="mh-name">
+            ALL ACCOUNTS TELEMETRY
+            <span className="mh-count">{allUnits.length} UNITS &bull; {allBackpack.length} ITEMS</span>
+          </div>
+          <div className="mh-sub">{onlineCount} of {accounts.length} online &mdash; aggregated data across all accounts.</div>
+        </div>
+        <button className="modal-close" onClick={onClose}>&times;</button>
+      </div>
+
+      {combined.loading ? (
+        <div style={{ padding: 40, textAlign: "center", color: "var(--dim)" }}>Loading all account details...</div>
+      ) : combined.details.length === 0 ? (
+        <div style={{ padding: 40, textAlign: "center", color: "var(--dim)" }}>No detail data available.</div>
+      ) : (
+        <>
+          <div className="modal-stats">
+            <div className="ms"><div className="ms-l">Accounts</div><div className="ms-v" style={{ color: "var(--cyan)" }}>{combined.details.length}</div></div>
+            <div className="ms"><div className="ms-l">Total Units</div><div className="ms-v" style={{ color: "var(--accent)" }}>{allUnits.length}</div></div>
+            <div className="ms"><div className="ms-l">Plot Slots</div><div className="ms-v" style={{ color: "var(--green)" }}>{allSlots.length}</div></div>
+            <div className="ms"><div className="ms-l">Tower Squad</div><div className="ms-v" style={{ color: "var(--gold)" }}>{allTower.length}</div></div>
+            <div className="ms"><div className="ms-l">Backpack Items</div><div className="ms-v" style={{ color: "var(--red)" }}>{allBackpack.length}</div></div>
+          </div>
+
+          <div className="modal-tabs">
+            <button className={`mtab ${tab === "units" ? "active" : ""}`} onClick={() => setCombined((p) => ({ ...p, tab: "units" }))}>&#x2694; Units Roster ({allUnits.length})</button>
+            <button className={`mtab ${tab === "slots" ? "active" : ""}`} onClick={() => setCombined((p) => ({ ...p, tab: "slots" }))}>&#x2699; Plot Generators ({allSlots.length})</button>
+            <button className={`mtab ${tab === "tower" ? "active" : ""}`} onClick={() => setCombined((p) => ({ ...p, tab: "tower" }))}>&#x1F3F0; Tower Squad ({allTower.length})</button>
+            <button className={`mtab ${tab === "backpack" ? "active" : ""}`} onClick={() => setCombined((p) => ({ ...p, tab: "backpack" }))}>&#x1F392; Backpack Items ({allBackpack.length})</button>
+          </div>
+
+          <div className="modal-body">
+            {tab === "units" && <CombinedUnitsTab units={allUnits} />}
+            {tab === "slots" && <CombinedSlotsTab slots={allSlots} />}
+            {tab === "tower" && <CombinedTowerTab units={allTower} />}
+            {tab === "backpack" && <CombinedBackpackTab items={allBackpack} />}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function CombinedUnitsTab({ units }: { units: (Unit & { owner: string })[] }) {
+  const [filter, setFilter] = useState("");
+  if (units.length === 0) return <div className="detail-empty">No unit data available.</div>;
+  const filtered = filter.trim()
+    ? units.filter((u) => u.name.toLowerCase().includes(filter.toLowerCase()) || u.rarity.toLowerCase().includes(filter.toLowerCase()) || (u.mutation || "").toLowerCase().includes(filter.toLowerCase()) || u.owner.toLowerCase().includes(filter.toLowerCase()))
+    : units;
+  return (
+    <>
+      <input className="search-input" style={{ width: "100%", marginBottom: 14 }} placeholder="Search unit, rarity, mutation, account..." value={filter} onChange={(e) => setFilter(e.target.value)} />
+      <div className="ugrid">
+        {filtered.map((u, i) => {
+          const rc = rarityColor(u.rarity);
+          return (
+            <div key={i} className="ucard" style={{ borderColor: rc + "25" }}>
+              <div className="ucard-top">
+                <span className="ub" style={{ background: "rgba(34,211,238,.08)", color: "var(--cyan)", fontSize: 8 }}>@{u.owner}</span>
+                {u.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{u.variant === "Titanic" ? "S" : u.variant === "Huge" ? "A+" : u.variant[0]}</span>}
+                {u.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {u.level}</span>}
+                <span className="ub" style={{ background: rc + "20", color: rc }}>{u.rarity.toUpperCase()}</span>
+              </div>
+              <div className="ucard-name" style={{ color: rc }}>{u.variant ? `${u.variant} ` : ""}{u.name}</div>
+              <div className="ucard-meta">
+                {u.mutation && (() => {
+                  const ms = MUTATION_STYLES[u.mutation];
+                  return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{u.mutation}</span>;
+                })()}
+                {!u.mutation && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>No Mutation</span>}
+                <span className="ucard-amount">x{u.amount}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function CombinedSlotsTab({ slots }: { slots: (SlotData & { owner: string })[] }) {
+  if (slots.length === 0) return <div className="detail-empty">No plot generator data available.</div>;
+  return (
+    <>
+      <div className="section-header">
+        <span>&#x2699; ALL PLOT GENERATORS ({slots.length} SLOTS ACROSS ALL ACCOUNTS)</span>
+      </div>
+      <div className="slot-grid">
+        {slots.map((s, i) => {
+          const rc = s.rarity ? rarityColor(s.rarity) : "var(--dim)";
+          return (
+            <div key={i} className="slot-card">
+              <div className="slot-header">
+                <span className="slot-badge">SLOT #{typeof s.slot === "number" ? s.slot : i + 1}</span>
+                <span className="ub" style={{ background: "rgba(34,211,238,.08)", color: "var(--cyan)", fontSize: 8 }}>@{s.owner}</span>
+              </div>
+              {s.name ? (
+                <>
+                  <div className="slot-name">{s.name}</div>
+                  <div className="slot-tags">
+                    {s.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{s.variant === "Titanic" ? "S" : s.variant === "Huge" ? "A+" : s.variant[0]}</span>}
+                    {s.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {s.level}</span>}
+                    <span className="ub" style={{ background: rc + "20", color: rc }}>{(s.rarity || "").toUpperCase()}</span>
+                    {s.mutation && (() => {
+                      const ms = MUTATION_STYLES[s.mutation];
+                      return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{s.mutation}</span>;
+                    })()}
+                  </div>
+                  {s.balance != null && (
+                    <div className="slot-balance">
+                      <span className="slot-bl">SLOT BALANCE</span>
+                      <span className="slot-bv">{fmtMoney(s.balance)}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="slot-empty">Empty Slot</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function CombinedTowerTab({ units }: { units: (TowerUnit & { owner: string })[] }) {
+  if (units.length === 0) return <div className="detail-empty">No tower squad data available.</div>;
+  return (
+    <>
+      <div className="section-header">
+        <span>&#x1F3F0; ALL TOWER COMBAT FIGHTERS ({units.length} ACROSS ALL ACCOUNTS)</span>
+      </div>
+      <div className="tower-grid">
+        {units.map((u, i) => {
+          const rc = rarityColor(u.rarity);
+          return (
+            <div key={i} className="tower-card">
+              <div className="tower-header">
+                <span className="slot-badge">FIGHTER #{typeof u.slot === "number" ? u.slot : i + 1}</span>
+                <span className="ub" style={{ background: "rgba(34,211,238,.08)", color: "var(--cyan)", fontSize: 8 }}>@{u.owner}</span>
+              </div>
+              <div className="tower-name">{u.variant ? `${u.variant} ` : ""}{u.name}</div>
+              <div className="tower-tags">
+                {u.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{u.variant === "Titanic" ? "S" : u.variant[0]}</span>}
+                {u.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {u.level}</span>}
+                <span className="ub" style={{ background: rc + "20", color: rc }}>{u.rarity.toUpperCase()}</span>
+                {u.mutation && (() => {
+                  const ms = MUTATION_STYLES[u.mutation!];
+                  return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{u.mutation}</span>;
+                })()}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function CombinedBackpackTab({ items }: { items: (BackpackItem & { owner: string })[] }) {
+  const [filter, setFilter] = useState("");
+  const [cat, setCat] = useState("All");
+
+  const categories = ["All", ...Array.from(new Set(items.map((it) => getCategory(it.kind)))).sort()];
+
+  const filtered = items.filter((it) => {
+    if (cat !== "All" && getCategory(it.kind) !== cat) return false;
+    if (filter.trim() && !it.name.toLowerCase().includes(filter.toLowerCase()) && !it.owner.toLowerCase().includes(filter.toLowerCase())) return false;
+    return true;
+  });
+
+  return (
+    <>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
+        <input className="search-input" style={{ width: 220 }} placeholder="Search items, accounts..." value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <div className="bp-cats">
+          {categories.map((c) => (
+            <button key={c} className={`bp-cat ${cat === c ? "active" : ""}`} onClick={() => setCat(c)}>
+              {c === "All" ? `All (${items.length})` : c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {filtered.length > 0 ? (
+        <div className="bp-grid">
+          {filtered.map((it, i) => (
+            <div key={i} className="bp-card">
+              <div className="bp-top">
+                <span className="bp-name">{it.name}</span>
+                <span className="bp-amount">x{it.amount.toLocaleString()}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span className="bp-kind" style={{ color: rarityColor(it.rarity) }}>{getCategory(it.kind)}</span>
+                <span style={{ fontSize: 9, fontWeight: 700, color: "var(--cyan)" }}>@{it.owner}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <div className="detail-empty">No backpack item data available.</div>
+      ) : (
+        <div className="detail-empty">No items match your filter.</div>
       )}
     </>
   );
