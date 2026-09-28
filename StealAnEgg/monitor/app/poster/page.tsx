@@ -894,6 +894,10 @@ function PosterPage() {
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: #0b0b12; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+        ${autoDownload ? `
+        .sidebar, .sb-sidebar { display: none !important; }
+        .sb-main { margin-left: 0 !important; }
+        ` : ""}
         .controls {
           background: #14141f; border-bottom: 1px solid #262636;
           padding: 16px 24px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
