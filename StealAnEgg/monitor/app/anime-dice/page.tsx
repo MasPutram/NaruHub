@@ -489,6 +489,19 @@ export default function AnimeDicePage() {
         .ub { font-size: 9px; font-weight: 800; padding: 3px 8px; border-radius: 5px; letter-spacing: .3px; }
         .ucard-amount { font-size: 10px; font-weight: 700; color: var(--dim); margin-left: auto; }
 
+        .unit-stats-box { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin: 10px 0 8px; border: 1px solid rgba(255,255,255,.06); border-radius: 8px; overflow: hidden; }
+        .unit-stat-cell { padding: 8px 12px; background: rgba(255,255,255,.02); }
+        .unit-stat-cell:first-child { border-right: 1px solid rgba(255,255,255,.06); }
+        .unit-stat-label { font-size: 9px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 2px; }
+        .unit-stat-val { font-size: 14px; font-weight: 900; color: var(--ink); }
+
+        .unit-trait-row { display: flex; align-items: center; padding: 6px 10px; margin: 6px 0; background: rgba(255,255,255,.02); border-radius: 6px; }
+
+        .unit-placements { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+        .unit-placement { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; border-radius: 6px; font-size: 10px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
+        .unit-placement.slot { background: rgba(52,211,153,.06); border: 1px solid rgba(52,211,153,.2); color: var(--green); }
+        .unit-placement.tower { background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.06); color: var(--dim); }
+
         /* Upgrade cards */
         .upgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
         .upcard { background: var(--card); border: 1px solid #1e1e38; border-radius: 10px; padding: 14px; display: flex; align-items: center; gap: 12px; }
@@ -885,27 +898,7 @@ function CombinedTowerTab({ units }: { units: (TowerUnit & { owner: string })[] 
         <span>&#x1F3F0; ALL TOWER COMBAT FIGHTERS ({units.length} ACROSS ALL ACCOUNTS)</span>
       </div>
       <div className="tower-grid">
-        {units.map((u, i) => {
-          const rc = rarityColor(u.rarity);
-          return (
-            <div key={i} className="tower-card">
-              <div className="tower-header">
-                <span className="slot-badge">FIGHTER #{typeof u.slot === "number" ? u.slot : i + 1}</span>
-                <span className="ub" style={{ background: "rgba(34,211,238,.08)", color: "var(--cyan)", fontSize: 8 }}>@{u.owner}</span>
-              </div>
-              <div className="tower-name">{u.variant ? `${u.variant} ` : ""}{u.name}</div>
-              <div className="tower-tags">
-                {u.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{u.variant === "Titanic" ? "S" : u.variant[0]}</span>}
-                {u.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {u.level}</span>}
-                <span className="ub" style={{ background: rc + "20", color: rc }}>{u.rarity.toUpperCase()}</span>
-                {u.mutation && (() => {
-                  const ms = MUTATION_STYLES[u.mutation!];
-                  return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{u.mutation}</span>;
-                })()}
-              </div>
-            </div>
-          );
-        })}
+        {units.map((u, i) => <TowerCardContent key={i} u={u} idx={i} ownerTag={u.owner} />)}
       </div>
     </>
   );
@@ -921,7 +914,7 @@ function CombinedBackpackTab({ items }: { items: (BackpackItem & { owner: string
     if (cat !== "All" && getCategory(it.kind) !== cat) return false;
     if (filter.trim() && !it.name.toLowerCase().includes(filter.toLowerCase()) && !it.owner.toLowerCase().includes(filter.toLowerCase())) return false;
     return true;
-  });
+  }).sort((a, b) => backpackSortKey(a.name) - backpackSortKey(b.name));
 
   return (
     <>
@@ -963,32 +956,58 @@ function CombinedBackpackTab({ items }: { items: (BackpackItem & { owner: string
 function UnitCardContent({ u, rc, ownerTag }: { u: Unit; rc: string; ownerTag?: string }) {
   return (
     <div className="ucard" style={{ borderColor: rc + "25" }}>
+      {ownerTag && <div style={{ marginBottom: 6 }}><span className="ub" style={{ background: "rgba(34,211,238,.08)", color: "var(--cyan)", fontSize: 8 }}>@{ownerTag}</span></div>}
       <div className="ucard-top">
-        {ownerTag && <span className="ub" style={{ background: "rgba(34,211,238,.08)", color: "var(--cyan)", fontSize: 8 }}>@{ownerTag}</span>}
         {u.grade && !u.variant && <span className="ub" style={{ background: "rgba(251,191,36,.12)", color: "var(--gold)", fontWeight: 900 }}>{u.grade}</span>}
         {u.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{u.variant === "Titanic" ? "S" : u.variant === "Huge" ? "A+" : u.variant[0]}</span>}
         {u.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {u.level}</span>}
         <span className="ub" style={{ background: rc + "20", color: rc }}>{u.rarity.toUpperCase()}</span>
-        {u.placed && <span className="ub" style={{ background: u.placed === "slot" ? "rgba(52,211,153,.1)" : "rgba(251,191,36,.1)", color: u.placed === "slot" ? "var(--green)" : "var(--gold)" }}>{u.placed === "slot" ? "PLOT" : "TOWER"}</span>}
-        {u.locked && <span className="ub" style={{ background: "rgba(239,68,68,.1)", color: "var(--red)" }}>LOCKED</span>}
-      </div>
-      <div className="ucard-name" style={{ color: rc }}>{u.variant ? `${u.variant} ` : ""}{u.name}</div>
-      <div className="ucard-meta">
         {u.mutation && (() => {
           const ms = MUTATION_STYLES[u.mutation];
           return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{u.mutation}</span>;
         })()}
-        {!u.mutation && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>No Mutation</span>}
-        {u.trait && <span className="ub" style={{ background: "rgba(168,85,247,.1)", color: "var(--accent2)" }}>{u.trait}</span>}
-        <span className="ucard-amount">x{u.amount}</span>
+        {u.locked && <span className="ub" style={{ background: "rgba(239,68,68,.1)", color: "var(--red)" }}>LOCKED</span>}
       </div>
-      {(u.income != null || u.damage != null || u.chance != null) && (
-        <div className="slot-stats" style={{ marginTop: 6 }}>
-          {u.income != null && <div className="slot-stat-row"><span className="slot-stat-l">Speed</span><span className="slot-stat-v" style={{ color: "var(--green)" }}>${fmtMoney(u.income)}/s</span></div>}
-          {u.damage != null && <div className="slot-stat-row"><span className="slot-stat-l">Damage</span><span className="slot-stat-v" style={{ color: "var(--red)" }}>{fmtMoney(u.damage)}</span></div>}
-          {u.chance != null && <div className="slot-stat-row"><span className="slot-stat-l">Chance</span><span className="slot-stat-v">1 in {fmtMoney(u.chance)}</span></div>}
+      <div className="ucard-name" style={{ color: rc }}>{u.variant ? `${u.variant} ` : ""}{u.name}</div>
+
+      {(u.chance != null || u.income != null) && (
+        <div className="unit-stats-box">
+          {u.chance != null && (
+            <div className="unit-stat-cell">
+              <div className="unit-stat-label">CHANCE</div>
+              <div className="unit-stat-val">1 in {fmtMoney(u.chance)}</div>
+            </div>
+          )}
+          {u.income != null && (
+            <div className="unit-stat-cell">
+              <div className="unit-stat-label">SPEED</div>
+              <div className="unit-stat-val" style={{ color: "var(--green)" }}>${fmtMoney(u.income)}/s</div>
+            </div>
+          )}
         </div>
       )}
+
+      {u.trait && (
+        <div className="unit-trait-row">
+          <span style={{ color: "var(--dim)", fontSize: 11, marginRight: 6 }}>&#x2699;</span>
+          <span style={{ color: "var(--accent2)", fontSize: 12, fontWeight: 700 }}>{u.trait}</span>
+        </div>
+      )}
+
+      {u.placed && (
+        <div className="unit-placements">
+          {u.placed === "slot" && (
+            <div className="unit-placement slot"><span>PLOT SLOT</span><span style={{ color: "var(--green)" }}>&#x25CF;</span></div>
+          )}
+          {u.placed === "tower" && (
+            <div className="unit-placement tower"><span>TOWER SQUAD</span><span>&#x1F3F0;</span></div>
+          )}
+        </div>
+      )}
+
+      <div className="ucard-meta" style={{ marginTop: u.placed || u.trait ? 0 : 6 }}>
+        <span className="ucard-amount">x{u.amount}</span>
+      </div>
     </div>
   );
 }
@@ -1076,6 +1095,41 @@ function SlotsTab({ slots }: { slots: SlotData[] }) {
   );
 }
 
+function TowerCardContent({ u, idx, ownerTag }: { u: TowerUnit; idx: number; ownerTag?: string }) {
+  const rc = rarityColor(u.rarity);
+  return (
+    <div className="tower-card">
+      <div className="tower-header">
+        <span className="slot-badge">FIGHTER #{typeof u.slot === "number" ? u.slot : idx + 1}</span>
+        {ownerTag && <span className="ub" style={{ background: "rgba(34,211,238,.08)", color: "var(--cyan)", fontSize: 8 }}>@{ownerTag}</span>}
+        <span className="ub" style={{ background: rc + "20", color: rc }}>{u.rarity.toUpperCase()}</span>
+      </div>
+      <div className="tower-name">{u.variant ? `${u.variant} ` : ""}{u.name}</div>
+      <div className="tower-tags">
+        {u.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{u.variant === "Titanic" ? "S" : u.variant[0]}</span>}
+        {u.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {u.level}</span>}
+        {u.mutation && (() => {
+          const ms = MUTATION_STYLES[u.mutation!];
+          return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{u.mutation}</span>;
+        })()}
+      </div>
+      {(u.chance != null || u.damage != null || u.income != null) && (
+        <div className="slot-stats" style={{ marginTop: 10 }}>
+          {u.chance != null && <div className="slot-stat-row"><span className="slot-stat-l">Roll Chance</span><span className="slot-stat-v" style={{ color: "var(--cyan)" }}>1 in {fmtMoney(u.chance)}</span></div>}
+          {u.damage != null && <div className="slot-stat-row"><span className="slot-stat-l">Damage</span><span className="slot-stat-v" style={{ color: "var(--red)" }}>{fmtMoney(u.damage)} DMG</span></div>}
+          {u.income != null && <div className="slot-stat-row"><span className="slot-stat-l">Income</span><span className="slot-stat-v" style={{ color: "var(--green)" }}>${fmtMoney(u.income)}/s</span></div>}
+        </div>
+      )}
+      {u.trait && (
+        <div className="unit-trait-row">
+          <span style={{ color: "var(--dim)", fontSize: 11, marginRight: 6 }}>&#x2699;</span>
+          <span style={{ color: "var(--accent2)", fontSize: 12, fontWeight: 700 }}>{u.trait}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TowerTab({ data }: { data: { squad: TowerUnit[]; equipped: TowerUnit | null } }) {
   if (!data.equipped && data.squad.length === 0) return <div className="detail-empty">No tower squad data available.</div>;
   return (
@@ -1083,20 +1137,9 @@ function TowerTab({ data }: { data: { squad: TowerUnit[]; equipped: TowerUnit | 
       {data.equipped && (
         <div className="equipped-section">
           <div className="section-header">
-            <span>&#x2694; EQUIPPED FIGHTER (Click to Manage)</span>
+            <span>&#x2694; EQUIPPED FIGHTER</span>
           </div>
-          <div className="equipped-card">
-            <div className="eq-name">{data.equipped.variant ? `${data.equipped.variant} ` : ""}{data.equipped.name}</div>
-            <div className="eq-tags">
-              {data.equipped.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{data.equipped.variant === "Titanic" ? "GRADE S" : data.equipped.variant.toUpperCase()}</span>}
-              <span className="ub" style={{ background: rarityColor(data.equipped.rarity) + "20", color: rarityColor(data.equipped.rarity) }}>{data.equipped.rarity.toUpperCase()}</span>
-              {data.equipped.mutation && (() => {
-                const ms = MUTATION_STYLES[data.equipped.mutation!];
-                return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{data.equipped.mutation}</span>;
-              })()}
-            </div>
-            {data.equipped.level != null && <div className="eq-level">Lv. {data.equipped.level}</div>}
-          </div>
+          <TowerCardContent u={data.equipped} idx={0} />
         </div>
       )}
 
@@ -1107,26 +1150,7 @@ function TowerTab({ data }: { data: { squad: TowerUnit[]; equipped: TowerUnit | 
             <span className="section-desc">Units dispatched to climb Infinity, Cursed, Dragon, and Pirate Towers.</span>
           </div>
           <div className="tower-grid">
-            {data.squad.map((u, i) => {
-              const rc = rarityColor(u.rarity);
-              return (
-                <div key={i} className="tower-card">
-                  <div className="tower-header">
-                    <span className="slot-badge">FIGHTER #{typeof u.slot === "number" ? u.slot : i + 1}</span>
-                    <span className="ub" style={{ background: rc + "20", color: rc }}>{u.rarity.toUpperCase()}</span>
-                  </div>
-                  <div className="tower-name">{u.variant ? `${u.variant} ` : ""}{u.name}</div>
-                  <div className="tower-tags">
-                    {u.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{u.variant === "Titanic" ? "S" : u.variant[0]}</span>}
-                    {u.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {u.level}</span>}
-                    {u.mutation && (() => {
-                      const ms = MUTATION_STYLES[u.mutation!];
-                      return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{u.mutation}</span>;
-                    })()}
-                  </div>
-                </div>
-              );
-            })}
+            {data.squad.map((u, i) => <TowerCardContent key={i} u={u} idx={i} />)}
           </div>
         </>
       )}
@@ -1146,6 +1170,19 @@ function getCategory(kind: string): string {
   return BACKPACK_CATEGORIES[kind] || kind;
 }
 
+const BACKPACK_SORT_ORDER: string[] = [
+  "Gems", "Trait Reroll", "Ticket", "Jackpot Point", "Lucky Spin",
+  "Star Fragment", "Rebirth Token", "Auto Roll Ticket",
+];
+
+function backpackSortKey(name: string): number {
+  const lower = name.toLowerCase();
+  for (let i = 0; i < BACKPACK_SORT_ORDER.length; i++) {
+    if (lower.includes(BACKPACK_SORT_ORDER[i].toLowerCase())) return i;
+  }
+  return BACKPACK_SORT_ORDER.length;
+}
+
 function BackpackTab({ items, gamepasses }: { items: BackpackItem[]; gamepasses: Record<string, boolean> }) {
   const [filter, setFilter] = useState("");
   const [cat, setCat] = useState("All");
@@ -1156,7 +1193,7 @@ function BackpackTab({ items, gamepasses }: { items: BackpackItem[]; gamepasses:
     if (cat !== "All" && getCategory(it.kind) !== cat) return false;
     if (filter.trim() && !it.name.toLowerCase().includes(filter.toLowerCase())) return false;
     return true;
-  });
+  }).sort((a, b) => backpackSortKey(a.name) - backpackSortKey(b.name));
 
   const gpEntries = Object.entries(gamepasses);
 
