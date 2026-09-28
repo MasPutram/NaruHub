@@ -587,6 +587,14 @@ function PosterPage() {
           growingEggs: detData.growingEggs || [],
           backpackEggs: detData.backpackEggs || [],
         });
+      } else if (found?.detail) {
+        setDetail({
+          activePets: found.detail.activePets || [],
+          activeLimit: found.detail.activeLimit,
+          allPets: found.detail.allPets || [],
+          growingEggs: found.detail.growingEggs || [],
+          backpackEggs: found.detail.backpackEggs || [],
+        });
       }
     } catch {}
     setLoading(false);
@@ -598,6 +606,7 @@ function PosterPage() {
 
   useEffect(() => {
     if (!autoDownload || loading || !summary || !posterRef.current) return;
+    if (!detail) return;
     const timer = setTimeout(async () => {
       try {
         const { default: html2canvas } = await import("html2canvas-pro");
@@ -620,9 +629,9 @@ function PosterPage() {
           error: (e as Error).message,
         }, "*");
       }
-    }, 1500);
+    }, 2000);
     return () => clearTimeout(timer);
-  }, [autoDownload, loading, summary, accountName, paramCatalogPrice]);
+  }, [autoDownload, loading, summary, detail, accountName, paramCatalogPrice]);
 
   async function downloadPoster() {
     if (!posterRef.current) return;
