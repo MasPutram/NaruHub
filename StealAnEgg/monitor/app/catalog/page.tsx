@@ -810,9 +810,9 @@ export default function CatalogPage() {
   }
 
   function downloadAllPosters() {
-    const withPrice = visible.filter((a) => a.catalogPrice && a.catalogPrice > 0);
-    if (withPrice.length === 0) return;
+    if (visible.length === 0) return;
     if (batchProgress) return;
+    const withPrice = visible;
     setBatchProgress({ current: 0, total: withPrice.length, account: "" });
 
     let idx = 0;
@@ -1566,17 +1566,15 @@ export default function CatalogPage() {
           >
             {summaryBusy ? "Generating..." : `📋 Download Rangkuman (${accounts.length} akun)`}
           </button>
-          {visible.some((a) => a.catalogPrice && a.catalogPrice > 0) && (
-            <button
-              className="btn-download-all"
-              onClick={downloadAllPosters}
-              disabled={!!batchProgress}
-            >
-              {batchProgress
-                ? `Generating ${batchProgress.current}/${batchProgress.total} — ${batchProgress.account}`
-                : `Download All Poster (${visible.filter((a) => a.catalogPrice && a.catalogPrice > 0).length} akun)`}
-            </button>
-          )}
+          <button
+            className="btn-download-all"
+            onClick={downloadAllPosters}
+            disabled={!!batchProgress || visible.length === 0}
+          >
+            {batchProgress
+              ? `Generating ${batchProgress.current}/${batchProgress.total} — ${batchProgress.account}`
+              : `Download All Poster (${visible.length} akun)`}
+          </button>
           <button
             className="btn-download-all"
             style={{ background: "#1c1012", color: "#f87171", border: "1px solid #3b1c1c" }}
