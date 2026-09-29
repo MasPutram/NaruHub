@@ -579,9 +579,10 @@ export default function CatalogPage() {
 
     const tableRows = rows.map((a, i) => {
       const tp = topPetLabel(a);
+      const mutCell = tp.mut ? `<span class="tp-mut" data-m="${escHtml(tp.mut)}">${escHtml(tp.mut)}</span>` : "—";
       const petCell = tp.text === "—"
         ? "—"
-        : `<div class="tp-row">${tp.mut ? `<span class="tp-mut" data-m="${escHtml(tp.mut)}">${escHtml(tp.mut)}</span>` : ""}<span class="tp-name">${escHtml(tp.text)}</span><span class="tp-rate">${tp.rate}</span></div>`;
+        : `<div class="tp-row"><span class="tp-name">${escHtml(tp.text)}</span><span class="tp-rate">${tp.rate}</span></div>`;
       const incAktif = a.incomeAktif != null ? fmtRate(a.incomeAktif) : "—";
       return `
       <tr class="${i % 2 === 1 ? "alt" : ""}">
@@ -589,6 +590,7 @@ export default function CatalogPage() {
         <td class="c-spd">${fmtCompact(a.speed)}</td>
         <td class="c-inc">${fmtRate(potensiEquip(a))}</td>
         <td class="c-aktif">${incAktif}</td>
+        <td class="c-mut">${mutCell}</td>
         <td class="c-toppet">${petCell}</td>
         <td class="c-num">${eggTotal(a)}</td>
         <td class="c-num" style="color:#6d28d9;font-weight:900">${divineCount(a) || "—"}</td>
@@ -665,9 +667,9 @@ export default function CatalogPage() {
         }
         table.rk-tbl tr.alt td { background: rgba(241, 245, 249, 0.6); }
         table.rk-tbl .c-code { font-weight: 900; color: #1e40af; }
-        table.rk-tbl .c-spd { font-weight: 800; color: #0f172a; }
-        table.rk-tbl .c-inc { font-weight: 800; color: #0f172a; }
-        table.rk-tbl .c-aktif { font-weight: 700; color: #475569; }
+        table.rk-tbl .c-spd { font-weight: 800; color: #5b8dde; }
+        table.rk-tbl .c-inc { font-weight: 800; color: #d45f5f; }
+        table.rk-tbl .c-aktif { font-weight: 900; color: #0f172a; }
         table.rk-tbl .c-num { text-align: center; font-weight: 700; }
         table.rk-tbl .c-mut { text-align: center; }
         table.rk-tbl .c-price { font-weight: 900; color: #16a34a; text-align: center; padding-left: 24px; padding-right: 24px; }
@@ -710,12 +712,13 @@ export default function CatalogPage() {
               <col style="width:8%">
               <col style="width:10%">
               <col style="width:10%">
-              <col style="width:17%">
+              <col style="width:9%">
+              <col style="width:12%">
+              <col style="width:5%">
               <col style="width:5%">
               <col style="width:6%">
               <col style="width:7%">
-              <col style="width:7%">
-              <col style="width:23%">
+              <col style="width:21%">
             </colgroup>
             <thead>
               <tr>
@@ -723,6 +726,7 @@ export default function CatalogPage() {
                 <th>Speed</th>
                 <th>Income Potensi</th>
                 <th>Income Aktif</th>
+                <th style="text-align:center">Mutasi</th>
                 <th>Top Pet</th>
                 <th style="text-align:center">Telur</th>
                 <th style="text-align:center">Divine</th>
