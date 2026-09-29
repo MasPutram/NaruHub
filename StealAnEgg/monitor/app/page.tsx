@@ -525,7 +525,7 @@ export default function DashboardPage() {
         .status-dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
         .status-dot.off { background: var(--red); box-shadow: 0 0 6px rgba(239,68,68,.4); }
         .acc-name { font-weight: 800; font-size: 14px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .dev-tag { color: var(--accent2); font-size: 9px; font-weight: 800; background: rgba(34,211,238,.08); border: 1px solid rgba(34,211,238,.2); border-radius: 5px; padding: 2px 6px; flex-shrink: 0; }
+        .dev-tag { color: var(--accent2); font-size: 13px; font-weight: 700; flex-shrink: 0; }
         .st.boss { background: linear-gradient(135deg, #7c3aed, #a78bfa); border-radius: 8px; padding: 5px 10px; }
         .st.boss .sl { color: #fff; }
         .st.boss .sv { color: #fff; font-size: 18px; }

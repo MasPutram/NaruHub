@@ -334,7 +334,7 @@ function ModeratedPageInner() {
         .card.resolved-card:hover { border-color: var(--green); }
         .card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
         .acc-name { font-weight: 800; font-size: 14px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .dev-tag { color: var(--accent2); font-size: 9px; font-weight: 800; background: rgba(34,211,238,.08); border: 1px solid rgba(34,211,238,.2); border-radius: 5px; padding: 2px 6px; flex-shrink: 0; }
+        .dev-tag { color: var(--accent2); font-size: 13px; font-weight: 700; flex-shrink: 0; }
         .mod-badge { font-size: 10px; font-weight: 800; padding: 3px 10px; border-radius: 6px; flex-shrink: 0; }
         .mod-badge.warn { background: rgba(245,158,11,0.15); color: var(--warn); }
         .mod-badge.ok { background: rgba(52,211,153,0.15); color: var(--green); }

@@ -1175,7 +1175,7 @@ export default function CatalogPage() {
         .cc-dot.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
         .cc-dot.off { background: #555; }
         .cc-name { font-size: 18px; font-weight: 800; }
-        .cc-device { color: var(--accent2); font-size: 10px; font-weight: 700; background: #1c1c2b; border: 1px solid var(--card-border); border-radius: 6px; padding: 2px 6px; }
+        .cc-device { color: var(--accent2); font-size: 13px; font-weight: 700; }
         .cc-status { margin-left: auto; font-size: 11px; color: var(--dim); }
 
         .cc-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
