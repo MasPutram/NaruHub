@@ -548,7 +548,7 @@ export default function CatalogPage() {
     const ROWS_AREA_H = CANVAS_H - HEADER_H - FOOTER_H - THEAD_H;
     const idealRowH = Math.floor(ROWS_AREA_H / rows.length);
     const rowH = Math.max(22, Math.min(60, idealRowH));
-    const bodyFontSize = Math.max(12, Math.min(22, Math.round(rowH * 0.48)));
+    const bodyFontSize = Math.max(14, Math.min(24, Math.round(rowH * 0.55)));
     const pillFontSize = Math.max(10, bodyFontSize - 2);
     if (rows.length > 50) {
       const proceed = confirm(`${rows.length} akun cukup banyak buat satu poster 16:9. Tetap generate? Tulisan bakal kecil.`);
