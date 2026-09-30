@@ -247,48 +247,25 @@ export default function RangkumanPage() {
         ) : (
           <div className="poster-wrap">
             <div className="poster" ref={posterRef}>
-              {/* Header with QR */}
+              {/* Header — logo + title | QR + owner (right) */}
               <div className="rk-header">
                 <div className="rk-brand">
                   <img className="rk-logo-img" src="/logo-naru.png" alt="Naru" crossOrigin="anonymous" />
                   <div>
                     <div className="rk-title">Katalog Stock Anime Dice</div>
-                    <div className="rk-sub">NaruHub &mdash; Stock {STOCK_ACCOUNT} &middot; Update {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</div>
+                    <div className="rk-sub">Stock {STOCK_ACCOUNT} &middot; Update {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</div>
                   </div>
                 </div>
                 <div className="rk-header-right">
-                  <div className="rk-owner">{owner}</div>
-                  <div className="rk-contact">{contact}</div>
-                </div>
-                {qrDataUrl && (
-                  <div className="rk-qr">
-                    <img src={qrDataUrl} alt="QR" />
-                    <div className="rk-qr-caption">Scan</div>
+                  {qrDataUrl && (
+                    <div className="rk-qr-box">
+                      <img src={qrDataUrl} alt="QR" />
+                    </div>
+                  )}
+                  <div className="rk-owner-block">
+                    <div className="rk-owner">{owner}</div>
+                    <div className="rk-contact">{contact}</div>
                   </div>
-                )}
-              </div>
-
-              {/* Compact stat bar without labels */}
-              <div className="stat-bar">
-                <div className="stat-cell green" title="Total Estimasi">
-                  <span className="s-ico">&#x1F4B0;</span>
-                  <span className="s-value">{fmtRp(totalEstimasi)}</span>
-                </div>
-                <div className="stat-cell gold" title="Unit Sewa">
-                  <span className="s-ico">&#x1F511;</span>
-                  <span className="s-value">{sewaUnits.length}</span>
-                </div>
-                <div className="stat-cell blue" title="Unit Sell 1sx+">
-                  <span className="s-ico">&#x1F6D2;</span>
-                  <span className="s-value">{sellUnits.length}</span>
-                </div>
-                <div className="stat-cell red" title="Sewa per jam">
-                  <span className="s-ico">&#x23F1;&#xFE0F;</span>
-                  <span className="s-value">{fmtRp(totalSewaPerJam)}</span>
-                </div>
-                <div className="stat-cell purple" title="Total Deposit">
-                  <span className="s-ico">&#x1F3E6;</span>
-                  <span className="s-value">{fmtRp(totalDeposit)}</span>
                 </div>
               </div>
 
@@ -392,7 +369,7 @@ export default function RangkumanPage() {
 
               {/* Footer */}
               <div className="rk-foot">
-                Poster resmi dari <strong>{owner}</strong> &mdash; Kalau tidak ada watermark / QR, itu POSTER PALSU. &middot; naruhub.my.id
+                Poster resmi dari <strong>{owner}</strong> &mdash; Kalau tidak ada watermark / QR, itu POSTER PALSU.
               </div>
 
               {/* Watermark */}
@@ -416,14 +393,13 @@ export default function RangkumanPage() {
 function SellRow({ u, state }: { u: Unit; state: InventoryState }) {
   const k = unitKey(u);
   const s = state.unitData[k];
-  const rc = rarityColor(u.rarity);
   return (
-    <div className="sell-plain-row">
-      <div className="spr-left">
-        <span className="spr-name" style={{ color: rc }}>{u.variant ? `${u.variant} ` : ""}{u.name}</span>
-        <span className="spr-chance">1 in {fmtMoney(u.chance)}</span>
+    <div className="sell-card">
+      <div className="scd-info">
+        <div className="scd-name">{u.variant ? `${u.variant} ` : ""}{u.name}</div>
+        <div className="scd-chance">1 in {fmtMoney(u.chance)}</div>
       </div>
-      <div className="spr-price">{s?.price ? fmtRp(s.price) : "—"}</div>
+      <div className="scd-price">{s?.price ? fmtRp(s.price) : "—"}</div>
     </div>
   );
 }
@@ -444,13 +420,16 @@ const styles = `
 .poster-wrap { display: flex; justify-content: center; padding: 20px 0; overflow-x: auto; }
 .poster {
   width: 1080px;
+  min-height: 1500px;
   background: #DFE7F0;
-  padding: 0;
+  padding: 0 0 40px;
   color: #0f172a;
   position: relative;
   font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
   overflow: hidden;
   box-shadow: 0 20px 60px rgba(0,0,0,.4);
+  display: flex;
+  flex-direction: column;
 }
 
 /* Header */
@@ -465,68 +444,39 @@ const styles = `
   position: relative;
   z-index: 3;
 }
-.rk-brand { display: flex; align-items: center; gap: 18px; flex: 1; }
+.rk-brand { display: flex; align-items: center; gap: 18px; flex: 1; min-width: 0; }
 .rk-logo-img {
   width: 68px; height: 68px; border-radius: 14px;
   object-fit: cover;
   flex-shrink: 0;
-  border: 2px solid #facc15;
-  background: #fff;
+  background: transparent;
 }
-.rk-title { font-size: 30px; font-weight: 900; letter-spacing: .5px; }
+.rk-title { font-size: 28px; font-weight: 900; letter-spacing: .5px; }
 .rk-sub { color: #cbd5e1; font-size: 13px; margin-top: 4px; letter-spacing: .3px; }
-.rk-header-right { text-align: right; }
-.rk-owner { font-size: 22px; font-weight: 900; color: #facc15; letter-spacing: .5px; }
-.rk-contact { font-size: 12px; color: #f8fafc; font-weight: 700; margin-top: 4px; }
-.rk-qr {
-  background: #fff;
-  padding: 6px 6px 4px;
-  border-radius: 10px;
-  text-align: center;
-  flex-shrink: 0;
-}
-.rk-qr img { display: block; width: 90px; height: 90px; }
-.rk-qr-caption { font-size: 9px; font-weight: 900; color: #0f172a; letter-spacing: 1px; margin-top: 2px; }
-
-/* Stat bar — icon + value only, no text labels */
-.stat-bar {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 10px;
-  padding: 16px 32px 0;
-  position: relative;
-  z-index: 3;
-}
-.stat-cell {
-  background: #ffffff;
-  border: 2px solid;
-  border-radius: 12px;
-  padding: 14px 16px;
+.rk-header-right {
   display: flex;
   align-items: center;
-  gap: 12px;
-  justify-content: center;
+  gap: 14px;
+  flex-shrink: 0;
 }
-.stat-cell.green { border-color: #16a34a; background: #ecfdf5; }
-.stat-cell.gold { border-color: #ca8a04; background: #fefce8; }
-.stat-cell.blue { border-color: #2563eb; background: #eff6ff; }
-.stat-cell.red { border-color: #dc2626; background: #fef2f2; }
-.stat-cell.purple { border-color: #7c3aed; background: #f5f3ff; }
-.s-ico { font-size: 24px; line-height: 1; }
-.s-value { font-size: 22px; font-weight: 900; color: #0f172a; }
-.stat-cell.green .s-value { color: #15803d; }
-.stat-cell.gold .s-value { color: #a16207; }
-.stat-cell.blue .s-value { color: #1d4ed8; }
-.stat-cell.red .s-value { color: #b91c1c; }
-.stat-cell.purple .s-value { color: #6d28d9; }
+.rk-qr-box {
+  background: #fff;
+  padding: 6px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.rk-qr-box img { display: block; width: 84px; height: 84px; }
+.rk-owner-block { text-align: right; }
+.rk-owner { font-size: 24px; font-weight: 900; color: #facc15; letter-spacing: .5px; line-height: 1.1; }
+.rk-contact { font-size: 12px; color: #f8fafc; font-weight: 700; margin-top: 6px; }
 
 /* Section header — bigger, with side lines */
 .sec-head {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 0 40px;
-  margin: 26px 0 16px;
+  padding: 0 32px;
+  margin: 32px 0 18px;
   position: relative;
   z-index: 3;
 }
@@ -556,10 +506,10 @@ const styles = `
   z-index: 3;
 }
 
-/* Sewa cards — in-game style (dark bg, gradient glow border) */
+/* Sewa cards — fixed 4 columns, wrap to next row when > 4 */
 .sewa-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   padding: 0 32px;
   position: relative;
@@ -686,28 +636,55 @@ const styles = `
 }
 .gcp-item.depo .gcp-v { color: #fed7aa; }
 
-/* Sell unit — plain text list, 2 columns, prominent "1 in Xsx" */
+/* Sell unit — card per unit, 2 columns, black name + red "1 in Xsx" */
 .sell-plain {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px 24px;
-  padding: 0 40px;
+  gap: 8px 12px;
+  padding: 0 32px;
   position: relative;
   z-index: 3;
 }
-.sell-col { display: flex; flex-direction: column; gap: 4px; }
-.sell-plain-row {
+.sell-col { display: flex; flex-direction: column; gap: 8px; }
+.sell-card {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  padding: 8px 4px;
-  border-bottom: 1px dashed #cbd5e1;
   gap: 12px;
+  padding: 12px 16px;
+  background: #ffffff;
+  border: 2px solid #0f172a;
+  border-radius: 10px;
+  box-shadow: 0 2px 0 #0f172a;
 }
-.spr-left { display: flex; align-items: baseline; gap: 10px; min-width: 0; flex: 1; }
-.spr-name { font-size: 15px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
-.spr-chance { font-size: 17px; font-weight: 900; color: #0f172a; white-space: nowrap; }
-.spr-price { font-size: 14px; font-weight: 900; color: #a16207; white-space: nowrap; flex-shrink: 0; }
+.scd-info { min-width: 0; flex: 1; }
+.scd-name {
+  font-size: 16px;
+  font-weight: 900;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.15;
+}
+.scd-chance {
+  font-size: 15px;
+  font-weight: 900;
+  color: #f87171;
+  margin-top: 3px;
+  letter-spacing: .3px;
+}
+.scd-price {
+  font-size: 15px;
+  font-weight: 900;
+  color: #a16207;
+  padding: 6px 12px;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 
 /* Inventory */
 .inv-grid {
