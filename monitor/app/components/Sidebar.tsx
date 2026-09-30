@@ -23,8 +23,8 @@ function isGroup(e: NavEntry): e is NavGroup {
 
 const NAV: NavEntry[] = [
   {
-    label: "Dashboard",
-    icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1",
+    label: "Katalog",
+    icon: "M4 6h16M4 10h16M4 14h16M4 18h16",
     items: [
       { label: "Steal An Egg", href: "/", icon: "M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4z" },
       { label: "Anime Dice", href: "/anime-dice", icon: "M19 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2zM8 16a1 1 0 110-2 1 1 0 010 2zm0-4a1 1 0 110-2 1 1 0 010 2zm4 2a1 1 0 110-2 1 1 0 010 2zm4 2a1 1 0 110-2 1 1 0 010 2zm0-4a1 1 0 110-2 1 1 0 010 2z" },
@@ -64,7 +64,7 @@ export default function Sidebar() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Dashboard: true, Termux: true, Captcha: true });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Katalog: true, Termux: true, Captcha: true });
 
   useEffect(() => { setMounted(true); }, []);
 

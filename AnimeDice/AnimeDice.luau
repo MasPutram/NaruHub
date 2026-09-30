@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Monitoring Anime Dice v1.4.0 (ultra-lightweight)
+-- NaruHub | Monitoring Anime Dice v1.4.1 (ultra-lightweight)
 -- Monitoring only -- no auto-roll/sell/equip, baca data → POST ke dashboard.
 
 ------------------------------------------------------------
@@ -301,11 +301,21 @@ local function collectInventory()
 				})
 			else
 				totalItemCount += (entry.amount or 1)
+				-- Try to pull gear-specific fields (slot, tier) from cfg for
+				-- gear items so the dashboard can categorize by slot (Head,
+				-- Torso, Back, Upper, Waist) for the Obito Mask etc.
+				local slot, tier
+				if cfg then
+					slot = cfg.slot or cfg.Slot or cfg.gearSlot or cfg.GearSlot or cfg.category or cfg.Category
+					tier = cfg.tier or cfg.Tier
+				end
 				table.insert(backpack, {
 					name = entry.name,
 					amount = entry.amount or 1,
 					kind = kind,
 					rarity = rarity,
+					slot = slot,
+					tier = tier,
 				})
 			end
 		end
