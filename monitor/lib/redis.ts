@@ -171,6 +171,8 @@ export function adForSaleKickKey(name: string) {
   return `ad:forsalekick:${name}`;
 }
 
+export const AD_INVENTORY_RATES_KEY = "ad:inventory:rates";
+
 
 type SetOptions = { ex?: number };
 
