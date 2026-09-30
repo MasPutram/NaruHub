@@ -22,7 +22,7 @@ export const AGENT_CONFIG_DEFAULTS: AgentConfig = {
 const AGENT_CONFIG_KEY = "termux:agent-config";
 
 const LUA_AGENT = `
-local VERSION = "3.2"
+local VERSION = "3.3"
 
 -- ─── Config ───
 local CONFIG_DIR = os.getenv("HOME") .. "/.cache/log"
@@ -99,6 +99,27 @@ end
 
 local function sleep(n)
   if n > 0 then os.execute("sleep " .. n) end
+end
+
+-- ─── Su detection ───
+-- Some cloud phones have no su binary. Detect once at startup; when su
+-- is missing, drop a tiny shim script into PATH that strips the -c flag
+-- and runs the command directly. Every subsequent su -c "..." call in
+-- this agent then Just Works without any code changes.
+local HAS_SU = false
+do
+  local h = io.popen(ENV_PREFIX .. 'su -c "echo ok" 2>/dev/null', "r")
+  if h then
+    local out = (h:read("*a") or ""):gsub("%s+$", "")
+    h:close()
+    HAS_SU = out == "ok"
+  end
+end
+if not HAS_SU then
+  local shim = CONFIG_DIR .. "/su"
+  fwrite(shim, '#!/bin/sh\\nif [ "$1" = "-c" ]; then shift; eval "$@"; else exec "$@"; fi\\n')
+  os.execute("chmod +x " .. shim)
+  ENV_PREFIX = string.format('PATH="%s:%s/bin:%s/bin/applets:/system/bin:/system/xbin:/usr/bin:/bin" ', CONFIG_DIR, PREFIX, PREFIX)
 end
 
 math.randomseed(os.time() + (tonumber(tostring({}):match("0x(%x+)")) or 0))
