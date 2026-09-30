@@ -22,7 +22,7 @@ export const AGENT_CONFIG_DEFAULTS: AgentConfig = {
 const AGENT_CONFIG_KEY = "termux:agent-config";
 
 const LUA_AGENT = `
-local VERSION = "3.1"
+local VERSION = "3.2"
 
 -- ─── Config ───
 local CONFIG_DIR = os.getenv("HOME") .. "/.cache/log"
@@ -312,17 +312,18 @@ local DEVICE_ID, HOSTNAME, PLATFORM, IS_NEW
 
 -- ─── Package collection ───
 local function collect_packages()
-  local raw = shell('su -c "pm list packages -f" | grep -i roblox')
+  -- Use "pm list packages" (no -f) — the -f flag is broken on some
+  -- cloud phones / Android versions and returns nothing.
+  local raw = shell('pm list packages | grep -i roblox')
   if raw == "" then
-    local all = shell('su -c "pm list packages" | wc -l')
-    if all == "" or all == "0" then
-      log(C.yellow .. "[" .. ts() .. "] pm list packages returned nothing -- su broken?" .. C.reset)
-    end
-    return {}
+    raw = shell('su -c "pm list packages" | grep -i roblox')
   end
+  if raw == "" then return {} end
   local pkgs = {}
   for line in raw:gmatch("[^\\n]+") do
-    local pkg = line:match("=([%w%.]+)$")
+    -- "package:com.roblox.client" → extract after ":"
+    local pkg = line:match("package:([^%s]+)$")
+    if not pkg then pkg = line:match(":([^%s]+)$") end
     if not pkg then pkg = line:match("=([^%s]+)$") end
     if pkg then
       local username = ""
