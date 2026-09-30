@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 // Serves heartbeatnaru.lua with the caller's access key baked in. The agent
 // fetches this on startup and writes it into every executor autoexec dir, so
 // each clone reports its Roblox server (JobId) presence. Keep this in sync
-// with StealAnEgg/heartbeatnaru.lua (this string is the deployed source).
+// with heartbeatnaru.lua (this string is the deployed source).
 const HEARTBEAT_SCRIPT = `-- heartbeatnaru.lua (auto-deployed by NaruHub agent)
 local BASE_URL = "https://naruhub.my.id"
 local ACCESS_KEY = "$$LICENSE$$"

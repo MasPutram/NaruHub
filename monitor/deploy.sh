@@ -4,7 +4,8 @@ set -euo pipefail
 # ─── Config ───
 VPS_HOST="103.253.212.251"
 VPS_USER="root"
-BASE="/root/NaruHub/StealAnEgg/monitor/.deploy"
+OLD_BASE="/root/NaruHub/StealAnEgg/monitor/.deploy"
+BASE="/root/NaruHub/monitor/.deploy"
 RELEASE_ID="$(git rev-parse --short HEAD)"
 ARCHIVE="naruhub-monitor.tar.gz"
 
@@ -46,10 +47,19 @@ echo "▸ Deploying on VPS..."
 ssh "${VPS_USER}@${VPS_HOST}" "RELEASE_ID='${RELEASE_ID}' bash -s" <<'REMOTE'
 set -euo pipefail
 
-BASE="/root/NaruHub/StealAnEgg/monitor/.deploy"
+OLD_BASE="/root/NaruHub/StealAnEgg/monitor/.deploy"
+BASE="/root/NaruHub/monitor/.deploy"
 RELEASE="$BASE/releases/$RELEASE_ID"
 ARCHIVE="/tmp/naruhub-monitor-$RELEASE_ID.tar.gz"
 ACTIVE="$BASE/active"
+
+# --- One-time migration from old path ---
+if [ -d "$OLD_BASE" ] && [ ! -d "$BASE/releases" ]; then
+  echo "▸ Migrating deploy dir from old path..."
+  mkdir -p "$(dirname "$BASE")"
+  cp -a "$OLD_BASE" "$BASE"
+  echo "  Migration complete"
+fi
 
 mkdir -p "$BASE/releases"
 rm -rf "$RELEASE"
@@ -77,6 +87,14 @@ fi
 TMPLINK="$BASE/active.new.$$"
 ln -s "$RELEASE" "$TMPLINK"
 mv -T "$TMPLINK" "$ACTIVE"
+
+# Update systemd service if still pointing to old path
+SVC_FILE="/etc/systemd/system/naruhub-monitor.service"
+if [ -f "$SVC_FILE" ] && grep -q "StealAnEgg" "$SVC_FILE"; then
+  sed -i "s|/root/NaruHub/StealAnEgg/monitor/.deploy|$BASE|g" "$SVC_FILE"
+  systemctl daemon-reload
+  echo "▸ Updated systemd service paths"
+fi
 
 systemctl restart naruhub-monitor
 sleep 2

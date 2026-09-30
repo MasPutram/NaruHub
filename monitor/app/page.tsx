@@ -406,7 +406,7 @@ export default function DashboardPage() {
       const body = await res.json();
       if (!res.ok || !body.ok) { setGenMsg(account, "Gagal: " + (body.error || "unknown"), "#f87171"); return; }
       setAccounts((prev) => prev.filter((a) => a.sourceAccount !== account));
-      // Script (StealAnEgg.luau) polls /api/monitor and sees forSale:true in the
+      // SAE script polls /api/monitor and sees forSale:true in the
       // next heartbeat response -- it Kicks the clone to Roblox home so the
       // operator can manually log out. No relaunch needed: the auto-rejoin
       // brain now skips a running-but-not-in-game app (home screen).

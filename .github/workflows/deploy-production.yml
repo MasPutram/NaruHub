@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - "StealAnEgg/monitor/**"
+      - "monitor/**"
       - ".github/workflows/deploy-production.yml"
   workflow_dispatch:
 
@@ -19,7 +19,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: StealAnEgg/monitor
+        working-directory: monitor
 
     steps:
       - name: Checkout
@@ -30,7 +30,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: StealAnEgg/monitor/package-lock.json
+          cache-dependency-path: monitor/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -62,7 +62,7 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: naruhub-monitor-${{ github.sha }}
-          path: StealAnEgg/monitor/naruhub-monitor.tar.gz
+          path: monitor/naruhub-monitor.tar.gz
           retention-days: 7
 
   deploy:
@@ -126,7 +126,7 @@ jobs:
           HOSTNAME=0.0.0.0
           ENVEOF
           sed -i 's/^          //' dotenv.txt
-          scp dotenv.txt "${VPS_USER}@${VPS_HOST}:/root/NaruHub/StealAnEgg/monitor/.deploy/.env"
+          scp dotenv.txt "${VPS_USER}@${VPS_HOST}:/tmp/naruhub-monitor-dotenv.txt"
           rm -f dotenv.txt
 
       - name: Deploy
@@ -142,12 +142,27 @@ jobs:
             "RELEASE_ID='${RELEASE_ID}' bash -s" <<'REMOTE'
           set -euo pipefail
 
-          BASE="/root/NaruHub/StealAnEgg/monitor/.deploy"
+          OLD_BASE="/root/NaruHub/StealAnEgg/monitor/.deploy"
+          BASE="/root/NaruHub/monitor/.deploy"
           RELEASE="$BASE/releases/$RELEASE_ID"
           ARCHIVE="/tmp/naruhub-monitor-$RELEASE_ID.tar.gz"
           ACTIVE="$BASE/active"
 
+          # --- One-time migration from old path ---
+          if [ -d "$OLD_BASE" ] && [ ! -d "$BASE/releases" ]; then
+            echo "Migrating deploy dir from old path..."
+            mkdir -p "$(dirname "$BASE")"
+            cp -a "$OLD_BASE" "$BASE"
+            echo "Migration complete: $OLD_BASE -> $BASE"
+          fi
+
           mkdir -p "$BASE/releases"
+
+          # Move env file from temp upload location
+          if [ -f /tmp/naruhub-monitor-dotenv.txt ]; then
+            mv /tmp/naruhub-monitor-dotenv.txt "$BASE/.env"
+          fi
+
           rm -rf "$RELEASE"
           mkdir -p "$RELEASE"
 
@@ -168,25 +183,31 @@ jobs:
           PREVIOUS=""
 
           if [ -L "$ACTIVE" ]; then
-            # Kondisi A: active is a symlink — read its target
             PREVIOUS="$(readlink -f "$ACTIVE")"
           elif [ -d "$ACTIVE" ]; then
-            # Kondisi B: active is a plain directory — remove it
             echo "WARNING: active is a plain directory, removing it"
             rm -rf "$ACTIVE"
           fi
-          # Kondisi C: active doesn't exist — PREVIOUS stays empty
 
-          # Atomic symlink swap: create temp symlink then mv (rename is atomic)
+          # Atomic symlink swap
           TMPLINK="$BASE/active.new.$$"
           ln -s "$RELEASE" "$TMPLINK"
           mv -T "$TMPLINK" "$ACTIVE"
 
-          # Ensure systemd loads env file
+          # Update systemd service to point to new path
           SVC_FILE="/etc/systemd/system/naruhub-monitor.service"
-          if [ -f "$SVC_FILE" ] && ! grep -q "EnvironmentFile=" "$SVC_FILE"; then
-            sed -i "/\[Service\]/a EnvironmentFile=$BASE/.env" "$SVC_FILE"
-            systemctl daemon-reload
+          if [ -f "$SVC_FILE" ]; then
+            # Fix EnvironmentFile if pointing to old path
+            if grep -q "StealAnEgg" "$SVC_FILE"; then
+              sed -i "s|/root/NaruHub/StealAnEgg/monitor/.deploy|$BASE|g" "$SVC_FILE"
+              systemctl daemon-reload
+              echo "Updated systemd service paths"
+            fi
+            # Add EnvironmentFile if missing
+            if ! grep -q "EnvironmentFile=" "$SVC_FILE"; then
+              sed -i "/\[Service\]/a EnvironmentFile=$BASE/.env" "$SVC_FILE"
+              systemctl daemon-reload
+            fi
           fi
 
           # --- Restart and verify ---
@@ -204,7 +225,6 @@ jobs:
           done
 
           if [ "$HEALTHY" = true ]; then
-            # Health check the HTTP endpoint
             if ! curl -fsS --max-time 10 https://naruhub.my.id/ > /dev/null 2>&1; then
               echo "WARNING: HTTP health check failed, but service is running"
             fi
@@ -243,7 +263,6 @@ jobs:
             tail -n +6 |
             while read -r old; do
               OLDPATH="$BASE/releases/$old"
-              # Don't delete the currently active or previous release
               if [ "$OLDPATH" != "$RELEASE" ] && [ "$OLDPATH" != "${PREVIOUS%/}" ]; then
                 rm -rf "$OLDPATH"
               fi
