@@ -459,7 +459,7 @@ const styles = `
   width: 1080px;
   min-height: 1500px;
   background: #DFE7F0;
-  padding: 0 0 40px;
+  padding: 0;
   color: #0f172a;
   position: relative;
   font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
