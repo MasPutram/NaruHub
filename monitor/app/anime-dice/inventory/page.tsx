@@ -131,11 +131,16 @@ const GEAR_SLOTS = ["Head", "Torso", "Back", "Upper", "Waist"];
 
 function gearSlotFromName(name: string): string | null {
   const n = name.toLowerCase();
-  if (n.includes("head") || n.includes("mask") || n.includes("helmet") || n.includes("hat")) return "Head";
-  if (n.includes("torso") || n.includes("chest") || n.includes("shirt") || n.includes("armor")) return "Torso";
-  if (n.includes("back") || n.includes("cape") || n.includes("wing")) return "Back";
-  if (n.includes("upper") || n.includes("arm") || n.includes("shoulder")) return "Upper";
-  if (n.includes("waist") || n.includes("belt") || n.includes("leg") || n.includes("pants")) return "Waist";
+  // Head: mask, helmet, hat, fan (e.g. Obita's War Fan, Obito Mask)
+  if (n.includes("mask") || n.includes("helmet") || n.includes("hat") || n.includes("fan") || n.includes("head")) return "Head";
+  // Torso: coat, robe, shirt, chest, armor (e.g. Mazun's Coat, Jogu's Robe)
+  if (n.includes("coat") || n.includes("robe") || n.includes("shirt") || n.includes("chest") || n.includes("armor") || n.includes("torso")) return "Torso";
+  // Back: drum, cape, wing (e.g. Enol's Drums)
+  if (n.includes("drum") || n.includes("cape") || n.includes("wing") || n.includes("back")) return "Back";
+  // Upper: halo, sword, arm, shoulder (e.g. Angel's Halo, Zaro's Swords)
+  if (n.includes("halo") || n.includes("sword") || n.includes("arm") || n.includes("shoulder") || n.includes("upper")) return "Upper";
+  // Waist: sash, belt, pants, leg (e.g. Sakuna's Sash)
+  if (n.includes("sash") || n.includes("belt") || n.includes("pants") || n.includes("leg") || n.includes("waist")) return "Waist";
   return null;
 }
 
