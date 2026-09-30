@@ -216,15 +216,37 @@ local function getTraitMults(trait)
 end
 
 ------------------------------------------------------------
--- Visuals module (loaded separately — gradient colors, modelName, shirtId)
--- Load via: loadstring(httpGet(game, ".../AnimeDiceVisuals.luau?v=" .. tick()))()
+-- Color helpers
 ------------------------------------------------------------
-local Visuals = nil
-pcall(function()
-	local src = httpGet(game, "https://raw.githubusercontent.com/MasPutram/NaruHub/main/AnimeDice/AnimeDiceVisuals.luau?v=" .. tostring(tick()))
-	local loader = loadstring(src)
-	Visuals = loader and loader() or nil
-end)
+local function color3ToHex(c)
+	return string.format("#%02X%02X%02X",
+		math.floor(c.R * 255 + 0.5),
+		math.floor(c.G * 255 + 0.5),
+		math.floor(c.B * 255 + 0.5))
+end
+
+local function gradientToHexArray(gradient)
+	if typeof(gradient) ~= "ColorSequence" then return nil end
+	local seen = {}
+	local colors = {}
+	for _, kp in ipairs(gradient.Keypoints) do
+		local hex = color3ToHex(kp.Value)
+		if not seen[hex] then
+			seen[hex] = true
+			table.insert(colors, hex)
+		end
+	end
+	return colors
+end
+
+local function getShirtId(model)
+	if not model then return nil end
+	local shirt = model:FindFirstChildOfClass("Shirt")
+	if shirt and shirt.ShirtTemplate ~= "" then
+		return shirt.ShirtTemplate:match("(%d+)")
+	end
+	return nil
+end
 
 ------------------------------------------------------------
 -- Rarity tier map (higher = rarer)
@@ -324,11 +346,6 @@ local function collectInventory()
 					placed = "tower"
 				end
 
-				local uColors, uModelName, uShirtId
-				if Visuals and Visuals.enrichUnit and cfg then
-					uColors, uModelName, uShirtId = Visuals.enrichUnit(cfg)
-				end
-
 				table.insert(units, {
 					id = id,
 					name = entry.name,
@@ -347,9 +364,9 @@ local function collectInventory()
 					chance = chance,
 					health = health,
 					placed = placed,
-					colors = uColors,
-					modelName = uModelName,
-					shirtId = uShirtId,
+					colors = cfg and gradientToHexArray(cfg.gradient) or nil,
+					modelName = cfg and cfg.baseModel and cfg.baseModel.Name or nil,
+					shirtId = cfg and getShirtId(cfg.baseModel) or nil,
 				})
 			else
 				totalItemCount += (entry.amount or 1)
@@ -505,9 +522,8 @@ local function collectSlots()
 						if slotInfo.damage then slotInfo.damage = slotInfo.damage * tDmg end
 						if slotInfo.health then slotInfo.health = slotInfo.health * tHp end
 
-						if Visuals and Visuals.enrichSlot then
-							slotInfo.colors, slotInfo.modelName = Visuals.enrichSlot(cfg)
-						end
+						slotInfo.colors = gradientToHexArray(cfg.gradient)
+						slotInfo.modelName = cfg.baseModel and cfg.baseModel.Name or nil
 					end
 				end
 			end

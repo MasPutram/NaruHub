@@ -14,6 +14,9 @@ interface Unit {
   income?: number | null;
   chance?: number | null;
   image?: number | string | null;
+  colors?: string[] | null;
+  modelName?: string | null;
+  shirtId?: string | number | null;
 }
 
 interface BackpackItem {
@@ -103,6 +106,16 @@ function imageUrl(image: number | string | null | undefined): string | null {
   return `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=420&height=420&format=png`;
 }
 
+function unitPortraitUrl(u: Unit): string | null {
+  return imageUrl(u.image) || imageUrl(u.shirtId);
+}
+
+function unitGradient(u: Unit): string {
+  const cs = u.colors && u.colors.length > 0 ? u.colors : [rarityColor(u.rarity)];
+  if (cs.length === 1) return `linear-gradient(135deg, ${cs[0]}, ${cs[0]}66)`;
+  return `linear-gradient(135deg, ${cs.join(", ")})`;
+}
+
 export default function RangkumanPage() {
   const [mounted, setMounted] = useState(false);
   const [detail, setDetail] = useState<ADDetail | null>(null);
@@ -110,9 +123,8 @@ export default function RangkumanPage() {
   const [state, setState] = useState<InventoryState>({ unitData: {}, bpSold: {}, sewa: {} });
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
-  const [owner, setOwner] = useState("KaijuBer2");
-  const [contact, setContact] = useState("");
-  const [showPoliceLine, setShowPoliceLine] = useState(true);
+  const [owner, setOwner] = useState("Mas Naru");
+  const [contact, setContact] = useState("facebook.com/naruaho");
   const posterRef = useRef<HTMLDivElement | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -142,12 +154,12 @@ export default function RangkumanPage() {
       const { default: html2canvas } = await import("html2canvas-pro");
       const canvas = await html2canvas(posterRef.current, {
         scale: 2,
-        backgroundColor: "#ffffff",
+        backgroundColor: "#DFE7F0",
         useCORS: true,
       });
       const link = document.createElement("a");
       const stamp = new Date().toISOString().slice(0, 10);
-      link.download = `rangkuman-${STOCK_ACCOUNT}-${stamp}.png`;
+      link.download = `Rangkuman-AnimeDice-${STOCK_ACCOUNT}-${stamp}.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
     } catch (e) {
@@ -167,7 +179,6 @@ export default function RangkumanPage() {
     return !state.sewa[k] && !state.unitData[k]?.sold;
   }).sort((a, b) => (b.chance || 0) - (a.chance || 0));
 
-  // Split sell into 2 columns
   const half = Math.ceil(sellUnits.length / 2);
   const sellLeft = sellUnits.slice(0, half);
   const sellRight = sellUnits.slice(half);
@@ -180,26 +191,27 @@ export default function RangkumanPage() {
   const divineGear = gearItems.filter((g) => g.rarity?.toLowerCase() === "divine").reduce((s, g) => s + (g.amount || 0), 0);
 
   const inventorySlots = [
-    { key: "gems", name: "GEMS", item: gems, qty: gems?.amount || 0, value: (gems?.amount || 0) / 1000 * rates.gemRate, rate: `${rates.gemRate} /1k`, color: "#22d3ee", emoji: "\u{1F48E}" },
-    { key: "trait", name: "TRAIT REROLL", item: traitReroll, qty: traitReroll?.amount || 0, value: (traitReroll?.amount || 0) / 1000 * rates.traitRerollRate, rate: `${rates.traitRerollRate} /1k`, color: "#818cf8", emoji: "\u{1F504}" },
-    { key: "lucky", name: "LUCKY SPIN", item: luckySpin, qty: luckySpin?.amount || 0, value: (luckySpin?.amount || 0) * rates.luckySpinRate, rate: `${rates.luckySpinRate} /pc`, color: "#fbbf24", emoji: "\u{1F3B0}" },
-    { key: "jackpot", name: "JACKPOT", item: jackpot, qty: jackpot?.amount || 0, value: (jackpot?.amount || 0) * rates.jackpotRate, rate: `${rates.jackpotRate} /pc`, color: "#ef4444", emoji: "\u{1F3AF}" },
-    { key: "gear", name: "DIVINE GEAR", item: null as BackpackItem | null, qty: divineGear, value: divineGear * rates.gearRate, rate: `${rates.gearRate} /pc`, color: "#c084fc", emoji: "\u{2699}\u{FE0F}" },
+    { key: "gems", name: "GEMS", item: gems, qty: gems?.amount || 0, value: (gems?.amount || 0) / 1000 * rates.gemRate, sub: `${rates.gemRate.toLocaleString("id-ID")} /1k`, accent: "#0891b2", bg: "#ecfeff" },
+    { key: "trait", name: "TRAIT REROLL", item: traitReroll, qty: traitReroll?.amount || 0, value: (traitReroll?.amount || 0) / 1000 * rates.traitRerollRate, sub: `${rates.traitRerollRate.toLocaleString("id-ID")} /1k`, accent: "#6366f1", bg: "#eef2ff" },
+    { key: "lucky", name: "LUCKY SPIN", item: luckySpin, qty: luckySpin?.amount || 0, value: (luckySpin?.amount || 0) * rates.luckySpinRate, sub: `${rates.luckySpinRate.toLocaleString("id-ID")} /pc`, accent: "#ca8a04", bg: "#fefce8" },
+    { key: "jackpot", name: "JACKPOT", item: jackpot, qty: jackpot?.amount || 0, value: (jackpot?.amount || 0) * rates.jackpotRate, sub: `${rates.jackpotRate.toLocaleString("id-ID")} /pc`, accent: "#dc2626", bg: "#fef2f2" },
+    { key: "gear", name: "DIVINE GEAR", item: null as BackpackItem | null, qty: divineGear, value: divineGear * rates.gearRate, sub: `${rates.gearRate.toLocaleString("id-ID")} /pc`, accent: "#9333ea", bg: "#faf5ff" },
   ];
+
+  const totalEstimasi = inventorySlots.reduce((s, x) => s + x.value, 0)
+    + Object.entries(state.unitData).reduce((s, [k, v]) => s + (v.sold ? 0 : v.price), 0);
+  const totalSewaPerJam = sewaUnits.reduce((s, u) => s + (state.sewa[unitKey(u)]?.pricePerHour || 0), 0);
+  const totalDeposit = sewaUnits.reduce((s, u) => s + (state.sewa[unitKey(u)]?.deposit || 0), 0);
 
   return (
     <>
       <style>{styles}</style>
       <div className="page">
         <div className="controls">
-          <label>Nama Pemilik:</label>
+          <label>Pemilik:</label>
           <input value={owner} onChange={(e) => setOwner(e.target.value)} />
           <label>Kontak:</label>
-          <input value={contact} onChange={(e) => setContact(e.target.value)} placeholder="WA / Discord" style={{ width: 180 }} />
-          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <input type="checkbox" checked={showPoliceLine} onChange={(e) => setShowPoliceLine(e.target.checked)} />
-            Police Line Hak Milik
-          </label>
+          <input value={contact} onChange={(e) => setContact(e.target.value)} placeholder="WA / FB / Discord" />
           <button className="dlbtn" onClick={downloadPoster} disabled={downloading}>
             {downloading ? "Downloading..." : "⬇ Download PNG"}
           </button>
@@ -214,166 +226,145 @@ export default function RangkumanPage() {
           <div className="poster-wrap">
             <div className="poster" ref={posterRef}>
               {/* Header */}
-              <div className="header">
-                <div className="brand">
-                  <div className="brand-logo">NH</div>
+              <div className="rk-header">
+                <div className="rk-brand">
+                  <div className="rk-logo">NH</div>
                   <div>
-                    <div className="brand-title">NARUHUB</div>
-                    <div className="brand-sub">ANIME DICE STOCK</div>
+                    <div className="rk-title">Katalog Stock Anime Dice</div>
+                    <div className="rk-sub">NaruHub — Stock {STOCK_ACCOUNT} · Update {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</div>
                   </div>
                 </div>
-                <div className="header-right">
-                  <div className="acc-name">{owner || STOCK_ACCOUNT}</div>
-                  {contact && <div className="acc-contact">{contact}</div>}
-                  <div className="acc-date">{new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</div>
+                <div className="rk-header-right">
+                  <div className="rk-owner">{owner}</div>
+                  <div className="rk-contact">{contact}</div>
+                  <div className="rk-scan">Hubungi untuk pembelian / sewa</div>
+                </div>
+              </div>
+
+              {/* Summary stats */}
+              <div className="stat-bar">
+                <div className="stat-cell green">
+                  <div className="s-label">TOTAL ESTIMASI</div>
+                  <div className="s-value">{fmtRp(totalEstimasi)}</div>
+                </div>
+                <div className="stat-cell gold">
+                  <div className="s-label">UNIT SEWA</div>
+                  <div className="s-value">{sewaUnits.length}</div>
+                </div>
+                <div className="stat-cell blue">
+                  <div className="s-label">UNIT SELL (1sx+)</div>
+                  <div className="s-value">{sellUnits.length}</div>
+                </div>
+                <div className="stat-cell red">
+                  <div className="s-label">SEWA / JAM</div>
+                  <div className="s-value">{fmtRp(totalSewaPerJam)}</div>
+                </div>
+                <div className="stat-cell purple">
+                  <div className="s-label">TOTAL DEPO</div>
+                  <div className="s-value">{fmtRp(totalDeposit)}</div>
                 </div>
               </div>
 
               {/* OPEN SEWA UNIT */}
-              <div className="section">
-                <div className="section-head">OPEN SEWA UNIT</div>
-                <div className="section-body">
-                  {sewaUnits.length === 0 ? (
-                    <div className="empty-slot">Belum ada unit yang dibuka untuk sewa</div>
-                  ) : (
-                    <div className="sewa-grid">
-                      {sewaUnits.slice(0, 4).map((u, i) => {
-                        const k = unitKey(u);
-                        const sewa = state.sewa[k];
-                        const rc = rarityColor(u.rarity);
-                        const img = imageUrl(u.image);
-                        return (
-                          <div key={i} className="sewa-card" style={{ borderColor: rc }}>
-                            <div className="sc-portrait" style={{ background: `linear-gradient(135deg, ${rc}22, ${rc}05)` }}>
-                              {img ? (
-                                <img src={img} alt={u.name} crossOrigin="anonymous" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                              ) : (
-                                <div className="sc-fallback" style={{ color: rc }}>{u.name[0]}</div>
-                              )}
-                            </div>
-                            <div className="sc-name" style={{ color: rc }}>{u.variant ? `${u.variant} ` : ""}{u.name}</div>
-                            <div className="sc-income">{u.income ? fmtMoney(u.income) : "-"}/s</div>
-                            <div className="sc-rp">{fmtRp(sewa.pricePerHour)} /jam</div>
-                            <div className="sc-depo">DEPO: {fmtRp(sewa.deposit)}</div>
-                          </div>
-                        );
-                      })}
-                      {Array.from({ length: Math.max(0, 4 - sewaUnits.length) }).map((_, i) => (
-                        <div key={`empty-${i}`} className="sewa-card empty">
-                          <div className="sc-portrait" />
-                          <div className="sc-name">-</div>
-                          <div className="sc-income">-</div>
-                          <div className="sc-rp">-</div>
-                          <div className="sc-depo">-</div>
+              <div className="sec-head">OPEN SEWA UNIT</div>
+              {sewaUnits.length === 0 ? (
+                <div className="empty-box">Belum ada unit yang dibuka untuk sewa</div>
+              ) : (
+                <div className="sewa-grid">
+                  {sewaUnits.slice(0, 4).map((u, i) => {
+                    const k = unitKey(u);
+                    const sewa = state.sewa[k];
+                    const rc = rarityColor(u.rarity);
+                    const img = unitPortraitUrl(u);
+                    return (
+                      <div key={i} className="sewa-card">
+                        <div className="sc-portrait" style={{ background: unitGradient(u) }}>
+                          {img ? (
+                            <img src={img} alt={u.name} crossOrigin="anonymous" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                          ) : (
+                            <div className="sc-fallback">{u.name[0]}</div>
+                          )}
+                          <div className="sc-rarity" style={{ background: rc }}>{u.rarity}</div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                        <div className="sc-body">
+                          <div className="sc-name">{u.variant ? `${u.variant} ` : ""}{u.name}</div>
+                          <div className="sc-meta">
+                            {u.grade && <span className="sc-tag">Grade {u.grade}</span>}
+                            {u.trait && <span className="sc-tag">{u.trait}</span>}
+                          </div>
+                          <div className="sc-income">${fmtMoney(u.income)}/s</div>
+                          <div className="sc-price-row">
+                            <div className="scp-item">
+                              <div className="scp-l">Rp/jam</div>
+                              <div className="scp-v">{fmtRp(sewa.pricePerHour)}</div>
+                            </div>
+                            <div className="scp-item">
+                              <div className="scp-l">Deposit</div>
+                              <div className="scp-v depo">{fmtRp(sewa.deposit)}</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
+              )}
 
               {/* SELL UNIT SX */}
-              <div className="section">
-                <div className="section-head">SELL UNIT SX</div>
-                <div className="section-body">
-                  <div className="sell-cols">
-                    <div className="sell-col">
-                      {sellLeft.map((u, i) => {
-                        const k = unitKey(u);
-                        const s = state.unitData[k];
-                        const rc = rarityColor(u.rarity);
-                        const img = imageUrl(u.image);
-                        return (
-                          <div key={i} className="sell-row">
-                            <div className="sr-portrait" style={{ borderColor: rc }}>
-                              {img ? (
-                                <img src={img} alt={u.name} crossOrigin="anonymous" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                              ) : (
-                                <div className="sr-fallback" style={{ background: rc + "22", color: rc }}>{u.name[0]}</div>
-                              )}
-                            </div>
-                            <div className="sr-info">
-                              <div className="sr-chance">1 in {fmtMoney(u.chance)}</div>
-                              <div className="sr-name" style={{ color: rc }}>{u.name}</div>
-                            </div>
-                            <div className="sr-price">{s?.price ? fmtRp(s.price) : "Rp -"}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="sell-col">
-                      {sellRight.map((u, i) => {
-                        const k = unitKey(u);
-                        const s = state.unitData[k];
-                        const rc = rarityColor(u.rarity);
-                        const img = imageUrl(u.image);
-                        return (
-                          <div key={i} className="sell-row">
-                            <div className="sr-portrait" style={{ borderColor: rc }}>
-                              {img ? (
-                                <img src={img} alt={u.name} crossOrigin="anonymous" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                              ) : (
-                                <div className="sr-fallback" style={{ background: rc + "22", color: rc }}>{u.name[0]}</div>
-                              )}
-                            </div>
-                            <div className="sr-info">
-                              <div className="sr-chance">1 in {fmtMoney(u.chance)}</div>
-                              <div className="sr-name" style={{ color: rc }}>{u.name}</div>
-                            </div>
-                            <div className="sr-price">{s?.price ? fmtRp(s.price) : "Rp -"}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
+              <div className="sec-head" style={{ marginTop: 18 }}>SELL UNIT SX</div>
+              {sellUnits.length === 0 ? (
+                <div className="empty-box">Belum ada unit tersedia untuk dijual</div>
+              ) : (
+                <div className="sell-cols">
+                  <div className="sell-col">
+                    {sellLeft.map((u, i) => <SellRow key={i} u={u} state={state} />)}
                   </div>
-                  {sellUnits.length === 0 && (
-                    <div className="empty-slot">Belum ada unit yang di-list untuk sell</div>
-                  )}
+                  <div className="sell-col">
+                    {sellRight.map((u, i) => <SellRow key={i} u={u} state={state} />)}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* INVENTORY */}
-              <div className="section">
-                <div className="section-head">INVENTORY</div>
-                <div className="section-body">
-                  <div className="inv-grid">
-                    {inventorySlots.map((it) => {
-                      const img = imageUrl(it.item?.image);
-                      return (
-                        <div key={it.key} className="inv-card" style={{ borderColor: it.color + "60" }}>
-                          <div className="ic-icon" style={{ background: it.color + "18", color: it.color }}>
-                            {img ? (
-                              <img src={img} alt={it.name} crossOrigin="anonymous" style={{ width: "100%", height: "100%", objectFit: "contain" }} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                            ) : it.emoji}
-                          </div>
-                          <div className="ic-name">{it.name}</div>
-                          <div className="ic-qty">{fmtNum(it.qty)}</div>
-                          <div className="ic-rate">{it.rate}</div>
-                          <div className="ic-value">{it.value > 0 ? fmtRp(it.value) : "-"}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+              <div className="sec-head" style={{ marginTop: 18 }}>INVENTORY</div>
+              <div className="inv-grid">
+                {inventorySlots.map((it) => {
+                  const img = imageUrl(it.item?.image);
+                  return (
+                    <div key={it.key} className="inv-card" style={{ borderColor: it.accent, background: it.bg }}>
+                      <div className="ic-icon-wrap">
+                        {img ? (
+                          <img src={img} alt={it.name} crossOrigin="anonymous" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                        ) : (
+                          <div className="ic-emoji" style={{ color: it.accent }}>{it.key === "gems" ? "\u{1F48E}" : it.key === "trait" ? "\u{1F504}" : it.key === "lucky" ? "\u{1F3B0}" : it.key === "jackpot" ? "\u{1F3AF}" : "\u{2699}\u{FE0F}"}</div>
+                        )}
+                      </div>
+                      <div className="ic-name" style={{ color: it.accent }}>{it.name}</div>
+                      <div className="ic-qty">{fmtNum(it.qty)}</div>
+                      <div className="ic-sub">{it.sub}</div>
+                      <div className="ic-value" style={{ color: it.accent, borderColor: it.accent + "40" }}>
+                        {it.value > 0 ? fmtRp(it.value) : "—"}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Footer */}
-              <div className="footer">
-                <div className="footer-brand">naruhub.my.id</div>
-                <div className="footer-note">Generated {new Date().toLocaleString("id-ID")}</div>
+              <div className="rk-foot">
+                Poster resmi dari <strong>{owner}</strong> — Kalau tidak ada watermark, itu POSTER PALSU. · naruhub.my.id
               </div>
 
-              {/* Police Line Overlay */}
-              {showPoliceLine && (
-                <>
-                  <div className="police-line top">
-                    <div className="pl-inner">HAK MILIK · {owner || STOCK_ACCOUNT} · HAK MILIK · {owner || STOCK_ACCOUNT} · HAK MILIK · {owner || STOCK_ACCOUNT} · HAK MILIK · {owner || STOCK_ACCOUNT} · HAK MILIK · {owner || STOCK_ACCOUNT} · </div>
+              {/* Watermark */}
+              <div className="rk-wm">
+                {Array.from({ length: 22 }).map((_, r) => (
+                  <div key={r} className={`rk-wm-row ${r % 2 === 1 ? "stagger" : ""}`}>
+                    {Array.from({ length: 12 }).map((_, i) => (
+                      <span key={i}>HAK MILIK · {(owner || STOCK_ACCOUNT).toUpperCase()}</span>
+                    ))}
                   </div>
-                  <div className="police-line bottom">
-                    <div className="pl-inner">HAK MILIK · {owner || STOCK_ACCOUNT} · HAK MILIK · {owner || STOCK_ACCOUNT} · HAK MILIK · {owner || STOCK_ACCOUNT} · HAK MILIK · {owner || STOCK_ACCOUNT} · HAK MILIK · {owner || STOCK_ACCOUNT} · </div>
-                  </div>
-                </>
-              )}
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -382,113 +373,310 @@ export default function RangkumanPage() {
   );
 }
 
+function SellRow({ u, state }: { u: Unit; state: InventoryState }) {
+  const k = unitKey(u);
+  const s = state.unitData[k];
+  const rc = rarityColor(u.rarity);
+  const img = unitPortraitUrl(u);
+  return (
+    <div className="sell-row">
+      <div className="sr-portrait" style={{ background: unitGradient(u) }}>
+        {img ? (
+          <img src={img} alt={u.name} crossOrigin="anonymous" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+        ) : (
+          <div className="sr-fallback">{u.name[0]}</div>
+        )}
+      </div>
+      <div className="sr-info">
+        <div className="sr-name">
+          <span style={{ color: rc }}>{u.variant ? `${u.variant} ` : ""}{u.name}</span>
+        </div>
+        <div className="sr-meta">
+          <span className="sr-chance">1 in {fmtMoney(u.chance)}</span>
+          {u.grade && <span className="sr-tag">G:{u.grade}</span>}
+          {u.trait && <span className="sr-tag">{u.trait}</span>}
+        </div>
+      </div>
+      <div className="sr-price">{s?.price ? fmtRp(s.price) : "—"}</div>
+    </div>
+  );
+}
+
 const styles = `
 * { box-sizing: border-box; margin: 0; padding: 0; }
-.page { min-height: 100vh; background: #0b0b14; padding: 20px; font-family: 'Inter', system-ui, sans-serif; color: #e8e8f0; }
-.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px 18px; background: #15152a; border: 1px solid #222240; border-radius: 12px; margin-bottom: 20px; max-width: 900px; margin-left: auto; margin-right: auto; }
-.controls label { font-size: 12px; font-weight: 700; color: #94a3b8; }
-.controls input[type="text"], .controls input:not([type]) { background: #0b0b14; border: 1px solid #222240; color: #e8e8f0; padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; width: 160px; }
-.controls input:focus { outline: none; border-color: #818cf8; }
-.dlbtn { background: #818cf8; color: #0b0b14; border: none; padding: 10px 20px; font-size: 12px; font-weight: 800; border-radius: 8px; cursor: pointer; letter-spacing: .5px; }
-.dlbtn.ghost { background: #222240; color: #e8e8f0; }
+.page { min-height: 100vh; background: #0b0b14; padding: 20px; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #e8e8f0; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px 18px; background: #14141f; border: 1px solid #262636; border-radius: 12px; margin-bottom: 20px; max-width: 1120px; margin-left: auto; margin-right: auto; position: sticky; top: 8px; z-index: 100; }
+.controls label { font-size: 12px; font-weight: 700; color: #8b8ba3; }
+.controls input { background: #1c1c2b; color: #e8e8f0; border: 1px solid #262636; padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; width: 200px; }
+.controls input:focus { outline: none; border-color: #a78bfa; }
+.dlbtn { background: #a78bfa; color: #1a1030; border: none; padding: 9px 20px; font-size: 13px; font-weight: 800; border-radius: 8px; cursor: pointer; letter-spacing: .3px; }
+.dlbtn.ghost { background: #262636; color: #e8e8f0; }
+.dlbtn:hover { filter: brightness(1.1); }
 .dlbtn:disabled { opacity: .6; cursor: not-allowed; }
 .loading { text-align: center; padding: 80px 20px; color: #555570; font-size: 14px; }
 
-.poster-wrap { display: flex; justify-content: center; padding: 20px 0; }
+.poster-wrap { display: flex; justify-content: center; padding: 20px 0; overflow-x: auto; }
 .poster {
-  width: 900px;
-  background: #ffffff;
-  color: #1a1a2e;
-  padding: 30px;
-  border-radius: 20px;
+  width: 1080px;
+  background: #DFE7F0;
+  padding: 0;
+  color: #0f172a;
   position: relative;
-  box-shadow: 0 20px 60px rgba(0,0,0,.4);
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
   overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,.4);
 }
 
 /* Header */
-.header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 16px; border-bottom: 3px solid #1a1a2e; margin-bottom: 20px; }
-.brand { display: flex; align-items: center; gap: 12px; }
-.brand-logo { width: 48px; height: 48px; background: #fbbf24; color: #0b0b14; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 18px; }
-.brand-title { font-size: 20px; font-weight: 900; color: #1a1a2e; letter-spacing: 1px; }
-.brand-sub { font-size: 10px; font-weight: 800; color: #6366f1; letter-spacing: 2px; }
-.header-right { text-align: right; }
-.acc-name { font-size: 18px; font-weight: 900; color: #1a1a2e; }
-.acc-contact { font-size: 11px; color: #6b7280; font-weight: 700; margin-top: 2px; }
-.acc-date { font-size: 10px; color: #94a3b8; font-weight: 600; margin-top: 2px; }
-
-/* Section */
-.section { margin-bottom: 18px; border: 2px solid #1a1a2e; border-radius: 10px; overflow: hidden; }
-.section-head { background: #cbd5e1; color: #1a1a2e; padding: 8px 16px; font-size: 13px; font-weight: 900; letter-spacing: 2px; text-align: center; border-bottom: 2px solid #1a1a2e; }
-.section-body { padding: 14px; background: #f8fafc; }
-.empty-slot { text-align: center; color: #94a3b8; padding: 20px; font-size: 12px; font-weight: 600; }
-
-/* Sewa */
-.sewa-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-.sewa-card { border: 2px solid #cbd5e1; border-radius: 10px; padding: 8px; text-align: center; background: #ffffff; }
-.sewa-card.empty { opacity: .3; }
-.sc-portrait { width: 100%; aspect-ratio: 3/4; background: #e2e8f0; border-radius: 6px; margin-bottom: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-.sc-portrait img { width: 100%; height: 100%; object-fit: cover; }
-.sc-fallback { font-size: 40px; font-weight: 900; }
-.sc-name { font-size: 12px; font-weight: 900; margin-bottom: 4px; line-height: 1.2; min-height: 28px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.sc-income { font-size: 11px; font-weight: 700; color: #059669; margin-bottom: 2px; }
-.sc-rp { font-size: 12px; font-weight: 900; color: #1a1a2e; margin-top: 4px; padding: 3px 6px; background: #fef3c7; border-radius: 4px; }
-.sc-depo { font-size: 10px; font-weight: 700; color: #6b7280; margin-top: 4px; }
-
-/* Sell */
-.sell-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.sell-col { display: flex; flex-direction: column; gap: 6px; }
-.sell-row { display: flex; align-items: center; gap: 8px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 8px; }
-.sr-portrait { width: 32px; height: 32px; border-radius: 6px; overflow: hidden; border: 2px solid; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-.sr-portrait img { width: 100%; height: 100%; object-fit: cover; }
-.sr-fallback { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 14px; }
-.sr-info { flex: 1; min-width: 0; }
-.sr-chance { font-size: 10px; color: #6b7280; font-weight: 700; }
-.sr-name { font-size: 11px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sr-price { font-size: 12px; font-weight: 900; color: #1a1a2e; padding: 3px 8px; background: #fef3c7; border-radius: 4px; flex-shrink: 0; }
-
-/* Inventory */
-.inv-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
-.inv-card { border: 2px solid; border-radius: 10px; padding: 10px 8px; text-align: center; background: #ffffff; }
-.ic-icon { width: 44px; height: 44px; border-radius: 10px; margin: 0 auto 6px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
-.ic-name { font-size: 10px; font-weight: 900; color: #1a1a2e; letter-spacing: .5px; margin-bottom: 4px; }
-.ic-qty { font-size: 16px; font-weight: 900; color: #1a1a2e; }
-.ic-rate { font-size: 9px; color: #94a3b8; font-weight: 700; margin: 2px 0; }
-.ic-value { font-size: 11px; font-weight: 900; color: #059669; padding: 3px 6px; background: #d1fae5; border-radius: 4px; margin-top: 4px; }
-
-/* Footer */
-.footer { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 2px solid #1a1a2e; margin-top: 16px; }
-.footer-brand { font-size: 12px; font-weight: 900; color: #6366f1; letter-spacing: 1px; }
-.footer-note { font-size: 10px; color: #94a3b8; font-weight: 600; }
-
-/* Police line */
-.police-line {
-  position: absolute;
-  left: -60px;
-  right: -60px;
-  height: 32px;
-  background: repeating-linear-gradient(-8deg, #fbbf24 0, #fbbf24 40px, #1a1a2e 40px, #1a1a2e 80px);
-  transform: rotate(-3deg);
-  overflow: hidden;
+.rk-header {
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  color: #fff;
+  padding: 24px 40px;
   display: flex;
   align-items: center;
-  pointer-events: none;
+  gap: 20px;
+  border-bottom: 4px solid #facc15;
+  position: relative;
+  z-index: 3;
 }
-.police-line.top { top: 60px; }
-.police-line.bottom { bottom: 100px; }
-.pl-inner {
-  color: #1a1a2e;
-  font-weight: 900;
-  font-size: 14px;
-  letter-spacing: 2px;
-  white-space: nowrap;
-  background: #fbbf24;
-  padding: 6px 20px;
-  border-top: 2px solid #1a1a2e;
-  border-bottom: 2px solid #1a1a2e;
-  width: 100%;
+.rk-brand { display: flex; align-items: center; gap: 16px; flex: 1; }
+.rk-logo { width: 56px; height: 56px; background: #facc15; color: #0f172a; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 22px; flex-shrink: 0; }
+.rk-title { font-size: 26px; font-weight: 900; letter-spacing: .5px; }
+.rk-sub { color: #cbd5e1; font-size: 12px; margin-top: 4px; letter-spacing: .3px; }
+.rk-header-right { text-align: right; }
+.rk-owner { font-size: 20px; font-weight: 900; color: #facc15; letter-spacing: .5px; }
+.rk-contact { font-size: 12px; color: #f8fafc; font-weight: 700; margin-top: 4px; }
+.rk-scan { font-size: 11px; color: #94a3b8; margin-top: 3px; }
+
+/* Stat bar */
+.stat-bar {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  padding: 16px 32px 0;
+  position: relative;
+  z-index: 3;
+}
+.stat-cell { background: #ffffff; border: 2px solid; border-radius: 12px; padding: 10px 14px; }
+.stat-cell.green { border-color: #16a34a; background: #ecfdf5; }
+.stat-cell.gold { border-color: #ca8a04; background: #fefce8; }
+.stat-cell.blue { border-color: #2563eb; background: #eff6ff; }
+.stat-cell.red { border-color: #dc2626; background: #fef2f2; }
+.stat-cell.purple { border-color: #7c3aed; background: #f5f3ff; }
+.s-label { font-size: 10px; font-weight: 800; color: #64748b; letter-spacing: .5px; }
+.s-value { font-size: 18px; font-weight: 900; margin-top: 3px; color: #0f172a; }
+.stat-cell.green .s-value { color: #15803d; }
+.stat-cell.gold .s-value { color: #a16207; }
+.stat-cell.blue .s-value { color: #1d4ed8; }
+.stat-cell.red .s-value { color: #b91c1c; }
+.stat-cell.purple .s-value { color: #6d28d9; }
+
+/* Section header */
+.sec-head {
+  background: #cbd5e1;
+  color: #0f172a;
+  border-radius: 999px;
+  padding: 8px 20px;
   text-align: center;
-  text-shadow: 0 0 4px rgba(0,0,0,.15);
+  font-size: 14px;
+  font-weight: 900;
+  margin: 18px 32px 12px;
+  letter-spacing: 2px;
+  position: relative;
+  z-index: 3;
+}
+.empty-box {
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+  margin: 0 32px;
+  position: relative;
+  z-index: 3;
+}
+
+/* Sewa cards */
+.sewa-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 0 32px;
+  position: relative;
+  z-index: 3;
+}
+.sewa-card {
+  background: #ffffff;
+  border: 2px solid #ca8a04;
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.sc-portrait {
+  width: 100%;
+  aspect-ratio: 1/1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.sc-portrait img { width: 100%; height: 100%; object-fit: cover; }
+.sc-fallback {
+  font-size: 60px;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 3px 12px rgba(0,0,0,.4);
+}
+.sc-rarity {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: .5px;
+  text-shadow: 0 1px 2px rgba(0,0,0,.3);
+}
+.sc-body { padding: 10px 12px 12px; }
+.sc-name { font-size: 13px; font-weight: 900; color: #0f172a; margin-bottom: 6px; line-height: 1.2; min-height: 32px; }
+.sc-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.sc-tag { background: #f1f5f9; color: #475569; font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 4px; }
+.sc-income { font-size: 13px; font-weight: 900; color: #16a34a; margin-bottom: 8px; }
+.sc-price-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.scp-item { background: #fefce8; border: 1px solid #fde68a; border-radius: 6px; padding: 5px 6px; text-align: center; }
+.scp-l { font-size: 8px; font-weight: 800; color: #92400e; letter-spacing: .3px; }
+.scp-v { font-size: 11px; font-weight: 900; color: #a16207; margin-top: 1px; }
+.scp-v.depo { color: #78350f; }
+
+/* Sell rows */
+.sell-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 0 32px;
+  position: relative;
+  z-index: 3;
+}
+.sell-col { display: flex; flex-direction: column; gap: 6px; }
+.sell-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.sr-portrait {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px #cbd5e1;
+}
+.sr-portrait img { width: 100%; height: 100%; object-fit: cover; }
+.sr-fallback { font-size: 20px; font-weight: 900; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+.sr-info { flex: 1; min-width: 0; }
+.sr-name { font-size: 12px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr-meta { display: flex; gap: 6px; margin-top: 2px; flex-wrap: wrap; align-items: center; }
+.sr-chance { font-size: 10px; color: #475569; font-weight: 800; }
+.sr-tag { font-size: 8px; font-weight: 900; padding: 1px 5px; background: #f1f5f9; color: #64748b; border-radius: 3px; letter-spacing: .3px; }
+.sr-price { font-size: 13px; font-weight: 900; color: #a16207; padding: 4px 10px; background: #fef3c7; border: 1px solid #fde68a; border-radius: 6px; flex-shrink: 0; min-width: 80px; text-align: right; }
+
+/* Inventory */
+.inv-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  padding: 0 32px;
+  position: relative;
+  z-index: 3;
+}
+.inv-card {
+  border: 2px solid;
+  border-radius: 14px;
+  padding: 14px 10px;
+  text-align: center;
+}
+.ic-icon-wrap {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: #ffffff;
+  margin: 0 auto 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgba(0,0,0,.06);
+}
+.ic-icon-wrap img { width: 100%; height: 100%; object-fit: contain; }
+.ic-emoji { font-size: 30px; }
+.ic-name { font-size: 11px; font-weight: 900; letter-spacing: .5px; margin-bottom: 6px; }
+.ic-qty { font-size: 20px; font-weight: 900; color: #0f172a; }
+.ic-sub { font-size: 10px; color: #64748b; font-weight: 700; margin-top: 2px; }
+.ic-value {
+  font-size: 12px;
+  font-weight: 900;
+  padding: 5px 8px;
+  background: #ffffff;
+  border: 1px solid;
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+/* Footer */
+.rk-foot {
+  background: #0f172a;
+  color: #cbd5e1;
+  padding: 14px 40px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  border-top: 3px solid #facc15;
+  margin-top: 20px;
+  position: relative;
+  z-index: 3;
+}
+.rk-foot strong { color: #facc15; }
+
+/* Watermark: repeated text, rotated, staggered — like SAE katalog rangkuman */
+.rk-wm {
+  position: absolute;
+  top: -300px; left: -300px; right: -300px; bottom: -300px;
+  pointer-events: none;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  padding: 30px 0;
+  transform: rotate(-22deg);
+}
+.rk-wm-row {
+  display: flex;
+  gap: 70px;
+  white-space: nowrap;
+  justify-content: flex-start;
+  padding-left: 0;
+}
+.rk-wm-row.stagger { padding-left: 140px; }
+.rk-wm span {
+  color: rgba(120, 130, 155, 0.16);
+  font-weight: 900;
+  font-size: 30px;
+  letter-spacing: 3px;
+  flex-shrink: 0;
 }
 `;
