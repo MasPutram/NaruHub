@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Monitoring Anime Dice v1.4.1 (ultra-lightweight)
+-- NaruHub | Monitoring Anime Dice v1.4.2 (ultra-lightweight)
 -- Monitoring only -- no auto-roll/sell/equip, baca data → POST ke dashboard.
 
 ------------------------------------------------------------
@@ -266,10 +266,21 @@ local function collectInventory()
 
 				local income, damage, chance, health
 				if cfg then
-					pcall(function() income = cfg:income() end)
-					pcall(function() damage = cfg:damage() end)
-					pcall(function() chance = cfg:chance() end)
-					pcall(function() health = cfg:health() end)
+					-- Try calling with entry first (so mutation/level/variant
+					-- multipliers apply, e.g. Emerald Titanic Meliadus).
+					-- Fall back to no-arg for older cfg shapes.
+					local function callStat(fn)
+						local v
+						local ok = pcall(function() v = fn(cfg, entry) end)
+						if ok and v ~= nil then return v end
+						local ok2, v2 = pcall(function() return fn(cfg) end)
+						if ok2 then return v2 end
+						return nil
+					end
+					if cfg.income then income = callStat(cfg.income) end
+					if cfg.damage then damage = callStat(cfg.damage) end
+					if cfg.chance then chance = callStat(cfg.chance) end
+					if cfg.health then health = callStat(cfg.health) end
 				end
 
 				local placed = nil
@@ -433,9 +444,17 @@ local function collectSlots()
 					slotInfo.trait = attrs.trait
 					slotInfo.grade = attrs.grade
 					if cfg then
-						pcall(function() slotInfo.income = cfg:income() end)
-						pcall(function() slotInfo.chance = cfg:chance() end)
-						pcall(function() slotInfo.damage = cfg:damage() end)
+						local function callStat2(fn)
+							local v
+							local ok = pcall(function() v = fn(cfg, entry) end)
+							if ok and v ~= nil then return v end
+							local ok2, v2 = pcall(function() return fn(cfg) end)
+							if ok2 then return v2 end
+							return nil
+						end
+						if cfg.income then slotInfo.income = callStat2(cfg.income) end
+						if cfg.chance then slotInfo.chance = callStat2(cfg.chance) end
+						if cfg.damage then slotInfo.damage = callStat2(cfg.damage) end
 					end
 				end
 			end
