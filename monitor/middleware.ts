@@ -5,6 +5,7 @@ const PUBLIC_PATHS = [
   "/api/auth",
   "/api/monitor",
   "/api/anime-dice/monitor",
+  "/api/anime-dice/catalog",
   "/api/check-access",
   "/api/termux",
   "/api/pet-icon",

@@ -173,6 +173,15 @@ export function adForSaleKickKey(name: string) {
 
 export const AD_INVENTORY_RATES_KEY = "ad:inventory:rates";
 
+// Enriched marketplace catalog snapshot per account (units with visuals,
+// backpack, stats). Written by AnimeDiceSell.luau, read by the catalog UI.
+// Persists longer than monitor: listings stay visible even when the account
+// is offline (24h TTL, refreshed on each push).
+export function adCatalogKey(name: string) {
+  return `ad:catalog:${name}`;
+}
+export const AD_CATALOG_TTL_S = 60 * 60 * 24; // 24 hours
+
 
 type SetOptions = { ex?: number };
 
