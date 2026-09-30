@@ -184,7 +184,7 @@ export default function RangkumanPage() {
     { key: "trait", name: "TRAIT REROLL", item: traitReroll, qty: traitReroll?.amount || 0, value: (traitReroll?.amount || 0) / 1000 * rates.traitRerollRate, rate: `${rates.traitRerollRate} /1k`, color: "#818cf8", emoji: "\u{1F504}" },
     { key: "lucky", name: "LUCKY SPIN", item: luckySpin, qty: luckySpin?.amount || 0, value: (luckySpin?.amount || 0) * rates.luckySpinRate, rate: `${rates.luckySpinRate} /pc`, color: "#fbbf24", emoji: "\u{1F3B0}" },
     { key: "jackpot", name: "JACKPOT", item: jackpot, qty: jackpot?.amount || 0, value: (jackpot?.amount || 0) * rates.jackpotRate, rate: `${rates.jackpotRate} /pc`, color: "#ef4444", emoji: "\u{1F3AF}" },
-    { key: "gear", name: "DIVINE GEAR", item: null, qty: divineGear, value: divineGear * rates.gearRate, rate: `${rates.gearRate} /pc`, color: "#c084fc", emoji: "\u{2699}\u{FE0F}" },
+    { key: "gear", name: "DIVINE GEAR", item: null as BackpackItem | null, qty: divineGear, value: divineGear * rates.gearRate, rate: `${rates.gearRate} /pc`, color: "#c084fc", emoji: "\u{2699}\u{FE0F}" },
   ];
 
   return (
@@ -337,15 +337,22 @@ export default function RangkumanPage() {
                 <div className="section-head">INVENTORY</div>
                 <div className="section-body">
                   <div className="inv-grid">
-                    {inventorySlots.map((it) => (
-                      <div key={it.key} className="inv-card" style={{ borderColor: it.color + "60" }}>
-                        <div className="ic-icon" style={{ background: it.color + "18", color: it.color }}>{it.emoji}</div>
-                        <div className="ic-name">{it.name}</div>
-                        <div className="ic-qty">{fmtNum(it.qty)}</div>
-                        <div className="ic-rate">{it.rate}</div>
-                        <div className="ic-value">{it.value > 0 ? fmtRp(it.value) : "-"}</div>
-                      </div>
-                    ))}
+                    {inventorySlots.map((it) => {
+                      const img = imageUrl(it.item?.image);
+                      return (
+                        <div key={it.key} className="inv-card" style={{ borderColor: it.color + "60" }}>
+                          <div className="ic-icon" style={{ background: it.color + "18", color: it.color }}>
+                            {img ? (
+                              <img src={img} alt={it.name} crossOrigin="anonymous" style={{ width: "100%", height: "100%", objectFit: "contain" }} onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            ) : it.emoji}
+                          </div>
+                          <div className="ic-name">{it.name}</div>
+                          <div className="ic-qty">{fmtNum(it.qty)}</div>
+                          <div className="ic-rate">{it.rate}</div>
+                          <div className="ic-value">{it.value > 0 ? fmtRp(it.value) : "-"}</div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
