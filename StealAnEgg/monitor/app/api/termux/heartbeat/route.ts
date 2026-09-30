@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       device = typeof existing === "string" ? JSON.parse(existing) : existing;
       device.lastSeen = Date.now();
       device.status = "online";
-      if (packages) device.packages = packages;
+      if (packages) device.packages = Array.isArray(packages) ? packages : [];
       if (Array.isArray(running)) device.running = running;
       if (stats) device.stats = stats;
       if (screen && screen.width && screen.height) device.screen = screen;
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
         status: "online",
         registeredAt: meta?.registeredAt || Date.now(),
         lastSeen: Date.now(),
-        packages: packages || [],
+        packages: Array.isArray(packages) ? packages : [],
         running: Array.isArray(running) ? running : [],
         stats: stats || {},
         screen: screen && screen.width && screen.height ? screen : undefined,

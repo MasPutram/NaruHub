@@ -22,7 +22,7 @@ export const AGENT_CONFIG_DEFAULTS: AgentConfig = {
 const AGENT_CONFIG_KEY = "termux:agent-config";
 
 const LUA_AGENT = `
-local VERSION = "3.0"
+local VERSION = "3.1"
 
 -- ─── Config ───
 local CONFIG_DIR = os.getenv("HOME") .. "/.cache/log"
@@ -150,7 +150,7 @@ function json.encode(val)
         return "[" .. table.concat(parts, ",") .. "]"
       end
     end
-    if next(val) == nil then return "{}" end
+    if next(val) == nil then return "[]" end
     local parts = {}
     for k, v in pairs(val) do
       parts[#parts+1] = json.encode(tostring(k)) .. ":" .. json.encode(v)
@@ -313,10 +313,17 @@ local DEVICE_ID, HOSTNAME, PLATFORM, IS_NEW
 -- ─── Package collection ───
 local function collect_packages()
   local raw = shell('su -c "pm list packages -f" | grep -i roblox')
-  if raw == "" then return {} end
+  if raw == "" then
+    local all = shell('su -c "pm list packages" | wc -l')
+    if all == "" or all == "0" then
+      log(C.yellow .. "[" .. ts() .. "] pm list packages returned nothing -- su broken?" .. C.reset)
+    end
+    return {}
+  end
   local pkgs = {}
   for line in raw:gmatch("[^\\n]+") do
     local pkg = line:match("=([%w%.]+)$")
+    if not pkg then pkg = line:match("=([^%s]+)$") end
     if pkg then
       local username = ""
       local prefs = shell(string.format('su -c "cat /data/data/%s/shared_prefs/prefs.xml"', pkg))
