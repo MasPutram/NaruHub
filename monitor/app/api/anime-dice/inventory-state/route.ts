@@ -8,9 +8,10 @@ const STATE_KEY = "ad:inventory:state";
 interface InventoryState {
   unitData: Record<string, { price: number; sold: boolean }>;
   bpSold: Record<string, number>;
+  sewa: Record<string, { pricePerHour: number; deposit: number }>;
 }
 
-const DEFAULT_STATE: InventoryState = { unitData: {}, bpSold: {} };
+const DEFAULT_STATE: InventoryState = { unitData: {}, bpSold: {}, sewa: {} };
 
 export async function GET() {
   try {
@@ -35,6 +36,7 @@ export async function POST(req: NextRequest) {
 
     if (body.unitData !== undefined) current.unitData = body.unitData;
     if (body.bpSold !== undefined) current.bpSold = body.bpSold;
+    if (body.sewa !== undefined) current.sewa = body.sewa;
 
     if (body.setUnit) {
       const { key, price, sold } = body.setUnit;

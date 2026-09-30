@@ -17,6 +17,7 @@ interface Unit {
   chance?: number | null;
   health?: number | null;
   placed?: "slot" | "tower" | null;
+  image?: number | string | null;
 }
 
 interface BackpackItem {
@@ -26,6 +27,7 @@ interface BackpackItem {
   rarity: string;
   slot?: string | null;
   tier?: string | number | null;
+  image?: number | string | null;
 }
 
 interface ADDetail {
@@ -55,9 +57,12 @@ interface Rates {
 
 interface UnitState { price: number; sold: boolean }
 
+interface SewaEntry { pricePerHour: number; deposit: number }
+
 interface InventoryState {
   unitData: Record<string, UnitState>;
   bpSold: Record<string, number>;
+  sewa: Record<string, SewaEntry>;
 }
 
 const DEFAULT_RATES: Rates = {
@@ -159,7 +164,10 @@ export default function InventoryPage() {
   const [detail, setDetail] = useState<ADDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [rates, setRates] = useState<Rates>(DEFAULT_RATES);
-  const [state, setState] = useState<InventoryState>({ unitData: {}, bpSold: {} });
+  const [state, setState] = useState<InventoryState>({ unitData: {}, bpSold: {}, sewa: {} });
+  const [selectedUnits, setSelectedUnits] = useState<Set<string>>(new Set());
+  const [sewaModalOpen, setSewaModalOpen] = useState(false);
+  const [sewaInputs, setSewaInputs] = useState<Record<string, { pricePerHour: string; deposit: string }>>({});
   const [tab, setTab] = useState<ViewTab>("unit");
   const [search, setSearch] = useState("");
   const [rarityFilter, setRarityFilter] = useState("All");
@@ -183,7 +191,7 @@ export default function InventoryPage() {
       const sBody = await stateRes.json();
       if (detailRes.ok && dBody.ok) setDetail(dBody);
       if (ratesRes.ok && rBody.ok && rBody.rates) setRates({ ...DEFAULT_RATES, ...rBody.rates });
-      if (stateRes.ok && sBody.ok && sBody.state) setState({ unitData: sBody.state.unitData || {}, bpSold: sBody.state.bpSold || {} });
+      if (stateRes.ok && sBody.ok && sBody.state) setState({ unitData: sBody.state.unitData || {}, bpSold: sBody.state.bpSold || {}, sewa: sBody.state.sewa || {} });
     } catch {}
     setLoading(false);
   }, []);
@@ -248,6 +256,49 @@ export default function InventoryPage() {
     saveState(next);
     setBpSoldModal(null);
     setBpSoldInput("");
+  }
+
+  function toggleSelect(key: string) {
+    setSelectedUnits((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  function openSewaModal() {
+    const inputs: Record<string, { pricePerHour: string; deposit: string }> = {};
+    selectedUnits.forEach((k) => {
+      const existing = state.sewa[k];
+      inputs[k] = {
+        pricePerHour: existing?.pricePerHour ? String(existing.pricePerHour) : "",
+        deposit: existing?.deposit ? String(existing.deposit) : "",
+      };
+    });
+    setSewaInputs(inputs);
+    setSewaModalOpen(true);
+  }
+
+  function confirmSewa() {
+    const nextSewa = { ...state.sewa };
+    Object.entries(sewaInputs).forEach(([k, v]) => {
+      const pph = parseFloat(v.pricePerHour.replace(/[.,]/g, "")) || 0;
+      const dep = parseFloat(v.deposit.replace(/[.,]/g, "")) || 0;
+      if (pph > 0 || dep > 0) {
+        nextSewa[k] = { pricePerHour: pph, deposit: dep };
+      } else {
+        delete nextSewa[k];
+      }
+    });
+    saveState({ ...state, sewa: nextSewa });
+    setSewaModalOpen(false);
+    setSelectedUnits(new Set());
+  }
+
+  function removeSewa(key: string) {
+    const nextSewa = { ...state.sewa };
+    delete nextSewa[key];
+    saveState({ ...state, sewa: nextSewa });
   }
 
   if (!mounted) return null;
@@ -396,7 +447,8 @@ export default function InventoryPage() {
             </button>
           </div>
           <div className="tb-actions">
-            <button className="tba-btn" onClick={downloadSummary}>&#x2B07; Download Rangkuman</button>
+            <a className="tba-btn" href="/anime-dice/inventory/rangkuman" target="_blank" rel="noopener">&#x1F4C4; Rangkuman Poster</a>
+            <button className="tba-btn" onClick={downloadSummary}>&#x2B07; Download .txt</button>
             <button className="tba-btn primary" onClick={() => setRateModalOpen(true)}>&#x2699;&#xFE0F; Set Rate</button>
           </div>
         </div>
@@ -439,6 +491,16 @@ export default function InventoryPage() {
             <div className="tab-row">
               <button className={`tabb ${tab === "unit" ? "active" : ""}`} onClick={() => setTab("unit")}>UNIT</button>
               <button className={`tabb ${tab === "backpack" ? "active" : ""}`} onClick={() => setTab("backpack")}>BACKPACK</button>
+              {tab === "unit" && selectedUnits.size > 0 && (
+                <>
+                  <button className="tabb sewa-btn" onClick={openSewaModal}>
+                    &#x1F511; UNIT SEWA ({selectedUnits.size})
+                  </button>
+                  <button className="tabb clear-btn" onClick={() => setSelectedUnits(new Set())}>
+                    &#x2715; Clear
+                  </button>
+                </>
+              )}
             </div>
 
             <div className="content-box">
@@ -455,10 +517,20 @@ export default function InventoryPage() {
                       const key = unitKey(u);
                       const s = state.unitData[key] || { price: 0, sold: false };
                       const rc = rarityColor(u.rarity);
+                      const isSewa = !!state.sewa[key];
+                      const isSelected = selectedUnits.has(key);
                       return (
-                        <div key={`${key}-${i}`} className={`ucard ${s.sold ? "sold" : ""}`}>
+                        <div key={`${key}-${i}`} className={`ucard ${s.sold ? "sold" : ""} ${isSelected ? "selected" : ""} ${isSewa ? "sewa" : ""}`}>
                           <div className="ucard-name" style={{ borderColor: rc + "40" }}>
+                            <input
+                              type="checkbox"
+                              className="ucard-check"
+                              checked={isSelected}
+                              onChange={() => toggleSelect(key)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
                             {u.variant ? `${u.variant} ` : ""}{u.name}
+                            {isSewa && <span className="ucard-sewa-badge">SEWA</span>}
                           </div>
                           <div className="ucard-gt">
                             <div className="ucgt">
@@ -732,6 +804,64 @@ export default function InventoryPage() {
           </div>
         </div>
       )}
+
+      {/* Sewa Modal */}
+      {sewaModalOpen && (
+        <div className="overlay" onClick={(e) => { if ((e.target as HTMLElement).classList.contains("overlay")) setSewaModalOpen(false); }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div className="modal-title">Unit Sewa ({selectedUnits.size})</div>
+              <button className="modal-x" onClick={() => setSewaModalOpen(false)}>&#x2715;</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ fontSize: 12, color: "var(--dim)", marginBottom: 14 }}>
+                Isi harga sewa (Rp/jam) dan deposit per unit. Kosongin = hapus dari sewa.
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {Array.from(selectedUnits).map((k) => {
+                  const u = sortedUnits.find((x) => unitKey(x) === k);
+                  if (!u) return null;
+                  const rc = rarityColor(u.rarity);
+                  const inp = sewaInputs[k] || { pricePerHour: "", deposit: "" };
+                  return (
+                    <div key={k} style={{ padding: 12, background: "var(--card)", border: "1px solid #222240", borderRadius: 10 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: rc, marginBottom: 8 }}>
+                        {u.variant ? `${u.variant} ` : ""}{u.name} <span style={{ color: "var(--dim)", fontSize: 11, fontWeight: 600 }}>· 1 in {fmtMoney(u.chance)}</span>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--dim)", marginBottom: 4, textTransform: "uppercase" }}>Rp / jam</div>
+                          <input
+                            className="sp-input"
+                            type="text"
+                            placeholder="0"
+                            value={inp.pricePerHour}
+                            onChange={(e) => setSewaInputs((prev) => ({ ...prev, [k]: { ...inp, pricePerHour: e.target.value.replace(/[^0-9]/g, "") } }))}
+                          />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "var(--dim)", marginBottom: 4, textTransform: "uppercase" }}>Deposit</div>
+                          <input
+                            className="sp-input"
+                            type="text"
+                            placeholder="0"
+                            value={inp.deposit}
+                            onChange={(e) => setSewaInputs((prev) => ({ ...prev, [k]: { ...inp, deposit: e.target.value.replace(/[^0-9]/g, "") } }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+                <button className="tba-btn" onClick={() => setSewaModalOpen(false)} style={{ flex: 1 }}>Batal</button>
+                <button className="tba-btn primary" onClick={confirmSewa} style={{ flex: 1 }}>Simpan Semua</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -844,7 +974,13 @@ const styles = `
 .ucard { background: var(--surface); border: 1px solid #222240; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; transition: all .15s; }
 .ucard:hover { border-color: #333350; }
 .ucard.sold { opacity: .55; }
-.ucard-name { font-size: 14px; font-weight: 800; color: var(--ink); text-align: center; padding: 8px; border: 1px solid #333; border-radius: 8px; }
+.ucard.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.ucard.sewa { border-color: var(--gold); background: linear-gradient(135deg, rgba(251,191,36,.04), transparent), var(--surface); }
+.ucard-name { font-size: 14px; font-weight: 800; color: var(--ink); text-align: center; padding: 8px; border: 1px solid #333; border-radius: 8px; position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.ucard-check { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.ucard-sewa-badge { font-size: 9px; font-weight: 900; padding: 2px 6px; background: var(--gold); color: #0b0b14; border-radius: 4px; letter-spacing: .5px; }
+.sewa-btn { background: var(--gold) !important; color: #0b0b14 !important; border-color: var(--gold) !important; }
+.clear-btn { background: var(--surface) !important; color: var(--dim) !important; }
 .ucard-gt { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .ucgt { padding: 6px 8px; background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.05); border-radius: 6px; text-align: center; }
 .ucgt-l { font-size: 8px; font-weight: 800; color: var(--dim); letter-spacing: .5px; margin-bottom: 2px; }
