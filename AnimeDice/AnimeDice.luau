@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Monitoring Anime Dice v1.4.3 (ultra-lightweight)
+-- NaruHub | Monitoring Anime Dice v1.5.0 (ultra-lightweight)
 -- Monitoring only -- no auto-roll/sell/equip, baca data → POST ke dashboard.
 
 ------------------------------------------------------------
@@ -189,93 +189,30 @@ local HttpService = game:GetService("HttpService")
 
 local DataController = require(ReplicatedStorage.Framework.Features.Data.DataController)
 local EntryRegistry = require(ReplicatedStorage.Framework.Features.Inventory.EntryRegistry)
+local MutationsConfig = require(ReplicatedStorage.Framework.Features.Inventory.Kinds.Unit.Mutations)
+local TraitsConfig = require(ReplicatedStorage.Framework.Features.Traits.Traits)
+local GradesConfig = require(ReplicatedStorage.Framework.Features.Grades.Grades)
 
 ------------------------------------------------------------
--- Mutation multipliers (chance)
---
--- The game applies a chance multiplier per mutation (e.g. Emerald ×1000),
--- but cfg:chance() returns the base unit chance without it. We try to
--- locate the game's own MutationRegistry / mutation data module; if that
--- fails we fall back to a hardcoded table (confirmed: Emerald = 1000×).
+-- Multiplier helpers (loaded from game modules at runtime)
 ------------------------------------------------------------
-local mutationChanceMult: { [string]: number } = {
-	-- Confirmed from game display
-	Emerald = 1000,
-	-- Common Anime Dice mutations (best-effort; adjust if game differs)
-	Gold = 5,
-	Silver = 2,
-	Bronze = 1.5,
-	Diamond = 25,
-	Ruby = 100,
-	Rainbow = 5000,
-	Paradox = 10000,
-	Void = 500,
-	Galaxy = 2500,
-}
-
-do
-	local mutationModulePaths = {
-		{ "Framework", "Features", "Inventory", "MutationRegistry" },
-		{ "Framework", "Features", "Mutation", "MutationRegistry" },
-		{ "Framework", "Features", "Mutation", "MutationConfig" },
-		{ "SharedModules", "MutationData" },
-		{ "SharedModules", "MutationConfig" },
-	}
-	for _, path in ipairs(mutationModulePaths) do
-		pcall(function()
-			local node: Instance = ReplicatedStorage
-			for _, seg in ipairs(path) do
-				node = node:FindFirstChild(seg)
-				if not node then return end
-			end
-			local mod = require(node)
-			if type(mod) == "table" then
-				local data = mod.Data or mod.data or mod.All or mod.Entries or mod
-				if type(data) == "table" then
-					for k, v in pairs(data) do
-						if type(v) == "table" then
-							local m = v.chanceMultiplier or v.ChanceMultiplier or v.chance or v.Chance or v.multiplier or v.Multiplier
-							if type(m) == "number" and m > 0 then
-								mutationChanceMult[tostring(k)] = m
-							end
-						end
-					end
-				end
-			end
-		end)
-	end
-end
-
-local function chanceMult(mutation)
+local function getMutationChanceMult(mutation)
 	if not mutation or mutation == "" then return 1 end
-	return mutationChanceMult[tostring(mutation)] or 1
+	local cfg = MutationsConfig[mutation]
+	return cfg and cfg.chance or 1
 end
 
--- Grade multipliers (best-effort; user to confirm exact values from game)
-local gradeChanceMult: { [string]: number } = {
-	S = 5,
-	A = 3,
-	B = 2,
-	C = 1.5,
-	D = 1,
-}
-local function gradeMult(grade)
+local function getGradeIncomeMult(grade)
 	if not grade or grade == "" then return 1 end
-	return gradeChanceMult[tostring(grade)] or 1
+	local cfg = GradesConfig[grade]
+	return cfg and cfg.incomeMultiplier or 1
 end
 
--- Trait multipliers (best-effort; user to confirm exact values from game)
-local traitChanceMult: { [string]: number } = {
-	Paradox = 100,
-	Fatal = 50,
-	Godlike = 25,
-	Deadly = 10,
-	Sharp = 5,
-	Fast = 3,
-}
-local function traitMult(trait)
-	if not trait or trait == "" then return 1 end
-	return traitChanceMult[tostring(trait)] or 1
+local function getTraitMults(trait)
+	if not trait or trait == "" then return 1, 1, 1 end
+	local cfg = TraitsConfig[trait]
+	if not cfg then return 1, 1, 1 end
+	return cfg.incomeMultiplier or 1, cfg.damageMultiplier or 1, cfg.healthMultiplier or 1
 end
 
 ------------------------------------------------------------
@@ -355,24 +292,19 @@ local function collectInventory()
 				local attrs = entry.attributes or {}
 				local income, damage, chance, health
 				if cfg then
-					local function callStat(fn)
-						local ok, v = pcall(function() return fn(cfg) end)
-						if ok then return v end
-						return nil
-					end
-					if cfg.income then income = callStat(cfg.income) end
-					if cfg.damage then damage = callStat(cfg.damage) end
-					if cfg.chance then chance = callStat(cfg.chance) end
-					if cfg.health then health = callStat(cfg.health) end
+					pcall(function() income = cfg:income() end)
+					pcall(function() damage = cfg:damage() end)
+					pcall(function() chance = cfg:chance() end)
+					pcall(function() health = cfg:health() end)
 				end
-				-- Apply mutation × grade × trait multipliers (game stacks
-				-- these on top of base chance/income). Confirmed: Emerald ×1000.
-				local mMult = chanceMult(attrs.mutation)
-				local gMult = gradeMult(attrs.grade)
-				local tMult = traitMult(attrs.trait)
-				local totalMult = mMult * gMult * tMult
-				if chance and totalMult ~= 1 then chance = chance * totalMult end
-				if income and totalMult ~= 1 then income = income * totalMult end
+				local mutChance = getMutationChanceMult(attrs.mutation)
+				if chance and mutChance ~= 1 then chance = chance * mutChance end
+
+				local gradeIncome = getGradeIncomeMult(attrs.grade)
+				local traitIncome, traitDamage, traitHealth = getTraitMults(attrs.trait)
+				if income then income = income * gradeIncome * traitIncome end
+				if damage then damage = damage * traitDamage end
+				if health then health = health * traitHealth end
 
 				local placed = nil
 				if slotUnitIds[id] then
@@ -534,17 +466,19 @@ local function collectSlots()
 					slotInfo.trait = attrs.trait
 					slotInfo.grade = attrs.grade
 					if cfg then
-						local function callStat2(fn)
-							local ok, v = pcall(function() return fn(cfg) end)
-							if ok then return v end
-							return nil
-						end
-						if cfg.income then slotInfo.income = callStat2(cfg.income) end
-						if cfg.chance then slotInfo.chance = callStat2(cfg.chance) end
-						if cfg.damage then slotInfo.damage = callStat2(cfg.damage) end
-						local sMult = chanceMult(attrs.mutation) * gradeMult(attrs.grade) * traitMult(attrs.trait)
-						if slotInfo.chance and sMult ~= 1 then slotInfo.chance = slotInfo.chance * sMult end
-						if slotInfo.income and sMult ~= 1 then slotInfo.income = slotInfo.income * sMult end
+						pcall(function() slotInfo.income = cfg:income() end)
+						pcall(function() slotInfo.chance = cfg:chance() end)
+						pcall(function() slotInfo.damage = cfg:damage() end)
+						pcall(function() slotInfo.health = cfg:health() end)
+
+						local mutCh = getMutationChanceMult(attrs.mutation)
+						if slotInfo.chance and mutCh ~= 1 then slotInfo.chance = slotInfo.chance * mutCh end
+
+						local gInc = getGradeIncomeMult(attrs.grade)
+						local tInc, tDmg, tHp = getTraitMults(attrs.trait)
+						if slotInfo.income then slotInfo.income = slotInfo.income * gInc * tInc end
+						if slotInfo.damage then slotInfo.damage = slotInfo.damage * tDmg end
+						if slotInfo.health then slotInfo.health = slotInfo.health * tHp end
 					end
 				end
 			end
@@ -738,7 +672,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v1.4.0",
+	Title = "NaruHub | Anime Dice v1.5.0",
 	Badge = "MONITOR",
 	TabWidth = 0,
 	Size = UDim2.fromOffset(380, 300),
