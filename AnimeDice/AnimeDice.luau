@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Monitoring Anime Dice v1.5.0 (ultra-lightweight)
+-- NaruHub | Monitoring Anime Dice v1.5.1 (ultra-lightweight)
 -- Monitoring only -- no auto-roll/sell/equip, baca data → POST ke dashboard.
 
 ------------------------------------------------------------
@@ -342,6 +342,11 @@ local function collectInventory()
 					slot = cfg.slot or cfg.Slot or cfg.gearSlot or cfg.GearSlot or cfg.category or cfg.Category
 					tier = cfg.tier or cfg.Tier
 				end
+				local image
+				if cfg and cfg.image then
+					local raw = tostring(cfg.image)
+					image = raw:match("(%d+)$")
+				end
 				table.insert(backpack, {
 					name = entry.name,
 					amount = entry.amount or 1,
@@ -349,6 +354,7 @@ local function collectInventory()
 					rarity = rarity,
 					slot = slot,
 					tier = tier,
+					image = image,
 				})
 			end
 		end
@@ -672,7 +678,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v1.5.0",
+	Title = "NaruHub | Anime Dice v1.5.1",
 	Badge = "MONITOR",
 	TabWidth = 0,
 	Size = UDim2.fromOffset(380, 300),
