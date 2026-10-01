@@ -575,7 +575,7 @@ function SellRow({ u, state, rates }: { u: Unit; state: InventoryState; rates: R
 
 const styles = `
 * { box-sizing: border-box; margin: 0; padding: 0; }
-.page { min-height: 100vh; background: #0b0b14; padding: 20px; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #e8e8f0; }
+.page { min-height: 100vh; background: #0b0b14; padding: 20px; font-family: var(--font-poppins), -apple-system, "Segoe UI", Roboto, sans-serif; color: #e8e8f0; }
 .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px 18px; background: #14141f; border: 1px solid #262636; border-radius: 12px; margin-bottom: 20px; max-width: 1120px; margin-left: auto; margin-right: auto; position: sticky; top: 8px; z-index: 100; }
 .controls label { font-size: 12px; font-weight: 700; color: #8b8ba3; }
 .controls input, .controls select { background: #1c1c2b; color: #e8e8f0; border: 1px solid #262636; padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; width: 200px; }
@@ -594,7 +594,7 @@ const styles = `
   padding: 0;
   color: #0f172a;
   position: relative;
-  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-poppins), -apple-system, "Segoe UI", Roboto, sans-serif;
   overflow: hidden;
   box-shadow: 0 20px 60px rgba(0,0,0,.4);
   display: flex;
@@ -620,7 +620,7 @@ const styles = `
   flex-shrink: 0;
   background: transparent;
 }
-.rk-title { font-size: 28px; font-weight: 900; letter-spacing: .5px; }
+.rk-title { font-size: 36px; font-weight: 400; letter-spacing: 1.5px; font-family: var(--font-bebas), "Impact", sans-serif; }
 .rk-sub { color: #cbd5e1; font-size: 13px; margin-top: 4px; letter-spacing: .3px; }
 .rk-header-right {
   display: flex;
@@ -651,17 +651,18 @@ const styles = `
 }
 .sec-line { flex: 1; height: 3px; background: #0f172a; border-radius: 2px; }
 .sec-text {
-  font-size: 22px;
-  font-weight: 900;
+  font-size: 28px;
+  font-weight: 400;
   color: #ffffff;
-  letter-spacing: 3px;
-  padding: 8px 22px;
+  letter-spacing: 4px;
+  padding: 8px 24px;
   background: linear-gradient(180deg, #f87171, #dc2626);
   border-radius: 8px;
   border: 2px solid #0f172a;
   white-space: nowrap;
-  text-shadow: 0 1px 2px rgba(0,0,0,.3);
+  text-shadow: 0 2px 4px rgba(0,0,0,.3);
   box-shadow: 0 2px 0 #0f172a;
+  font-family: var(--font-bebas), "Impact", sans-serif;
 }
 .sec-bonus {
   font-size: 15px;
@@ -727,14 +728,15 @@ const styles = `
   flex-direction: column;
 }
 .gc-name {
-  font-size: 18px;
-  font-weight: 900;
+  font-size: 22px;
+  font-weight: 400;
   color: #ffffff;
-  line-height: 1.15;
+  line-height: 1.1;
   margin-bottom: 4px;
-  letter-spacing: .2px;
+  letter-spacing: 1px;
   text-shadow: 0 2px 6px rgba(0,0,0,.5);
-  min-height: 42px;
+  min-height: 48px;
+  font-family: var(--font-bebas), "Impact", sans-serif;
 }
 .gc-rarity {
   font-size: 14px;
