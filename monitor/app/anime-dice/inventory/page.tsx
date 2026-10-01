@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 
 interface Unit {
+  id?: string | null;
   name: string;
   rarity: string;
   variant: string | null;
@@ -136,7 +137,8 @@ function fmtRp(v: number): string {
 }
 
 function unitKey(u: Unit): string {
-  return [u.name, u.variant || "", u.rarity, u.mutation || "", u.trait || "", u.grade || ""].join("|");
+  if (u.id) return "id:" + u.id;
+  return [u.name, u.variant || "", u.rarity, u.mutation || "", u.trait || "", u.grade || "", u.level ?? ""].join("|");
 }
 
 type ViewTab = "unit" | "backpack";
