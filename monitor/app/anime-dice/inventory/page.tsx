@@ -339,14 +339,14 @@ export default function InventoryPage() {
 
   const rawUnits = (detail?.allUnits || []).filter((u) => u.chance != null && u.chance >= MIN_CHANCE);
   const sortedUnits = [...rawUnits].sort((a, b) => {
-    const ra = RARITY_ORDER.indexOf(a.rarity);
-    const rb = RARITY_ORDER.indexOf(b.rarity);
+    const ra = RARITY_ORDER.indexOf(rarityDisplayFor(a));
+    const rb = RARITY_ORDER.indexOf(rarityDisplayFor(b));
     if (ra !== rb) return (ra === -1 ? 999 : ra) - (rb === -1 ? 999 : rb);
     return (b.chance || 0) - (a.chance || 0);
   });
 
   const filteredUnits = sortedUnits.filter((u) => {
-    if (rarityFilter !== "All" && u.rarity !== rarityFilter) return false;
+    if (rarityFilter !== "All" && rarityDisplayFor(u) !== rarityFilter) return false;
     if (search.trim()) {
       const q = search.toLowerCase();
       const full = ((u.variant || "") + " " + u.name + " " + (u.trait || "") + " " + (u.grade || "")).toLowerCase();
@@ -355,7 +355,7 @@ export default function InventoryPage() {
     return true;
   });
 
-  const availableRarities = Array.from(new Set(sortedUnits.map((u) => u.rarity)));
+  const availableRarities = Array.from(new Set(sortedUnits.map((u) => rarityDisplayFor(u))));
 
   const backpack = detail?.backpack || [];
   const gems = backpack.find((b) => b.name.toLowerCase().includes("gem"));
@@ -516,7 +516,7 @@ export default function InventoryPage() {
               <input className="sp-input" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
               <select className="sp-input" value={rarityFilter} onChange={(e) => setRarityFilter(e.target.value)}>
                 <option value="All">All Rarities</option>
-                {availableRarities.map((r) => <option key={r} value={r}>{rarityDisplay(r)}</option>)}
+                {availableRarities.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
             </div>
             <div className="sp-section">
@@ -563,7 +563,7 @@ export default function InventoryPage() {
                     {filteredUnits.map((u, i) => {
                       const key = unitKey(u);
                       const s = state.unitData[key] || { price: 0, sold: false };
-                      const rc = rarityColor(u.rarity);
+                      const rc = rarityColor(rarityDisplayFor(u));
                       const isSewa = !!state.sewa[key];
                       const isSelected = selectedUnits.has(key);
                       return (
@@ -779,7 +779,7 @@ export default function InventoryPage() {
                   {soldUnitsList.map((u, i) => {
                     const key = unitKey(u);
                     const s = state.unitData[key];
-                    const rc = rarityColor(u.rarity);
+                    const rc = rarityColor(rarityDisplayFor(u));
                     return (
                       <div key={i} className="sold-row">
                         <div className="sr-name">
@@ -880,7 +880,7 @@ export default function InventoryPage() {
                 {Array.from(selectedUnits).map((k) => {
                   const u = sortedUnits.find((x) => unitKey(x) === k);
                   if (!u) return null;
-                  const rc = rarityColor(u.rarity);
+                  const rc = rarityColor(rarityDisplayFor(u));
                   const inp = sewaInputs[k] || { pricePerHour: "", deposit: "" };
                   return (
                     <div key={k} style={{ padding: 12, background: "var(--card)", border: "1px solid #222240", borderRadius: 10 }}>

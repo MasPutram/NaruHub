@@ -143,7 +143,7 @@ function unitPortraitUrl(u: Unit): string | null {
 }
 
 function unitGradient(u: Unit): string {
-  const cs = u.colors && u.colors.length > 0 ? u.colors : [rarityColor(u.rarity)];
+  const cs = u.colors && u.colors.length > 0 ? u.colors : [rarityColor(rarityDisplayFor(u))];
   if (cs.length === 1) return `linear-gradient(135deg, ${cs[0]}, ${cs[0]}66)`;
   return `linear-gradient(135deg, ${cs.join(", ")})`;
 }
@@ -338,7 +338,7 @@ export default function RangkumanPage() {
                   {sewaUnits.map((u, i) => {
                     const k = unitKey(u);
                     const sewa = state.sewa[k];
-                    const cs = (u.colors && u.colors.length > 0) ? u.colors : [rarityColor(u.rarity), rarityColor(u.rarity)];
+                    const cs = (u.colors && u.colors.length > 0) ? u.colors : [rarityColor(rarityDisplayFor(u)), rarityColor(rarityDisplayFor(u))];
                     const borderGrad = `linear-gradient(135deg, ${cs.join(", ")})`;
                     const rarityGrad = cs.length >= 2 ? `linear-gradient(90deg, ${cs.join(", ")})` : `linear-gradient(90deg, ${cs[0]}, ${cs[0]}aa)`;
                     return (
