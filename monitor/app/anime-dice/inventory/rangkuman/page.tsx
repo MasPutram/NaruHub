@@ -148,6 +148,23 @@ function unitGradient(u: Unit): string {
   return `linear-gradient(135deg, ${cs.join(", ")})`;
 }
 
+// Game-matched gradients for the rarity LABEL text. Game uses holy
+// green→yellow→white shimmer for Heavenly, cyan→white for Celestial, etc.
+const RARITY_LABEL_GRADIENT: Record<string, string> = {
+  Heavenly: "linear-gradient(90deg, #a7f3d0 0%, #fef9c3 30%, #ffffff 50%, #fef9c3 70%, #a7f3d0 100%)",
+  Celestial: "linear-gradient(90deg, #67e8f9, #ffffff, #67e8f9)",
+  "Secret II": "linear-gradient(90deg, #f0abfc, #ffffff, #f0abfc)",
+  "Secret I": "linear-gradient(90deg, #fbcfe8, #ffffff, #fbcfe8)",
+  Exclusive: "linear-gradient(90deg, #fca5a5, #fde047, #fca5a5)",
+};
+
+function rarityLabelGradient(u: Unit, fallbackColors: string[]): string {
+  const r = rarityDisplayFor(u);
+  if (RARITY_LABEL_GRADIENT[r]) return RARITY_LABEL_GRADIENT[r];
+  if (fallbackColors.length >= 2) return `linear-gradient(90deg, ${fallbackColors.join(", ")})`;
+  return `linear-gradient(90deg, ${fallbackColors[0]}, ${fallbackColors[0]}aa)`;
+}
+
 export default function RangkumanPage() {
   const [mounted, setMounted] = useState(false);
   const [detail, setDetail] = useState<ADDetail | null>(null);
@@ -382,7 +399,7 @@ export default function RangkumanPage() {
                     const sewa = state.sewa[k];
                     const cs = (u.colors && u.colors.length > 0) ? u.colors : [rarityColor(rarityDisplayFor(u)), rarityColor(rarityDisplayFor(u))];
                     const borderGrad = `linear-gradient(135deg, ${cs.join(", ")})`;
-                    const rarityGrad = cs.length >= 2 ? `linear-gradient(90deg, ${cs.join(", ")})` : `linear-gradient(90deg, ${cs[0]}, ${cs[0]}aa)`;
+                    const rarityGrad = rarityLabelGradient(u, cs);
                     return (
                       <div key={i} className="game-card" style={{ ["--glow" as any]: cs[0] || "#facc15" }}>
                         <div className="gc-border" style={{ background: borderGrad }} />
@@ -679,11 +696,12 @@ const styles = `
   min-height: 42px;
 }
 .gc-rarity {
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 1px;
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
   margin-bottom: 8px;
-  filter: drop-shadow(0 1px 2px rgba(0,0,0,.4));
+  filter: drop-shadow(0 0 4px rgba(255,255,255,.5)) drop-shadow(0 1px 2px rgba(0,0,0,.5));
+  text-transform: uppercase;
 }
 .gc-info-row {
   display: flex;
