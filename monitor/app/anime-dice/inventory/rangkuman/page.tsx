@@ -159,11 +159,11 @@ export default function RangkumanPage() {
   const [contact, setContact] = useState("facebook.com/naruaho");
   const [qrTarget, setQrTarget] = useState("https://www.facebook.com/naruaho");
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
-  const [accounts, setAccounts] = useState<string[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string>(DEFAULT_ACCOUNT);
   const posterRef = useRef<HTMLDivElement | null>(null);
 
-  // Load last-selected account from localStorage (set by inventory page)
+  // Resolve active account = most-recent catalog push (same rule as inventory
+  // page). Seed from localStorage for instant render, then poll.
   useEffect(() => {
     try {
       const saved = localStorage.getItem("ad-inv-selected-account");
@@ -171,16 +171,24 @@ export default function RangkumanPage() {
     } catch {}
   }, []);
 
-  const fetchAccounts = useCallback(async () => {
+  const resolveActiveAccount = useCallback(async () => {
     try {
       const res = await fetch("/api/anime-dice/catalog");
       const body = await res.json();
-      if (res.ok && body.ok && Array.isArray(body.snapshots)) {
-        const names: string[] = body.snapshots
-          .map((s: any) => s.sourceAccount)
-          .filter((n: any) => typeof n === "string" && n.length > 0);
-        names.sort((a, b) => a.localeCompare(b));
-        setAccounts(names);
+      if (res.ok && body.ok && Array.isArray(body.snapshots) && body.snapshots.length > 0) {
+        const latest = body.snapshots.reduce((best: any, cur: any) => {
+          if (!best) return cur;
+          return (cur.lastSeen || 0) > (best.lastSeen || 0) ? cur : best;
+        }, null);
+        const name = latest?.sourceAccount;
+        if (typeof name === "string" && name.length > 0) {
+          setSelectedAccount((prev) => {
+            if (prev !== name) {
+              try { localStorage.setItem("ad-inv-selected-account", name); } catch {}
+            }
+            return name;
+          });
+        }
       }
     } catch {}
   }, []);
@@ -204,7 +212,11 @@ export default function RangkumanPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { setMounted(true); fetchAccounts(); }, [fetchAccounts]);
+  useEffect(() => { setMounted(true); resolveActiveAccount(); }, [resolveActiveAccount]);
+  useEffect(() => {
+    const id = setInterval(resolveActiveAccount, 15000);
+    return () => clearInterval(id);
+  }, [resolveActiveAccount]);
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   useEffect(() => {
@@ -312,15 +324,10 @@ export default function RangkumanPage() {
       <style>{styles}</style>
       <div className="page">
         <div className="controls">
-          <label>Akun:</label>
-          <select
-            value={selectedAccount}
-            onChange={(e) => { setSelectedAccount(e.target.value); try { localStorage.setItem("ad-inv-selected-account", e.target.value); } catch {} }}
-            style={{ width: 180 }}
-          >
-            {!accounts.includes(selectedAccount) && <option value={selectedAccount}>{selectedAccount}</option>}
-            {accounts.map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
+          <label>Akun aktif:</label>
+          <div style={{ padding: "8px 12px", background: "#1c1c2b", border: "1px solid #262636", borderRadius: 8, fontSize: 13, fontWeight: 700, color: "#facc15", minWidth: 180 }}>
+            {selectedAccount}
+          </div>
           <label>Pemilik:</label>
           <input value={owner} onChange={(e) => setOwner(e.target.value)} />
           <label>Kontak:</label>

@@ -211,31 +211,31 @@ export default function InventoryPage() {
   const [soldItemsOpen, setSoldItemsOpen] = useState(false);
   const [bpSoldModal, setBpSoldModal] = useState<string | null>(null);
   const [bpSoldInput, setBpSoldInput] = useState("");
-  const [accounts, setAccounts] = useState<string[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<string>(DEFAULT_ACCOUNT);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const priceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  // Load last-selected account from localStorage once on mount
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(SELECTED_ACCOUNT_KEY);
-      if (saved) setSelectedAccount(saved);
-    } catch {}
-  }, []);
-
-  const fetchAccounts = useCallback(async () => {
+  // Active inventory = the account whose catalog snapshot was pushed MOST
+  // RECENTLY. Executing AnimeDiceSell.luau on a different account auto-
+  // promotes it to the active inventory on the next poll (no manual pick).
+  const resolveActiveAccount = useCallback(async () => {
     try {
       const res = await fetch("/api/anime-dice/catalog");
       const body = await res.json();
-      if (res.ok && body.ok && Array.isArray(body.snapshots)) {
-        const names: string[] = body.snapshots
-          .map((s: any) => s.sourceAccount)
-          .filter((n: any) => typeof n === "string" && n.length > 0);
-        names.sort((a, b) => a.localeCompare(b));
-        setAccounts(names);
-        // If current selection isn't in the list, pick the first available
-        setSelectedAccount((prev) => (names.includes(prev) ? prev : (names[0] || prev)));
+      if (res.ok && body.ok && Array.isArray(body.snapshots) && body.snapshots.length > 0) {
+        const latest = body.snapshots.reduce((best: any, cur: any) => {
+          if (!best) return cur;
+          return (cur.lastSeen || 0) > (best.lastSeen || 0) ? cur : best;
+        }, null);
+        const name = latest?.sourceAccount;
+        if (typeof name === "string" && name.length > 0) {
+          setSelectedAccount((prev) => {
+            if (prev !== name) {
+              try { localStorage.setItem(SELECTED_ACCOUNT_KEY, name); } catch {}
+            }
+            return name;
+          });
+        }
       }
     } catch {}
   }, []);
@@ -258,25 +258,33 @@ export default function InventoryPage() {
     setLoading(false);
   }, [selectedAccount]);
 
-  function changeAccount(name: string) {
-    setSelectedAccount(name);
-    try { localStorage.setItem(SELECTED_ACCOUNT_KEY, name); } catch {}
-    setLoading(true);
-    setDetail(null);
-    setSelectedUnits(new Set());
-  }
-
-  useEffect(() => { setMounted(true); fetchAccounts(); }, [fetchAccounts]);
+  useEffect(() => {
+    setMounted(true);
+    // Seed from the last-known account for an instant render, then let the
+    // catalog poll decide the real active account on first fetch.
+    try {
+      const saved = localStorage.getItem(SELECTED_ACCOUNT_KEY);
+      if (saved) setSelectedAccount(saved);
+    } catch {}
+    resolveActiveAccount();
+  }, [resolveActiveAccount]);
   useEffect(() => {
     fetchData();
     const id = setInterval(fetchData, 15000);
     return () => clearInterval(id);
   }, [fetchData]);
-  // Re-check available accounts periodically — new executors may come online
+  // Poll which account is currently active (most-recent push). If a different
+  // account just exe'd the script, this swaps the inventory to it.
   useEffect(() => {
-    const id = setInterval(fetchAccounts, 30000);
+    const id = setInterval(resolveActiveAccount, 10000);
     return () => clearInterval(id);
-  }, [fetchAccounts]);
+  }, [resolveActiveAccount]);
+  // Switching account should start fresh — drop stale selection
+  useEffect(() => {
+    setSelectedUnits(new Set());
+    setDetail(null);
+    setLoading(true);
+  }, [selectedAccount]);
 
   function saveRates(next: Rates) {
     setRates(next);
@@ -553,14 +561,18 @@ export default function InventoryPage() {
               </div>
             </div>
             <div className="sp-section">
-              <div className="sp-label">Pilih Akun ({accounts.length})</div>
-              <select className="sp-input" value={selectedAccount} onChange={(e) => changeAccount(e.target.value)}>
-                {!accounts.includes(selectedAccount) && (
-                  <option value={selectedAccount}>{selectedAccount}</option>
-                )}
-                {accounts.map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
-              {accounts.length === 0 && (
+              <div className="sp-label">Mode</div>
+              <div style={{ fontSize: 11, color: "var(--dim)", lineHeight: 1.5, padding: "6px 0" }}>
+                Auto-switch ke akun yang terakhir exe <b style={{ color: "var(--accent)" }}>AnimeDiceSell.luau</b>. Jalankan script di akun lain → inventory ikut pindah (polling 10s).
+              </div>
+              <button
+                className="sp-input"
+                onClick={() => resolveActiveAccount()}
+                style={{ cursor: "pointer", background: "var(--accent)", color: "#0b0b14", fontWeight: 800, border: "none", textAlign: "center" }}
+              >
+                &#x21BB; Scan Sekarang
+              </button>
+              {!detail && !loading && (
                 <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 4 }}>
                   Belum ada akun lapor via AnimeDiceSell.luau
                 </div>
