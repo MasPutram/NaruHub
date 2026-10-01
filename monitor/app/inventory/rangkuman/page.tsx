@@ -670,7 +670,6 @@ const styles = `
   color: #0f172a;
   letter-spacing: .5px;
   white-space: nowrap;
-  font-style: italic;
   padding: 6px 14px;
   background: #ffffff;
   border: 2px solid #0f172a;
