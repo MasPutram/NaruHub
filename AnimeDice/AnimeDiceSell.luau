@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | AnimeDice Sell Catalog v1.3.0
+-- NaruHub | AnimeDice Sell Catalog v1.4.0
 -- Sends enriched inventory data to dashboard catalog for marketplace listings.
 -- Separate loadstring — does NOT interfere with the monitoring script.
 
@@ -158,10 +158,14 @@ local RARITY_TIER = {
 	Exclusive = 11,
 }
 
-local RARITY_DISPLAY = {
-	["Secret I"] = "Celestial",
-	["Secret II"] = "Heavenly",
-}
+local function getDisplayRarity(cfg, mutation)
+	if not cfg or not cfg.getRarity then return cfg and cfg.rarity or "Unknown" end
+	local proxy = {}
+	for k, v in pairs(cfg) do proxy[k] = v end
+	if mutation then proxy.mutation = mutation end
+	local ok, result = pcall(function() return cfg.getRarity(proxy) end)
+	return ok and result or cfg.rarity
+end
 
 ------------------------------------------------------------
 -- Collect catalog data (enriched for marketplace display)
@@ -222,14 +226,17 @@ local function collectCatalog()
 				if slotUnitIds[id] then placed = "slot"
 				elseif towerUnitIds[id] then placed = "tower" end
 
+				local displayRarity = getDisplayRarity(cfg, attrs.mutation)
+
 				table.insert(units, {
 					id = id,
 					name = entry.name,
 					amount = entry.amount or 1,
-					rarity = RARITY_DISPLAY[rarity] or rarity,
+					rarity = rarity,
+					displayRarity = displayRarity,
 					variant = variant,
 					order = order,
-					tier = RARITY_TIER[rarity] or 0,
+					tier = RARITY_TIER[displayRarity] or RARITY_TIER[rarity] or 0,
 					mutation = attrs.mutation,
 					level = attrs.level,
 					trait = attrs.trait,
@@ -328,7 +335,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | AD Catalog v1.3.0",
+	Title = "NaruHub | AD Catalog v1.4.0",
 	Badge = "SELL",
 	TabWidth = 0,
 	Size = UDim2.fromOffset(380, 260),

@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Monitoring Anime Dice v1.8.0 (ultra-lightweight)
+-- NaruHub | Monitoring Anime Dice v1.9.0 (ultra-lightweight)
 -- Monitoring only -- no auto-roll/sell/equip, baca data → POST ke dashboard.
 
 ------------------------------------------------------------
@@ -268,10 +268,14 @@ local RARITY_TIER = {
 	Exclusive = 11,
 }
 
-local RARITY_DISPLAY = {
-	["Secret I"] = "Celestial",
-	["Secret II"] = "Heavenly",
-}
+local function getDisplayRarity(cfg, mutation)
+	if not cfg or not cfg.getRarity then return cfg and cfg.rarity or "Unknown" end
+	local proxy = {}
+	for k, v in pairs(cfg) do proxy[k] = v end
+	if mutation then proxy.mutation = mutation end
+	local ok, result = pcall(function() return cfg.getRarity(proxy) end)
+	return ok and result or cfg.rarity
+end
 
 ------------------------------------------------------------
 -- Data collectors
@@ -356,14 +360,17 @@ local function collectInventory()
 					placed = "tower"
 				end
 
+				local displayRarity = getDisplayRarity(cfg, attrs.mutation)
+
 				table.insert(units, {
 					id = id,
 					name = entry.name,
 					amount = entry.amount or 1,
-					rarity = RARITY_DISPLAY[rarity] or rarity,
+					rarity = rarity,
+					displayRarity = displayRarity,
 					variant = variant,
 					order = order,
-					tier = RARITY_TIER[rarity] or 0,
+					tier = RARITY_TIER[displayRarity] or RARITY_TIER[rarity] or 0,
 					mutation = attrs.mutation,
 					level = attrs.level,
 					trait = attrs.trait,
@@ -511,8 +518,8 @@ local function collectSlots()
 					local cfg = allEntries[entry.name]
 					local attrs = entry.attributes or {}
 					slotInfo.name = entry.name
-					local rawRarity = cfg and cfg.rarity or "Unknown"
-					slotInfo.rarity = RARITY_DISPLAY[rawRarity] or rawRarity
+					slotInfo.rarity = cfg and cfg.rarity or "Unknown"
+					slotInfo.displayRarity = getDisplayRarity(cfg, attrs.mutation)
 					slotInfo.variant = cfg and cfg.variant or nil
 					slotInfo.level = attrs.level
 					slotInfo.mutation = attrs.mutation
@@ -744,7 +751,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v1.8.0",
+	Title = "NaruHub | Anime Dice v1.9.0",
 	Badge = "MONITOR",
 	TabWidth = 0,
 	Size = UDim2.fromOffset(380, 300),
