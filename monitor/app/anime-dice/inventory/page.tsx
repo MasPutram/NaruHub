@@ -6,6 +6,7 @@ interface Unit {
   id?: string | null;
   name: string;
   rarity: string;
+  displayRarity?: string | null;
   variant: string | null;
   mutation: string | null;
   level: number | null;
@@ -106,11 +107,19 @@ const RARITY_ORDER = [
 
 function rarityColor(r: string): string { return RARITY_COLORS[r] || "#71717a"; }
 
-// Match game display names: Secret I → Celestial, Secret II → Heavenly
+// Mutation-aware display mapping. Game promotes Secret I → Heavenly when the
+// unit carries a top-tier mutation (Emerald/Diamond/Ruby/Rainbow). Prefer
+// Luau-provided displayRarity when present.
 const RARITY_DISPLAY: Record<string, string> = {
   "Secret I": "Celestial",
   "Secret II": "Heavenly",
 };
+const PROMOTING_MUTATIONS = new Set(["Emerald", "Diamond", "Ruby", "Rainbow"]);
+function rarityDisplayFor(u: { rarity: string; mutation?: string | null; displayRarity?: string | null }): string {
+  if (u.displayRarity) return u.displayRarity;
+  if (u.rarity === "Secret I" && u.mutation && PROMOTING_MUTATIONS.has(u.mutation)) return "Heavenly";
+  return RARITY_DISPLAY[u.rarity] || u.rarity;
+}
 function rarityDisplay(r: string): string { return RARITY_DISPLAY[r] || r; }
 
 function fmtMoney(v: number | null | undefined): string {
@@ -775,7 +784,7 @@ export default function InventoryPage() {
                       <div key={i} className="sold-row">
                         <div className="sr-name">
                           <span style={{ color: rc }}>{u.variant ? `${u.variant} ` : ""}{u.name}</span>
-                          <span className="sr-sub"> · {rarityDisplay(u.rarity)} · 1 in {fmtMoney(u.chance)}</span>
+                          <span className="sr-sub"> · {rarityDisplayFor(u)} · 1 in {fmtMoney(u.chance)}</span>
                         </div>
                         <div className="sr-price">{fmtRp(unitPrice(u))}</div>
                         <button className="sr-undo" onClick={() => toggleUnitSold(key)}>Undo</button>

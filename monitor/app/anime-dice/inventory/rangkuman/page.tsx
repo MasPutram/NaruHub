@@ -6,6 +6,7 @@ interface Unit {
   id?: string | null;
   name: string;
   rarity: string;
+  displayRarity?: string | null;
   variant: string | null;
   mutation: string | null;
   level: number | null;
@@ -76,13 +77,21 @@ const RARITY_COLORS: Record<string, string> = {
 function rarityColor(r: string): string { return RARITY_COLORS[r] || "#71717a"; }
 
 // Game renders internal rarities with upgraded display names when a top-tier
-// mutation (Rainbow etc.) is applied. If Luau already sends the display name
-// this is a no-op; otherwise we translate internal → display at render time.
+// mutation (Rainbow etc.) is applied. Rule turned out to be compound: high
+// mutations promote Secret I → Heavenly as well. Prefer the explicit
+// displayRarity field from the Luau payload when sent; otherwise use a
+// mutation-aware heuristic for Secret I/II that matches observed game output.
 const RARITY_DISPLAY: Record<string, string> = {
   "Secret I": "Celestial",
   "Secret II": "Heavenly",
 };
-function rarityDisplay(r: string): string { return RARITY_DISPLAY[r] || r; }
+const PROMOTING_MUTATIONS = new Set(["Emerald", "Diamond", "Ruby", "Rainbow"]);
+function rarityDisplayFor(u: Unit): string {
+  if (u.displayRarity) return u.displayRarity;
+  const r = u.rarity;
+  if (r === "Secret I" && u.mutation && PROMOTING_MUTATIONS.has(u.mutation)) return "Heavenly";
+  return RARITY_DISPLAY[r] || r;
+}
 
 function fmtMoney(v: number | null | undefined): string {
   if (v == null) return "-";
@@ -338,7 +347,7 @@ export default function RangkumanPage() {
                         <div className="gc-inner">
                           <div className="gc-name">{u.variant ? `${u.variant} ` : ""}{u.name}</div>
                           <div className="gc-rarity" style={{ backgroundImage: rarityGrad, backgroundClip: "text", WebkitBackgroundClip: "text", color: "transparent", WebkitTextFillColor: "transparent" }}>
-                            {rarityDisplay(u.rarity)}
+                            {rarityDisplayFor(u)}
                           </div>
                           {/* Info kecil: level, mutation, grade, trait */}
                           <div className="gc-info-row">
