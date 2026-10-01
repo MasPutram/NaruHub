@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | AnimeDice Sell Catalog v1.2.0
+-- NaruHub | AnimeDice Sell Catalog v1.3.0
 -- Sends enriched inventory data to dashboard catalog for marketplace listings.
 -- Separate loadstring — does NOT interfere with the monitoring script.
 
@@ -67,6 +67,7 @@ local EntryRegistry = require(ReplicatedStorage.Framework.Features.Inventory.Ent
 local MutationsConfig = require(ReplicatedStorage.Framework.Features.Inventory.Kinds.Unit.Mutations)
 local TraitsConfig = require(ReplicatedStorage.Framework.Features.Traits.Traits)
 local GradesConfig = require(ReplicatedStorage.Framework.Features.Grades.Grades)
+local BuffController = require(ReplicatedStorage.Framework.Features.Buffs.BuffController)
 
 ------------------------------------------------------------
 -- Multiplier helpers
@@ -279,6 +280,14 @@ local function reportCatalog()
 		local units, backpack = collectCatalog()
 		local X = DataController.___X
 
+		local globalBuffs = {}
+		pcall(function()
+			globalBuffs.money = BuffController.GetBuff("Money Multiplier")
+			globalBuffs.damage = BuffController.GetBuff("Damage Multiplier")
+			globalBuffs.health = BuffController.GetBuff("Health Multiplier")
+			globalBuffs.luck = BuffController.GetBuff("Luck")
+		end)
+
 		local payload = {
 			game = "AnimeDice",
 			sourceAccount = LocalPlayer.Name,
@@ -287,6 +296,7 @@ local function reportCatalog()
 			rebirth = X.Rebirth or 0,
 			dice = X.Dice or "Normal",
 			vip = (X.OwnedGamepasses and X.OwnedGamepasses.VIP) or false,
+			globalBuffs = globalBuffs,
 			units = units,
 			backpack = backpack,
 			unitsCount = #units,
@@ -318,7 +328,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | AD Catalog v1.2.0",
+	Title = "NaruHub | AD Catalog v1.3.0",
 	Badge = "SELL",
 	TabWidth = 0,
 	Size = UDim2.fromOffset(380, 260),
