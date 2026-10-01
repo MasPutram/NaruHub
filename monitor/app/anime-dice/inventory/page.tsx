@@ -530,7 +530,14 @@ export default function InventoryPage() {
                               onClick={(e) => e.stopPropagation()}
                             />
                             {u.variant ? `${u.variant} ` : ""}{u.name}
-                            {isSewa && <span className="ucard-sewa-badge">SEWA</span>}
+                            {isSewa && (
+                              <span
+                                className="ucard-sewa-badge"
+                                title="Klik untuk hapus dari sewa"
+                                onClick={(e) => { e.stopPropagation(); if (confirm(`Hapus "${u.name}" dari daftar sewa?`)) removeSewa(key); }}
+                                style={{ cursor: "pointer" }}
+                              >SEWA &#x2715;</span>
+                            )}
                           </div>
                           <div className="ucard-gt">
                             <div className="ucgt">
@@ -825,8 +832,18 @@ export default function InventoryPage() {
                   const inp = sewaInputs[k] || { pricePerHour: "", deposit: "" };
                   return (
                     <div key={k} style={{ padding: 12, background: "var(--card)", border: "1px solid #222240", borderRadius: 10 }}>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: rc, marginBottom: 8 }}>
-                        {u.variant ? `${u.variant} ` : ""}{u.name} <span style={{ color: "var(--dim)", fontSize: 11, fontWeight: 600 }}>· 1 in {fmtMoney(u.chance)}</span>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 8 }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: rc, minWidth: 0, flex: 1 }}>
+                          {u.variant ? `${u.variant} ` : ""}{u.name} <span style={{ color: "var(--dim)", fontSize: 11, fontWeight: 600 }}>· 1 in {fmtMoney(u.chance)}</span>
+                        </div>
+                        {state.sewa[k] && (
+                          <button
+                            onClick={() => { removeSewa(k); setSewaInputs((prev) => { const next = { ...prev }; delete next[k]; return next; }); setSelectedUnits((prev) => { const next = new Set(prev); next.delete(k); return next; }); }}
+                            style={{ background: "rgba(239,68,68,.12)", color: "var(--red)", border: "1px solid rgba(239,68,68,.3)", padding: "4px 10px", borderRadius: 6, fontSize: 10, fontWeight: 800, cursor: "pointer", flexShrink: 0 }}
+                          >
+                            &#x2715; Hapus Sewa
+                          </button>
+                        )}
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                         <div>
