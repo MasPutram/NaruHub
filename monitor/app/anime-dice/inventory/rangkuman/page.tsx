@@ -49,9 +49,20 @@ interface Rates {
   jackpotRate: number;
   gearRate: number;
   gearSetRate: number;
+  unitRateLow: number;
+  unitRateHigh: number;
 }
 
-const DEFAULT_RATES: Rates = { gemRate: 0, traitRerollRate: 0, luckySpinRate: 0, jackpotRate: 0, gearRate: 0, gearSetRate: 0 };
+const DEFAULT_RATES: Rates = { gemRate: 0, traitRerollRate: 0, luckySpinRate: 0, jackpotRate: 0, gearRate: 0, gearSetRate: 0, unitRateLow: 0, unitRateHigh: 0 };
+const UNIT_RATE_THRESHOLD = 1e22;
+
+function autoUnitPrice(u: Unit, rates: Rates): number {
+  const c = Number(u.chance) || 0;
+  if (c <= 0) return 0;
+  const rate = c >= UNIT_RATE_THRESHOLD ? rates.unitRateHigh : rates.unitRateLow;
+  if (!rate) return 0;
+  return (c / 1e21) * rate;
+}
 const STOCK_ACCOUNT = "KaijuBer2";
 const MIN_CHANCE = 1e21;
 
@@ -246,8 +257,14 @@ export default function RangkumanPage() {
     { key: "gear", name: "DIVINE GEAR", item: null as BackpackItem | null, qty: divineGear, value: gearTotalValue, rateText: `Rp ${rates.gearRate.toLocaleString("id-ID")}`, rateUnit: "/pc", accent: "#9333ea", bg: "#faf5ff", emoji: "\u{2699}\u{FE0F}", sets: fullSets, setValue: gearSetValue, setRate: rates.gearSetRate, leftover: leftoverGear },
   ];
 
+  // Unit price: manual override wins; else auto-compute from rate × chance.
+  // Only sellable (not sewa'd, not sold) count toward estimasi.
+  const unitPriceOf = (u: Unit): number => {
+    const s = state.unitData[unitKey(u)];
+    return s?.price || autoUnitPrice(u, rates);
+  };
   const totalEstimasi = inventorySlots.reduce((s, x) => s + x.value, 0)
-    + Object.entries(state.unitData).reduce((s, [k, v]) => s + (v.sold ? 0 : v.price), 0);
+    + sellUnits.reduce((s, u) => s + unitPriceOf(u), 0);
   const totalSewaPerJam = sewaUnits.reduce((s, u) => s + (state.sewa[unitKey(u)]?.pricePerHour || 0), 0);
   const totalDeposit = sewaUnits.reduce((s, u) => s + (state.sewa[unitKey(u)]?.deposit || 0), 0);
 
@@ -370,10 +387,10 @@ export default function RangkumanPage() {
               ) : (
                 <div className="sell-plain">
                   <div className="sell-col">
-                    {sellLeft.map((u, i) => <SellRow key={i} u={u} state={state} />)}
+                    {sellLeft.map((u, i) => <SellRow key={i} u={u} state={state} rates={rates} />)}
                   </div>
                   <div className="sell-col">
-                    {sellRight.map((u, i) => <SellRow key={i} u={u} state={state} />)}
+                    {sellRight.map((u, i) => <SellRow key={i} u={u} state={state} rates={rates} />)}
                   </div>
                 </div>
               )}
@@ -447,16 +464,17 @@ export default function RangkumanPage() {
   );
 }
 
-function SellRow({ u, state }: { u: Unit; state: InventoryState }) {
+function SellRow({ u, state, rates }: { u: Unit; state: InventoryState; rates: Rates }) {
   const k = unitKey(u);
   const s = state.unitData[k];
+  const price = s?.price || autoUnitPrice(u, rates);
   return (
     <div className="sell-card">
       <div className="scd-info">
         <div className="scd-chance">1 in {fmtMoney(u.chance)}</div>
         <div className="scd-name">{u.variant ? `${u.variant} ` : ""}{u.name}</div>
       </div>
-      <div className="scd-price">{s?.price ? fmtRp(s.price) : "—"}</div>
+      <div className="scd-price">{price > 0 ? fmtRp(price) : "—"}</div>
     </div>
   );
 }

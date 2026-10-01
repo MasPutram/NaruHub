@@ -55,6 +55,8 @@ interface Rates {
   jackpotRate: number;
   gearRate: number;
   gearSetRate: number;
+  unitRateLow: number;   // Rp per 1sx of chance, applied to units < 10sx chance
+  unitRateHigh: number;  // Rp per 1sx of chance, applied to units >= 10sx chance
 }
 
 interface UnitState { price: number; sold: boolean }
@@ -74,6 +76,8 @@ const DEFAULT_RATES: Rates = {
   jackpotRate: 0,
   gearRate: 0,
   gearSetRate: 0,
+  unitRateLow: 0,
+  unitRateHigh: 0,
 };
 
 const STOCK_ACCOUNT = "KaijuBer2";
@@ -139,6 +143,16 @@ function fmtRp(v: number): string {
 function unitKey(u: Unit): string {
   if (u.id) return "id:" + u.id;
   return [u.name, u.variant || "", u.rarity, u.mutation || "", u.trait || "", u.grade || "", u.level ?? ""].join("|");
+}
+
+const UNIT_RATE_THRESHOLD = 1e22; // 10sx
+
+function autoUnitPrice(u: Unit, rates: Rates): number {
+  const c = Number(u.chance) || 0;
+  if (c <= 0) return 0;
+  const rate = c >= UNIT_RATE_THRESHOLD ? rates.unitRateHigh : rates.unitRateLow;
+  if (!rate) return 0;
+  return (c / 1e21) * rate; // chance converted to "sx units" × rate
 }
 
 type ViewTab = "unit" | "backpack";
@@ -374,12 +388,25 @@ export default function InventoryPage() {
   const availGearVal = availDivineGear * rates.gearRate;
   const soldGearVal = totalGearSold * rates.gearRate;
 
+  // Price per unit: prefer manual override, else auto-compute from rate × chance
+  const unitPrice = (u: Unit): number => {
+    const s = state.unitData[unitKey(u)];
+    if (s?.price) return s.price;
+    return autoUnitPrice(u, rates);
+  };
+
   // Fleet estimasi (available)
   const estimasi = gemsV.availVal + traitV.availVal + luckyV.availVal + jackpotV.availVal + availGearVal
-    + Object.entries(state.unitData).reduce((s, [k, v]) => s + (v.sold ? 0 : v.price), 0);
+    + sortedUnits.reduce((s, u) => {
+        const st = state.unitData[unitKey(u)];
+        return s + (st?.sold ? 0 : unitPrice(u));
+      }, 0);
 
   const terjual = gemsV.soldVal + traitV.soldVal + luckyV.soldVal + jackpotV.soldVal + soldGearVal
-    + Object.entries(state.unitData).reduce((s, [k, v]) => s + (v.sold ? v.price : 0), 0);
+    + sortedUnits.reduce((s, u) => {
+        const st = state.unitData[unitKey(u)];
+        return s + (st?.sold ? unitPrice(u) : 0);
+      }, 0);
 
   const soldUnitsList = sortedUnits.filter((u) => state.unitData[unitKey(u)]?.sold);
   const soldItemsList = [
@@ -582,7 +609,7 @@ export default function InventoryPage() {
                             <input
                               className="ucp-input"
                               type="text"
-                              placeholder="0"
+                              placeholder={(() => { const ap = autoUnitPrice(u, rates); return ap > 0 ? "auto: " + Math.round(ap).toLocaleString("id-ID") : "0"; })()}
                               value={s.price ? s.price.toLocaleString("id-ID") : ""}
                               onChange={(e) => setUnitPrice(key, e.target.value)}
                             />
@@ -714,10 +741,13 @@ export default function InventoryPage() {
                 <RateField label="Rate Jackpot" sub="/ pc" value={rates.jackpotRate} onChange={(v) => updateRate("jackpotRate", v)} />
                 <RateField label="Rate Gear" sub="/ divine gear (pc)" value={rates.gearRate} onChange={(v) => updateRate("gearRate", v)} />
                 <RateField label="Rate Gear Set" sub="/ 1 set komplit (5 slot)" value={rates.gearSetRate} onChange={(v) => updateRate("gearSetRate", v)} />
+                <RateField label="Rate Unit (chance < 10sx)" sub="× sx chance (bukan money)" value={rates.unitRateLow} onChange={(v) => updateRate("unitRateLow", v)} />
+                <RateField label="Rate Unit (chance >= 10sx)" sub="× sx chance (bukan money)" value={rates.unitRateHigh} onChange={(v) => updateRate("unitRateHigh", v)} />
               </div>
               <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 16, lineHeight: 1.5 }}>
                 Perubahan rate otomatis tersimpan.<br />
-                <span style={{ color: "var(--purple)", fontWeight: 700 }}>Gear Set</span> = harga 1 set komplit (Head + Torso + Back + Upper + Waist). Gear sisa (yang belum lengkap satu set) dihitung pakai Rate Gear per pc.
+                <span style={{ color: "var(--purple)", fontWeight: 700 }}>Gear Set</span> = harga 1 set komplit (Head + Torso + Back + Upper + Waist). Gear sisa (yang belum lengkap satu set) dihitung pakai Rate Gear per pc.<br />
+                <span style={{ color: "var(--cyan)", fontWeight: 700 }}>Rate Unit</span> = Rp per 1sx chance. Price otomatis = (chance / 1sx) × rate. Manual price (ketik Rp. di card unit) override auto-price.
               </div>
             </div>
           </div>
@@ -747,14 +777,14 @@ export default function InventoryPage() {
                           <span style={{ color: rc }}>{u.variant ? `${u.variant} ` : ""}{u.name}</span>
                           <span className="sr-sub"> · {rarityDisplay(u.rarity)} · 1 in {fmtMoney(u.chance)}</span>
                         </div>
-                        <div className="sr-price">{fmtRp(s?.price || 0)}</div>
+                        <div className="sr-price">{fmtRp(unitPrice(u))}</div>
                         <button className="sr-undo" onClick={() => toggleUnitSold(key)}>Undo</button>
                       </div>
                     );
                   })}
                   <div className="sold-total">
                     <span>Total Terjual (Units)</span>
-                    <b>{fmtRp(soldUnitsList.reduce((s, u) => s + (state.unitData[unitKey(u)]?.price || 0), 0))}</b>
+                    <b>{fmtRp(soldUnitsList.reduce((s, u) => s + unitPrice(u), 0))}</b>
                   </div>
                 </div>
               )}
