@@ -92,3 +92,28 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
 }
+
+// DELETE ?account=Name wipes a single account snapshot. No query wipes
+// every ad:catalog:* key — fresh slate (next Luau push repopulates).
+export async function DELETE(req: NextRequest) {
+  try {
+    const account = req.nextUrl.searchParams.get("account");
+    if (account) {
+      await redis.del(adCatalogKey(account));
+      return NextResponse.json({ ok: true, deleted: account });
+    }
+
+    const keys: string[] = [];
+    let cursor = "0";
+    do {
+      const res = await redis.scan(cursor, { match: "ad:catalog:*", count: 200 });
+      cursor = String(res[0]);
+      keys.push(...(res[1] || []));
+    } while (cursor !== "0");
+
+    for (const k of keys) await redis.del(k);
+    return NextResponse.json({ ok: true, deleted: keys.length });
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
+  }
+}

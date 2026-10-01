@@ -362,8 +362,7 @@ export default function RangkumanPage() {
             onChange={(e) => { setSelectedAccount(e.target.value); try { localStorage.setItem("ad-inv-selected-account", e.target.value); } catch {} }}
             style={{ width: 220 }}
           >
-            <option value={ALL_ACCOUNTS}>&#x1F310; All Accounts (gabungan)</option>
-            {!accounts.includes(selectedAccount) && selectedAccount !== ALL_ACCOUNTS && <option value={selectedAccount}>{selectedAccount}</option>}
+            {!accounts.includes(selectedAccount) && <option value={selectedAccount}>{selectedAccount}</option>}
             {accounts.map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
           <label>Pemilik:</label>

@@ -54,3 +54,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
 }
+
+// Wipe all per-unit/per-item tracking (prices, sold toggles, sewa, bp sold).
+// Rates (ad:inventory:rates) and the catalog snapshots are NOT touched.
+export async function DELETE() {
+  try {
+    await redis.set(STATE_KEY, JSON.stringify(DEFAULT_STATE));
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
+  }
+}

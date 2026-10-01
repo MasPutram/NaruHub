@@ -610,8 +610,7 @@ export default function InventoryPage() {
             <div className="sp-section">
               <div className="sp-label">Pilih Akun ({accounts.length})</div>
               <select className="sp-input" value={selectedAccount} onChange={(e) => changeAccount(e.target.value)}>
-                <option value={ALL_ACCOUNTS}>&#x1F310; All Accounts (gabungan)</option>
-                {!accounts.includes(selectedAccount) && selectedAccount !== ALL_ACCOUNTS && (
+                {!accounts.includes(selectedAccount) && (
                   <option value={selectedAccount}>{selectedAccount}</option>
                 )}
                 {accounts.map((n) => <option key={n} value={n}>{n}</option>)}
@@ -623,6 +622,24 @@ export default function InventoryPage() {
                 title="Refresh daftar akun"
               >
                 &#x21BB; Refresh List
+              </button>
+              <button
+                className="sp-input"
+                onClick={async () => {
+                  if (!confirm("Hapus SEMUA tracking (prices, sewa, sold)? Rates tetap tersimpan. Catalog akun akan di-reset juga.")) return;
+                  await Promise.all([
+                    fetch("/api/anime-dice/inventory-state", { method: "DELETE" }).catch(() => {}),
+                    fetch("/api/anime-dice/catalog", { method: "DELETE" }).catch(() => {}),
+                  ]);
+                  setState({ unitData: {}, bpSold: {}, sewa: {} });
+                  setSelectedUnits(new Set());
+                  await fetchAccounts();
+                  await fetchData();
+                }}
+                style={{ cursor: "pointer", background: "rgba(239,68,68,.1)", color: "var(--red)", fontWeight: 700, border: "1px solid rgba(239,68,68,.3)", textAlign: "center", marginTop: 6 }}
+                title="Reset semua tracking dan catalog"
+              >
+                &#x1F5D1; Clear Data (Fresh)
               </button>
               {accounts.length === 0 && (
                 <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 6, lineHeight: 1.4 }}>
