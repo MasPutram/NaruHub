@@ -268,6 +268,11 @@ local RARITY_TIER = {
 	Exclusive = 11,
 }
 
+local RARITY_DISPLAY = {
+	["Secret I"] = "Celestial",
+	["Secret II"] = "Heavenly",
+}
+
 ------------------------------------------------------------
 -- Data collectors
 ------------------------------------------------------------
@@ -355,7 +360,7 @@ local function collectInventory()
 					id = id,
 					name = entry.name,
 					amount = entry.amount or 1,
-					rarity = rarity,
+					rarity = RARITY_DISPLAY[rarity] or rarity,
 					variant = variant,
 					order = order,
 					tier = RARITY_TIER[rarity] or 0,
@@ -506,7 +511,8 @@ local function collectSlots()
 					local cfg = allEntries[entry.name]
 					local attrs = entry.attributes or {}
 					slotInfo.name = entry.name
-					slotInfo.rarity = cfg and cfg.rarity or "Unknown"
+					local rawRarity = cfg and cfg.rarity or "Unknown"
+					slotInfo.rarity = RARITY_DISPLAY[rawRarity] or rawRarity
 					slotInfo.variant = cfg and cfg.variant or nil
 					slotInfo.level = attrs.level
 					slotInfo.mutation = attrs.mutation

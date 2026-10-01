@@ -157,6 +157,11 @@ local RARITY_TIER = {
 	Exclusive = 11,
 }
 
+local RARITY_DISPLAY = {
+	["Secret I"] = "Celestial",
+	["Secret II"] = "Heavenly",
+}
+
 ------------------------------------------------------------
 -- Collect catalog data (enriched for marketplace display)
 ------------------------------------------------------------
@@ -220,7 +225,7 @@ local function collectCatalog()
 					id = id,
 					name = entry.name,
 					amount = entry.amount or 1,
-					rarity = rarity,
+					rarity = RARITY_DISPLAY[rarity] or rarity,
 					variant = variant,
 					order = order,
 					tier = RARITY_TIER[rarity] or 0,
