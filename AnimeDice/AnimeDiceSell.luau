@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | AnimeDice Sell Catalog v1.4.0
+-- NaruHub | AnimeDice Sell Catalog v1.5.0
 -- Sends enriched inventory data to dashboard catalog for marketplace listings.
 -- Separate loadstring — does NOT interfere with the monitoring script.
 
@@ -327,6 +327,31 @@ local function reportCatalog()
 end
 
 ------------------------------------------------------------
+-- Number formatter
+------------------------------------------------------------
+local SUFFIXES = {
+	"", "K", "M", "B", "T", "qa", "qi", "sx", "sp", "oc",
+	"no", "dc", "ud", "dd", "td", "qad", "qid", "sxd", "spd", "ocd",
+	"nod", "vg", "uvg",
+}
+
+local function formatNum(n)
+	if not n or n == 0 then return "0" end
+	if n < 1000 then return string.format("%.0f", n) end
+	local tier = math.floor(math.log10(math.abs(n)) / 3)
+	if tier < 1 then return string.format("%.0f", n) end
+	if tier > #SUFFIXES - 1 then tier = #SUFFIXES - 1 end
+	local scaled = n / (10 ^ (tier * 3))
+	if scaled >= 100 then
+		return string.format("%.0f%s", scaled, SUFFIXES[tier + 1])
+	elseif scaled >= 10 then
+		return string.format("%.1f%s", scaled, SUFFIXES[tier + 1])
+	else
+		return string.format("%.2f%s", scaled, SUFFIXES[tier + 1])
+	end
+end
+
+------------------------------------------------------------
 -- NaruUI Window
 ------------------------------------------------------------
 local Fluent = NaruUI.New({
@@ -335,10 +360,10 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | AD Catalog v1.4.0",
+	Title = "NaruHub | AD Catalog v1.5.0",
 	Badge = "SELL",
 	TabWidth = 0,
-	Size = UDim2.fromOffset(380, 260),
+	Size = UDim2.fromOffset(420, 460),
 	AutoStartMinimized = false,
 })
 
@@ -346,11 +371,63 @@ local Tab = Window:AddTab({ Title = "" })
 local section = Tab:AddSection(LocalPlayer.Name, { NoCollapse = true })
 
 local statusPara = section:AddParagraph({
-	Title = "Catalog",
+	Title = "Status",
 	Content = "Starting...",
-	ContentSize = 14,
+	ContentSize = 13,
 	Center = true,
 })
+
+local statsPara = section:AddParagraph({
+	Title = "Inventory",
+	Content = "Loading...",
+	ContentSize = 13,
+})
+
+local topUnitsPara = section:AddParagraph({
+	Title = "Top Units (by Income)",
+	Content = "Loading...",
+	ContentSize = 12,
+})
+
+local function buildInventoryDisplay()
+	local units, backpack = collectCatalog()
+
+	local totalIncome = 0
+	for _, u in ipairs(units) do
+		if u.income then totalIncome += u.income end
+	end
+
+	local statsLines = {
+		"Units: " .. #units,
+		"Items: " .. #backpack,
+		"Total Income: $" .. formatNum(totalIncome) .. "/s",
+	}
+	statsPara:SetContent(table.concat(statsLines, "\n"))
+
+	table.sort(units, function(a, b)
+		return (a.income or 0) > (b.income or 0)
+	end)
+
+	local topLines = {}
+	for i = 1, math.min(10, #units) do
+		local u = units[i]
+		local parts = {}
+		if u.mutation then table.insert(parts, u.mutation) end
+		if u.grade then table.insert(parts, u.grade) end
+		if u.trait then table.insert(parts, u.trait) end
+		local suffix = #parts > 0 and " [" .. table.concat(parts, " | ") .. "]" or ""
+		local rarity = u.displayRarity or u.rarity or ""
+		local lvl = u.level and (" Lv" .. u.level) or ""
+		table.insert(topLines,
+			i .. ". " .. u.name .. lvl ..
+			"\n   " .. rarity .. suffix ..
+			"\n   $" .. formatNum(u.income or 0) .. "/s"
+		)
+	end
+	topUnitsPara:SetContent(table.concat(topLines, "\n\n"))
+
+	return #units, #backpack
+end
 
 ------------------------------------------------------------
 -- Report loop (every 60s — less frequent than monitor)
@@ -359,10 +436,11 @@ task.spawn(function()
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		local ok, err = reportCatalog()
 		if ok then
-			statusPara:SetContent("Catalog sent OK")
+			statusPara:SetContent("Catalog sent OK (" .. os.date("%H:%M:%S") .. ")")
 		else
 			statusPara:SetContent("Gagal: " .. tostring(err))
 		end
+		pcall(buildInventoryDisplay)
 		task.wait(60)
 	end
 end)
