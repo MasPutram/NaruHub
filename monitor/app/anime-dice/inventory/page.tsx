@@ -101,6 +101,13 @@ const RARITY_ORDER = [
 
 function rarityColor(r: string): string { return RARITY_COLORS[r] || "#71717a"; }
 
+// Match game display names: Secret I → Celestial, Secret II → Heavenly
+const RARITY_DISPLAY: Record<string, string> = {
+  "Secret I": "Celestial",
+  "Secret II": "Heavenly",
+};
+function rarityDisplay(r: string): string { return RARITY_DISPLAY[r] || r; }
+
 function fmtMoney(v: number | null | undefined): string {
   if (v == null) return "-";
   const n = Number(v);
@@ -471,7 +478,7 @@ export default function InventoryPage() {
               <input className="sp-input" placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
               <select className="sp-input" value={rarityFilter} onChange={(e) => setRarityFilter(e.target.value)}>
                 <option value="All">All Rarities</option>
-                {availableRarities.map((r) => <option key={r} value={r}>{r}</option>)}
+                {availableRarities.map((r) => <option key={r} value={r}>{rarityDisplay(r)}</option>)}
               </select>
             </div>
             <div className="sp-section">
@@ -736,7 +743,7 @@ export default function InventoryPage() {
                       <div key={i} className="sold-row">
                         <div className="sr-name">
                           <span style={{ color: rc }}>{u.variant ? `${u.variant} ` : ""}{u.name}</span>
-                          <span className="sr-sub"> · {u.rarity} · 1 in {fmtMoney(u.chance)}</span>
+                          <span className="sr-sub"> · {rarityDisplay(u.rarity)} · 1 in {fmtMoney(u.chance)}</span>
                         </div>
                         <div className="sr-price">{fmtRp(s?.price || 0)}</div>
                         <button className="sr-undo" onClick={() => toggleUnitSold(key)}>Undo</button>

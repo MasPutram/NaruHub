@@ -63,6 +63,15 @@ const RARITY_COLORS: Record<string, string> = {
 
 function rarityColor(r: string): string { return RARITY_COLORS[r] || "#71717a"; }
 
+// Game renders internal rarities with upgraded display names when a top-tier
+// mutation (Rainbow etc.) is applied. If Luau already sends the display name
+// this is a no-op; otherwise we translate internal → display at render time.
+const RARITY_DISPLAY: Record<string, string> = {
+  "Secret I": "Celestial",
+  "Secret II": "Heavenly",
+};
+function rarityDisplay(r: string): string { return RARITY_DISPLAY[r] || r; }
+
 function fmtMoney(v: number | null | undefined): string {
   if (v == null) return "-";
   const n = Number(v);
@@ -310,7 +319,7 @@ export default function RangkumanPage() {
                         <div className="gc-inner">
                           <div className="gc-name">{u.variant ? `${u.variant} ` : ""}{u.name}</div>
                           <div className="gc-rarity" style={{ backgroundImage: rarityGrad, backgroundClip: "text", WebkitBackgroundClip: "text", color: "transparent", WebkitTextFillColor: "transparent" }}>
-                            {u.rarity}
+                            {rarityDisplay(u.rarity)}
                           </div>
                           {/* Info kecil: level, mutation, grade, trait */}
                           <div className="gc-info-row">
