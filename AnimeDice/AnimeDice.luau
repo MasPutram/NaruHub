@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Monitoring Anime Dice v1.6.2 (ultra-lightweight)
+-- NaruHub | Monitoring Anime Dice v1.7.0 (ultra-lightweight)
 -- Monitoring only -- no auto-roll/sell/equip, baca data → POST ke dashboard.
 
 ------------------------------------------------------------
@@ -192,6 +192,7 @@ local EntryRegistry = require(ReplicatedStorage.Framework.Features.Inventory.Ent
 local MutationsConfig = require(ReplicatedStorage.Framework.Features.Inventory.Kinds.Unit.Mutations)
 local TraitsConfig = require(ReplicatedStorage.Framework.Features.Traits.Traits)
 local GradesConfig = require(ReplicatedStorage.Framework.Features.Grades.Grades)
+local BuffController = require(ReplicatedStorage.Framework.Features.Buffs.BuffController)
 
 ------------------------------------------------------------
 -- Multiplier helpers (loaded from game modules at runtime)
@@ -335,9 +336,10 @@ local function collectInventory()
 
 				local gradeIncome = getGradeIncomeMult(attrs.grade)
 				local traitIncome, traitDamage, traitHealth = getTraitMults(attrs.trait)
-				if income then income = income * gradeIncome * traitIncome end
-				if damage then damage = damage * traitDamage end
-				if health then health = health * traitHealth end
+				local level = attrs.level or 1
+				if income then income = income * gradeIncome * traitIncome * level end
+				if damage then damage = damage * traitDamage * level end
+				if health then health = health * traitHealth * level end
 
 				local placed = nil
 				if slotUnitIds[id] then
@@ -518,9 +520,10 @@ local function collectSlots()
 
 						local gInc = getGradeIncomeMult(attrs.grade)
 						local tInc, tDmg, tHp = getTraitMults(attrs.trait)
-						if slotInfo.income then slotInfo.income = slotInfo.income * gInc * tInc end
-						if slotInfo.damage then slotInfo.damage = slotInfo.damage * tDmg end
-						if slotInfo.health then slotInfo.health = slotInfo.health * tHp end
+						local lvl = attrs.level or 1
+						if slotInfo.income then slotInfo.income = slotInfo.income * gInc * tInc * lvl end
+						if slotInfo.damage then slotInfo.damage = slotInfo.damage * tDmg * lvl end
+						if slotInfo.health then slotInfo.health = slotInfo.health * tHp * lvl end
 
 						slotInfo.colors = gradientToHexArray(cfg.gradient)
 						slotInfo.modelName = cfg.baseModel and cfg.baseModel.Name or nil
@@ -650,6 +653,14 @@ local function reportToMonitor()
 			})
 		end
 
+		local globalBuffs = {}
+		pcall(function()
+			globalBuffs.money = BuffController.GetBuff("Money Multiplier")
+			globalBuffs.damage = BuffController.GetBuff("Damage Multiplier")
+			globalBuffs.health = BuffController.GetBuff("Health Multiplier")
+			globalBuffs.luck = BuffController.GetBuff("Luck")
+		end)
+
 		local payload = {
 			game = "AnimeDice",
 			sourceAccount = LocalPlayer.Name,
@@ -675,6 +686,7 @@ local function reportToMonitor()
 			towerSquad = towerSquad,
 			upgradesList = upgradesList,
 			totalItemCount = totalItemCount,
+			globalBuffs = globalBuffs,
 		}
 
 		local body = HttpService:JSONEncode(payload)
@@ -720,7 +732,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v1.6.2",
+	Title = "NaruHub | Anime Dice v1.7.0",
 	Badge = "MONITOR",
 	TabWidth = 0,
 	Size = UDim2.fromOffset(380, 300),
