@@ -666,9 +666,9 @@ const styles = `
 }
 .sec-bonus {
   font-size: 15px;
-  font-weight: 900;
+  font-weight: 500;
   color: #0f172a;
-  letter-spacing: .5px;
+  letter-spacing: .3px;
   white-space: nowrap;
   padding: 6px 14px;
   background: #ffffff;
