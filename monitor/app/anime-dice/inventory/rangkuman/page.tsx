@@ -353,7 +353,7 @@ export default function RangkumanPage() {
                   <img className="rk-logo-img" src="/logo-naru.png" alt="Naru" crossOrigin="anonymous" />
                   <div>
                     <div className="rk-title">Katalog Stock Anime Dice</div>
-                    <div className="rk-sub">Stock {selectedAccount} &middot; Update {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</div>
+                    <div className="rk-sub">Update {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</div>
                   </div>
                 </div>
                 <div className="rk-header-right">
@@ -829,15 +829,17 @@ const styles = `
   margin-top: 3px;
 }
 .scd-price {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 900;
-  color: #a16207;
-  padding: 6px 12px;
-  background: #fef3c7;
-  border: 1px solid #fde68a;
-  border-radius: 6px;
+  color: #0f172a;
+  padding: 7px 14px;
+  background: #facc15;
+  border: 2px solid #0f172a;
+  border-radius: 8px;
   white-space: nowrap;
   flex-shrink: 0;
+  box-shadow: 0 2px 0 #0f172a;
+  letter-spacing: .2px;
 }
 
 /* Inventory */
