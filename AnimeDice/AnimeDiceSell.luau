@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | AnimeDice Sell Catalog v1.1.0
+-- NaruHub | AnimeDice Sell Catalog v1.2.0
 -- Sends enriched inventory data to dashboard catalog for marketplace listings.
 -- Separate loadstring — does NOT interfere with the monitoring script.
 
@@ -205,9 +205,12 @@ local function collectCatalog()
 				local gradeIncome = getGradeIncomeMult(attrs.grade)
 				local traitIncome, traitDamage, traitHealth = getTraitMults(attrs.trait)
 				local level = attrs.level or 1
-				if income then income = income * gradeIncome * traitIncome * level end
-				if damage then damage = damage * traitDamage * level end
-				if health then health = health * traitHealth * level end
+				local levelMult = 0.75 + 0.25 * level
+				local mutIncomeMult = mutChance ~= 1 and mutChance ^ 0.725 or 1
+				local mutCombatMult = mutChance ~= 1 and mutChance ^ 0.58 or 1
+				if income then income = income * gradeIncome * traitIncome * levelMult * mutIncomeMult end
+				if damage then damage = damage * traitDamage * mutCombatMult end
+				if health then health = health * traitHealth * mutCombatMult end
 
 				local placed = nil
 				if slotUnitIds[id] then placed = "slot"
@@ -310,7 +313,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | AD Catalog v1.1.0",
+	Title = "NaruHub | AD Catalog v1.2.0",
 	Badge = "SELL",
 	TabWidth = 0,
 	Size = UDim2.fromOffset(380, 260),

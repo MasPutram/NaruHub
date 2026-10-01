@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Monitoring Anime Dice v1.7.0 (ultra-lightweight)
+-- NaruHub | Monitoring Anime Dice v1.8.0 (ultra-lightweight)
 -- Monitoring only -- no auto-roll/sell/equip, baca data → POST ke dashboard.
 
 ------------------------------------------------------------
@@ -337,9 +337,12 @@ local function collectInventory()
 				local gradeIncome = getGradeIncomeMult(attrs.grade)
 				local traitIncome, traitDamage, traitHealth = getTraitMults(attrs.trait)
 				local level = attrs.level or 1
-				if income then income = income * gradeIncome * traitIncome * level end
-				if damage then damage = damage * traitDamage * level end
-				if health then health = health * traitHealth * level end
+				local levelMult = 0.75 + 0.25 * level
+				local mutIncomeMult = mutChance ~= 1 and mutChance ^ 0.725 or 1
+				local mutCombatMult = mutChance ~= 1 and mutChance ^ 0.58 or 1
+				if income then income = income * gradeIncome * traitIncome * levelMult * mutIncomeMult end
+				if damage then damage = damage * traitDamage * mutCombatMult end
+				if health then health = health * traitHealth * mutCombatMult end
 
 				local placed = nil
 				if slotUnitIds[id] then
@@ -521,9 +524,12 @@ local function collectSlots()
 						local gInc = getGradeIncomeMult(attrs.grade)
 						local tInc, tDmg, tHp = getTraitMults(attrs.trait)
 						local lvl = attrs.level or 1
-						if slotInfo.income then slotInfo.income = slotInfo.income * gInc * tInc * lvl end
-						if slotInfo.damage then slotInfo.damage = slotInfo.damage * tDmg * lvl end
-						if slotInfo.health then slotInfo.health = slotInfo.health * tHp * lvl end
+						local lvlMult = 0.75 + 0.25 * lvl
+						local mutIncMult = mutCh ~= 1 and mutCh ^ 0.725 or 1
+						local mutCbtMult = mutCh ~= 1 and mutCh ^ 0.58 or 1
+						if slotInfo.income then slotInfo.income = slotInfo.income * gInc * tInc * lvlMult * mutIncMult end
+						if slotInfo.damage then slotInfo.damage = slotInfo.damage * tDmg * mutCbtMult end
+						if slotInfo.health then slotInfo.health = slotInfo.health * tHp * mutCbtMult end
 
 						slotInfo.colors = gradientToHexArray(cfg.gradient)
 						slotInfo.modelName = cfg.baseModel and cfg.baseModel.Name or nil
@@ -732,7 +738,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v1.7.0",
+	Title = "NaruHub | Anime Dice v1.8.0",
 	Badge = "MONITOR",
 	TabWidth = 0,
 	Size = UDim2.fromOffset(380, 300),
