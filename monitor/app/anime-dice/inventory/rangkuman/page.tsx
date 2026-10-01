@@ -64,7 +64,7 @@ function autoUnitPrice(u: Unit, rates: Rates): number {
   if (!rate) return 0;
   return (c / 1e21) * rate;
 }
-const STOCK_ACCOUNT = "KaijuBer2";
+const DEFAULT_ACCOUNT = "KaijuBer2";
 const MIN_CHANCE = 1e21;
 
 const RARITY_COLORS: Record<string, string> = {
@@ -159,16 +159,41 @@ export default function RangkumanPage() {
   const [contact, setContact] = useState("facebook.com/naruaho");
   const [qrTarget, setQrTarget] = useState("https://www.facebook.com/naruaho");
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
+  const [accounts, setAccounts] = useState<string[]>([]);
+  const [selectedAccount, setSelectedAccount] = useState<string>(DEFAULT_ACCOUNT);
   const posterRef = useRef<HTMLDivElement | null>(null);
 
+  // Load last-selected account from localStorage (set by inventory page)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("ad-inv-selected-account");
+      if (saved) setSelectedAccount(saved);
+    } catch {}
+  }, []);
+
+  const fetchAccounts = useCallback(async () => {
+    try {
+      const res = await fetch("/api/anime-dice/catalog");
+      const body = await res.json();
+      if (res.ok && body.ok && Array.isArray(body.snapshots)) {
+        const names: string[] = body.snapshots
+          .map((s: any) => s.sourceAccount)
+          .filter((n: any) => typeof n === "string" && n.length > 0);
+        names.sort((a, b) => a.localeCompare(b));
+        setAccounts(names);
+      }
+    } catch {}
+  }, []);
+
   const fetchAll = useCallback(async () => {
+    if (!selectedAccount) return;
     try {
       const [d, r, s] = await Promise.all([
-        fetch("/api/anime-dice/account-detail?account=" + encodeURIComponent(STOCK_ACCOUNT)).then((x) => x.json()),
+        fetch("/api/anime-dice/account-detail?account=" + encodeURIComponent(selectedAccount)).then((x) => x.json()),
         fetch("/api/anime-dice/inventory-rates").then((x) => x.json()),
         fetch("/api/anime-dice/inventory-state").then((x) => x.json()),
       ]);
-      if (d.ok) setDetail(d);
+      if (d.ok) setDetail(d); else setDetail(null);
       if (r.ok && r.rates) setRates({ ...DEFAULT_RATES, ...r.rates });
       if (s.ok && s.state) setState({
         unitData: s.state.unitData || {},
@@ -179,7 +204,8 @@ export default function RangkumanPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { setMounted(true); fetchAll(); }, [fetchAll]);
+  useEffect(() => { setMounted(true); fetchAccounts(); }, [fetchAccounts]);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   useEffect(() => {
     let cancelled = false;
@@ -211,7 +237,7 @@ export default function RangkumanPage() {
       });
       const link = document.createElement("a");
       const stamp = new Date().toISOString().slice(0, 10);
-      link.download = `Rangkuman-AnimeDice-${STOCK_ACCOUNT}-${stamp}.png`;
+      link.download = `Rangkuman-AnimeDice-${selectedAccount}-${stamp}.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
     } catch (e) {
@@ -286,6 +312,15 @@ export default function RangkumanPage() {
       <style>{styles}</style>
       <div className="page">
         <div className="controls">
+          <label>Akun:</label>
+          <select
+            value={selectedAccount}
+            onChange={(e) => { setSelectedAccount(e.target.value); try { localStorage.setItem("ad-inv-selected-account", e.target.value); } catch {} }}
+            style={{ width: 180 }}
+          >
+            {!accounts.includes(selectedAccount) && <option value={selectedAccount}>{selectedAccount}</option>}
+            {accounts.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
           <label>Pemilik:</label>
           <input value={owner} onChange={(e) => setOwner(e.target.value)} />
           <label>Kontak:</label>
@@ -299,9 +334,9 @@ export default function RangkumanPage() {
         </div>
 
         {loading ? (
-          <div className="loading">Memuat data {STOCK_ACCOUNT}...</div>
+          <div className="loading">Memuat data {selectedAccount}...</div>
         ) : !detail ? (
-          <div className="loading">Belum ada data untuk {STOCK_ACCOUNT}.</div>
+          <div className="loading">Belum ada data untuk {selectedAccount}.</div>
         ) : (
           <div className="poster-wrap">
             <div className="poster" ref={posterRef}>
@@ -311,7 +346,7 @@ export default function RangkumanPage() {
                   <img className="rk-logo-img" src="/logo-naru.png" alt="Naru" crossOrigin="anonymous" />
                   <div>
                     <div className="rk-title">Katalog Stock Anime Dice</div>
-                    <div className="rk-sub">Stock {STOCK_ACCOUNT} &middot; Update {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</div>
+                    <div className="rk-sub">Stock {selectedAccount} &middot; Update {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}</div>
                   </div>
                 </div>
                 <div className="rk-header-right">
@@ -460,7 +495,7 @@ export default function RangkumanPage() {
                 {Array.from({ length: 22 }).map((_, r) => (
                   <div key={r} className={`rk-wm-row ${r % 2 === 1 ? "stagger" : ""}`}>
                     {Array.from({ length: 12 }).map((_, i) => (
-                      <span key={i}>HAK MILIK &middot; {(owner || STOCK_ACCOUNT).toUpperCase()}</span>
+                      <span key={i}>HAK MILIK &middot; {(owner || selectedAccount).toUpperCase()}</span>
                     ))}
                   </div>
                 ))}
@@ -493,7 +528,7 @@ const styles = `
 .page { min-height: 100vh; background: #0b0b14; padding: 20px; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #e8e8f0; }
 .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px 18px; background: #14141f; border: 1px solid #262636; border-radius: 12px; margin-bottom: 20px; max-width: 1120px; margin-left: auto; margin-right: auto; position: sticky; top: 8px; z-index: 100; }
 .controls label { font-size: 12px; font-weight: 700; color: #8b8ba3; }
-.controls input { background: #1c1c2b; color: #e8e8f0; border: 1px solid #262636; padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; width: 200px; }
+.controls input, .controls select { background: #1c1c2b; color: #e8e8f0; border: 1px solid #262636; padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; width: 200px; }
 .controls input:focus { outline: none; border-color: #a78bfa; }
 .dlbtn { background: #a78bfa; color: #1a1030; border: none; padding: 9px 20px; font-size: 13px; font-weight: 800; border-radius: 8px; cursor: pointer; letter-spacing: .3px; }
 .dlbtn.ghost { background: #262636; color: #e8e8f0; }

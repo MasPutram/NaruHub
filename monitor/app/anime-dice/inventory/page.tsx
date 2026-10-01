@@ -81,7 +81,8 @@ const DEFAULT_RATES: Rates = {
   unitRateHigh: 0,
 };
 
-const STOCK_ACCOUNT = "KaijuBer2";
+const DEFAULT_ACCOUNT = "KaijuBer2"; // initial pick when nothing else is cached
+const SELECTED_ACCOUNT_KEY = "ad-inv-selected-account";
 const MIN_CHANCE = 1e21; // 1 in 1sx and above only
 
 const RARITY_COLORS: Record<string, string> = {
@@ -210,32 +211,72 @@ export default function InventoryPage() {
   const [soldItemsOpen, setSoldItemsOpen] = useState(false);
   const [bpSoldModal, setBpSoldModal] = useState<string | null>(null);
   const [bpSoldInput, setBpSoldInput] = useState("");
+  const [accounts, setAccounts] = useState<string[]>([]);
+  const [selectedAccount, setSelectedAccount] = useState<string>(DEFAULT_ACCOUNT);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const priceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
+  // Load last-selected account from localStorage once on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SELECTED_ACCOUNT_KEY);
+      if (saved) setSelectedAccount(saved);
+    } catch {}
+  }, []);
+
+  const fetchAccounts = useCallback(async () => {
+    try {
+      const res = await fetch("/api/anime-dice/catalog");
+      const body = await res.json();
+      if (res.ok && body.ok && Array.isArray(body.snapshots)) {
+        const names: string[] = body.snapshots
+          .map((s: any) => s.sourceAccount)
+          .filter((n: any) => typeof n === "string" && n.length > 0);
+        names.sort((a, b) => a.localeCompare(b));
+        setAccounts(names);
+        // If current selection isn't in the list, pick the first available
+        setSelectedAccount((prev) => (names.includes(prev) ? prev : (names[0] || prev)));
+      }
+    } catch {}
+  }, []);
+
   const fetchData = useCallback(async () => {
+    if (!selectedAccount) return;
     try {
       const [detailRes, ratesRes, stateRes] = await Promise.all([
-        fetch("/api/anime-dice/account-detail?account=" + encodeURIComponent(STOCK_ACCOUNT)),
+        fetch("/api/anime-dice/account-detail?account=" + encodeURIComponent(selectedAccount)),
         fetch("/api/anime-dice/inventory-rates"),
         fetch("/api/anime-dice/inventory-state"),
       ]);
       const dBody = await detailRes.json();
       const rBody = await ratesRes.json();
       const sBody = await stateRes.json();
-      if (detailRes.ok && dBody.ok) setDetail(dBody);
+      if (detailRes.ok && dBody.ok) setDetail(dBody); else setDetail(null);
       if (ratesRes.ok && rBody.ok && rBody.rates) setRates({ ...DEFAULT_RATES, ...rBody.rates });
       if (stateRes.ok && sBody.ok && sBody.state) setState({ unitData: sBody.state.unitData || {}, bpSold: sBody.state.bpSold || {}, sewa: sBody.state.sewa || {} });
     } catch {}
     setLoading(false);
-  }, []);
+  }, [selectedAccount]);
 
+  function changeAccount(name: string) {
+    setSelectedAccount(name);
+    try { localStorage.setItem(SELECTED_ACCOUNT_KEY, name); } catch {}
+    setLoading(true);
+    setDetail(null);
+    setSelectedUnits(new Set());
+  }
+
+  useEffect(() => { setMounted(true); fetchAccounts(); }, [fetchAccounts]);
   useEffect(() => {
-    setMounted(true);
     fetchData();
     const id = setInterval(fetchData, 15000);
     return () => clearInterval(id);
   }, [fetchData]);
+  // Re-check available accounts periodically — new executors may come online
+  useEffect(() => {
+    const id = setInterval(fetchAccounts, 30000);
+    return () => clearInterval(id);
+  }, [fetchAccounts]);
 
   function saveRates(next: Rates) {
     setRates(next);
@@ -431,7 +472,7 @@ export default function InventoryPage() {
 
   function downloadSummary() {
     const lines: string[] = [];
-    lines.push(`NARUHUB — INVENTORY SUMMARY (${STOCK_ACCOUNT})`);
+    lines.push(`NARUHUB — INVENTORY SUMMARY (${selectedAccount})`);
     lines.push(`Generated: ${new Date().toLocaleString("id-ID")}`);
     lines.push("");
     lines.push(`ESTIMASI (Tersedia): ${fmtRp(estimasi)}`);
@@ -461,7 +502,7 @@ export default function InventoryPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `inventory-${STOCK_ACCOUNT}-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `inventory-${selectedAccount}-${new Date().toISOString().slice(0, 10)}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -505,11 +546,25 @@ export default function InventoryPage() {
           <aside className="side-panel">
             <div className="sp-title">PANEL</div>
             <div className="sp-account">
-              <div className="sp-avatar">K</div>
-              <div>
-                <div className="sp-name">{STOCK_ACCOUNT}</div>
+              <div className="sp-avatar">{(selectedAccount || "?")[0]?.toUpperCase()}</div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="sp-name" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedAccount}</div>
                 <div className="sp-sub">Stock Account</div>
               </div>
+            </div>
+            <div className="sp-section">
+              <div className="sp-label">Pilih Akun ({accounts.length})</div>
+              <select className="sp-input" value={selectedAccount} onChange={(e) => changeAccount(e.target.value)}>
+                {!accounts.includes(selectedAccount) && (
+                  <option value={selectedAccount}>{selectedAccount}</option>
+                )}
+                {accounts.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
+              {accounts.length === 0 && (
+                <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 4 }}>
+                  Belum ada akun lapor via AnimeDiceSell.luau
+                </div>
+              )}
             </div>
             <div className="sp-section">
               <div className="sp-label">Unit Filter</div>
@@ -552,9 +607,9 @@ export default function InventoryPage() {
 
             <div className="content-box">
               {loading ? (
-                <div className="empty">Memuat data {STOCK_ACCOUNT}...</div>
+                <div className="empty">Memuat data {selectedAccount}...</div>
               ) : !detail ? (
-                <div className="empty">Belum ada data untuk {STOCK_ACCOUNT}. Pastikan akun online dan melapor.</div>
+                <div className="empty">Belum ada data untuk {selectedAccount}. Pastikan akun online dan melapor.</div>
               ) : tab === "unit" ? (
                 filteredUnits.length === 0 ? (
                   <div className="empty">Tidak ada unit 1 in 1sx+ yang cocok filter.</div>
