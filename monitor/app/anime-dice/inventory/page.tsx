@@ -440,12 +440,30 @@ export default function InventoryPage() {
   const luckyV = itemValue(luckySpin, "luckySpin", rates.luckySpinRate);
   const jackpotV = itemValue(jackpot, "jackpot", rates.jackpotRate);
 
-  // Gear: total divine gears × gearRate, sold tracking per gear item
-  const gearPrefix = `${selectedAccount}:gear:`;
-  const totalGearSold = Object.keys(state.bpSold).filter((k) => k.startsWith(gearPrefix)).reduce((s, k) => s + (state.bpSold[k] || 0), 0);
-  const availDivineGear = Math.max(0, divineGearCount - totalGearSold);
-  const availGearVal = availDivineGear * rates.gearRate;
-  const soldGearVal = totalGearSold * rates.gearRate;
+  // Gear: track total divine gears sold under single key (per account).
+  // Available = total - sold. Full sets computed from available per-slot
+  // (assuming uniform distribution of sold across slots).
+  const GEAR_SLOT_LIST = ["Head", "Torso", "Back", "Upper", "Waist"];
+  const totalDivineSold = state.bpSold[`${selectedAccount}:gear:divine`] || 0;
+  const availDivineGear = Math.max(0, divineGearCount - totalDivineSold);
+
+  // Per-slot divine count (from backpack items filtered by slot)
+  const divinePerSlot: Record<string, number> = { Head: 0, Torso: 0, Back: 0, Upper: 0, Waist: 0 };
+  gearItems.filter((g) => g.rarity?.toLowerCase() === "divine").forEach((g) => {
+    const s = gearSlot(g);
+    if (s && divinePerSlot[s] !== undefined) divinePerSlot[s] += (g.amount || 0);
+  });
+  // How many complete sets we can form from AVAILABLE divine gear.
+  // Scale per-slot counts proportionally to availDivineGear vs total.
+  const scaleFactor = divineGearCount > 0 ? availDivineGear / divineGearCount : 0;
+  const availPerSlot = GEAR_SLOT_LIST.map((s) => Math.floor(divinePerSlot[s] * scaleFactor));
+  const fullSets = availPerSlot.length > 0 ? Math.min(...availPerSlot) : 0;
+  const leftoverDivine = Math.max(0, availDivineGear - fullSets * GEAR_SLOT_LIST.length);
+
+  const setValue = fullSets * rates.gearSetRate;
+  const leftoverValue = leftoverDivine * rates.gearRate;
+  const availGearVal = setValue + leftoverValue;
+  const soldGearVal = totalDivineSold * rates.gearRate;
 
   // Price per unit: prefer manual override, else auto-compute from rate × chance
   const unitPrice = (u: Unit): number => {
@@ -473,7 +491,7 @@ export default function InventoryPage() {
     { name: "Trait Reroll", qty: traitV.soldQty, val: traitV.soldVal, key: "traitReroll" },
     { name: "Lucky Spin", qty: luckyV.soldQty, val: luckyV.soldVal, key: "luckySpin" },
     { name: "Jackpot Point", qty: jackpotV.soldQty, val: jackpotV.soldVal, key: "jackpot" },
-    { name: "Divine Gear", qty: totalGearSold, val: soldGearVal, key: "gear" },
+    { name: "Divine Gear", qty: totalDivineSold, val: soldGearVal, key: "gear:divine" },
   ].filter((x) => x.qty > 0);
 
   const totalItemsRp = gemsV.availVal + traitV.availVal + luckyV.availVal + jackpotV.availVal;
@@ -715,13 +733,22 @@ export default function InventoryPage() {
                     </div>
                   </div>
 
-                  {/* GEAR section */}
+                  {/* GEAR section — Divine only */}
                   <div className="bp-section">
                     <div className="bp-sec-head">
-                      <div className="bp-sec-title">GEAR (Divine only priced)</div>
-                      <div className="bp-sec-total">
-                        <span className="bpst-l">TOTAL HARGA GEARS</span>
-                        <span className="bpst-v green">{fmtRp(totalGearsRp)}</span>
+                      <div className="bp-sec-title">GEAR DIVINE</div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <button
+                          className="tba-btn"
+                          onClick={() => { setBpSoldModal("gear:divine"); setBpSoldInput(String(totalDivineSold || "")); }}
+                          style={{ fontSize: 11, padding: "6px 12px" }}
+                        >
+                          &#x1F3F7;&#xFE0F; Divine Terjual ({fmtNum(totalDivineSold)})
+                        </button>
+                        <div className="bp-sec-total">
+                          <span className="bpst-l">TOTAL HARGA GEARS</span>
+                          <span className="bpst-v green">{fmtRp(totalGearsRp)}</span>
+                        </div>
                       </div>
                     </div>
                     {gearItems.length === 0 ? (
@@ -732,32 +759,31 @@ export default function InventoryPage() {
                     ) : (
                       <div className="bp-grid">
                         {GEAR_SLOTS.map((slot) => {
-                          const slotItems = gearItems.filter((g) => gearSlot(g) === slot);
-                          const slotTotal = slotItems.reduce((s, g) => s + (g.amount || 0), 0);
-                          const slotDivine = slotItems.filter((g) => g.rarity?.toLowerCase() === "divine").reduce((s, g) => s + (g.amount || 0), 0);
+                          const slotDivineItems = gearItems.filter((g) => gearSlot(g) === slot && g.rarity?.toLowerCase() === "divine");
+                          const slotDivine = slotDivineItems.reduce((s, g) => s + (g.amount || 0), 0);
                           return (
                             <div key={slot} className="bp-card">
                               <div className="bpc-head">
                                 <div className="bpc-icon" style={{ background: "rgba(192,132,252,.1)", color: "#c084fc" }}>&#x2699;&#xFE0F;</div>
                                 <div className="bpc-info">
                                   <div className="bpc-name">{slot.toUpperCase()}</div>
-                                  <div className="bpc-sub">{slotItems.length} tipe / {slotDivine} divine</div>
+                                  <div className="bpc-sub">{slotDivine} divine</div>
                                 </div>
                               </div>
                               <div className="bpc-row">
-                                <span className="bpc-l">QTY (Total)</span>
-                                <span className="bpc-v">{fmtNum(slotTotal)}</span>
+                                <span className="bpc-l">QTY (Divine)</span>
+                                <span className="bpc-v" style={{ color: "#c084fc" }}>{fmtNum(slotDivine)}</span>
                               </div>
                               <div className="bpc-row">
-                                <span className="bpc-l">Rp. (Divine × Rate)</span>
+                                <span className="bpc-l">Rp. (/ Rate)</span>
                                 <span className="bpc-v green">{fmtRp(slotDivine * rates.gearRate)}</span>
                               </div>
-                              {slotItems.length > 0 && (
+                              {slotDivineItems.length > 0 && (
                                 <div className="gear-list">
-                                  {slotItems.map((g, gi) => (
+                                  {slotDivineItems.map((g, gi) => (
                                     <div key={gi} className="gear-row">
                                       <span className="gr-name">{g.name}</span>
-                                      <span className="gr-rar" style={{ color: rarityColor(g.rarity) }}>{g.rarity}</span>
+                                      <span className="gr-rar" style={{ color: rarityColor(g.rarity) }}>Divine</span>
                                       <span className="gr-qty">x{g.amount}</span>
                                     </div>
                                   ))}
@@ -766,32 +792,35 @@ export default function InventoryPage() {
                             </div>
                           );
                         })}
-                        {/* Uncategorized gear */}
-                        {(() => {
-                          const uncat = gearItems.filter((g) => gearSlot(g) === null);
-                          if (uncat.length === 0) return null;
-                          const uncatDivine = uncat.filter((g) => g.rarity?.toLowerCase() === "divine").reduce((s, g) => s + (g.amount || 0), 0);
-                          return (
-                            <div className="bp-card">
-                              <div className="bpc-head">
-                                <div className="bpc-icon" style={{ background: "rgba(255,255,255,.05)", color: "#94a3b8" }}>&#x2753;</div>
-                                <div className="bpc-info">
-                                  <div className="bpc-name">UNCATEGORIZED</div>
-                                  <div className="bpc-sub">{uncat.length} tipe / {uncatDivine} divine</div>
-                                </div>
-                              </div>
-                              <div className="gear-list">
-                                {uncat.map((g, gi) => (
-                                  <div key={gi} className="gear-row">
-                                    <span className="gr-name">{g.name}</span>
-                                    <span className="gr-rar" style={{ color: rarityColor(g.rarity) }}>{g.rarity}</span>
-                                    <span className="gr-qty">x{g.amount}</span>
-                                  </div>
-                                ))}
-                              </div>
+
+                        {/* 1 Set Komplit card */}
+                        <div className="bp-card" style={{ borderColor: fullSets > 0 ? "rgba(251,191,36,.4)" : undefined, background: fullSets > 0 ? "linear-gradient(135deg, rgba(251,191,36,.04), transparent), var(--card)" : undefined }}>
+                          <div className="bpc-head">
+                            <div className="bpc-icon" style={{ background: "rgba(251,191,36,.12)", color: "var(--gold)" }}>&#x1F3C6;</div>
+                            <div className="bpc-info">
+                              <div className="bpc-name" style={{ color: fullSets > 0 ? "var(--gold)" : undefined }}>1 SET KOMPLIT</div>
+                              <div className="bpc-sub">Head + Torso + Back + Upper + Waist</div>
                             </div>
-                          );
-                        })()}
+                          </div>
+                          <div className="bpc-row">
+                            <span className="bpc-l">Set Tersedia</span>
+                            <span className="bpc-v" style={{ color: fullSets > 0 ? "var(--gold)" : "var(--dim)" }}>{fullSets}</span>
+                          </div>
+                          <div className="bpc-row">
+                            <span className="bpc-l">Rate / Set</span>
+                            <span className="bpc-v">{rates.gearSetRate > 0 ? fmtRp(rates.gearSetRate) : "Not set"}</span>
+                          </div>
+                          <div className="bpc-row">
+                            <span className="bpc-l">Nilai Set</span>
+                            <span className="bpc-v green">{fullSets > 0 && rates.gearSetRate > 0 ? fmtRp(setValue) : "—"}</span>
+                          </div>
+                          {leftoverDivine > 0 && (
+                            <div className="bpc-row" style={{ background: "rgba(192,132,252,.06)", borderRadius: 6, marginTop: 4 }}>
+                              <span className="bpc-l">Sisa Pcs</span>
+                              <span className="bpc-v" style={{ color: "#c084fc" }}>{leftoverDivine} · {fmtRp(leftoverValue)}</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
