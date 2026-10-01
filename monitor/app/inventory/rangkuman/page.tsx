@@ -814,7 +814,7 @@ const styles = `
 .gcs-item.chance .gcs-l { color: #cbd5e1; }
 .gcs-v {
   font-size: 15px;
-  font-weight: 900;
+  font-weight: 500;
   margin-top: 2px;
   letter-spacing: .2px;
 }
@@ -850,11 +850,12 @@ const styles = `
 }
 .gcp-item.depo .gcp-l { color: #431407; }
 .gcp-v {
-  font-size: 16px;
-  font-weight: 900;
+  font-size: 24px;
+  font-weight: 400;
   color: #451a03;
   margin-top: 2px;
-  letter-spacing: .2px;
+  letter-spacing: .3px;
+  line-height: 1.1;
   text-shadow: 0 1px 0 rgba(255,255,255,.3);
 }
 .gcp-item.depo .gcp-v { color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,.3); }
