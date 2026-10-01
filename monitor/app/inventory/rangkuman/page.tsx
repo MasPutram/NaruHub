@@ -664,13 +664,17 @@ const styles = `
   box-shadow: 0 2px 0 #0f172a;
 }
 .sec-bonus {
-  font-size: 14px;
-  font-weight: 800;
+  font-size: 15px;
+  font-weight: 900;
   color: #0f172a;
-  letter-spacing: .3px;
+  letter-spacing: .5px;
   white-space: nowrap;
   font-style: italic;
-  padding: 0 6px;
+  padding: 6px 14px;
+  background: #ffffff;
+  border: 2px solid #0f172a;
+  border-radius: 6px;
+  box-shadow: 0 2px 0 #0f172a;
 }
 .empty-box {
   background: #ffffff;
