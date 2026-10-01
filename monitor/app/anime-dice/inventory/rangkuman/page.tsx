@@ -388,7 +388,9 @@ export default function RangkumanPage() {
 
               {/* OPEN SEWA UNIT */}
               <div className="sec-head">
-                <div className="sec-line" /><div className="sec-text">OPEN SEWA UNIT</div><div className="sec-line" />
+                <div className="sec-text">SEWA UNIT</div>
+                <div className="sec-bonus">bonus potion</div>
+                <div className="sec-line" />
               </div>
               {sewaUnits.length === 0 ? (
                 <div className="empty-box">Belum ada unit yang dibuka untuk sewa</div>
@@ -448,7 +450,9 @@ export default function RangkumanPage() {
 
               {/* SELL UNIT SX — plain text rows, no cards */}
               <div className="sec-head">
-                <div className="sec-line" /><div className="sec-text">SELL UNIT SX</div><div className="sec-line" />
+                <div className="sec-text">SELL UNIT</div>
+                <div className="sec-bonus">bonus gems dan traits</div>
+                <div className="sec-line" />
               </div>
               {sellUnits.length === 0 ? (
                 <div className="empty-box">Belum ada unit tersedia untuk dijual</div>
@@ -465,7 +469,9 @@ export default function RangkumanPage() {
 
               {/* INVENTORY */}
               <div className="sec-head">
-                <div className="sec-line" /><div className="sec-text">ITEMS</div><div className="sec-line" />
+                <div className="sec-text">ITEMS</div>
+                <div className="sec-bonus">bonus items</div>
+                <div className="sec-line" />
               </div>
               <div className="inv-grid">
                 {inventorySlots.map((it) => {
@@ -625,15 +631,26 @@ const styles = `
 }
 .sec-line { flex: 1; height: 3px; background: #0f172a; border-radius: 2px; }
 .sec-text {
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 900;
-  color: #0f172a;
-  letter-spacing: 4px;
-  padding: 6px 20px;
-  background: #facc15;
+  color: #ffffff;
+  letter-spacing: 3px;
+  padding: 8px 22px;
+  background: linear-gradient(180deg, #f87171, #dc2626);
   border-radius: 8px;
   border: 2px solid #0f172a;
   white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0,0,0,.3);
+  box-shadow: 0 2px 0 #0f172a;
+}
+.sec-bonus {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: .3px;
+  white-space: nowrap;
+  font-style: italic;
+  padding: 0 6px;
 }
 .empty-box {
   background: #ffffff;
