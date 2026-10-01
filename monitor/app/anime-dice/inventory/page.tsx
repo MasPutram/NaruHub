@@ -83,6 +83,7 @@ const DEFAULT_RATES: Rates = {
 
 const DEFAULT_ACCOUNT = "KaijuBer2"; // initial pick when nothing else is cached
 const SELECTED_ACCOUNT_KEY = "ad-inv-selected-account";
+const ALL_ACCOUNTS = "__ALL__"; // sentinel: aggregate across every catalog push
 const MIN_CHANCE = 1e21; // 1 in 1sx and above only
 
 const RARITY_COLORS: Record<string, string> = {
@@ -212,74 +213,99 @@ export default function InventoryPage() {
   const [bpSoldModal, setBpSoldModal] = useState<string | null>(null);
   const [bpSoldInput, setBpSoldInput] = useState("");
   const [selectedAccount, setSelectedAccount] = useState<string>(DEFAULT_ACCOUNT);
+  const [accounts, setAccounts] = useState<string[]>([]);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const priceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  // Active inventory = the account whose catalog snapshot was pushed MOST
-  // RECENTLY. Executing AnimeDiceSell.luau on a different account auto-
-  // promotes it to the active inventory on the next poll (no manual pick).
-  const resolveActiveAccount = useCallback(async () => {
+  // List of accounts that have pushed via AnimeDiceSell.luau. User picks
+  // from the dropdown — no auto-switch. "All Accounts" aggregates them.
+  const fetchAccounts = useCallback(async () => {
     try {
       const res = await fetch("/api/anime-dice/catalog");
       const body = await res.json();
-      if (res.ok && body.ok && Array.isArray(body.snapshots) && body.snapshots.length > 0) {
-        const latest = body.snapshots.reduce((best: any, cur: any) => {
-          if (!best) return cur;
-          return (cur.lastSeen || 0) > (best.lastSeen || 0) ? cur : best;
-        }, null);
-        const name = latest?.sourceAccount;
-        if (typeof name === "string" && name.length > 0) {
-          setSelectedAccount((prev) => {
-            if (prev !== name) {
-              try { localStorage.setItem(SELECTED_ACCOUNT_KEY, name); } catch {}
-            }
-            return name;
-          });
-        }
+      if (res.ok && body.ok && Array.isArray(body.snapshots)) {
+        const names = body.snapshots
+          .map((s: any) => s.sourceAccount)
+          .filter((n: any) => typeof n === "string" && n.length > 0) as string[];
+        names.sort((a, b) => a.localeCompare(b));
+        setAccounts(names);
       }
     } catch {}
   }, []);
 
+  function changeAccount(name: string) {
+    setSelectedAccount(name);
+    try { localStorage.setItem(SELECTED_ACCOUNT_KEY, name); } catch {}
+  }
+
   const fetchData = useCallback(async () => {
     if (!selectedAccount) return;
     try {
-      const [detailRes, ratesRes, stateRes] = await Promise.all([
-        fetch("/api/anime-dice/account-detail?account=" + encodeURIComponent(selectedAccount)),
+      const [ratesRes, stateRes] = await Promise.all([
         fetch("/api/anime-dice/inventory-rates"),
         fetch("/api/anime-dice/inventory-state"),
       ]);
-      const dBody = await detailRes.json();
       const rBody = await ratesRes.json();
       const sBody = await stateRes.json();
-      if (detailRes.ok && dBody.ok) setDetail(dBody); else setDetail(null);
       if (ratesRes.ok && rBody.ok && rBody.rates) setRates({ ...DEFAULT_RATES, ...rBody.rates });
       if (stateRes.ok && sBody.ok && sBody.state) setState({ unitData: sBody.state.unitData || {}, bpSold: sBody.state.bpSold || {}, sewa: sBody.state.sewa || {} });
+
+      if (selectedAccount === ALL_ACCOUNTS) {
+        // Aggregate every account's catalog snapshot into one virtual inventory
+        const res = await fetch("/api/anime-dice/catalog");
+        const body = await res.json();
+        if (res.ok && body.ok && Array.isArray(body.snapshots)) {
+          const allU: any[] = [];
+          const bpMap = new Map<string, any>();
+          body.snapshots.forEach((snap: any) => {
+            const us = Array.isArray(snap.units) ? snap.units : [];
+            us.forEach((u: any) => allU.push(u));
+            const bp = Array.isArray(snap.backpack) ? snap.backpack : [];
+            bp.forEach((it: any) => {
+              const key = (it.name || "").toLowerCase();
+              const prev = bpMap.get(key);
+              if (prev) prev.amount = (prev.amount || 0) + (it.amount || 0);
+              else bpMap.set(key, { ...it });
+            });
+          });
+          setDetail({
+            ownedDice: [], upgrades: {}, gamepasses: {}, topUnits: [],
+            allUnits: allU, backpack: Array.from(bpMap.values()),
+            slots: [], towerSquad: { squad: [], equipped: null }, upgradesList: [],
+            unitsCount: allU.length, unitTypesCount: allU.length,
+            discoveredCount: 0, slotsCount: 0,
+            totalItemCount: Array.from(bpMap.values()).reduce((s, b) => s + (b.amount || 0), 0),
+          } as ADDetail);
+        } else {
+          setDetail(null);
+        }
+      } else {
+        const detailRes = await fetch("/api/anime-dice/account-detail?account=" + encodeURIComponent(selectedAccount));
+        const dBody = await detailRes.json();
+        if (detailRes.ok && dBody.ok) setDetail(dBody); else setDetail(null);
+      }
     } catch {}
     setLoading(false);
   }, [selectedAccount]);
 
   useEffect(() => {
     setMounted(true);
-    // Seed from the last-known account for an instant render, then let the
-    // catalog poll decide the real active account on first fetch.
     try {
       const saved = localStorage.getItem(SELECTED_ACCOUNT_KEY);
       if (saved) setSelectedAccount(saved);
     } catch {}
-    resolveActiveAccount();
-  }, [resolveActiveAccount]);
+    fetchAccounts();
+  }, [fetchAccounts]);
   useEffect(() => {
     fetchData();
     const id = setInterval(fetchData, 15000);
     return () => clearInterval(id);
   }, [fetchData]);
-  // Poll which account is currently active (most-recent push). If a different
-  // account just exe'd the script, this swaps the inventory to it.
+  // Keep the account list fresh so new executors show up in the dropdown
   useEffect(() => {
-    const id = setInterval(resolveActiveAccount, 10000);
+    const id = setInterval(fetchAccounts, 30000);
     return () => clearInterval(id);
-  }, [resolveActiveAccount]);
-  // Switching account should start fresh — drop stale selection
+  }, [fetchAccounts]);
   useEffect(() => {
     setSelectedUnits(new Set());
     setDetail(null);
@@ -573,27 +599,34 @@ export default function InventoryPage() {
           <aside className="side-panel">
             <div className="sp-title">PANEL</div>
             <div className="sp-account">
-              <div className="sp-avatar">{(selectedAccount || "?")[0]?.toUpperCase()}</div>
+              <div className="sp-avatar">{selectedAccount === ALL_ACCOUNTS ? "✦" : (selectedAccount || "?")[0]?.toUpperCase()}</div>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="sp-name" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{selectedAccount}</div>
-                <div className="sp-sub">Stock Account</div>
+                <div className="sp-name" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {selectedAccount === ALL_ACCOUNTS ? "All Accounts" : selectedAccount}
+                </div>
+                <div className="sp-sub">{selectedAccount === ALL_ACCOUNTS ? `Gabungan ${accounts.length} akun` : "Stock Account"}</div>
               </div>
             </div>
             <div className="sp-section">
-              <div className="sp-label">Mode</div>
-              <div style={{ fontSize: 11, color: "var(--dim)", lineHeight: 1.5, padding: "6px 0" }}>
-                Auto-switch ke akun yang terakhir exe <b style={{ color: "var(--accent)" }}>AnimeDiceSell.luau</b>. Jalankan script di akun lain → inventory ikut pindah (polling 10s).
-              </div>
+              <div className="sp-label">Pilih Akun ({accounts.length})</div>
+              <select className="sp-input" value={selectedAccount} onChange={(e) => changeAccount(e.target.value)}>
+                <option value={ALL_ACCOUNTS}>&#x1F310; All Accounts (gabungan)</option>
+                {!accounts.includes(selectedAccount) && selectedAccount !== ALL_ACCOUNTS && (
+                  <option value={selectedAccount}>{selectedAccount}</option>
+                )}
+                {accounts.map((n) => <option key={n} value={n}>{n}</option>)}
+              </select>
               <button
                 className="sp-input"
-                onClick={() => resolveActiveAccount()}
-                style={{ cursor: "pointer", background: "var(--accent)", color: "#0b0b14", fontWeight: 800, border: "none", textAlign: "center" }}
+                onClick={() => fetchAccounts()}
+                style={{ cursor: "pointer", background: "var(--surface)", color: "var(--ink)", fontWeight: 700, border: "1px solid #222240", textAlign: "center", marginTop: 6 }}
+                title="Refresh daftar akun"
               >
-                &#x21BB; Scan Sekarang
+                &#x21BB; Refresh List
               </button>
-              {!detail && !loading && (
-                <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 4 }}>
-                  Belum ada akun lapor via AnimeDiceSell.luau
+              {accounts.length === 0 && (
+                <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 6, lineHeight: 1.4 }}>
+                  Belum ada akun lapor via <b>AnimeDiceSell.luau</b>
                 </div>
               )}
             </div>
@@ -638,9 +671,9 @@ export default function InventoryPage() {
 
             <div className="content-box">
               {loading ? (
-                <div className="empty">Memuat data {selectedAccount}...</div>
+                <div className="empty">Memuat data {selectedAccount === ALL_ACCOUNTS ? "semua akun" : selectedAccount}...</div>
               ) : !detail ? (
-                <div className="empty">Belum ada data untuk {selectedAccount}. Pastikan akun online dan melapor.</div>
+                <div className="empty">Belum ada data untuk {selectedAccount === ALL_ACCOUNTS ? "akun manapun" : selectedAccount}. Pastikan AnimeDiceSell.luau sudah di-exe.</div>
               ) : tab === "unit" ? (
                 filteredUnits.length === 0 ? (
                   <div className="empty">Tidak ada unit 1 in 1sx+ yang cocok filter.</div>

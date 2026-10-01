@@ -1,6 +1,6 @@
 {
   "name": "steal-egg-monitor",
-  "version": "2.10.7",
+  "version": "2.11.0",
   "private": true,
   "scripts": {
     "dev": "next dev",

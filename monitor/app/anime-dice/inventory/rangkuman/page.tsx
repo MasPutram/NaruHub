@@ -65,6 +65,7 @@ function autoUnitPrice(u: Unit, rates: Rates): number {
   return (c / 1e21) * rate;
 }
 const DEFAULT_ACCOUNT = "KaijuBer2";
+const ALL_ACCOUNTS = "__ALL__";
 const MIN_CHANCE = 1e21;
 
 const RARITY_COLORS: Record<string, string> = {
@@ -177,10 +178,10 @@ export default function RangkumanPage() {
   const [qrTarget, setQrTarget] = useState("https://www.facebook.com/naruaho");
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [selectedAccount, setSelectedAccount] = useState<string>(DEFAULT_ACCOUNT);
+  const [accounts, setAccounts] = useState<string[]>([]);
   const posterRef = useRef<HTMLDivElement | null>(null);
 
-  // Resolve active account = most-recent catalog push (same rule as inventory
-  // page). Seed from localStorage for instant render, then poll.
+  // Seed from localStorage (shared with the Inventory page's selection)
   useEffect(() => {
     try {
       const saved = localStorage.getItem("ad-inv-selected-account");
@@ -188,24 +189,16 @@ export default function RangkumanPage() {
     } catch {}
   }, []);
 
-  const resolveActiveAccount = useCallback(async () => {
+  const fetchAccounts = useCallback(async () => {
     try {
       const res = await fetch("/api/anime-dice/catalog");
       const body = await res.json();
-      if (res.ok && body.ok && Array.isArray(body.snapshots) && body.snapshots.length > 0) {
-        const latest = body.snapshots.reduce((best: any, cur: any) => {
-          if (!best) return cur;
-          return (cur.lastSeen || 0) > (best.lastSeen || 0) ? cur : best;
-        }, null);
-        const name = latest?.sourceAccount;
-        if (typeof name === "string" && name.length > 0) {
-          setSelectedAccount((prev) => {
-            if (prev !== name) {
-              try { localStorage.setItem("ad-inv-selected-account", name); } catch {}
-            }
-            return name;
-          });
-        }
+      if (res.ok && body.ok && Array.isArray(body.snapshots)) {
+        const names = body.snapshots
+          .map((s: any) => s.sourceAccount)
+          .filter((n: any) => typeof n === "string" && n.length > 0) as string[];
+        names.sort((a, b) => a.localeCompare(b));
+        setAccounts(names);
       }
     } catch {}
   }, []);
@@ -213,27 +206,49 @@ export default function RangkumanPage() {
   const fetchAll = useCallback(async () => {
     if (!selectedAccount) return;
     try {
-      const [d, r, s] = await Promise.all([
-        fetch("/api/anime-dice/account-detail?account=" + encodeURIComponent(selectedAccount)).then((x) => x.json()),
+      const [r, s] = await Promise.all([
         fetch("/api/anime-dice/inventory-rates").then((x) => x.json()),
         fetch("/api/anime-dice/inventory-state").then((x) => x.json()),
       ]);
-      if (d.ok) setDetail(d); else setDetail(null);
       if (r.ok && r.rates) setRates({ ...DEFAULT_RATES, ...r.rates });
       if (s.ok && s.state) setState({
         unitData: s.state.unitData || {},
         bpSold: s.state.bpSold || {},
         sewa: s.state.sewa || {},
       });
+
+      if (selectedAccount === ALL_ACCOUNTS) {
+        const res = await fetch("/api/anime-dice/catalog");
+        const body = await res.json();
+        if (res.ok && body.ok && Array.isArray(body.snapshots)) {
+          const allU: any[] = [];
+          const bpMap = new Map<string, any>();
+          body.snapshots.forEach((snap: any) => {
+            (snap.units || []).forEach((u: any) => allU.push(u));
+            (snap.backpack || []).forEach((it: any) => {
+              const key = (it.name || "").toLowerCase();
+              const prev = bpMap.get(key);
+              if (prev) prev.amount = (prev.amount || 0) + (it.amount || 0);
+              else bpMap.set(key, { ...it });
+            });
+          });
+          setDetail({ allUnits: allU, backpack: Array.from(bpMap.values()) } as ADDetail);
+        } else {
+          setDetail(null);
+        }
+      } else {
+        const d = await fetch("/api/anime-dice/account-detail?account=" + encodeURIComponent(selectedAccount)).then((x) => x.json());
+        if (d.ok) setDetail(d); else setDetail(null);
+      }
     } catch {}
     setLoading(false);
-  }, []);
+  }, [selectedAccount]);
 
-  useEffect(() => { setMounted(true); resolveActiveAccount(); }, [resolveActiveAccount]);
+  useEffect(() => { setMounted(true); fetchAccounts(); }, [fetchAccounts]);
   useEffect(() => {
-    const id = setInterval(resolveActiveAccount, 15000);
+    const id = setInterval(fetchAccounts, 30000);
     return () => clearInterval(id);
-  }, [resolveActiveAccount]);
+  }, [fetchAccounts]);
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   useEffect(() => {
@@ -341,10 +356,16 @@ export default function RangkumanPage() {
       <style>{styles}</style>
       <div className="page">
         <div className="controls">
-          <label>Akun aktif:</label>
-          <div style={{ padding: "8px 12px", background: "#1c1c2b", border: "1px solid #262636", borderRadius: 8, fontSize: 13, fontWeight: 700, color: "#facc15", minWidth: 180 }}>
-            {selectedAccount}
-          </div>
+          <label>Akun:</label>
+          <select
+            value={selectedAccount}
+            onChange={(e) => { setSelectedAccount(e.target.value); try { localStorage.setItem("ad-inv-selected-account", e.target.value); } catch {} }}
+            style={{ width: 220 }}
+          >
+            <option value={ALL_ACCOUNTS}>&#x1F310; All Accounts (gabungan)</option>
+            {!accounts.includes(selectedAccount) && selectedAccount !== ALL_ACCOUNTS && <option value={selectedAccount}>{selectedAccount}</option>}
+            {accounts.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
           <label>Pemilik:</label>
           <input value={owner} onChange={(e) => setOwner(e.target.value)} />
           <label>Kontak:</label>
