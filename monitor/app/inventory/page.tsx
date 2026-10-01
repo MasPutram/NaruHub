@@ -324,9 +324,11 @@ export default function InventoryPage() {
     }, 600);
   }
 
-  // User types rate directly in rupiah ("perak") — type 700 = Rp 700.
+  // User input × 100 = rupiah. 1 = Rp 100, 10 = Rp 1,000, 13 = Rp 1,300.
   function updateRate(key: keyof Rates, val: string) {
-    saveRates({ ...rates, [key]: parseFloat(val) || 0 });
+    const n = parseFloat(val);
+    const rupiah = Number.isFinite(n) ? n * 100 : 0;
+    saveRates({ ...rates, [key]: rupiah });
   }
 
   function saveState(next: InventoryState) {
@@ -1084,11 +1086,13 @@ export default function InventoryPage() {
 }
 
 function RateField({ label, sub, value, onChange }: { label: string; sub: string; value: number; onChange: (v: string) => void }) {
+  // Display rupiah ÷ 100 so user types in "ratus perak" (1 = Rp 100, 10 = Rp 1k, 13 = Rp 1.3k)
+  const displayVal = value ? value / 100 : 0;
   return (
     <div className="rate-field">
-      <div className="rate-label">{label} <span className="rate-sublabel">{sub} <b style={{ color: "var(--cyan)" }}>(perak / Rp)</b></span></div>
+      <div className="rate-label">{label} <span className="rate-sublabel">{sub} <b style={{ color: "var(--cyan)" }}>(1 = 100p, 10 = 1rb)</b></span></div>
       <input className="rate-input" type="number" step="any" placeholder="0"
-        value={value || ""} onChange={(e) => onChange(e.target.value)} />
+        value={displayVal || ""} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }
