@@ -121,6 +121,16 @@ function fmtRp(v: number): string {
   return "Rp " + Math.round(v).toLocaleString("id-ID");
 }
 
+// Compact "K / M / B" (no "Rp" prefix) — used on sewa cards.
+function fmtK(v: number): string {
+  if (!v) return "0";
+  const abs = Math.abs(v);
+  if (abs >= 1e9) return (v / 1e9).toFixed(abs >= 1e10 ? 0 : 1).replace(/\.0$/, "") + "b";
+  if (abs >= 1e6) return (v / 1e6).toFixed(abs >= 1e7 ? 0 : 1).replace(/\.0$/, "") + "m";
+  if (abs >= 1e3) return (v / 1e3).toFixed(abs >= 1e4 ? 0 : 1).replace(/\.0$/, "") + "k";
+  return String(Math.round(v));
+}
+
 function unitKey(u: Unit): string {
   if (u.id) return "id:" + u.id;
   return [u.name, u.variant || "", u.rarity, u.mutation || "", u.trait || "", u.grade || "", u.level ?? ""].join("|");
@@ -454,11 +464,11 @@ export default function RangkumanPage() {
                           <div className="gc-price-row">
                             <div className="gcp-item">
                               <div className="gcp-l">Rp / JAM</div>
-                              <div className="gcp-v">{fmtRp(sewa.pricePerHour)}</div>
+                              <div className="gcp-v">{fmtK(sewa.pricePerHour)}</div>
                             </div>
                             <div className="gcp-item depo">
                               <div className="gcp-l">DEPOSIT</div>
-                              <div className="gcp-v">{fmtRp(sewa.deposit)}</div>
+                              <div className="gcp-v">{fmtK(sewa.deposit)}</div>
                             </div>
                           </div>
                         </div>
