@@ -47,9 +47,10 @@ interface Rates {
   luckySpinRate: number;
   jackpotRate: number;
   gearRate: number;
+  gearSetRate: number;
 }
 
-const DEFAULT_RATES: Rates = { gemRate: 0, traitRerollRate: 0, luckySpinRate: 0, jackpotRate: 0, gearRate: 0 };
+const DEFAULT_RATES: Rates = { gemRate: 0, traitRerollRate: 0, luckySpinRate: 0, jackpotRate: 0, gearRate: 0, gearSetRate: 0 };
 const STOCK_ACCOUNT = "KaijuBer2";
 const MIN_CHANCE = 1e21;
 
@@ -221,14 +222,17 @@ export default function RangkumanPage() {
     if (slot) gearBySlot[slot] += (g.amount || 0);
   });
   const fullSets = Math.min(...GEAR_SLOTS.map((s) => gearBySlot[s]));
-  const gearSetValue = fullSets * GEAR_SLOTS.length * rates.gearRate;
+  const leftoverGear = divineGear - fullSets * GEAR_SLOTS.length;
+  const gearSetValue = fullSets * rates.gearSetRate;
+  const gearLeftoverValue = leftoverGear * rates.gearRate;
+  const gearTotalValue = gearSetValue + gearLeftoverValue;
 
   const inventorySlots = [
     { key: "gems", name: "GEMS", item: gems, qty: gems?.amount || 0, value: (gems?.amount || 0) / 1000 * rates.gemRate, rateText: `Rp ${rates.gemRate.toLocaleString("id-ID")}`, rateUnit: "/1k", accent: "#0891b2", bg: "#ecfeff", emoji: "\u{1F48E}" },
     { key: "trait", name: "TRAIT REROLL", item: traitReroll, qty: traitReroll?.amount || 0, value: (traitReroll?.amount || 0) / 1000 * rates.traitRerollRate, rateText: `Rp ${rates.traitRerollRate.toLocaleString("id-ID")}`, rateUnit: "/1k", accent: "#6366f1", bg: "#eef2ff", emoji: "\u{1F504}" },
     { key: "lucky", name: "LUCKY SPIN", item: luckySpin, qty: luckySpin?.amount || 0, value: (luckySpin?.amount || 0) * rates.luckySpinRate, rateText: `Rp ${rates.luckySpinRate.toLocaleString("id-ID")}`, rateUnit: "/pc", accent: "#ca8a04", bg: "#fefce8", emoji: "\u{1F3B0}" },
     { key: "jackpot", name: "JACKPOT", item: jackpot, qty: jackpot?.amount || 0, value: (jackpot?.amount || 0) * rates.jackpotRate, rateText: `Rp ${rates.jackpotRate.toLocaleString("id-ID")}`, rateUnit: "/pc", accent: "#dc2626", bg: "#fef2f2", emoji: "\u{1F3AF}" },
-    { key: "gear", name: "DIVINE GEAR", item: null as BackpackItem | null, qty: divineGear, value: divineGear * rates.gearRate, rateText: `Rp ${rates.gearRate.toLocaleString("id-ID")}`, rateUnit: "/pc", accent: "#9333ea", bg: "#faf5ff", emoji: "\u{2699}\u{FE0F}", sets: fullSets, setValue: gearSetValue },
+    { key: "gear", name: "DIVINE GEAR", item: null as BackpackItem | null, qty: divineGear, value: gearTotalValue, rateText: `Rp ${rates.gearRate.toLocaleString("id-ID")}`, rateUnit: "/pc", accent: "#9333ea", bg: "#faf5ff", emoji: "\u{2699}\u{FE0F}", sets: fullSets, setValue: gearSetValue, setRate: rates.gearSetRate, leftover: leftoverGear },
   ];
 
   const totalEstimasi = inventorySlots.reduce((s, x) => s + x.value, 0)
@@ -387,14 +391,19 @@ export default function RangkumanPage() {
                         {it.rateText}
                         <span className="ic-rate-unit">{it.rateUnit}</span>
                       </div>
-                      {/* Divine gear: /set line */}
-                      {it.key === "gear" && it.sets !== undefined && it.sets > 0 && (
+                      {/* Divine gear: show set rate line too */}
+                      {it.key === "gear" && it.setRate !== undefined && it.setRate > 0 && (
                         <div className="ic-set-big" style={{ color: it.accent }}>
-                          {fmtRp(it.setValue!)}<span className="ic-rate-unit">/set × {it.sets}</span>
+                          Rp {it.setRate.toLocaleString("id-ID")}<span className="ic-rate-unit">/set</span>
                         </div>
                       )}
                       {/* Stock small */}
-                      <div className="ic-stock">Stock: <b>{fmtNum(it.qty)}</b></div>
+                      <div className="ic-stock">
+                        Stock: <b>{fmtNum(it.qty)}</b>
+                        {it.key === "gear" && it.sets !== undefined && it.sets > 0 && (
+                          <> &middot; <b style={{ color: it.accent }}>{it.sets} set</b> + {it.leftover} pcs</>
+                        )}
+                      </div>
                       {/* Value */}
                       <div className="ic-value" style={{ color: it.accent, borderColor: it.accent + "40" }}>
                         {it.value > 0 ? fmtRp(it.value) : "—"}

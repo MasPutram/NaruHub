@@ -53,6 +53,7 @@ interface Rates {
   luckySpinRate: number;
   jackpotRate: number;
   gearRate: number;
+  gearSetRate: number;
 }
 
 interface UnitState { price: number; sold: boolean }
@@ -71,6 +72,7 @@ const DEFAULT_RATES: Rates = {
   luckySpinRate: 0,
   jackpotRate: 0,
   gearRate: 0,
+  gearSetRate: 0,
 };
 
 const STOCK_ACCOUNT = "KaijuBer2";
@@ -701,10 +703,12 @@ export default function InventoryPage() {
                 <RateField label="Rate Trait Reroll" sub="/ 1k pcs" value={rates.traitRerollRate} onChange={(v) => updateRate("traitRerollRate", v)} />
                 <RateField label="Rate Lucky Spin" sub="/ pc" value={rates.luckySpinRate} onChange={(v) => updateRate("luckySpinRate", v)} />
                 <RateField label="Rate Jackpot" sub="/ pc" value={rates.jackpotRate} onChange={(v) => updateRate("jackpotRate", v)} />
-                <RateField label="Rate Gear" sub="/ divine gear" value={rates.gearRate} onChange={(v) => updateRate("gearRate", v)} />
+                <RateField label="Rate Gear" sub="/ divine gear (pc)" value={rates.gearRate} onChange={(v) => updateRate("gearRate", v)} />
+                <RateField label="Rate Gear Set" sub="/ 1 set komplit (5 slot)" value={rates.gearSetRate} onChange={(v) => updateRate("gearSetRate", v)} />
               </div>
-              <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 16 }}>
-                Perubahan rate otomatis tersimpan.
+              <div style={{ fontSize: 11, color: "var(--dim)", marginTop: 16, lineHeight: 1.5 }}>
+                Perubahan rate otomatis tersimpan.<br />
+                <span style={{ color: "var(--purple)", fontWeight: 700 }}>Gear Set</span> = harga 1 set komplit (Head + Torso + Back + Upper + Waist). Gear sisa (yang belum lengkap satu set) dihitung pakai Rate Gear per pc.
               </div>
             </div>
           </div>
