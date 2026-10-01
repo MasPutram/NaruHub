@@ -324,10 +324,10 @@ export default function InventoryPage() {
     }, 600);
   }
 
-  // User input × 100 = rupiah. 1 = Rp 100, 10 = Rp 1,000, 13 = Rp 1,300.
+  // User types rate in "ribu" (× 1000). 0.5 = Rp 500, 20 = Rp 20,000.
   function updateRate(key: keyof Rates, val: string) {
     const n = parseFloat(val);
-    const rupiah = Number.isFinite(n) ? n * 100 : 0;
+    const rupiah = Number.isFinite(n) ? n * 1000 : 0;
     saveRates({ ...rates, [key]: rupiah });
   }
 
@@ -1086,13 +1086,34 @@ export default function InventoryPage() {
 }
 
 function RateField({ label, sub, value, onChange }: { label: string; sub: string; value: number; onChange: (v: string) => void }) {
-  // Display rupiah ÷ 100 so user types in "ratus perak" (1 = Rp 100, 10 = Rp 1k, 13 = Rp 1.3k)
-  const displayVal = value ? value / 100 : 0;
+  // Local string state so the user can type "0" or "0.5" freely (if we
+  // bound value={0 || ""} the field would blank out and swallow the keystroke).
+  // Sync back from props only when they diverge from what the user is typing.
+  const displayVal = value ? value / 1000 : 0;
+  const [local, setLocal] = useState<string>(displayVal ? String(displayVal) : "");
+  useEffect(() => {
+    const parsed = parseFloat(local);
+    const current = Number.isFinite(parsed) ? parsed : 0;
+    if (current !== displayVal) setLocal(displayVal ? String(displayVal) : "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
   return (
     <div className="rate-field">
-      <div className="rate-label">{label} <span className="rate-sublabel">{sub} <b style={{ color: "var(--cyan)" }}>(1 = 100p, 10 = 1rb)</b></span></div>
-      <input className="rate-input" type="number" step="any" placeholder="0"
-        value={displayVal || ""} onChange={(e) => onChange(e.target.value)} />
+      <div className="rate-label">{label} <span className="rate-sublabel">{sub} <b style={{ color: "var(--cyan)" }}>(ribu, 0.5 = 500p)</b></span></div>
+      <input
+        className="rate-input"
+        type="text"
+        inputMode="decimal"
+        placeholder="0"
+        value={local}
+        onChange={(e) => {
+          const v = e.target.value.replace(/,/g, ".");
+          // Allow only numbers + single dot
+          if (!/^\d*\.?\d*$/.test(v)) return;
+          setLocal(v);
+          onChange(v);
+        }}
+      />
     </div>
   );
 }
