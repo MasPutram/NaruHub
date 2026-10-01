@@ -335,7 +335,7 @@ export default function InventoryPage() {
   function confirmBpSold() {
     if (!bpSoldModal) return;
     const qty = parseFloat(bpSoldInput.replace(/[.,]/g, "")) || 0;
-    const next = { ...state, bpSold: { ...state.bpSold, [bpSoldModal]: qty } };
+    const next = { ...state, bpSold: { ...state.bpSold, [`${selectedAccount}:${bpSoldModal}`]: qty } };
     saveState(next);
     setBpSoldModal(null);
     setBpSoldInput("");
@@ -425,7 +425,7 @@ export default function InventoryPage() {
   // Calculate values per item type: (available qty × rate)
   function itemValue(item: BackpackItem | undefined, soldKey: string, rate: number, divisor: number = 1): { availQty: number; soldQty: number; availVal: number; soldVal: number } {
     const total = item?.amount || 0;
-    const sold = state.bpSold[soldKey] || 0;
+    const sold = state.bpSold[`${selectedAccount}:${soldKey}`] || 0;
     const avail = Math.max(0, total - sold);
     return {
       availQty: avail,
@@ -441,7 +441,8 @@ export default function InventoryPage() {
   const jackpotV = itemValue(jackpot, "jackpot", rates.jackpotRate);
 
   // Gear: total divine gears × gearRate, sold tracking per gear item
-  const totalGearSold = Object.keys(state.bpSold).filter((k) => k.startsWith("gear:")).reduce((s, k) => s + (state.bpSold[k] || 0), 0);
+  const gearPrefix = `${selectedAccount}:gear:`;
+  const totalGearSold = Object.keys(state.bpSold).filter((k) => k.startsWith(gearPrefix)).reduce((s, k) => s + (state.bpSold[k] || 0), 0);
   const availDivineGear = Math.max(0, divineGearCount - totalGearSold);
   const availGearVal = availDivineGear * rates.gearRate;
   const soldGearVal = totalGearSold * rates.gearRate;
@@ -503,7 +504,7 @@ export default function InventoryPage() {
     lines.push("");
     lines.push("=== GEAR ===");
     gearItems.forEach((g) => {
-      const sold = state.bpSold[`gear:${g.name}`] || 0;
+      const sold = state.bpSold[`${selectedAccount}:gear:${g.name}`] || 0;
       lines.push(`- ${g.name} [${g.rarity}] | Total ${g.amount} | Terjual ${sold}`);
     });
     const blob = new Blob([lines.join("\n")], { type: "text/plain" });
@@ -887,7 +888,7 @@ export default function InventoryPage() {
                       <div className="sr-name">{it.name}</div>
                       <div className="sr-qty">x{fmtNum(it.qty)}</div>
                       <div className="sr-price">{fmtRp(it.val)}</div>
-                      <button className="sr-undo" onClick={() => { const next = { ...state, bpSold: { ...state.bpSold, [it.key]: 0 } }; saveState(next); }}>Reset</button>
+                      <button className="sr-undo" onClick={() => { const next = { ...state, bpSold: { ...state.bpSold, [`${selectedAccount}:${it.key}`]: 0 } }; saveState(next); }}>Reset</button>
                     </div>
                   ))}
                   <div className="sold-total">
