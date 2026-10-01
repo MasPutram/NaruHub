@@ -448,7 +448,7 @@ export default function RangkumanPage() {
 
               {/* INVENTORY */}
               <div className="sec-head">
-                <div className="sec-line" /><div className="sec-text">INVENTORY</div><div className="sec-line" />
+                <div className="sec-line" /><div className="sec-text">ITEMS</div><div className="sec-line" />
               </div>
               <div className="inv-grid">
                 {inventorySlots.map((it) => {
