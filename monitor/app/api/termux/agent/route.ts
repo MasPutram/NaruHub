@@ -617,7 +617,7 @@ local function get_proc_rss_mb(pid)
   return pages and (tonumber(pages) * 4 / 1024) or 0
 end
 
--- `level` picks how aggressively running clones should drop caches.
+-- level picks how aggressively running clones should drop caches.
 -- RUNNING_MODERATE: light, just caches, no major GC — safe to call often.
 -- RUNNING_LOW: slightly firmer hint.
 -- RUNNING_CRITICAL: "you're about to be killed, dump EVERYTHING" — causes
