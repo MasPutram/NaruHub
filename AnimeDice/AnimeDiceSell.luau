@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | AnimeDice Sell Catalog v1.6.0
+-- NaruHub | AnimeDice Sell Catalog v1.7.0
 -- Sends enriched inventory data to dashboard catalog for marketplace listings.
 -- Separate loadstring — does NOT interfere with the monitoring script.
 
@@ -57,36 +57,49 @@ local _naruSrc = httpGet(game, "https://raw.githubusercontent.com/MasPutram/Naru
 local NaruUI = loadstring(_naruSrc)()
 
 ------------------------------------------------------------
--- Device detection (match username → device via Termux API)
+-- Device detection (match server players → devices via Termux API)
 ------------------------------------------------------------
-local DEVICE_NAME = nil
+local deviceUserMap = {}
 
-local function detectDevice()
+local function fetchDeviceMap()
 	local ok, result = pcall(function()
 		local res = request({
 			Url = SERVER_BASE_URL .. "/api/termux/devices",
 			Method = "GET",
 			Headers = { ["Content-Type"] = "application/json" },
 		})
-		if not res or not res.Body then return nil end
+		if not res or not res.Body then return {} end
 		local parsed = game:GetService("HttpService"):JSONDecode(res.Body)
-		if not parsed or not parsed.ok or not parsed.devices then return nil end
-		local username = LocalPlayer.Name
+		if not parsed or not parsed.ok or not parsed.devices then return {} end
+		local usernameToDevice = {}
 		for _, device in ipairs(parsed.devices) do
+			local dname = device.customName or device.hostname or device.deviceId
 			if device.packages then
 				for _, pkg in ipairs(device.packages) do
-					if pkg.username == username then
-						return device.customName or device.hostname or device.deviceId
+					if pkg.username then
+						usernameToDevice[pkg.username] = dname
 					end
 				end
 			end
 		end
-		return nil
+		return usernameToDevice
 	end)
-	return ok and result or nil
+	return ok and result or {}
 end
 
-DEVICE_NAME = detectDevice()
+local function buildDeviceMap()
+	local map = fetchDeviceMap()
+	local result = {}
+	for _, player in ipairs(Players:GetPlayers()) do
+		local dname = map[player.Name]
+		if dname then
+			result[player.Name] = dname
+		end
+	end
+	return result
+end
+
+deviceUserMap = buildDeviceMap()
 
 ------------------------------------------------------------
 -- Game data access
@@ -393,7 +406,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | AD Catalog v1.6.0",
+	Title = "NaruHub | AD Catalog v1.7.0",
 	Badge = "SELL",
 	TabWidth = 0,
 	Size = UDim2.fromOffset(420, 460),
