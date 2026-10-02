@@ -22,7 +22,7 @@ export const AGENT_CONFIG_DEFAULTS: AgentConfig = {
 const AGENT_CONFIG_KEY = "termux:agent-config";
 
 const LUA_AGENT = `
-local VERSION = "3.3"
+local VERSION = "3.4"
 
 -- ─── Config ───
 local CONFIG_DIR = os.getenv("HOME") .. "/.cache/log"
@@ -617,12 +617,35 @@ local function get_proc_rss_mb(pid)
   return pages and (tonumber(pages) * 4 / 1024) or 0
 end
 
-local function trim_ram()
+-- `level` picks how aggressively running clones should drop caches.
+-- RUNNING_MODERATE: light, just caches, no major GC — safe to call often.
+-- RUNNING_LOW: slightly firmer hint.
+-- RUNNING_CRITICAL: "you're about to be killed, dump EVERYTHING" — causes
+--                   big GC + full cache rebuild on next frame → noticeable
+--                   stutter. Reserve for pre-launch / pre-rejoin only.
+local function trim_ram(level)
+  level = level or "RUNNING_CRITICAL"
   local running = collect_running()
   if #running == 0 then return end
   for _, pkg in ipairs(running) do
-    shellcode('su -c "am send-trim-memory ' .. pkg .. ' RUNNING_CRITICAL"')
+    shellcode('su -c "am send-trim-memory ' .. pkg .. ' ' .. level .. '"')
   end
+end
+
+-- Gentle periodic trim: only fires when RAM is actually tight, and uses
+-- a lighter level. Prevents the "every 30s all clones stutter" lag.
+local TRIM_GATE_PCT = 30  -- only trim when < this % RAM free (early kick-in for long AFK)
+local function maybe_trim_ram_soft()
+  if TOTAL_RAM_MB == 0 then TOTAL_RAM_MB = get_total_ram_mb() end
+  if TOTAL_RAM_MB == 0 then return end
+  local mem_raw = shell('su -c "cat /proc/meminfo"')
+  local mem_avail_kb = tonumber(mem_raw:match("MemAvailable:%s+(%d+)")) or 0
+  local mem_avail_mb = math.floor(mem_avail_kb / 1024)
+  local mem_pct = (mem_avail_mb / TOTAL_RAM_MB) * 100
+  if mem_pct >= TRIM_GATE_PCT then return end
+  -- Below gate but not critical → MODERATE. Below 10% → LOW (slightly firmer).
+  local level = mem_pct < 10 and "RUNNING_LOW" or "RUNNING_MODERATE"
+  trim_ram(level)
 end
 
 local NEXT_RAM_LOG = 0
@@ -657,7 +680,7 @@ local function log_ram_status()
     local color = mem_pct < 15 and C.red or (mem_pct < 30 and C.yellow or C.dim)
     log(color .. "[" .. ts() .. "] RAM " .. mem_avail_mb .. "/" .. math.floor(TOTAL_RAM_MB) .. "MB (" .. mem_pct .. "% free) | " .. table.concat(parts, " ") .. C.reset)
   end
-  NEXT_RAM_LOG = now + 1800
+  NEXT_RAM_LOG = now + 7200 -- 2 hours (quiet during long AFK sessions)
 end
 
 
@@ -1505,7 +1528,7 @@ while true do
       local stats = collect_stats()
       local running = collect_running()
       log_ram_status()
-      trim_ram()
+      maybe_trim_ram_soft()
       ws_send({
         type = "heartbeat",
         deviceId = DEVICE_ID,
