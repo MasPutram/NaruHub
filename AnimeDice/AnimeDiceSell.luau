@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | AnimeDice Sell Catalog v1.5.0
+-- NaruHub | AnimeDice Sell Catalog v1.6.0
 -- Sends enriched inventory data to dashboard catalog for marketplace listings.
 -- Separate loadstring — does NOT interfere with the monitoring script.
 
@@ -55,6 +55,38 @@ local LocalPlayer = Players.LocalPlayer
 local httpGet = game.HttpGet or HttpGet
 local _naruSrc = httpGet(game, "https://raw.githubusercontent.com/MasPutram/NaruHub/main/NaruUI/NaruUI.luau?v=" .. tostring(tick()))
 local NaruUI = loadstring(_naruSrc)()
+
+------------------------------------------------------------
+-- Device detection (match username → device via Termux API)
+------------------------------------------------------------
+local DEVICE_NAME = nil
+
+local function detectDevice()
+	local ok, result = pcall(function()
+		local res = request({
+			Url = SERVER_BASE_URL .. "/api/termux/devices",
+			Method = "GET",
+			Headers = { ["Content-Type"] = "application/json" },
+		})
+		if not res or not res.Body then return nil end
+		local parsed = game:GetService("HttpService"):JSONDecode(res.Body)
+		if not parsed or not parsed.ok or not parsed.devices then return nil end
+		local username = LocalPlayer.Name
+		for _, device in ipairs(parsed.devices) do
+			if device.packages then
+				for _, pkg in ipairs(device.packages) do
+					if pkg.username == username then
+						return device.customName or device.hostname or device.deviceId
+					end
+				end
+			end
+		end
+		return nil
+	end)
+	return ok and result or nil
+end
+
+DEVICE_NAME = detectDevice()
 
 ------------------------------------------------------------
 -- Game data access
@@ -298,6 +330,7 @@ local function reportCatalog()
 		local payload = {
 			game = "AnimeDice",
 			sourceAccount = LocalPlayer.Name,
+			deviceName = DEVICE_NAME,
 			money = X.Money or 0,
 			rolls = X.Rolls or 0,
 			rebirth = X.Rebirth or 0,
@@ -360,7 +393,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | AD Catalog v1.5.0",
+	Title = "NaruHub | AD Catalog v1.6.0",
 	Badge = "SELL",
 	TabWidth = 0,
 	Size = UDim2.fromOffset(420, 460),
@@ -368,7 +401,10 @@ local Window = Fluent:CreateWindow({
 })
 
 local Tab = Window:AddTab({ Title = "" })
-local section = Tab:AddSection(LocalPlayer.Name, { NoCollapse = true })
+local sectionTitle = DEVICE_NAME
+	and (LocalPlayer.Name .. "  ⟶  " .. DEVICE_NAME)
+	or LocalPlayer.Name
+local section = Tab:AddSection(sectionTitle, { NoCollapse = true })
 
 local statusPara = section:AddParagraph({
 	Title = "Status",
