@@ -9,6 +9,10 @@ import {
   FORSALE_KICK_TTL_S,
   deviceAccountsKey,
   DEVICE_ACCOUNTS_TTL_S,
+  adEventKey,
+  AD_EVENT_TTL_S,
+  AD_EVENT_HISTORY_KEY,
+  AD_EVENT_HISTORY_MAX,
 } from "@/lib/redis";
 
 export async function OPTIONS() {
@@ -94,6 +98,38 @@ export async function POST(req: NextRequest) {
     pipeline.set(adAccountKey(name), JSON.stringify(summary), { ex: ACCOUNT_TTL_S });
     pipeline.set(adDetailKey(name), JSON.stringify(detail), { ex: ACCOUNT_TTL_S });
     await pipeline.exec();
+
+    // Weather / server event — any client that sees ActiveWeather != nil
+    // publishes it here so the dashboard surfaces the current event + buffs.
+    // We write unconditionally (last-writer-wins) because the per-server event
+    // is global for everyone on that JobId, and multiple clients may be in
+    // the same server. remaining must be > 0 to count as still active.
+    try {
+      const ev = data.activeEvent;
+      if (ev && typeof ev.name === "string" && Number(ev.remaining) > 0) {
+        const payload = {
+          name: ev.name,
+          duration: Number(ev.duration) || 0,
+          startedAt: Number(ev.startedAt) || 0,
+          remaining: Number(ev.remaining) || 0,
+          buffs: ev.buffs || null,
+          jobId: data.jobId || null,
+          placeId: data.placeId || null,
+          reportedBy: name,
+          reportedAt: Math.floor(Date.now() / 1000),
+        };
+        const prevRaw = await redis.get<string>(adEventKey());
+        const prev = prevRaw ? (typeof prevRaw === "string" ? JSON.parse(prevRaw) : prevRaw) : null;
+        await redis.set(adEventKey(), JSON.stringify(payload), { ex: AD_EVENT_TTL_S });
+        // Push to history list when this is a NEW event (different startedAt
+        // or different name than the one we had cached). Keep last N entries.
+        if (!prev || prev.name !== payload.name || prev.startedAt !== payload.startedAt) {
+          try {
+            await (redis as any).queuePush(AD_EVENT_HISTORY_KEY, JSON.stringify(payload), { ttl: 60 * 60 * 24 * 7, maxLen: AD_EVENT_HISTORY_MAX });
+          } catch {}
+        }
+      }
+    } catch {}
 
     const hbDeviceId = req.headers.get("x-device-id") || "unknown";
     if (hbDeviceId !== "unknown" && name !== "?") {

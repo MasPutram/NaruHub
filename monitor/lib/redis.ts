@@ -182,6 +182,19 @@ export function adCatalogKey(name: string) {
 }
 export const AD_CATALOG_TTL_S = 60 * 60 * 24; // 24 hours
 
+// Weather / server event in Anime Dice: Luck Event, Cash Event, Roll Speed
+// Event, Trait Event, Grade Event. Server picks one every ~15-30 min and it
+// lasts 5 min. Any monitoring client that sees ActiveWeather != nil reports
+// it; dashboard reads this key to surface the current event + remaining time.
+export function adEventKey() {
+  return "ad:event:active";
+}
+export const AD_EVENT_TTL_S = 360; // 6 min (slightly longer than 5min event)
+
+// Short rolling history of the last ~50 events for the dashboard timeline.
+export const AD_EVENT_HISTORY_KEY = "ad:event:history";
+export const AD_EVENT_HISTORY_MAX = 50;
+
 
 type SetOptions = { ex?: number };
 

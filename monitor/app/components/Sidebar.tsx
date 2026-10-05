@@ -39,6 +39,13 @@ const NAV: NavEntry[] = [
     ],
   },
   {
+    label: "Event",
+    icon: "M13 10V3L4 14h7v7l9-11h-7z",
+    items: [
+      { label: "Anime Dice", href: "/event/anime-dice", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
+    ],
+  },
+  {
     label: "Termux",
     icon: "M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
     items: [
@@ -70,7 +77,7 @@ export default function Sidebar() {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Dashboard: true, Katalog: true, Termux: true, Captcha: true });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Dashboard: true, Katalog: true, Event: true, Termux: true, Captcha: true });
 
   useEffect(() => { setMounted(true); }, []);
 
