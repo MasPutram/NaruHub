@@ -26,11 +26,22 @@ export async function GET() {
       }
     }
 
-    const history = (Array.isArray(hist) ? hist : [])
+    const parsedHistory = (Array.isArray(hist) ? hist : [])
       .map((s: string) => {
         try { return JSON.parse(s); } catch { return null; }
       })
       .filter(Boolean);
+
+    // Dedup by (jobId, event name, startedAt rounded to minute). Multiple
+    // accounts in the same server all report the same event — collapse
+    // those into a single history row and keep the earliest/first report.
+    const seen = new Set<string>();
+    const history = parsedHistory.filter((ev: any) => {
+      const key = `${ev.jobId || "?"}|${ev.name}|${Math.floor((ev.startedAt || 0) / 60)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 
     return NextResponse.json({ ok: true, event, history });
   } catch (e: any) {

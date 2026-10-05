@@ -123,9 +123,14 @@ export async function POST(req: NextRequest) {
         const prevRaw = await redis.get<string>(adEventKey());
         const prev = prevRaw ? (typeof prevRaw === "string" ? JSON.parse(prevRaw) : prevRaw) : null;
         await redis.set(adEventKey(), JSON.stringify(payload), { ex: AD_EVENT_TTL_S });
-        // Push to history list when this is a NEW event (different startedAt
-        // or different name than the one we had cached). Keep last N entries.
-        if (!prev || prev.name !== payload.name || prev.startedAt !== payload.startedAt) {
+        // Push to history list only when this is a genuinely new event. Many
+        // accounts in the same server all push the same event — gate on the
+        // (jobId, name) tuple so one server's event appears once, not once
+        // per reporter. Falls back to name+startedAt rounded to the minute
+        // for jobId-less reports.
+        const curKey = `${payload.jobId || "?"}|${payload.name}|${Math.floor(payload.startedAt / 60)}`;
+        const prevKey = prev ? `${prev.jobId || "?"}|${prev.name}|${Math.floor((prev.startedAt || 0) / 60)}` : null;
+        if (!prev || curKey !== prevKey) {
           try {
             await (redis as any).queuePush(AD_EVENT_HISTORY_KEY, JSON.stringify(payload), { ttl: 60 * 60 * 24 * 7, maxLen: AD_EVENT_HISTORY_MAX });
           } catch {}
