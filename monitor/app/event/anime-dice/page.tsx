@@ -25,6 +25,27 @@ interface EventsResponse {
   history?: ActiveEvent[];
 }
 
+interface ADAccount {
+  sourceAccount: string;
+  jobId?: string | null;
+  online?: boolean;
+  dice?: string | null;
+  rebirth?: number | null;
+}
+
+interface TermuxPackage {
+  package?: string;
+  username?: string;
+}
+
+interface TermuxDevice {
+  deviceId: string;
+  hostname?: string;
+  customName?: string;
+  packages?: TermuxPackage[];
+  status?: string;
+}
+
 const AD_PLACE_ID = 113290951185459;
 
 // Known events — color + accent per name so cards stay recognizable at a glance
@@ -60,13 +81,21 @@ function fmtAgo(ts: number): string {
 export default function AnimeDiceEventPage() {
   const [mounted, setMounted] = useState(false);
   const [data, setData] = useState<EventsResponse | null>(null);
+  const [accounts, setAccounts] = useState<ADAccount[]>([]);
+  const [devices, setDevices] = useState<TermuxDevice[]>([]);
   const [tick, setTick] = useState(0); // local 1s tick for countdown
 
   const fetchEvent = useCallback(async () => {
     try {
-      const res = await fetch("/api/anime-dice/events", { cache: "no-store" });
-      const body = await res.json();
-      setData(body);
+      const [eRes, aRes, dRes] = await Promise.all([
+        fetch("/api/anime-dice/events", { cache: "no-store" }),
+        fetch("/api/anime-dice/accounts", { cache: "no-store" }),
+        fetch("/api/termux/devices", { cache: "no-store" }),
+      ]);
+      const [eBody, aBody, dBody] = await Promise.all([eRes.json(), aRes.json(), dRes.json()]);
+      setData(eBody);
+      if (Array.isArray(aBody?.accounts)) setAccounts(aBody.accounts);
+      if (Array.isArray(dBody?.devices)) setDevices(dBody.devices);
     } catch {}
   }, []);
 
@@ -211,6 +240,9 @@ export default function AnimeDiceEventPage() {
           </div>
         )}
 
+        {/* Server Map — group online accounts by jobId */}
+        <ServerMap accounts={accounts} devices={devices} activeJobId={event?.jobId || null} />
+
         <div className="hist">
           <div className="hist-title">EVENT HISTORY <span>{history.length}</span></div>
           {history.length === 0 ? (
@@ -234,6 +266,87 @@ export default function AnimeDiceEventPage() {
         </div>
       </div>
     </>
+  );
+}
+
+function ServerMap({ accounts, devices, activeJobId }: { accounts: ADAccount[]; devices: TermuxDevice[]; activeJobId: string | null }) {
+  // Build username → device-name map
+  const deviceByUser = new Map<string, string>();
+  devices.forEach((d) => {
+    const label = d.customName || d.hostname || d.deviceId.slice(0, 8);
+    (d.packages || []).forEach((p) => {
+      if (p?.username) deviceByUser.set(p.username, label);
+    });
+  });
+
+  // Group accounts by jobId (only online, only with a jobId)
+  const groups = new Map<string, ADAccount[]>();
+  accounts.forEach((a) => {
+    if (!a.online) return;
+    const jid = a.jobId;
+    if (!jid) return;
+    const arr = groups.get(jid) || [];
+    arr.push(a);
+    groups.set(jid, arr);
+  });
+
+  // Sort: active-event server first, then by headcount desc
+  const entries = Array.from(groups.entries()).sort((a, b) => {
+    if (a[0] === activeJobId) return -1;
+    if (b[0] === activeJobId) return 1;
+    return b[1].length - a[1].length;
+  });
+
+  const [copied, setCopied] = useState<string | null>(null);
+  function copyTeleport(jobId: string) {
+    const script = `game:GetService("TeleportService"):TeleportToPlaceInstance(${AD_PLACE_ID}, "${jobId}", game.Players.LocalPlayer)`;
+    navigator.clipboard?.writeText(script);
+    setCopied(jobId);
+    setTimeout(() => setCopied((c) => (c === jobId ? null : c)), 2000);
+  }
+
+  return (
+    <div className="smap">
+      <div className="smap-title">
+        SERVER MAP <span>{entries.length} server &middot; {Array.from(groups.values()).reduce((s, a) => s + a.length, 0)} akun</span>
+      </div>
+      {entries.length === 0 ? (
+        <div className="smap-empty">Belum ada akun online dengan jobId tercatat.</div>
+      ) : (
+        <div className="smap-list">
+          {entries.map(([jobId, accs], idx) => {
+            const isActive = jobId === activeJobId;
+            return (
+              <div key={jobId} className={`smap-server ${isActive ? "active" : ""}`}>
+                <div className="ss-head">
+                  <div className="ss-title">
+                    <span className="ss-idx">Server #{idx + 1}</span>
+                    {isActive && <span className="ss-badge">EVENT HERE</span>}
+                  </div>
+                  <button
+                    className="ss-copy"
+                    onClick={() => copyTeleport(jobId)}
+                    title="Copy teleport script"
+                  >
+                    {copied === jobId ? "✓ Copied" : "\u{1F4CB} Copy Teleport"}
+                  </button>
+                </div>
+                <div className="ss-jobid">{jobId}</div>
+                <div className="ss-accs">
+                  {accs.map((a) => (
+                    <div key={a.sourceAccount} className="ss-acc">
+                      <span className="ss-acc-name">{a.sourceAccount}</span>
+                      <span className="ss-arrow">&rarr;</span>
+                      <span className="ss-acc-dev">{deviceByUser.get(a.sourceAccount) || "?"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -339,4 +452,35 @@ const styles = `
 .hr-dur { color: #71717a; font-weight: 700; font-family: var(--font-numbers), monospace; }
 .hr-ago { color: #71717a; font-weight: 600; margin-left: auto; }
 .hr-by { color: #94a3b8; font-weight: 700; font-size: 11px; }
+
+/* Server Map */
+.smap { margin-bottom: 24px; }
+.smap-title { font-size: 11px; font-weight: 800; color: #71717a; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.smap-title span { background: #1c1c2b; color: #cbd5e1; padding: 2px 10px; border-radius: 10px; font-size: 10px; font-weight: 700; letter-spacing: .3px; text-transform: none; }
+.smap-empty { color: #71717a; font-size: 12px; text-align: center; padding: 24px; background: #14141f; border: 1px dashed #262636; border-radius: 10px; }
+.smap-list { display: flex; flex-direction: column; gap: 10px; }
+.smap-server {
+  background: #14141f; border: 1px solid #262636; border-radius: 12px; padding: 14px 16px;
+}
+.smap-server.active {
+  border-color: #facc15;
+  background: linear-gradient(135deg, rgba(250,204,21,.06), #14141f);
+  box-shadow: 0 0 16px rgba(250,204,21,.15);
+}
+.ss-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.ss-title { display: flex; align-items: center; gap: 10px; }
+.ss-idx { font-size: 14px; font-weight: 800; color: #e8e8f0; }
+.ss-badge { background: #facc15; color: #0b0b14; font-size: 9px; font-weight: 900; padding: 3px 8px; border-radius: 4px; letter-spacing: .5px; }
+.ss-copy {
+  background: #262636; color: #e8e8f0; border: 1px solid #3f3f46;
+  font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+  font-family: inherit; transition: all .12s;
+}
+.ss-copy:hover { background: #3f3f46; border-color: #52525b; }
+.ss-jobid { font-size: 10px; color: #71717a; font-family: var(--font-numbers), monospace; margin-bottom: 10px; word-break: break-all; }
+.ss-accs { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid #262636; }
+.ss-acc { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 0; }
+.ss-acc-name { font-weight: 800; color: #e8e8f0; min-width: 120px; }
+.ss-arrow { color: #52525b; font-weight: 700; }
+.ss-acc-dev { color: #a78bfa; font-weight: 700; font-family: var(--font-numbers), monospace; }
 `;
