@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Monitoring Anime Dice v2.0.0 (ultra-lightweight)
+-- NaruHub | Monitoring Anime Dice v2.1.0 (ultra-lightweight)
 -- Monitoring only -- no auto-roll/sell/equip, baca data → POST ke dashboard.
 
 ------------------------------------------------------------
@@ -172,14 +172,10 @@ end
 if not GRANTED_VIA_GLOBAL then return end
 
 ------------------------------------------------------------
--- NaruUI (loaded from GitHub)
+-- Services
 ------------------------------------------------------------
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
-
-local httpGet = game.HttpGet or HttpGet
-local _naruSrc = httpGet(game, "https://raw.githubusercontent.com/MasPutram/NaruHub/main/NaruUI/NaruUI.luau?v=" .. tostring(tick()))
-local NaruUI = loadstring(_naruSrc)()
 
 ------------------------------------------------------------
 -- Game data access
@@ -782,88 +778,53 @@ local function reportToMonitor()
 end
 
 ------------------------------------------------------------
--- NaruUI Window (new API — all config in NaruUI.New)
+-- Minimal status GUI
 ------------------------------------------------------------
-local Fluent = NaruUI.New({
-	ConfigPrefix = "AnimeDice",
-	BrandColor = Color3.fromRGB(255, 100, 100),
-})
-
-local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v2.0.0",
-	Badge = "MONITOR",
-	TabWidth = 0,
-	Size = UDim2.fromOffset(380, 300),
-	AutoStartMinimized = false,
-})
-
-local Tab = Window:AddTab({ Title = "" })
-local section = Tab:AddSection(LocalPlayer.Name, { NoCollapse = true })
-
-local usernamePara = section:AddParagraph({
-	Title = "Username",
-	Content = LocalPlayer.Name,
-	ContentSize = 14,
-	Center = true,
-})
-
+local statusLabel
 do
-	local myName = LocalPlayer.Name
-	local myPrefix = myName:match("^(%D+)%d+$")
+	local container
+	pcall(function() container = gethui and gethui() end)
+	container = container or game:GetService("CoreGui")
 
-	local function refreshUsernameList()
-		if not myPrefix then
-			usernamePara:SetContent(myName)
-			return
-		end
-		local matches = {}
-		for _, p in ipairs(Players:GetPlayers()) do
-			local prefix, num = p.Name:match("^(%D+)(%d+)$")
-			if prefix == myPrefix then
-				table.insert(matches, { name = p.Name, num = tonumber(num) or 0 })
-			end
-		end
-		if #matches <= 1 then
-			usernamePara:SetContent(myName)
-			return
-		end
-		table.sort(matches, function(a, b) return a.num < b.num end)
-		local names = {}
-		for _, m in ipairs(matches) do
-			local tag = m.name == myName and " ← ini" or ""
-			table.insert(names, m.name .. tag)
-		end
-		usernamePara:SetContent(table.concat(names, "\n"))
-	end
+	local sg = Instance.new("ScreenGui")
+	sg.Name = "NaruHubAD"
+	sg.ResetOnSpawn = false
+	sg.DisplayOrder = 9998
+	sg.IgnoreGuiInset = true
+	sg.Parent = container
 
-	Players.PlayerAdded:Connect(function() task.wait(0.5) refreshUsernameList() end)
-	Players.PlayerRemoving:Connect(function() task.wait(0.5) refreshUsernameList() end)
-	task.spawn(refreshUsernameList)
+	statusLabel = Instance.new("TextLabel")
+	statusLabel.Text = "[AD] " .. LocalPlayer.Name .. " — ..."
+	statusLabel.Font = Enum.Font.RobotoMono
+	statusLabel.TextSize = 11
+	statusLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
+	statusLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
+	statusLabel.BackgroundTransparency = 0.3
+	statusLabel.Size = UDim2.new(0, 260, 0, 20)
+	statusLabel.Position = UDim2.new(0, 6, 1, -26)
+	statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+	statusLabel.BorderSizePixel = 0
+	statusLabel.Parent = sg
+	Instance.new("UICorner", statusLabel).CornerRadius = UDim.new(0, 4)
+	Instance.new("UIPadding", statusLabel).PaddingLeft = UDim.new(0, 6)
 end
 
-local monitorPara = section:AddParagraph({
-	Title = "Monitor",
-	Content = "Starting...",
-	ContentSize = 14,
-	Center = true,
-})
-
 ------------------------------------------------------------
--- Auto-start monitoring loop
+-- Monitoring loop
 ------------------------------------------------------------
-task.spawn(function()
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		local ok, err = reportToMonitor()
-		local ping = 0
-		pcall(function()
-			ping = math.floor((LocalPlayer:GetNetworkPing() or 0) * 1000)
-		end)
-		local pingStr = ping > 0 and (" " .. ping .. "ms") or ""
-		if ok then
-			monitorPara:SetContent("OK" .. pingStr)
-		else
-			monitorPara:SetContent("Gagal" .. pingStr)
-		end
-		task.wait(30)
+while statusLabel and statusLabel.Parent do
+	local ok, err = reportToMonitor()
+	local ping = 0
+	pcall(function()
+		ping = math.floor((LocalPlayer:GetNetworkPing() or 0) * 1000)
+	end)
+	local pingStr = ping > 0 and (" " .. ping .. "ms") or ""
+	if ok then
+		statusLabel.Text = "[AD] " .. LocalPlayer.Name .. " — OK" .. pingStr
+		statusLabel.TextColor3 = Color3.fromRGB(120, 220, 140)
+	else
+		statusLabel.Text = "[AD] " .. LocalPlayer.Name .. " — Gagal" .. pingStr
+		statusLabel.TextColor3 = Color3.fromRGB(248, 113, 113)
 	end
-end)
+	task.wait(30)
+end
