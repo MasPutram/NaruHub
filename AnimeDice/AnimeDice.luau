@@ -241,7 +241,7 @@ titleBar.BorderSizePixel = 0
 titleBar.Parent = mainFrame
 
 local titleLabel = Instance.new("TextLabel")
-titleLabel.Text = "NaruHub | Anime Dice v2.4.0"
+titleLabel.Text = "NaruHub | Anime Dice v2.4.1"
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 13
 titleLabel.TextColor3 = INK
@@ -444,40 +444,29 @@ do
 end
 
 ------------------------------------------------------------
--- Username list detection
+-- Server player list (all players in same JobId)
 ------------------------------------------------------------
 do
 	local myName = LocalPlayer.Name
-	local myPrefix = myName:match("^(%D+)%d+$")
 
-	local function refreshUsernameList()
-		if not myPrefix then
+	local function refreshPlayerList()
+		local all = Players:GetPlayers()
+		if #all <= 1 then
 			setUserContent(myName)
 			return
 		end
-		local matches = {}
-		for _, p in ipairs(Players:GetPlayers()) do
-			local prefix, num = p.Name:match("^(%D+)(%d+)$")
-			if prefix == myPrefix then
-				table.insert(matches, { name = p.Name, num = tonumber(num) or 0 })
-			end
-		end
-		if #matches <= 1 then
-			setUserContent(myName)
-			return
-		end
-		table.sort(matches, function(a, b) return a.num < b.num end)
+		table.sort(all, function(a, b) return a.Name < b.Name end)
 		local names = {}
-		for _, m in ipairs(matches) do
-			local tag = m.name == myName and " ← ini" or ""
-			table.insert(names, m.name .. tag)
+		for _, p in ipairs(all) do
+			local tag = p.Name == myName and " ← ini" or ""
+			table.insert(names, p.Name .. tag)
 		end
 		setUserContent(table.concat(names, "\n"))
 	end
 
-	Players.PlayerAdded:Connect(function() task.wait(0.5) refreshUsernameList() end)
-	Players.PlayerRemoving:Connect(function() task.wait(0.5) refreshUsernameList() end)
-	task.spawn(refreshUsernameList)
+	Players.PlayerAdded:Connect(function() task.wait(0.5) refreshPlayerList() end)
+	Players.PlayerRemoving:Connect(function() task.wait(0.5) refreshPlayerList() end)
+	task.spawn(refreshPlayerList)
 end
 
 ------------------------------------------------------------
