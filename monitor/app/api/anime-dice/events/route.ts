@@ -16,12 +16,14 @@ export async function GET() {
       try {
         event = typeof raw === "string" ? JSON.parse(raw) : raw;
       } catch {}
-      // Recompute remaining server-side so the UI doesn't have to trust the
-      // reporter's stale value when it polls again.
+      // Recompute remaining from startedAt (fixed) instead of remaining
+      // (which the client re-reports with its own clock drift). A new
+      // heartbeat from a different account used to make the countdown jump
+      // forward or backward depending on which client reported last.
       if (event && event.startedAt && event.duration) {
         const now = Math.floor(Date.now() / 1000);
-        const elapsed = Math.max(0, now - (event.reportedAt || now));
-        event.remaining = Math.max(0, (event.remaining || 0) - elapsed);
+        const elapsed = Math.max(0, now - event.startedAt);
+        event.remaining = Math.max(0, event.duration - elapsed);
         if (event.remaining <= 0) event = null;
       }
     }

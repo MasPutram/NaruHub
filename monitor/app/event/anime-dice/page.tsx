@@ -121,11 +121,12 @@ export default function AnimeDiceEventPage() {
   const history = data?.history || [];
 
   // Client-side countdown — reduce remaining by seconds elapsed since fetch
-  const serverReportedAt = event?.reportedAt || 0;
-  const localElapsed = serverReportedAt
-    ? Math.max(0, Math.floor(Date.now() / 1000) - serverReportedAt)
+  // Anchor countdown to startedAt (fixed Roblox server time) + duration.
+  // Immune to client/report clock drift — a new heartbeat with slightly
+  // different remaining won't bump the on-screen countdown forward or back.
+  const remaining = event && event.startedAt && event.duration
+    ? Math.max(0, event.duration - (Math.floor(Date.now() / 1000) - event.startedAt))
     : 0;
-  const remaining = event ? Math.max(0, (event.remaining || 0) - localElapsed) : 0;
   const progress = event && event.duration
     ? Math.min(100, Math.max(0, ((event.duration - remaining) / event.duration) * 100))
     : 0;
