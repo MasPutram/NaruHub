@@ -327,22 +327,28 @@ return (function()
 			-- so mobile menu/chat/backpack icons don't steal taps.
 			--==============================================================
 			do
-				local coreGui = game:GetService("CoreGui")
-				local hui = coreGui
-				for _, o in ipairs(hui:GetChildren()) do
-					if o.Name == (configPrefix .. "Launcher") then
-						pcall(function() o:Destroy() end)
-					end
-				end
-				-- Also clean stale copies under gethui() (older versions)
-				local altHui = (gethui and gethui()) or nil
-				if altHui and altHui ~= coreGui then
-					for _, o in ipairs(altHui:GetChildren()) do
-						if o.Name == (configPrefix .. "Launcher") then
-							pcall(function() o:Destroy() end)
+				local coreGui
+				pcall(function() coreGui = game:GetService("CoreGui") end)
+				local altHui
+				pcall(function() altHui = gethui and gethui() end)
+				local hui = altHui or coreGui
+
+				pcall(function()
+					if hui then
+						for _, o in ipairs(hui:GetChildren()) do
+							if o.Name == (configPrefix .. "Launcher") then
+								pcall(function() o:Destroy() end)
+							end
 						end
 					end
-				end
+					if altHui and coreGui and altHui ~= coreGui then
+						for _, o in ipairs(coreGui:GetChildren()) do
+							if o.Name == (configPrefix .. "Launcher") then
+								pcall(function() o:Destroy() end)
+							end
+						end
+					end
+				end)
 
 				local launcher = Instance.new("ScreenGui")
 				launcher.Name = configPrefix .. "Launcher"
@@ -350,10 +356,13 @@ return (function()
 				launcher.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 				launcher.IgnoreGuiInset = true
 				launcher.DisplayOrder = 2_000_000_000
-				launcher.Enabled = true -- ALWAYS visible now (both min & restore)
+				launcher.Enabled = true
 				pcall(function() launcher.Parent = hui end)
 				if not launcher.Parent then
-					launcher.Parent = altHui or game.Players.LocalPlayer:WaitForChild("PlayerGui")
+					pcall(function() launcher.Parent = coreGui end)
+				end
+				if not launcher.Parent then
+					launcher.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
 				end
 
 				local logoBtn = Instance.new("ImageButton")
@@ -931,7 +940,10 @@ return (function()
 						local selected = {}
 						local poolSize = dcfg.PoolSize or 100
 
-						local listGui = uiNew("ScreenGui", { Name = configPrefix .. "Dropdown", ResetOnSpawn = false, DisplayOrder = 200 }, (gethui and gethui()) or game:GetService("CoreGui"))
+						local ddParent
+						pcall(function() ddParent = gethui and gethui() end)
+						if not ddParent then pcall(function() ddParent = game:GetService("CoreGui") end) end
+						local listGui = uiNew("ScreenGui", { Name = configPrefix .. "Dropdown", ResetOnSpawn = false, DisplayOrder = 200 }, ddParent)
 						local backdrop = uiNew("TextButton", {
 							Visible = false,
 							Size = UDim2.fromScale(1, 1),
