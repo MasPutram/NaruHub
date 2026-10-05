@@ -31,6 +31,8 @@ interface ADAccount {
   online?: boolean;
   dice?: string | null;
   rebirth?: number | null;
+  serverPlayerCount?: number | null;
+  serverMaxPlayers?: number | null;
 }
 
 interface TermuxPackage {
@@ -347,6 +349,23 @@ function ServerMap({ accounts, devices, activeJobId }: { accounts: ADAccount[]; 
                 <div className="ss-head">
                   <div className="ss-title">
                     <span className="ss-idx">Server #{idx + 1}</span>
+                    {(() => {
+                      // Any of our accounts in this server reports the server-wide
+                      // player count; they're all in the same server so take the max
+                      // (freshest = most accurate against race conditions).
+                      const counts = accs.map((a) => a.serverPlayerCount || 0).filter((n) => n > 0);
+                      const maxCounts = accs.map((a) => a.serverMaxPlayers || 0).filter((n) => n > 0);
+                      const total = counts.length ? Math.max(...counts) : 0;
+                      const max = maxCounts.length ? Math.max(...maxCounts) : 0;
+                      if (!total) return null;
+                      const ours = accs.length;
+                      const nearFull = max > 0 && total / max >= 0.8;
+                      return (
+                        <span className={`ss-players ${nearFull ? "full" : ""}`} title={`${ours} akun kita + ${total - ours} player lain`}>
+                          &#x1F465; {total}{max ? `/${max}` : ""}
+                        </span>
+                      );
+                    })()}
                     {isActive && <span className="ss-badge">EVENT HERE</span>}
                   </div>
                   <button
@@ -519,6 +538,12 @@ const styles = `
 .ss-title { display: flex; align-items: center; gap: 10px; }
 .ss-idx { font-size: 14px; font-weight: 800; color: #e8e8f0; }
 .ss-badge { background: #facc15; color: #0b0b14; font-size: 9px; font-weight: 900; padding: 3px 8px; border-radius: 4px; letter-spacing: .5px; }
+.ss-players {
+  background: rgba(34,211,238,.12); color: #22d3ee;
+  font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid rgba(34,211,238,.3); font-family: var(--font-numbers), monospace;
+}
+.ss-players.full { background: rgba(239,68,68,.12); color: #ef4444; border-color: rgba(239,68,68,.4); }
 .ss-copy {
   background: #262636; color: #e8e8f0; border: 1px solid #3f3f46;
   font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 6px; cursor: pointer;

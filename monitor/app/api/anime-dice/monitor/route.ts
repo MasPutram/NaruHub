@@ -77,6 +77,8 @@ export async function POST(req: NextRequest) {
       deviceId: req.headers.get("x-device-id") || "unknown",
       jobId: data.jobId || null,
       placeId: data.placeId || null,
+      serverPlayerCount: Number(data.serverPlayerCount) || null,
+      serverMaxPlayers: Number(data.serverMaxPlayers) || null,
     };
 
     const detail = {
