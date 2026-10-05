@@ -241,7 +241,7 @@ titleBar.BorderSizePixel = 0
 titleBar.Parent = mainFrame
 
 local titleLabel = Instance.new("TextLabel")
-titleLabel.Text = "NaruHub | Anime Dice v2.4.1"
+titleLabel.Text = "NaruHub | Anime Dice v2.4.2"
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 13
 titleLabel.TextColor3 = INK
@@ -444,29 +444,73 @@ do
 end
 
 ------------------------------------------------------------
--- Server player list (all players in same JobId)
+-- My accounts in this server (fetch from dashboard API)
 ------------------------------------------------------------
 do
 	local myName = LocalPlayer.Name
+	local myAccounts = {}
+
+	local function fetchMyAccounts()
+		local ok, result = pcall(function()
+			local res = request({
+				Url = SERVER_BASE_URL .. "/api/anime-dice/accounts",
+				Method = "GET",
+				Headers = { ["Content-Type"] = "application/json" },
+			})
+			if res and res.Body then
+				local parsed = game:GetService("HttpService"):JSONDecode(res.Body)
+				if parsed and parsed.accounts then
+					local set = {}
+					for _, acc in ipairs(parsed.accounts) do
+						if acc.sourceAccount then
+							set[acc.sourceAccount] = true
+						end
+					end
+					return set
+				end
+			end
+			return {}
+		end)
+		myAccounts = ok and result or {}
+	end
 
 	local function refreshPlayerList()
-		local all = Players:GetPlayers()
-		if #all <= 1 then
+		local names = {}
+		for _, p in ipairs(Players:GetPlayers()) do
+			if myAccounts[p.Name] then
+				local tag = p.Name == myName and " ← ini" or ""
+				table.insert(names, p.Name .. tag)
+			end
+		end
+		if #names == 0 then
 			setUserContent(myName)
 			return
 		end
-		table.sort(all, function(a, b) return a.Name < b.Name end)
-		local names = {}
-		for _, p in ipairs(all) do
-			local tag = p.Name == myName and " ← ini" or ""
-			table.insert(names, p.Name .. tag)
-		end
+		table.sort(names)
 		setUserContent(table.concat(names, "\n"))
 	end
 
-	Players.PlayerAdded:Connect(function() task.wait(0.5) refreshPlayerList() end)
-	Players.PlayerRemoving:Connect(function() task.wait(0.5) refreshPlayerList() end)
-	task.spawn(refreshPlayerList)
+	task.spawn(function()
+		fetchMyAccounts()
+		refreshPlayerList()
+	end)
+
+	Players.PlayerAdded:Connect(function()
+		task.wait(0.5)
+		refreshPlayerList()
+	end)
+	Players.PlayerRemoving:Connect(function()
+		task.wait(0.5)
+		refreshPlayerList()
+	end)
+
+	task.spawn(function()
+		while GUI_ALIVE and screenGui and screenGui.Parent do
+			task.wait(60)
+			fetchMyAccounts()
+			refreshPlayerList()
+		end
+	end)
 end
 
 ------------------------------------------------------------
