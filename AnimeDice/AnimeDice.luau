@@ -241,7 +241,7 @@ titleBar.BorderSizePixel = 0
 titleBar.Parent = mainFrame
 
 local titleLabel = Instance.new("TextLabel")
-titleLabel.Text = "NaruHub | Anime Dice v2.4.2"
+titleLabel.Text = "NaruHub | Anime Dice v2.4.3"
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 13
 titleLabel.TextColor3 = INK
@@ -444,13 +444,14 @@ do
 end
 
 ------------------------------------------------------------
--- My accounts in this server (fetch from dashboard API)
+-- My accounts in this server (same JobId from dashboard API)
 ------------------------------------------------------------
 do
 	local myName = LocalPlayer.Name
-	local myAccounts = {}
+	local currentJobId = game.JobId
+	local sameServerAccounts = {}
 
-	local function fetchMyAccounts()
+	local function fetchSameServerAccounts()
 		local ok, result = pcall(function()
 			local res = request({
 				Url = SERVER_BASE_URL .. "/api/anime-dice/accounts",
@@ -462,7 +463,7 @@ do
 				if parsed and parsed.accounts then
 					local set = {}
 					for _, acc in ipairs(parsed.accounts) do
-						if acc.sourceAccount then
+						if acc.sourceAccount and acc.jobId == currentJobId then
 							set[acc.sourceAccount] = true
 						end
 					end
@@ -471,18 +472,16 @@ do
 			end
 			return {}
 		end)
-		myAccounts = ok and result or {}
+		sameServerAccounts = ok and result or {}
 	end
 
 	local function refreshPlayerList()
 		local names = {}
-		for _, p in ipairs(Players:GetPlayers()) do
-			if myAccounts[p.Name] then
-				local tag = p.Name == myName and " ← ini" or ""
-				table.insert(names, p.Name .. tag)
-			end
+		for name in pairs(sameServerAccounts) do
+			local tag = name == myName and " ← ini" or ""
+			table.insert(names, name .. tag)
 		end
-		if #names == 0 then
+		if #names <= 1 then
 			setUserContent(myName)
 			return
 		end
@@ -491,23 +490,15 @@ do
 	end
 
 	task.spawn(function()
-		fetchMyAccounts()
-		refreshPlayerList()
-	end)
-
-	Players.PlayerAdded:Connect(function()
-		task.wait(0.5)
-		refreshPlayerList()
-	end)
-	Players.PlayerRemoving:Connect(function()
-		task.wait(0.5)
+		task.wait(5)
+		fetchSameServerAccounts()
 		refreshPlayerList()
 	end)
 
 	task.spawn(function()
 		while GUI_ALIVE and screenGui and screenGui.Parent do
-			task.wait(60)
-			fetchMyAccounts()
+			task.wait(35)
+			fetchSameServerAccounts()
 			refreshPlayerList()
 		end
 	end)
