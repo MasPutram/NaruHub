@@ -73,15 +73,77 @@ export async function POST(req: NextRequest) {
       } catch {}
     }
 
-    // Spread: assign each launching clone a DIFFERENT Roblox server so they
-    // don't all pile into one (they'd steal from each other -> less income).
-    // Opt-in via body.spread. Best-effort: excludes servers this device's own
-    // clones already sit in (presence) + assigns distinct within this batch;
-    // if the server list can't be fetched or runs out, those packages keep
-    // their plain place target (random server) -- never worse than before.
-    const spread = body.spread === true;
+    // Server-assignment mode. Mutually exclusive:
+    //   spread: each clone gets a DIFFERENT populated server (anti-pile)
+    //   share : all clones get the SAME populated server (gang up / server hop)
+    // Default (both false): plain MAIN launch -> Roblox picks random.
+    const spread = body.spread === true && body.share !== true;
+    const share = body.share === true;
     const assigned: Record<string, string> = {};
-    if (spread) {
+
+    if (share) {
+      // Pick ONE server per placeId; every package of that placeId joins it.
+      const byPlace: Record<string, string[]> = {};
+      for (const pkg of packageNames) {
+        const m = (targets[pkg] || "").match(/placeId=(\d+)/);
+        if (m) (byPlace[m[1]] ||= []).push(pkg);
+      }
+      for (const [placeId, pkgs] of Object.entries(byPlace)) {
+        let chosen = "";
+        // Prefer a jobId this device already sits in (fresh presence) -- hops
+        // into an existing clone's server. Otherwise pick a populated public
+        // server (same rank as spread, just take the first).
+        try {
+          const presPrefix = `presence:${deviceId}:`;
+          let cur = "0";
+          const keys: string[] = [];
+          do {
+            const [next, ks] = await redis.scan(cur, { match: `${presPrefix}*`, count: 100 });
+            cur = next;
+            keys.push(...ks);
+          } while (cur !== "0");
+          if (keys.length > 0) {
+            const vals = await redis.mget(...keys);
+            const now = Date.now();
+            for (const v of vals) {
+              if (!v) continue;
+              try {
+                const o = JSON.parse(v as string);
+                if (String(o.placeId) === placeId && o.jobId && o.ts && now - o.ts < 600 * 1000) {
+                  chosen = o.jobId;
+                  break;
+                }
+              } catch {}
+            }
+          }
+        } catch {}
+        if (!chosen) {
+          try {
+            const url = `https://games.roblox.com/v1/games/${placeId}/servers/Public?sortOrder=Asc&limit=100`;
+            const ctrl = new AbortController();
+            const to = setTimeout(() => ctrl.abort(), 6000);
+            const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
+            clearTimeout(to);
+            if (res.ok) {
+              const data = await res.json();
+              const servers: any[] = Array.isArray(data?.data) ? data.data : [];
+              const best = servers
+                .filter((s) => s && s.id && typeof s.playing === "number" && s.playing < (s.maxPlayers || 999))
+                .sort((a, b) => {
+                  const ap = (a.playing || 0) >= 5 ? 0 : 1;
+                  const bp = (b.playing || 0) >= 5 ? 0 : 1;
+                  if (ap !== bp) return ap - bp;
+                  return (a.ping || 9999) - (b.ping || 9999);
+                })[0];
+              if (best?.id) chosen = String(best.id);
+            }
+          } catch {}
+        }
+        if (chosen) {
+          for (const pkg of pkgs) assigned[pkg] = chosen;
+        }
+      }
+    } else if (spread) {
       const byPlace: Record<string, string[]> = {};
       for (const pkg of packageNames) {
         const m = (targets[pkg] || "").match(/placeId=(\d+)/);
@@ -233,7 +295,9 @@ export async function POST(req: NextRequest) {
       maxLen: TERMUX_COMMAND_LOG_MAX,
     });
 
-    return NextResponse.json({ ok: true, commands, spreadCount: Object.keys(assigned).length, stalePreviousCommands });
+    const assignedCount = Object.keys(assigned).length;
+    const sharedJobId = share && assignedCount > 0 ? Object.values(assigned)[0] : null;
+    return NextResponse.json({ ok: true, commands, spreadCount: spread ? assignedCount : 0, sharedCount: share ? assignedCount : 0, sharedJobId, stalePreviousCommands });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }

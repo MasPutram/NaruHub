@@ -141,6 +141,7 @@ export default function DeviceDetailPage() {
   const [gridModalOpen, setGridModalOpen] = useState(false);
   const [launchingBatch, setLaunchingBatch] = useState(false);
   const [spreadServers, setSpreadServers] = useState(true);
+  const [shareServer, setShareServer] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState("");
@@ -469,13 +470,13 @@ export default function DeviceDetailPage() {
       const res = await fetch("/api/device-control/launch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId, packageNames: list.map((p) => p.pkg), cols: g.cols, rows: g.rows, resize, launchDelay, targets, spread: spreadServers }),
+        body: JSON.stringify({ deviceId, packageNames: list.map((p) => p.pkg), cols: g.cols, rows: g.rows, resize, launchDelay, targets, spread: spreadServers && !shareServer, share: shareServer }),
       });
       const data = await res.json();
       setToast(
         data.ok
           ? `Launch queued for ${list.length} package${list.length !== 1 ? "s" : ""}` +
-            (spreadServers && data.spreadCount ? ` — spread ke ${data.spreadCount} server` : "")
+            (shareServer && data.sharedCount ? ` — share: ${data.sharedCount} akun ke 1 server${data.sharedJobId ? ` (${String(data.sharedJobId).slice(0, 8)}…)` : ""}` : (spreadServers && data.spreadCount ? ` — spread ke ${data.spreadCount} server` : ""))
           : `Gagal: ${data.error}`
       );
       if (data.ok) fetchDevice();
@@ -1047,8 +1048,12 @@ export default function DeviceDetailPage() {
                   {savingPolicy ? "Saving..." : `Auto Grid (${selectedPkgs.length})`}
                 </button>
                 <label className="qc-switch" style={{ display: "inline-flex", marginRight: 4 }} title="Sebar tiap clone ke server Roblox yang beda (anti numpuk satu server)">
-                  <input type="checkbox" checked={spreadServers} onChange={(e) => setSpreadServers(e.target.checked)} />
+                  <input type="checkbox" checked={spreadServers && !shareServer} onChange={(e) => { setSpreadServers(e.target.checked); if (e.target.checked) setShareServer(false); }} />
                   <span style={{ fontSize: 12 }}>Spread server</span>
+                </label>
+                <label className="qc-switch" style={{ display: "inline-flex", marginRight: 4 }} title="Semua clone selected join ke SATU server yang sama (populated public server, atau server yg sudah ada clone kita di dalamnya)">
+                  <input type="checkbox" checked={shareServer} onChange={(e) => { setShareServer(e.target.checked); if (e.target.checked) setSpreadServers(false); }} />
+                  <span style={{ fontSize: 12 }}>Share server</span>
                 </label>
                 <button
                   className="btn primary"
