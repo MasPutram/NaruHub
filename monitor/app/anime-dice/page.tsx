@@ -46,6 +46,9 @@ interface BackpackItem {
   amount: number;
   kind: string;
   rarity: string;
+  slot?: string | null;
+  tier?: string | number | null;
+  image?: number | string | null;
 }
 
 interface SlotData {
@@ -907,6 +910,7 @@ function CombinedTowerTab({ units }: { units: (TowerUnit & { owner: string })[] 
 function CombinedBackpackTab({ items }: { items: (BackpackItem & { owner: string })[] }) {
   const [filter, setFilter] = useState("");
   const [cat, setCat] = useState("All");
+  const [mode, setMode] = useState<"summary" | "list">("summary");
 
   const categories = ["All", ...Array.from(new Set(items.map((it) => getCategory(it.kind)))).sort()];
 
@@ -914,12 +918,49 @@ function CombinedBackpackTab({ items }: { items: (BackpackItem & { owner: string
     if (cat !== "All" && getCategory(it.kind) !== cat) return false;
     if (filter.trim() && !it.name.toLowerCase().includes(filter.toLowerCase()) && !it.owner.toLowerCase().includes(filter.toLowerCase())) return false;
     return true;
-  }).sort((a, b) => backpackSortKey(a.name) - backpackSortKey(b.name));
+  });
+  const filteredList = [...filtered].sort((a, b) => backpackSortKey(a.name) - backpackSortKey(b.name));
+
+  // Aggregate: group by name, sum amount across accounts, track owners
+  const aggMap = new Map<string, { name: string; rarity: string; kind: string; slot?: string | null; total: number; owners: Set<string> }>();
+  filtered.forEach((it) => {
+    const key = it.name;
+    const prev = aggMap.get(key);
+    if (prev) {
+      prev.total += it.amount || 0;
+      prev.owners.add(it.owner);
+    } else {
+      aggMap.set(key, {
+        name: it.name,
+        rarity: it.rarity,
+        kind: it.kind,
+        slot: it.slot,
+        total: it.amount || 0,
+        owners: new Set([it.owner]),
+      });
+    }
+  });
+  // Group aggregated items by kind
+  const byKind = new Map<string, typeof aggMap extends Map<string, infer V> ? V[] : never>();
+  aggMap.forEach((v) => {
+    const g = getCategory(v.kind);
+    const arr = byKind.get(g) || [];
+    arr.push(v);
+    byKind.set(g, arr);
+  });
+  const kindEntries = Array.from(byKind.entries()).map(([k, arr]) => {
+    arr.sort((a, b) => b.total - a.total);
+    return { kind: k, items: arr, totalItems: arr.reduce((s, x) => s + x.total, 0) };
+  }).sort((a, b) => b.totalItems - a.totalItems);
 
   return (
     <>
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
-        <input className="search-input" style={{ width: 220 }} placeholder="Search items, accounts..." value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <div className="pill-tabs">
+          <button className={`ptab ${mode === "summary" ? "active" : ""}`} onClick={() => setMode("summary")}>FLEET SUMMARY</button>
+          <button className={`ptab ${mode === "list" ? "active" : ""}`} onClick={() => setMode("list")}>PER OWNER</button>
+        </div>
+        <input className="search-input" style={{ width: 220 }} placeholder={mode === "summary" ? "Search items..." : "Search items, accounts..."} value={filter} onChange={(e) => setFilter(e.target.value)} />
         <div className="bp-cats">
           {categories.map((c) => (
             <button key={c} className={`bp-cat ${cat === c ? "active" : ""}`} onClick={() => setCat(c)}>
@@ -929,9 +970,38 @@ function CombinedBackpackTab({ items }: { items: (BackpackItem & { owner: string
         </div>
       </div>
 
-      {filtered.length > 0 ? (
+      {mode === "summary" ? (
+        kindEntries.length === 0 ? (
+          <div className="detail-empty">{items.length === 0 ? "No backpack item data available." : "No items match your filter."}</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {kindEntries.map((grp) => (
+              <div key={grp.kind}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: "var(--accent)", letterSpacing: 1, textTransform: "uppercase", marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                  {grp.kind}
+                  <span style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)", padding: "2px 8px", borderRadius: 4, fontSize: 9 }}>{grp.items.length} tipe · {grp.totalItems.toLocaleString()} total</span>
+                </div>
+                <div className="bp-grid">
+                  {grp.items.map((it, i) => (
+                    <div key={i} className="bp-card">
+                      <div className="bp-top">
+                        <span className="bp-name">{it.name}</span>
+                        <span className="bp-amount" style={{ background: "rgba(52,211,153,.1)", color: "var(--green)" }}>×{it.total.toLocaleString()}</span>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span className="bp-kind" style={{ color: rarityColor(it.rarity) }}>{it.rarity}{it.slot ? ` · ${it.slot}` : ""}</span>
+                        <span style={{ fontSize: 9, fontWeight: 700, color: "var(--cyan)" }}>{it.owners.size} akun</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : filteredList.length > 0 ? (
         <div className="bp-grid">
-          {filtered.map((it, i) => (
+          {filteredList.map((it, i) => (
             <div key={i} className="bp-card">
               <div className="bp-top">
                 <span className="bp-name">{it.name}</span>
