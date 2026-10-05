@@ -343,7 +343,7 @@ local function reportCatalog()
 		local payload = {
 			game = "AnimeDice",
 			sourceAccount = LocalPlayer.Name,
-			deviceName = DEVICE_NAME,
+			deviceMap = deviceUserMap,
 			money = X.Money or 0,
 			rolls = X.Rolls or 0,
 			rebirth = X.Rebirth or 0,
@@ -414,16 +414,19 @@ local Window = Fluent:CreateWindow({
 })
 
 local Tab = Window:AddTab({ Title = "" })
-local sectionTitle = DEVICE_NAME
-	and (LocalPlayer.Name .. "  ⟶  " .. DEVICE_NAME)
-	or LocalPlayer.Name
-local section = Tab:AddSection(sectionTitle, { NoCollapse = true })
+local section = Tab:AddSection(LocalPlayer.Name, { NoCollapse = true })
 
 local statusPara = section:AddParagraph({
 	Title = "Status",
 	Content = "Starting...",
 	ContentSize = 13,
 	Center = true,
+})
+
+local deviceMapPara = section:AddParagraph({
+	Title = "Device Map",
+	Content = "Detecting...",
+	ContentSize = 12,
 })
 
 local statsPara = section:AddParagraph({
@@ -440,6 +443,20 @@ local topUnitsPara = section:AddParagraph({
 
 local function buildInventoryDisplay()
 	local units, backpack = collectCatalog()
+
+	pcall(function()
+		deviceUserMap = buildDeviceMap()
+		if next(deviceUserMap) then
+			local lines = {}
+			for username, dname in pairs(deviceUserMap) do
+				table.insert(lines, username .. "  ⟶  " .. dname)
+			end
+			table.sort(lines)
+			deviceMapPara:SetContent(table.concat(lines, "\n"))
+		else
+			deviceMapPara:SetContent("No matches in this server")
+		end
+	end)
 
 	local totalIncome = 0
 	for _, u in ipairs(units) do
