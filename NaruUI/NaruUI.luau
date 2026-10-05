@@ -109,12 +109,16 @@ return (function()
 		end
 
 		function Fluent:CreateWindow(wcfg)
+			local guiParent
+			pcall(function() guiParent = gethui and gethui() end)
+			guiParent = guiParent or game:GetService("CoreGui")
+
 			local screenGui = uiNew("ScreenGui", {
 				Name = (wcfg.GuiName or configPrefix) .. "GUI",
 				ResetOnSpawn = false,
 				ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 				DisplayOrder = 100,
-			}, (gethui and gethui()) or game:GetService("CoreGui"))
+			}, guiParent)
 			self.GUI = screenGui
 
 			local size = wcfg.Size or UDim2.fromOffset(720, 480)
