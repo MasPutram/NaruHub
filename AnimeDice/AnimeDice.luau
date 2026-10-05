@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Monitoring Anime Dice v2.1.0 (ultra-lightweight)
+-- NaruHub | Monitoring Anime Dice v2.1.1 (ultra-lightweight)
 -- Monitoring only -- no auto-roll/sell/equip, baca data → POST ke dashboard.
 
 ------------------------------------------------------------
@@ -795,18 +795,19 @@ do
 
 	statusLabel = Instance.new("TextLabel")
 	statusLabel.Text = "[AD] " .. LocalPlayer.Name .. " — ..."
-	statusLabel.Font = Enum.Font.RobotoMono
-	statusLabel.TextSize = 11
-	statusLabel.TextColor3 = Color3.fromRGB(180, 180, 190)
-	statusLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
-	statusLabel.BackgroundTransparency = 0.3
-	statusLabel.Size = UDim2.new(0, 260, 0, 20)
-	statusLabel.Position = UDim2.new(0, 6, 1, -26)
+	statusLabel.Font = Enum.Font.GothamBold
+	statusLabel.TextSize = 14
+	statusLabel.TextColor3 = Color3.fromRGB(220, 220, 230)
+	statusLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+	statusLabel.BackgroundTransparency = 0.15
+	statusLabel.Size = UDim2.new(0, 280, 0, 28)
+	statusLabel.Position = UDim2.new(0, 8, 0, 38)
 	statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 	statusLabel.BorderSizePixel = 0
 	statusLabel.Parent = sg
-	Instance.new("UICorner", statusLabel).CornerRadius = UDim.new(0, 4)
-	Instance.new("UIPadding", statusLabel).PaddingLeft = UDim.new(0, 6)
+	Instance.new("UICorner", statusLabel).CornerRadius = UDim.new(0, 6)
+	Instance.new("UIPadding", statusLabel).PaddingLeft = UDim.new(0, 8)
+	Instance.new("UIStroke", statusLabel).Color = Color3.fromRGB(60, 60, 80)
 end
 
 ------------------------------------------------------------
