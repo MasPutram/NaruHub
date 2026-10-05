@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Monitoring Anime Dice v1.9.0 (ultra-lightweight)
+-- NaruHub | Monitoring Anime Dice v2.0.0 (ultra-lightweight)
 -- Monitoring only -- no auto-roll/sell/equip, baca data → POST ke dashboard.
 
 ------------------------------------------------------------
@@ -193,6 +193,10 @@ local MutationsConfig = require(ReplicatedStorage.Framework.Features.Inventory.K
 local TraitsConfig = require(ReplicatedStorage.Framework.Features.Traits.Traits)
 local GradesConfig = require(ReplicatedStorage.Framework.Features.Grades.Grades)
 local BuffController = require(ReplicatedStorage.Framework.Features.Buffs.BuffController)
+local WeatherConfig = require(ReplicatedStorage.Framework.Features.Weather.WeatherConfig)
+local ActiveWeatherProp = require(ReplicatedStorage.Packages.Network)
+	.ClientComm.new(ReplicatedStorage.Network, false, "WeatherService")
+	:GetProperty("ActiveWeather")
 
 ------------------------------------------------------------
 -- Multiplier helpers (loaded from game modules at runtime)
@@ -622,6 +626,36 @@ local function collectUpgradesList()
 end
 
 ------------------------------------------------------------
+-- Active server event (weather system)
+------------------------------------------------------------
+local function collectActiveEvent()
+	local ok, result = pcall(function()
+		local current = ActiveWeatherProp:Get()
+		if not current or not current.name then return nil end
+		local remaining = current.duration - (workspace:GetServerTimeNow() - current.startedAt)
+		if remaining <= 0 then return nil end
+		local buffs
+		pcall(function()
+			local cfg = WeatherConfig.Get(current.name)
+			if cfg and cfg.buffs then
+				buffs = {}
+				for buffName, buffData in pairs(cfg.buffs) do
+					buffs[buffName] = { bucket = buffData.bucket, amount = buffData.amount }
+				end
+			end
+		end)
+		return {
+			name = current.name,
+			duration = current.duration,
+			startedAt = current.startedAt,
+			remaining = remaining,
+			buffs = buffs,
+		}
+	end)
+	return ok and result or nil
+end
+
+------------------------------------------------------------
 -- Report to monitor (dashboard)
 ------------------------------------------------------------
 local function reportToMonitor()
@@ -680,9 +714,14 @@ local function reportToMonitor()
 			globalBuffs.luck = BuffController.GetBuff("Luck")
 		end)
 
+		local activeEvent = collectActiveEvent()
+
 		local payload = {
 			game = "AnimeDice",
 			sourceAccount = LocalPlayer.Name,
+			jobId = game.JobId,
+			placeId = game.PlaceId,
+			activeEvent = activeEvent,
 			money = stats.money,
 			rolls = stats.rolls,
 			rebirth = stats.rebirth,
@@ -751,7 +790,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v1.9.0",
+	Title = "NaruHub | Anime Dice v2.0.0",
 	Badge = "MONITOR",
 	TabWidth = 0,
 	Size = UDim2.fromOffset(380, 300),
