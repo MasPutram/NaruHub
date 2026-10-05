@@ -1,6 +1,7 @@
 --!nocheck
--- NaruHub | Monitoring Anime Dice v2.2.0
+-- NaruHub | Monitoring Anime Dice v2.3.0
 -- Monitoring only -- no auto-roll/sell/equip, baca data → POST ke dashboard.
+-- Self-contained GUI (no external NaruUI fetch).
 
 ------------------------------------------------------------
 -- Key Gate
@@ -73,7 +74,8 @@ do
 	if not granted then
 		local container
 		pcall(function() container = gethui and gethui() end)
-		container = container or game:GetService("CoreGui")
+		if not container then pcall(function() container = game:GetService("CoreGui") end) end
+		container = container or game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
 
 		local screenGui = Instance.new("ScreenGui")
 		screenGui.Name = "AnimeDiceKeyGate"
@@ -172,14 +174,259 @@ end
 if not GRANTED_VIA_GLOBAL then return end
 
 ------------------------------------------------------------
--- NaruUI (loaded from GitHub)
+-- Services
 ------------------------------------------------------------
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
-local httpGet = game.HttpGet or HttpGet
-local _naruSrc = httpGet(game, "https://raw.githubusercontent.com/MasPutram/NaruHub/main/NaruUI/NaruUI.luau?v=" .. tostring(tick()))
-local NaruUI = loadstring(_naruSrc)()
+------------------------------------------------------------
+-- Inline GUI builder (replaces external NaruUI)
+------------------------------------------------------------
+local GUI_ALIVE = true
+local screenGui
+
+do
+	local container
+	pcall(function() container = gethui and gethui() end)
+	if not container then pcall(function() container = game:GetService("CoreGui") end) end
+	container = container or LocalPlayer:WaitForChild("PlayerGui")
+
+	-- Clean up old copies
+	pcall(function()
+		for _, o in ipairs(container:GetChildren()) do
+			if o.Name == "AnimeDiceGUI" then
+				pcall(function() o:Destroy() end)
+			end
+		end
+	end)
+
+	screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "AnimeDiceGUI"
+	screenGui.ResetOnSpawn = false
+	screenGui.DisplayOrder = 100
+	screenGui.IgnoreGuiInset = true
+	screenGui.Parent = container
+end
+
+-- Main window frame
+local BG = Color3.fromRGB(15, 15, 25)
+local CARD = Color3.fromRGB(22, 22, 38)
+local INK = Color3.fromRGB(232, 232, 240)
+local DIM = Color3.fromRGB(100, 100, 130)
+local ACCENT = Color3.fromRGB(255, 100, 100)
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "Main"
+mainFrame.Size = UDim2.fromOffset(360, 260)
+mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+mainFrame.BackgroundColor3 = BG
+mainFrame.BackgroundTransparency = 0.04
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = true
+mainFrame.Parent = screenGui
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
+local stroke = Instance.new("UIStroke", mainFrame)
+stroke.Color = Color3.fromRGB(40, 40, 55)
+stroke.Thickness = 1
+
+-- Title bar
+local titleBar = Instance.new("Frame")
+titleBar.Name = "TitleBar"
+titleBar.Size = UDim2.new(1, 0, 0, 36)
+titleBar.BackgroundColor3 = CARD
+titleBar.BorderSizePixel = 0
+titleBar.Parent = mainFrame
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Text = "NaruHub | Anime Dice v2.3.0"
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 13
+titleLabel.TextColor3 = INK
+titleLabel.BackgroundTransparency = 1
+titleLabel.Size = UDim2.new(1, -80, 1, 0)
+titleLabel.Position = UDim2.new(0, 12, 0, 0)
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = titleBar
+
+local badge = Instance.new("TextLabel")
+badge.Text = "MONITOR"
+badge.Font = Enum.Font.GothamBold
+badge.TextSize = 9
+badge.TextColor3 = ACCENT
+badge.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+badge.BackgroundTransparency = 0.88
+badge.Size = UDim2.new(0, 62, 0, 20)
+badge.Position = UDim2.new(1, -106, 0, 8)
+badge.BorderSizePixel = 0
+badge.Parent = titleBar
+Instance.new("UICorner", badge).CornerRadius = UDim.new(0, 4)
+
+-- Minimize button
+local minimized = false
+local minBtn = Instance.new("TextButton")
+minBtn.Text = "—"
+minBtn.Font = Enum.Font.GothamBold
+minBtn.TextSize = 14
+minBtn.TextColor3 = DIM
+minBtn.BackgroundTransparency = 1
+minBtn.Size = UDim2.new(0, 32, 0, 32)
+minBtn.Position = UDim2.new(1, -36, 0, 2)
+minBtn.Parent = titleBar
+
+-- Draggable
+do
+	local dragging, dragStart, startPos
+	titleBar.InputBegan:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = inp.Position
+			startPos = mainFrame.Position
+		end
+	end)
+	titleBar.InputEnded:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(inp)
+		if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
+			local delta = inp.Position - dragStart
+			mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+end
+
+-- Content area
+local content = Instance.new("Frame")
+content.Name = "Content"
+content.Size = UDim2.new(1, -24, 1, -48)
+content.Position = UDim2.new(0, 12, 0, 42)
+content.BackgroundTransparency = 1
+content.Parent = mainFrame
+local layout = Instance.new("UIListLayout", content)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Padding = UDim.new(0, 8)
+
+-- Section header
+local sectionLabel = Instance.new("TextLabel")
+sectionLabel.Text = LocalPlayer.Name
+sectionLabel.Font = Enum.Font.GothamBold
+sectionLabel.TextSize = 14
+sectionLabel.TextColor3 = INK
+sectionLabel.BackgroundTransparency = 1
+sectionLabel.Size = UDim2.new(1, 0, 0, 22)
+sectionLabel.TextXAlignment = Enum.TextXAlignment.Left
+sectionLabel.LayoutOrder = 1
+sectionLabel.Parent = content
+
+-- Username paragraph
+local function makePara(title, initialContent, order)
+	local frame = Instance.new("Frame")
+	frame.Name = title
+	frame.BackgroundColor3 = CARD
+	frame.BackgroundTransparency = 0.3
+	frame.Size = UDim2.new(1, 0, 0, 50)
+	frame.AutomaticSize = Enum.AutomaticSize.Y
+	frame.BorderSizePixel = 0
+	frame.LayoutOrder = order
+	frame.Parent = content
+	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+	local pad = Instance.new("UIPadding", frame)
+	pad.PaddingLeft = UDim.new(0, 10)
+	pad.PaddingRight = UDim.new(0, 10)
+	pad.PaddingTop = UDim.new(0, 8)
+	pad.PaddingBottom = UDim.new(0, 8)
+
+	local tl = Instance.new("TextLabel")
+	tl.Text = title
+	tl.Font = Enum.Font.GothamBold
+	tl.TextSize = 10
+	tl.TextColor3 = DIM
+	tl.BackgroundTransparency = 1
+	tl.Size = UDim2.new(1, 0, 0, 14)
+	tl.TextXAlignment = Enum.TextXAlignment.Left
+	tl.Parent = frame
+
+	local cl = Instance.new("TextLabel")
+	cl.Name = "Value"
+	cl.Text = initialContent
+	cl.Font = Enum.Font.Gotham
+	cl.TextSize = 14
+	cl.TextColor3 = INK
+	cl.TextWrapped = true
+	cl.RichText = true
+	cl.BackgroundTransparency = 1
+	cl.Size = UDim2.new(1, 0, 0, 18)
+	cl.AutomaticSize = Enum.AutomaticSize.Y
+	cl.Position = UDim2.new(0, 0, 0, 16)
+	cl.TextXAlignment = Enum.TextXAlignment.Center
+	cl.Parent = frame
+
+	local function setContent(text)
+		cl.Text = text
+	end
+	return frame, setContent
+end
+
+local _, setUserContent = makePara("Username", LocalPlayer.Name, 2)
+local _, setMonitorContent = makePara("Monitor", "Starting...", 3)
+
+-- Minimize / restore
+local fullSize = mainFrame.Size
+local miniSize = UDim2.fromOffset(fullSize.X.Offset, 36)
+minBtn.MouseButton1Click:Connect(function()
+	minimized = not minimized
+	if minimized then
+		content.Visible = false
+		TweenService:Create(mainFrame, TweenInfo.new(0.15), { Size = miniSize }):Play()
+		minBtn.Text = "+"
+	else
+		TweenService:Create(mainFrame, TweenInfo.new(0.15), { Size = fullSize }):Play()
+		task.wait(0.15)
+		content.Visible = true
+		minBtn.Text = "—"
+	end
+end)
+
+------------------------------------------------------------
+-- Username list detection
+------------------------------------------------------------
+do
+	local myName = LocalPlayer.Name
+	local myPrefix = myName:match("^(%D+)%d+$")
+
+	local function refreshUsernameList()
+		if not myPrefix then
+			setUserContent(myName)
+			return
+		end
+		local matches = {}
+		for _, p in ipairs(Players:GetPlayers()) do
+			local prefix, num = p.Name:match("^(%D+)(%d+)$")
+			if prefix == myPrefix then
+				table.insert(matches, { name = p.Name, num = tonumber(num) or 0 })
+			end
+		end
+		if #matches <= 1 then
+			setUserContent(myName)
+			return
+		end
+		table.sort(matches, function(a, b) return a.num < b.num end)
+		local names = {}
+		for _, m in ipairs(matches) do
+			local tag = m.name == myName and " ← ini" or ""
+			table.insert(names, m.name .. tag)
+		end
+		setUserContent(table.concat(names, "\n"))
+	end
+
+	Players.PlayerAdded:Connect(function() task.wait(0.5) refreshUsernameList() end)
+	Players.PlayerRemoving:Connect(function() task.wait(0.5) refreshUsernameList() end)
+	task.spawn(refreshUsernameList)
+end
 
 ------------------------------------------------------------
 -- Game data access
@@ -199,7 +446,7 @@ local ActiveWeatherProp = require(ReplicatedStorage.Packages.Network)
 	:GetProperty("ActiveWeather")
 
 ------------------------------------------------------------
--- Multiplier helpers (loaded from game modules at runtime)
+-- Multiplier helpers
 ------------------------------------------------------------
 local function getMutationChanceMult(mutation)
 	if not mutation or mutation == "" then return 1 end
@@ -254,7 +501,7 @@ local function getShirtId(model)
 end
 
 ------------------------------------------------------------
--- Rarity tier map (higher = rarer)
+-- Rarity tier map
 ------------------------------------------------------------
 local RARITY_TIER = {
 	Common = 1,
@@ -615,77 +862,10 @@ local function reportToMonitor()
 end
 
 ------------------------------------------------------------
--- NaruUI Window
-------------------------------------------------------------
-local Fluent = NaruUI.New({
-	ConfigPrefix = "AnimeDice",
-	BrandColor = Color3.fromRGB(255, 100, 100),
-})
-
-local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v2.2.0",
-	Badge = "MONITOR",
-	TabWidth = 0,
-	Size = UDim2.fromOffset(380, 300),
-	AutoStartMinimized = false,
-})
-
-local Tab = Window:AddTab({ Title = "" })
-local section = Tab:AddSection(LocalPlayer.Name, { NoCollapse = true })
-
-local usernamePara = section:AddParagraph({
-	Title = "Username",
-	Content = LocalPlayer.Name,
-	ContentSize = 14,
-	Center = true,
-})
-
-do
-	local myName = LocalPlayer.Name
-	local myPrefix = myName:match("^(%D+)%d+$")
-
-	local function refreshUsernameList()
-		if not myPrefix then
-			usernamePara:SetContent(myName)
-			return
-		end
-		local matches = {}
-		for _, p in ipairs(Players:GetPlayers()) do
-			local prefix, num = p.Name:match("^(%D+)(%d+)$")
-			if prefix == myPrefix then
-				table.insert(matches, { name = p.Name, num = tonumber(num) or 0 })
-			end
-		end
-		if #matches <= 1 then
-			usernamePara:SetContent(myName)
-			return
-		end
-		table.sort(matches, function(a, b) return a.num < b.num end)
-		local names = {}
-		for _, m in ipairs(matches) do
-			local tag = m.name == myName and " ← ini" or ""
-			table.insert(names, m.name .. tag)
-		end
-		usernamePara:SetContent(table.concat(names, "\n"))
-	end
-
-	Players.PlayerAdded:Connect(function() task.wait(0.5) refreshUsernameList() end)
-	Players.PlayerRemoving:Connect(function() task.wait(0.5) refreshUsernameList() end)
-	task.spawn(refreshUsernameList)
-end
-
-local monitorPara = section:AddParagraph({
-	Title = "Monitor",
-	Content = "Starting...",
-	ContentSize = 14,
-	Center = true,
-})
-
-------------------------------------------------------------
--- Auto-start monitoring loop
+-- Monitoring loop
 ------------------------------------------------------------
 task.spawn(function()
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+	while GUI_ALIVE and screenGui and screenGui.Parent do
 		local ok, err = reportToMonitor()
 		local ping = 0
 		pcall(function()
@@ -693,9 +873,9 @@ task.spawn(function()
 		end)
 		local pingStr = ping > 0 and (" " .. ping .. "ms") or ""
 		if ok then
-			monitorPara:SetContent("OK" .. pingStr)
+			setMonitorContent("OK" .. pingStr)
 		else
-			monitorPara:SetContent("Gagal" .. pingStr)
+			setMonitorContent("Gagal" .. pingStr)
 		end
 		task.wait(30)
 	end
