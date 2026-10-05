@@ -78,12 +78,15 @@ function fmtAgo(ts: number): string {
   return `${Math.floor(h / 24)}h lalu`;
 }
 
+type Tab = "server" | "event";
+
 export default function AnimeDiceEventPage() {
   const [mounted, setMounted] = useState(false);
   const [data, setData] = useState<EventsResponse | null>(null);
   const [accounts, setAccounts] = useState<ADAccount[]>([]);
   const [devices, setDevices] = useState<TermuxDevice[]>([]);
   const [tick, setTick] = useState(0); // local 1s tick for countdown
+  const [tab, setTab] = useState<Tab>("server");
 
   const fetchEvent = useCallback(async () => {
     try {
@@ -147,12 +150,35 @@ export default function AnimeDiceEventPage() {
       <style>{styles}</style>
       <div className="page">
         <div className="topbar">
-          <h1>Server Event — Anime Dice</h1>
+          <h1>Anime Dice</h1>
+          <div style={{ flex: 1 }} />
           <button className="refresh-btn" onClick={fetchEvent} title="Refresh">
             &#x21BB;
           </button>
         </div>
 
+        <div className="tab-bar">
+          <button
+            className={`tab-btn ${tab === "server" ? "active" : ""}`}
+            onClick={() => setTab("server")}
+          >
+            Server Map
+            <span className="tab-badge server">{(() => {
+              const g = new Set<string>();
+              accounts.forEach((a) => { if (a.online && a.jobId) g.add(a.jobId); });
+              return g.size;
+            })()}</span>
+          </button>
+          <button
+            className={`tab-btn ${tab === "event" ? "active" : ""} ${event ? "live" : ""}`}
+            onClick={() => setTab("event")}
+          >
+            Event Map
+            {event ? <span className="tab-badge live">LIVE</span> : <span className="tab-badge">{(data?.history || []).length}</span>}
+          </button>
+        </div>
+
+        {tab === "event" ? (<>
         {!event ? (
           <div className="idle">
             <div className="idle-emoji">&#x1F4A4;</div>
@@ -240,9 +266,6 @@ export default function AnimeDiceEventPage() {
           </div>
         )}
 
-        {/* Server Map — group online accounts by jobId */}
-        <ServerMap accounts={accounts} devices={devices} activeJobId={event?.jobId || null} />
-
         <div className="hist">
           <div className="hist-title">EVENT HISTORY <span>{history.length}</span></div>
           {history.length === 0 ? (
@@ -264,6 +287,9 @@ export default function AnimeDiceEventPage() {
             </div>
           )}
         </div>
+        </>) : (
+          <ServerMap accounts={accounts} devices={devices} activeJobId={event?.jobId || null} />
+        )}
       </div>
     </>
   );
@@ -362,13 +388,35 @@ const styles = `
   font-family: var(--font-poppins), -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
-.topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
-.topbar h1 { font-size: 14px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: #cbd5e1; }
+.topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.topbar h1 { font-size: 20px; font-weight: 900; color: #e8e8f0; letter-spacing: .5px; }
 .refresh-btn {
   background: #1c1c2b; color: #e8e8f0; border: 1px solid #262636;
   width: 36px; height: 36px; border-radius: 8px; cursor: pointer; font-size: 18px;
 }
 .refresh-btn:hover { background: #262636; }
+
+/* Pill tabs — Katalog Akun style */
+.tab-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+.tab-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: #14141f; color: #94a3b8;
+  border: 2px solid #262636; border-radius: 999px;
+  padding: 10px 20px; font-size: 14px; font-weight: 800; cursor: pointer;
+  transition: all .15s; font-family: inherit;
+}
+.tab-btn:hover { color: #e8e8f0; border-color: #3f3f46; }
+.tab-btn.active { background: #0b0b14; color: #e8e8f0; border-color: #52525b; }
+.tab-badge {
+  background: #a78bfa; color: #0b0b14;
+  font-size: 11px; font-weight: 900; border-radius: 999px;
+  padding: 3px 9px; min-width: 20px; text-align: center;
+}
+.tab-badge.live {
+  background: #ef4444; color: #ffffff;
+  animation: live-pulse 1.5s infinite;
+}
+@keyframes live-pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
 
 /* Idle state */
 .idle {
