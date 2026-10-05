@@ -241,7 +241,7 @@ titleBar.BorderSizePixel = 0
 titleBar.Parent = mainFrame
 
 local titleLabel = Instance.new("TextLabel")
-titleLabel.Text = "NaruHub | Anime Dice v2.4.3"
+titleLabel.Text = "NaruHub | Anime Dice v2.4.4"
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 13
 titleLabel.TextColor3 = INK
@@ -901,6 +901,8 @@ local function reportToMonitor()
 			backpack = backpackItems,
 			totalItemCount = totalItemCount,
 			globalBuffs = globalBuffs,
+			serverPlayerCount = #Players:GetPlayers(),
+			serverMaxPlayers = Players.MaxPlayers,
 		}
 
 		local body = HttpService:JSONEncode(payload)
