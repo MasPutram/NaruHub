@@ -2,23 +2,6 @@
 
 import { useEffect, useState, useCallback } from "react";
 
-interface Unit {
-  name: string;
-  rarity: string;
-  variant: string | null;
-  mutation: string | null;
-  level: number | null;
-  amount: number;
-  trait?: string | null;
-  grade?: string | null;
-  locked?: boolean | null;
-  income?: number | null;
-  damage?: number | null;
-  chance?: number | null;
-  health?: number | null;
-  placed?: "slot" | "tower" | null;
-}
-
 interface ADAccount {
   sourceAccount: string;
   money: number | null;
@@ -34,7 +17,7 @@ interface ADAccount {
   slotsCount: number;
   ownedDiceCount: number;
   gamepasses: Record<string, boolean>;
-  topUnits: Unit[];
+  topUnits: { name: string; rarity: string }[];
   online: boolean;
   firstSeen?: number;
   lastSeen?: number;
@@ -51,44 +34,15 @@ interface BackpackItem {
   image?: number | string | null;
 }
 
-interface SlotData {
-  slot: number | string;
-  name?: string;
-  rarity?: string;
-  variant?: string | null;
-  level?: number | null;
-  mutation?: string | null;
-  balance?: number | null;
-  income?: number | null;
-  chance?: number | null;
-  damage?: number | null;
-  trait?: string | null;
-  grade?: string | null;
-}
-
-interface TowerUnit {
-  name: string;
-  rarity: string;
-  variant?: string | null;
-  level?: number | null;
-  mutation?: string | null;
-  slot?: number | string;
-  trait?: string | null;
-  grade?: string | null;
-  income?: number | null;
-  damage?: number | null;
-  chance?: number | null;
-}
-
 interface ADDetail {
   ownedDice: string[];
   upgrades: Record<string, number>;
   gamepasses: Record<string, boolean>;
-  topUnits: Unit[];
-  allUnits: Unit[];
+  topUnits: { name: string; rarity: string }[];
+  allUnits: { name: string; rarity: string }[];
   backpack: BackpackItem[];
-  slots: SlotData[];
-  towerSquad: { squad: TowerUnit[]; equipped: TowerUnit | null };
+  slots: unknown[];
+  towerSquad: unknown;
   upgradesList: string[];
   unitsCount: number;
   unitTypesCount: number;
@@ -115,40 +69,6 @@ const RARITY_COLORS: Record<string, string> = {
 
 function rarityColor(r: string): string { return RARITY_COLORS[r] || "#71717a"; }
 
-const DICE_COLORS: Record<string, string> = {
-  Titan: "#f59e0b", Void: "#7c3aed", Solar: "#facc15", "Blood Moon": "#dc2626",
-  Lunar: "#818cf8", Galaxy: "#a855f7", Prismatic: "#ec4899", Dragon: "#ef4444",
-  Shadow: "#6b7280", Storm: "#38bdf8", Arcane: "#8b5cf6", Ice: "#67e8f9",
-  Fire: "#f97316", Lightning: "#fde68a", Magma: "#ef4444", Nature: "#22c55e",
-  Light: "#fef08a", "Black Hole": "#4b5563", Corrupted: "#a855f7", Royal: "#eab308",
-  Water: "#3b82f6", Normal: "#6b7280",
-};
-function diceColor(d: string): string { return DICE_COLORS[d] || "#818cf8"; }
-
-const MUTATION_STYLES: Record<string, { bg: string; color: string }> = {
-  Diamond: { bg: "linear-gradient(135deg, #67e8f9, #22d3ee)", color: "#0c4a6e" },
-  Gold: { bg: "linear-gradient(135deg, #fde68a, #f59e0b)", color: "#7c4a03" },
-  Silver: { bg: "linear-gradient(135deg, #e5e7eb, #9ca3af)", color: "#374151" },
-  Ruby: { bg: "linear-gradient(135deg, #fca5a5, #ef4444)", color: "#fff" },
-};
-
-function fmtMoney(v: number | null | undefined): string {
-  if (v == null) return "-";
-  const n = Number(v);
-  const abs = Math.abs(n);
-  if (abs >= 1e30) return (n / 1e30).toFixed(2) + "no";
-  if (abs >= 1e27) return (n / 1e27).toFixed(2) + "oc";
-  if (abs >= 1e24) return (n / 1e24).toFixed(2) + "sp";
-  if (abs >= 1e21) return (n / 1e21).toFixed(2) + "sx";
-  if (abs >= 1e18) return (n / 1e18).toFixed(2) + "qi";
-  if (abs >= 1e15) return (n / 1e15).toFixed(2) + "qa";
-  if (abs >= 1e12) return (n / 1e12).toFixed(2) + "t";
-  if (abs >= 1e9) return (n / 1e9).toFixed(2) + "b";
-  if (abs >= 1e6) return (n / 1e6).toFixed(2) + "m";
-  if (abs >= 1e3) return (n / 1e3).toFixed(2) + "k";
-  return n.toFixed(0);
-}
-
 function fmtNum(v: number | null | undefined): string {
   if (v == null) return "-";
   return Number(v).toLocaleString("en-US");
@@ -171,8 +91,6 @@ function accountNumber(name: string): number | null {
 }
 
 type TabMode = "all" | "online" | "offline";
-type DetailTab = "units" | "slots" | "tower" | "backpack" | "upgrades";
-type CombinedTab = "units" | "slots" | "tower" | "backpack";
 
 interface CombinedDetail {
   account: string;
@@ -183,7 +101,6 @@ interface CombinedState {
   open: boolean;
   loading: boolean;
   details: CombinedDetail[];
-  tab: CombinedTab;
 }
 
 export default function AnimeDicePage() {
@@ -193,8 +110,7 @@ export default function AnimeDicePage() {
   const [tabMode, setTabMode] = useState<TabMode>("all");
   const [search, setSearch] = useState("");
   const [detail, setDetail] = useState<{ name: string; data: ADDetail | null; loading: boolean; account: ADAccount | null } | null>(null);
-  const [detailTab, setDetailTab] = useState<DetailTab>("units");
-  const [combined, setCombined] = useState<CombinedState>({ open: false, loading: false, details: [], tab: "units" });
+  const [combined, setCombined] = useState<CombinedState>({ open: false, loading: false, details: [] });
 
   const fetchAccounts = useCallback(async () => {
     try {
@@ -214,10 +130,8 @@ export default function AnimeDicePage() {
   function sortAccounts(list: ADAccount[]): ADAccount[] {
     const sorted = [...list];
     switch (sortMode) {
-      case "money": sorted.sort((a, b) => (Number(b.money) || 0) - (Number(a.money) || 0)); break;
       case "rebirth": sorted.sort((a, b) => (Number(b.rebirth) || 0) - (Number(a.rebirth) || 0)); break;
       case "rolls": sorted.sort((a, b) => (Number(b.rolls) || 0) - (Number(a.rolls) || 0)); break;
-      case "units": sorted.sort((a, b) => (b.unitsCount || 0) - (a.unitsCount || 0)); break;
       default:
         sorted.sort((a, b) => {
           const na = accountNumber(a.sourceAccount), nb = accountNumber(b.sourceAccount);
@@ -231,10 +145,7 @@ export default function AnimeDicePage() {
   function filterAccounts(list: ADAccount[]): ADAccount[] {
     if (!search.trim()) return list;
     const q = search.trim().toLowerCase();
-    return list.filter((a) =>
-      a.sourceAccount.toLowerCase().includes(q) ||
-      (a.dice || "").toLowerCase().includes(q)
-    );
+    return list.filter((a) => a.sourceAccount.toLowerCase().includes(q));
   }
 
   const filtered = filterAccounts(accounts);
@@ -244,13 +155,11 @@ export default function AnimeDicePage() {
     tabMode === "online" ? allOnline : tabMode === "offline" ? allOffline : filtered
   );
 
-  const totalMoney = allOnline.reduce((s, a) => s + (Number(a.money) || 0), 0);
   const totalRebirths = allOnline.reduce((s, a) => s + (Number(a.rebirth) || 0), 0);
   const totalRolls = allOnline.reduce((s, a) => s + (Number(a.rolls) || 0), 0);
-  const totalUnits = allOnline.reduce((s, a) => s + (a.unitsCount || 0), 0);
 
   async function openCombined() {
-    setCombined({ open: true, loading: true, details: [], tab: "units" });
+    setCombined({ open: true, loading: true, details: [] });
     try {
       const res = await fetch("/api/anime-dice/all-details");
       const body = await res.json();
@@ -267,7 +176,6 @@ export default function AnimeDicePage() {
   async function openDetail(name: string) {
     const acc = accounts.find((a) => a.sourceAccount === name) || null;
     setDetail({ name, data: null, loading: true, account: acc });
-    setDetailTab("units");
     try {
       const res = await fetch("/api/anime-dice/account-detail?account=" + encodeURIComponent(name));
       const body = await res.json();
@@ -289,11 +197,9 @@ export default function AnimeDicePage() {
         * { box-sizing: border-box; margin: 0; padding: 0; }
         .ad { max-width: 1600px; margin: 0 auto; padding: 20px 24px 40px; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
 
-        /* Top bar */
         .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
         .topbar h1 { font-size: 13px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink); }
 
-        /* Tabs + sort + search row */
         .controls { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
         .pill-tabs { display: flex; gap: 0; }
         .ptab { padding: 8px 18px; font-size: 12px; font-weight: 800; cursor: pointer; color: var(--dim); background: none; border: none; transition: all .15s; border-radius: 20px; }
@@ -309,10 +215,9 @@ export default function AnimeDicePage() {
         .search-input:focus { outline: none; border-color: var(--accent); }
         .search-input::placeholder { color: var(--dim); }
 
-        /* Grid */
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 14px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
 
-        /* ─── Combined card ─── */
+        /* Combined card */
         .combined { background: linear-gradient(135deg, rgba(34,211,238,.04), rgba(139,92,246,.04)), var(--card); border: 1px solid rgba(34,211,238,.15); border-radius: 16px; padding: 20px; cursor: pointer; transition: all .15s; }
         .combined:hover { border-color: rgba(34,211,238,.35); transform: translateY(-1px); box-shadow: 0 0 0 1px rgba(34,211,238,.2), 0 8px 24px rgba(0,0,0,.3); }
         .comb-top { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
@@ -322,19 +227,12 @@ export default function AnimeDicePage() {
         .comb-sub { font-size: 11px; color: var(--dim); margin-top: 2px; }
         .comb-badge { font-size: 9px; font-weight: 900; padding: 4px 10px; border-radius: 6px; background: rgba(34,211,238,.12); color: var(--cyan); border: 1px solid rgba(34,211,238,.25); letter-spacing: .5px; }
         .comb-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
-        .comb-stat { }
         .comb-stat .cs-label { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; }
         .comb-stat .cs-value { font-size: 22px; font-weight: 900; margin-top: 2px; }
-        .comb-stat .cs-value.money { color: var(--green); }
-        .comb-stat .cs-value.rebirth { color: var(--ink); }
-        .comb-extras { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-        .comb-extra { background: rgba(255,255,255,.03); border-radius: 8px; padding: 8px 10px; text-align: center; }
-        .comb-extra .ce-label { font-size: 9px; font-weight: 700; color: var(--dim); text-transform: uppercase; }
-        .comb-extra .ce-value { font-size: 14px; font-weight: 900; color: var(--cyan); margin-top: 2px; }
-        .comb-footer { margin-top: 14px; display: flex; align-items: center; justify-content: space-between; }
+        .comb-footer { display: flex; align-items: center; justify-content: space-between; }
         .comb-footer-link { font-size: 11px; font-weight: 700; color: var(--cyan); display: flex; align-items: center; gap: 6px; }
 
-        /* ─── Account card ─── */
+        /* Account card */
         .acard { background: var(--card); border: 1px solid #1e1e38; border-radius: 16px; padding: 20px; cursor: pointer; transition: all .15s; position: relative; }
         .acard:hover { background: var(--card-hover); border-color: #2a2a50; transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0,0,0,.3); }
         .acard.offline { opacity: .55; }
@@ -352,35 +250,18 @@ export default function AnimeDicePage() {
         .acard-status.on { background: rgba(52,211,153,.15); color: var(--green); }
         .acard-status.off { background: rgba(239,68,68,.1); color: var(--red); }
         .acard-time { font-size: 10px; color: var(--dim); font-weight: 600; }
-        .acard-dice { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 800; letter-spacing: .3px; flex-shrink: 0; }
 
         .acard-main { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
         .acard-stat .as-label { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .3px; }
         .acard-stat .as-value { font-size: 20px; font-weight: 900; margin-top: 2px; }
-        .acard-stat .as-value.money { color: var(--green); }
-        .acard-stat .as-value.rebirth { color: var(--ink); }
 
-        /* Best unit row */
-        .acard-unit { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding: 10px 12px; background: rgba(255,255,255,.02); border-radius: 10px; }
-        .unit-icon { width: 32px; height: 32px; border-radius: 8px; background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
-        .unit-name { font-size: 13px; font-weight: 700; color: var(--ink); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .unit-badges { display: flex; gap: 4px; flex-shrink: 0; }
-        .ubadge { font-size: 9px; font-weight: 800; padding: 3px 8px; border-radius: 4px; letter-spacing: .3px; }
-
-        /* Toggle pills */
-        .acard-toggles { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 12px; }
-        .toggle-pill { font-size: 9px; font-weight: 800; padding: 4px 10px; border-radius: 5px; letter-spacing: .3px; text-transform: uppercase; }
-        .toggle-pill.on { background: rgba(52,211,153,.12); color: var(--green); }
-        .toggle-pill.off { background: rgba(255,255,255,.03); color: var(--dim); }
-
-        /* Footer link */
         .acard-footer { display: flex; align-items: center; gap: 6px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.04); }
         .acard-footer-link { font-size: 11px; font-weight: 700; color: var(--cyan); display: flex; align-items: center; gap: 6px; flex: 1; }
         .acard-footer-arrow { margin-left: auto; color: var(--dim); font-size: 16px; }
 
         .empty { color: var(--dim); text-align: center; padding: 80px 0; font-size: 14px; }
 
-        /* ─── Detail modal ─── */
+        /* Modal */
         .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: flex; align-items: flex-start; justify-content: center; padding: 30px 16px; overflow-y: auto; z-index: 50; backdrop-filter: blur(6px); }
         .modal { background: var(--bg); border: 1px solid #1e1e38; border-radius: 20px; width: 100%; max-width: 960px; overflow: hidden; }
         .modal-head { background: var(--card); padding: 20px 24px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid rgba(255,255,255,.04); }
@@ -402,70 +283,25 @@ export default function AnimeDicePage() {
         .ms .ms-l { font-size: 9px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 4px; }
         .ms .ms-v { font-size: 16px; font-weight: 900; }
 
-        .modal-tabs { display: flex; gap: 0; padding: 0 24px; background: var(--card); border-bottom: 1px solid rgba(255,255,255,.04); overflow-x: auto; }
-        .mtab { padding: 12px 18px; font-size: 12px; font-weight: 800; cursor: pointer; color: var(--dim); background: none; border: none; border-bottom: 2px solid transparent; transition: all .15s; white-space: nowrap; }
-        .mtab:hover { color: var(--ink); }
-        .mtab.active { color: var(--cyan); border-bottom-color: var(--cyan); }
-
         .modal-body { padding: 20px 24px; max-height: 60vh; overflow-y: auto; }
         .detail-empty { color: var(--dim); font-size: 13px; padding: 30px 0; text-align: center; }
 
-        /* Modal account bar */
         .modal-account-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; background: var(--card); border-bottom: 1px solid rgba(255,255,255,.04); gap: 12px; flex-wrap: wrap; }
         .mab-left { display: flex; align-items: center; gap: 10px; }
         .mab-name { font-size: 15px; font-weight: 900; color: var(--ink); }
         .mab-status { font-size: 10px; font-weight: 800; padding: 3px 10px; border-radius: 5px; }
         .mab-status.on { background: rgba(52,211,153,.12); color: var(--green); }
         .mab-status.off { background: rgba(239,68,68,.1); color: var(--red); }
-        .mab-dice { font-size: 11px; font-weight: 700; }
-        .mab-vip { font-size: 10px; font-weight: 800; padding: 3px 10px; border-radius: 5px; background: rgba(251,191,36,.12); color: var(--gold); }
         .mab-stats { display: flex; gap: 16px; }
         .mab-stat { font-size: 13px; font-weight: 800; display: flex; gap: 6px; }
         .mab-sl { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; }
         .mh-count { font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 6px; background: rgba(34,211,238,.12); color: var(--cyan); margin-left: 10px; letter-spacing: .5px; }
 
-        /* Section headers */
-        .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 6px; }
-        .section-header > span:first-child { font-size: 12px; font-weight: 800; color: var(--accent); letter-spacing: .5px; text-transform: uppercase; }
-        .section-desc { font-size: 11px; color: var(--dim); font-weight: 600; }
-        .section-right { font-size: 11px; color: var(--dim); font-weight: 700; }
-
-        /* Slot cards */
-        .slot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
-        .slot-card { background: var(--card); border: 1px solid #1e1e38; border-radius: 12px; padding: 16px; transition: border-color .15s; }
-        .slot-card:hover { border-color: #2a2a50; }
-        .slot-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-        .slot-badge { font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 6px; background: rgba(129,140,248,.08); color: var(--accent); letter-spacing: .3px; }
-        .slot-dot { width: 8px; height: 8px; border-radius: 50%; }
-        .slot-name { font-size: 15px; font-weight: 800; color: var(--ink); margin-bottom: 8px; }
-        .slot-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
-        .slot-balance { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.04); }
-        .slot-bl { font-size: 9px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .3px; }
-        .slot-bv { font-size: 16px; font-weight: 900; color: var(--green); }
-        .slot-empty { color: var(--dim); font-size: 13px; font-weight: 600; padding: 20px 0; text-align: center; }
-        .slot-stats { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
-        .slot-stat-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
-        .slot-stat-l { font-size: 10px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .3px; }
-        .slot-stat-v { font-size: 13px; font-weight: 800; color: var(--ink); }
-
-        /* Tower squad */
-        .equipped-section { margin-bottom: 16px; }
-        .equipped-card { background: linear-gradient(135deg, rgba(129,140,248,.06), rgba(168,85,247,.06)), var(--card); border: 1px solid rgba(129,140,248,.2); border-radius: 14px; padding: 18px; }
-        .eq-name { font-size: 18px; font-weight: 900; color: var(--ink); margin-bottom: 8px; }
-        .eq-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
-        .eq-level { font-size: 12px; font-weight: 700; color: var(--dim); }
-        .tower-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
-        .tower-card { background: var(--card); border: 1px solid #1e1e38; border-radius: 12px; padding: 16px; }
-        .tower-card:hover { border-color: #2a2a50; }
-        .tower-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-        .tower-name { font-size: 15px; font-weight: 800; color: var(--ink); margin-bottom: 6px; }
-        .tower-tags { display: flex; flex-wrap: wrap; gap: 4px; }
-
         /* Backpack items */
         .bp-cats { display: flex; gap: 0; flex-wrap: wrap; }
         .bp-cat { padding: 6px 14px; font-size: 11px; font-weight: 800; cursor: pointer; color: var(--dim); background: none; border: none; border-radius: 16px; transition: all .15s; }
         .bp-cat:hover { color: var(--ink); }
-        .bp-cat.active { background: var(--red); color: #fff; }
+        .bp-cat.active { background: var(--accent); color: #0b0b14; }
         .bp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
         .bp-card { background: var(--card); border: 1px solid #1e1e38; border-radius: 10px; padding: 12px 14px; transition: border-color .15s; }
         .bp-card:hover { border-color: #2a2a50; }
@@ -474,62 +310,13 @@ export default function AnimeDicePage() {
         .bp-amount { font-size: 12px; font-weight: 800; color: var(--dim); background: rgba(255,255,255,.04); padding: 2px 8px; border-radius: 4px; }
         .bp-kind { font-size: 11px; font-weight: 600; }
 
-        /* Upgrade pills */
-        .up-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
-        .up-pill { font-size: 12px; font-weight: 700; padding: 8px 14px; border-radius: 8px; background: rgba(129,140,248,.06); border: 1px solid rgba(129,140,248,.15); color: var(--accent); }
-
-        /* Dice active tag */
-        .active-dice { border-width: 2px !important; box-shadow: 0 0 8px rgba(129,140,248,.2); }
-        .dice-active-tag { font-size: 8px; font-weight: 900; padding: 2px 6px; border-radius: 3px; background: var(--accent); color: #0b0b14; margin-left: 4px; }
-
-        /* Unit cards in detail */
-        .ugrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
-        .ucard { background: var(--card); border: 1px solid #1e1e38; border-radius: 12px; padding: 14px; transition: border-color .15s; }
-        .ucard:hover { border-color: #2a2a50; }
-        .ucard-top { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
-        .ucard-name { font-size: 14px; font-weight: 800; margin-bottom: 6px; }
-        .ucard-meta { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-        .ub { font-size: 9px; font-weight: 800; padding: 3px 8px; border-radius: 5px; letter-spacing: .3px; }
-        .ucard-amount { font-size: 10px; font-weight: 700; color: var(--dim); margin-left: auto; }
-
-        .unit-stats-box { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin: 10px 0 8px; border: 1px solid rgba(255,255,255,.06); border-radius: 8px; overflow: hidden; }
-        .unit-stat-cell { padding: 8px 12px; background: rgba(255,255,255,.02); }
-        .unit-stat-cell:first-child { border-right: 1px solid rgba(255,255,255,.06); }
-        .unit-stat-label { font-size: 9px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 2px; }
-        .unit-stat-val { font-size: 14px; font-weight: 900; color: var(--ink); }
-
-        .unit-trait-row { display: flex; align-items: center; padding: 6px 10px; margin: 6px 0; background: rgba(255,255,255,.02); border-radius: 6px; }
-
-        .unit-placements { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
-        .unit-placement { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; border-radius: 6px; font-size: 10px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; }
-        .unit-placement.slot { background: rgba(52,211,153,.06); border: 1px solid rgba(52,211,153,.2); color: var(--green); }
-        .unit-placement.tower { background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.06); color: var(--dim); }
-
-        /* Upgrade cards */
-        .upgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
-        .upcard { background: var(--card); border: 1px solid #1e1e38; border-radius: 10px; padding: 14px; display: flex; align-items: center; gap: 12px; }
-        .upcard .up-name { font-size: 13px; font-weight: 700; flex: 1; }
-        .upcard .up-lv { font-size: 18px; font-weight: 900; color: var(--accent); }
-
-        /* Dice chips */
-        .dgrid { display: flex; flex-wrap: wrap; gap: 8px; }
-        .dchip { background: rgba(129,140,248,.06); border: 1px solid rgba(129,140,248,.15); border-radius: 8px; padding: 8px 14px; font-size: 12px; font-weight: 700; color: var(--accent); }
-
-        /* Gamepass list */
-        .gp-list { display: flex; flex-direction: column; gap: 6px; }
-        .gp-row { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid #1e1e38; border-radius: 10px; padding: 10px 14px; }
-        .gp-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-        .gp-dot.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
-        .gp-dot.off { background: #333; }
-        .gp-name { flex: 1; font-size: 13px; font-weight: 700; }
-        .gp-status { font-size: 11px; font-weight: 800; }
-        .gp-status.on { color: var(--green); }
-        .gp-status.off { color: var(--dim); }
+        .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 6px; }
+        .section-header > span:first-child { font-size: 12px; font-weight: 800; color: var(--accent); letter-spacing: .5px; text-transform: uppercase; }
       `}</style>
 
       <div className="ad">
         <div className="topbar">
-          <h1>Control Dashboard</h1>
+          <h1>Anime Dice Dashboard</h1>
         </div>
 
         <div className="controls">
@@ -541,12 +328,10 @@ export default function AnimeDicePage() {
           <div className="sort-wrap">
             <select className="sort-select" value={sortMode} onChange={(e) => setSortMode(e.target.value)}>
               <option value="default">SORT: DEFAULT</option>
-              <option value="money">MONEY (HIGH - LOW)</option>
               <option value="rebirth">REBIRTH (HIGH - LOW)</option>
-              <option value="rolls">SESSION ROLLS (HIGH - LOW)</option>
-              <option value="units">UNIT COUNT (HIGH - LOW)</option>
+              <option value="rolls">ROLLS (HIGH - LOW)</option>
             </select>
-            <input className="search-input" type="text" placeholder="Search accounts, dice..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input className="search-input" type="text" placeholder="Search accounts..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
         </div>
 
@@ -557,11 +342,8 @@ export default function AnimeDicePage() {
         ) : (
           <div className="grid">
             <CombinedCard
-              accounts={displayed}
-              totalMoney={totalMoney}
               totalRebirths={totalRebirths}
               totalRolls={totalRolls}
-              totalUnits={totalUnits}
               onlineCount={allOnline.length}
               totalCount={filtered.length}
               onClick={openCombined}
@@ -575,7 +357,7 @@ export default function AnimeDicePage() {
         {detail && (
           <div className="overlay" onClick={(e) => { if ((e.target as HTMLElement).classList.contains("overlay")) setDetail(null); }}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
-              <DetailModal detail={detail} tab={detailTab} setTab={setDetailTab} onClose={() => setDetail(null)} />
+              <DetailModal detail={detail} onClose={() => setDetail(null)} />
             </div>
           </div>
         )}
@@ -583,7 +365,7 @@ export default function AnimeDicePage() {
         {combined.open && (
           <div className="overlay" onClick={(e) => { if ((e.target as HTMLElement).classList.contains("overlay")) setCombined((p) => ({ ...p, open: false })); }}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
-              <CombinedModal combined={combined} setCombined={setCombined} accounts={accounts} onClose={() => setCombined((p) => ({ ...p, open: false }))} />
+              <CombinedModal combined={combined} accounts={accounts} onClose={() => setCombined((p) => ({ ...p, open: false }))} />
             </div>
           </div>
         )}
@@ -592,8 +374,8 @@ export default function AnimeDicePage() {
   );
 }
 
-function CombinedCard({ accounts, totalMoney, totalRebirths, totalRolls, totalUnits, onlineCount, totalCount, onClick }: {
-  accounts: ADAccount[]; totalMoney: number; totalRebirths: number; totalRolls: number; totalUnits: number; onlineCount: number; totalCount: number; onClick: () => void;
+function CombinedCard({ totalRebirths, totalRolls, onlineCount, totalCount, onClick }: {
+  totalRebirths: number; totalRolls: number; onlineCount: number; totalCount: number; onClick: () => void;
 }) {
   return (
     <div className="combined" onClick={onClick}>
@@ -607,30 +389,16 @@ function CombinedCard({ accounts, totalMoney, totalRebirths, totalRolls, totalUn
       </div>
       <div className="comb-stats">
         <div className="comb-stat">
-          <div className="cs-label">Combined Money</div>
-          <div className="cs-value money">{fmtMoney(totalMoney)}</div>
+          <div className="cs-label">Total Rebirths</div>
+          <div className="cs-value" style={{ color: "var(--accent2)" }}>{fmtNum(totalRebirths)}</div>
         </div>
         <div className="comb-stat">
-          <div className="cs-label">Total Rebirths</div>
-          <div className="cs-value rebirth">{totalRebirths}</div>
-        </div>
-      </div>
-      <div className="comb-extras">
-        <div className="comb-extra">
-          <div className="ce-label">Units</div>
-          <div className="ce-value">{fmtNum(totalUnits)}</div>
-        </div>
-        <div className="comb-extra">
-          <div className="ce-label">Rolls</div>
-          <div className="ce-value">{fmtNum(totalRolls)}</div>
-        </div>
-        <div className="comb-extra">
-          <div className="ce-label">Accounts</div>
-          <div className="ce-value">{totalCount}</div>
+          <div className="cs-label">Total Rolls</div>
+          <div className="cs-value" style={{ color: "var(--accent)" }}>{fmtNum(totalRolls)}</div>
         </div>
       </div>
       <div className="comb-footer">
-        <span className="comb-footer-link">Click to inspect All Accounts Telemetry <span>&#x2192;</span></span>
+        <span className="comb-footer-link">Click to see combined items &amp; gears <span>&#x2192;</span></span>
       </div>
     </div>
   );
@@ -638,8 +406,6 @@ function CombinedCard({ accounts, totalMoney, totalRebirths, totalRolls, totalUn
 
 function AccountCard({ account: a, onOpen }: { account: ADAccount; onOpen: (name: string) => void }) {
   const isOff = !a.online;
-  const bestUnit = (a.topUnits || [])[0] || null;
-  const dc = diceColor(a.dice || "");
 
   return (
     <div className={`acard ${isOff ? "offline" : ""}`} onClick={() => onOpen(a.sourceAccount)}>
@@ -655,72 +421,34 @@ function AccountCard({ account: a, onOpen }: { account: ADAccount; onOpen: (name
             <span className="acard-time">{fmtLastSeen(a.lastSeen)}</span>
           </div>
         </div>
-        {a.dice && (
-          <span className="acard-dice" style={{ background: dc + "18", color: dc, border: `1px solid ${dc}30` }}>
-            &#x1F3B2; {a.dice.toUpperCase()}
-          </span>
-        )}
       </div>
 
-      <div className="acard-main" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+      <div className="acard-main">
         <div className="acard-stat">
-          <div className="as-label">Balance</div>
-          <div className="as-value money">{fmtMoney(a.money)}</div>
-        </div>
-        <div className="acard-stat" style={{ textAlign: "center" }}>
           <div className="as-label">Rebirth</div>
-          <div className="as-value rebirth">R{a.rebirth ?? 0}</div>
+          <div className="as-value" style={{ color: "var(--accent2)" }}>R{a.rebirth ?? 0}</div>
         </div>
         <div className="acard-stat" style={{ textAlign: "right" }}>
-          <div className="as-label">Session Rolls</div>
+          <div className="as-label">Rolls</div>
           <div className="as-value" style={{ color: "var(--accent)" }}>{fmtNum(a.rolls)}</div>
         </div>
       </div>
 
-      {bestUnit && (
-        <div className="acard-unit">
-          <div className="unit-icon">&#x2694;</div>
-          <span className="unit-name">{bestUnit.variant ? `${bestUnit.variant} ` : ""}{bestUnit.name}</span>
-          <div className="unit-badges">
-            {bestUnit.variant && (
-              <span className="ubadge" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{bestUnit.variant === "Titanic" ? "None" : bestUnit.variant}</span>
-            )}
-            {!bestUnit.variant && (
-              <span className="ubadge" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>None</span>
-            )}
-            {bestUnit.mutation && (() => {
-              const ms = MUTATION_STYLES[bestUnit.mutation];
-              return <span className="ubadge" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{bestUnit.mutation}</span>;
-            })()}
-          </div>
-        </div>
-      )}
-
-      <div className="acard-toggles">
-        <span className={`toggle-pill ${a.autoRoll ? "on" : "off"}`}>ROLL</span>
-        <span className={`toggle-pill ${(a.autoSell ?? 0) > 0 ? "on" : "off"}`}>BALANCE</span>
-        <span className="toggle-pill off">AFK</span>
-      </div>
-
       <div className="acard-footer">
-        <span className="acard-footer-link">Click to open full telemetry preview</span>
+        <span className="acard-footer-link">View items &amp; gears</span>
         <span className="acard-footer-arrow">&#x2192;</span>
       </div>
     </div>
   );
 }
 
-function DetailModal({ detail, tab, setTab, onClose }: {
+function DetailModal({ detail, onClose }: {
   detail: { name: string; data: ADDetail | null; loading: boolean; account: ADAccount | null };
-  tab: DetailTab; setTab: (t: DetailTab) => void; onClose: () => void;
+  onClose: () => void;
 }) {
   const acc = detail.account;
   const d = detail.data;
   const isOnline = acc?.online ?? false;
-
-  const unitCount = d?.allUnits?.length || d?.topUnits?.length || 0;
-  const itemCount = (d?.totalItemCount ?? 0) || (d?.backpack?.length ?? 0);
-  const totalThings = unitCount + itemCount;
 
   return (
     <>
@@ -731,10 +459,10 @@ function DetailModal({ detail, tab, setTab, onClose }: {
         </div>
         <div className="mh-info">
           <div className="mh-name">
-            TELEMETRY & INVENTORY
-            {totalThings > 0 && <span className="mh-count">{unitCount} UNITS &bull; {itemCount} ITEMS</span>}
+            {detail.name}
+            {d && <span className="mh-count">{d.backpack?.length || 0} ITEMS</span>}
           </div>
-          <div className="mh-sub">Inspect units, plot generators, combat squad, items & upgrades.</div>
+          <div className="mh-sub">Items &amp; Gears</div>
         </div>
         <button className="modal-close" onClick={onClose}>&times;</button>
       </div>
@@ -749,30 +477,15 @@ function DetailModal({ detail, tab, setTab, onClose }: {
             <div className="mab-left">
               <span className="mab-name">{detail.name}</span>
               <span className={`mab-status ${isOnline ? "on" : "off"}`}>{isOnline ? "ONLINE" : "OFFLINE"}</span>
-              {acc?.dice && <span className="mab-dice" style={{ color: diceColor(acc.dice) }}>{acc.dice} Dice</span>}
-              {acc?.vip && <span className="mab-vip">VIP</span>}
             </div>
             <div className="mab-stats">
-              <span className="mab-stat"><span className="mab-sl">Money</span> <span style={{ color: "var(--green)" }}>{fmtMoney(acc?.money)}</span></span>
               <span className="mab-stat"><span className="mab-sl">Rebirth</span> <span style={{ color: "var(--accent2)" }}>R{acc?.rebirth ?? 0}</span></span>
               <span className="mab-stat"><span className="mab-sl">Rolls</span> <span style={{ color: "var(--accent)" }}>{fmtNum(acc?.rolls)}</span></span>
             </div>
           </div>
 
-          <div className="modal-tabs">
-            <button className={`mtab ${tab === "units" ? "active" : ""}`} onClick={() => setTab("units")}>&#x2694; Units Roster ({unitCount})</button>
-            <button className={`mtab ${tab === "slots" ? "active" : ""}`} onClick={() => setTab("slots")}>&#x2699; Plot Generators ({d.slots?.length || 0})</button>
-            <button className={`mtab ${tab === "tower" ? "active" : ""}`} onClick={() => setTab("tower")}>&#x1F3F0; Tower Squad ({d.towerSquad?.squad?.length || 0})</button>
-            <button className={`mtab ${tab === "backpack" ? "active" : ""}`} onClick={() => setTab("backpack")}>&#x1F392; Backpack Items ({d.backpack?.length || 0})</button>
-            <button className={`mtab ${tab === "upgrades" ? "active" : ""}`} onClick={() => setTab("upgrades")}>&#x2B50; Upgrades & Dice</button>
-          </div>
-
           <div className="modal-body">
-            {tab === "units" && <UnitsTab units={d.allUnits?.length ? d.allUnits : d.topUnits || []} />}
-            {tab === "slots" && <SlotsTab slots={d.slots || []} />}
-            {tab === "tower" && <TowerTab data={d.towerSquad || { squad: [], equipped: null }} />}
-            {tab === "backpack" && <BackpackTab items={d.backpack || []} gamepasses={d.gamepasses || {}} />}
-            {tab === "upgrades" && <UpgradesDiceTab upgrades={d.upgrades || {}} upgradesList={d.upgradesList || []} dice={d.ownedDice || []} activeDice={acc?.dice || ""} />}
+            <BackpackTab items={d.backpack || []} />
           </div>
         </>
       )}
@@ -780,26 +493,15 @@ function DetailModal({ detail, tab, setTab, onClose }: {
   );
 }
 
-function CombinedModal({ combined, setCombined, accounts, onClose }: {
+function CombinedModal({ combined, accounts, onClose }: {
   combined: CombinedState;
-  setCombined: (fn: (p: CombinedState) => CombinedState) => void;
   accounts: ADAccount[];
   onClose: () => void;
 }) {
-  const tab = combined.tab;
   const onlineCount = accounts.filter((a) => a.online).length;
 
-  const allUnits: (Unit & { owner: string })[] = [];
-  const allSlots: (SlotData & { owner: string })[] = [];
-  const allTower: (TowerUnit & { owner: string })[] = [];
   const allBackpack: (BackpackItem & { owner: string })[] = [];
-
   for (const d of combined.details) {
-    const units = d.data.allUnits?.length ? d.data.allUnits : d.data.topUnits || [];
-    for (const u of units) allUnits.push({ ...u, owner: d.account });
-    for (const s of (d.data.slots || [])) allSlots.push({ ...s, owner: d.account });
-    for (const t of (d.data.towerSquad?.squad || [])) allTower.push({ ...t, owner: d.account });
-    if (d.data.towerSquad?.equipped) allTower.push({ ...d.data.towerSquad.equipped, owner: d.account });
     for (const b of (d.data.backpack || [])) allBackpack.push({ ...b, owner: d.account });
   }
 
@@ -811,10 +513,10 @@ function CombinedModal({ combined, setCombined, accounts, onClose }: {
         </div>
         <div className="mh-info">
           <div className="mh-name">
-            ALL ACCOUNTS TELEMETRY
-            <span className="mh-count">{allUnits.length} UNITS &bull; {allBackpack.length} ITEMS</span>
+            ALL ACCOUNTS
+            <span className="mh-count">{allBackpack.length} ITEMS</span>
           </div>
-          <div className="mh-sub">{onlineCount} of {accounts.length} online &mdash; aggregated data across all accounts.</div>
+          <div className="mh-sub">{onlineCount} of {accounts.length} online &mdash; combined items &amp; gears.</div>
         </div>
         <button className="modal-close" onClick={onClose}>&times;</button>
       </div>
@@ -827,24 +529,11 @@ function CombinedModal({ combined, setCombined, accounts, onClose }: {
         <>
           <div className="modal-stats">
             <div className="ms"><div className="ms-l">Accounts</div><div className="ms-v" style={{ color: "var(--cyan)" }}>{combined.details.length}</div></div>
-            <div className="ms"><div className="ms-l">Total Units</div><div className="ms-v" style={{ color: "var(--accent)" }}>{allUnits.length}</div></div>
-            <div className="ms"><div className="ms-l">Plot Slots</div><div className="ms-v" style={{ color: "var(--green)" }}>{allSlots.length}</div></div>
-            <div className="ms"><div className="ms-l">Tower Squad</div><div className="ms-v" style={{ color: "var(--gold)" }}>{allTower.length}</div></div>
-            <div className="ms"><div className="ms-l">Backpack Items</div><div className="ms-v" style={{ color: "var(--red)" }}>{allBackpack.length}</div></div>
-          </div>
-
-          <div className="modal-tabs">
-            <button className={`mtab ${tab === "units" ? "active" : ""}`} onClick={() => setCombined((p) => ({ ...p, tab: "units" }))}>&#x2694; Units Roster ({allUnits.length})</button>
-            <button className={`mtab ${tab === "slots" ? "active" : ""}`} onClick={() => setCombined((p) => ({ ...p, tab: "slots" }))}>&#x2699; Plot Generators ({allSlots.length})</button>
-            <button className={`mtab ${tab === "tower" ? "active" : ""}`} onClick={() => setCombined((p) => ({ ...p, tab: "tower" }))}>&#x1F3F0; Tower Squad ({allTower.length})</button>
-            <button className={`mtab ${tab === "backpack" ? "active" : ""}`} onClick={() => setCombined((p) => ({ ...p, tab: "backpack" }))}>&#x1F392; Backpack Items ({allBackpack.length})</button>
+            <div className="ms"><div className="ms-l">Total Items</div><div className="ms-v" style={{ color: "var(--accent)" }}>{allBackpack.length}</div></div>
           </div>
 
           <div className="modal-body">
-            {tab === "units" && <CombinedUnitsTab units={allUnits} />}
-            {tab === "slots" && <CombinedSlotsTab slots={allSlots} />}
-            {tab === "tower" && <CombinedTowerTab units={allTower} />}
-            {tab === "backpack" && <CombinedBackpackTab items={allBackpack} />}
+            <CombinedBackpackTab items={allBackpack} />
           </div>
         </>
       )}
@@ -852,57 +541,73 @@ function CombinedModal({ combined, setCombined, accounts, onClose }: {
   );
 }
 
-function CombinedUnitsTab({ units }: { units: (Unit & { owner: string })[] }) {
+const BACKPACK_CATEGORIES: Record<string, string> = {
+  Currency: "Currencies",
+  "Damage Potion": "Damage Boosts",
+  "Income Potion": "Income Boosts",
+  "Luck Potion": "Luck Boosts",
+  "Reroll Potion": "Rerolls",
+};
+
+function getCategory(kind: string): string {
+  return BACKPACK_CATEGORIES[kind] || kind;
+}
+
+const BACKPACK_SORT_ORDER: string[] = [
+  "Gems", "Trait Reroll", "Ticket", "Jackpot Point", "Lucky Spin",
+  "Star Fragment", "Rebirth Token", "Auto Roll Ticket",
+];
+
+function backpackSortKey(name: string): number {
+  const lower = name.toLowerCase();
+  for (let i = 0; i < BACKPACK_SORT_ORDER.length; i++) {
+    if (lower.includes(BACKPACK_SORT_ORDER[i].toLowerCase())) return i;
+  }
+  return BACKPACK_SORT_ORDER.length;
+}
+
+function BackpackTab({ items }: { items: BackpackItem[] }) {
   const [filter, setFilter] = useState("");
-  if (units.length === 0) return <div className="detail-empty">No unit data available.</div>;
-  const filtered = filter.trim()
-    ? units.filter((u) => u.name.toLowerCase().includes(filter.toLowerCase()) || u.rarity.toLowerCase().includes(filter.toLowerCase()) || (u.mutation || "").toLowerCase().includes(filter.toLowerCase()) || (u.trait || "").toLowerCase().includes(filter.toLowerCase()) || u.owner.toLowerCase().includes(filter.toLowerCase()))
-    : units;
-  return (
-    <>
-      <input className="search-input" style={{ width: "100%", marginBottom: 14 }} placeholder="Search unit, rarity, mutation, trait, account..." value={filter} onChange={(e) => setFilter(e.target.value)} />
-      <div className="ugrid">
-        {filtered.map((u, i) => <UnitCardContent key={i} u={u} rc={rarityColor(u.rarity)} ownerTag={u.owner} />)}
-      </div>
-    </>
-  );
-}
+  const [cat, setCat] = useState("All");
 
-function CombinedSlotsTab({ slots }: { slots: (SlotData & { owner: string })[] }) {
-  if (slots.length === 0) return <div className="detail-empty">No plot generator data available.</div>;
+  const categories = ["All", ...Array.from(new Set(items.map((it) => getCategory(it.kind)))).sort()];
+
+  const filtered = items.filter((it) => {
+    if (cat !== "All" && getCategory(it.kind) !== cat) return false;
+    if (filter.trim() && !it.name.toLowerCase().includes(filter.toLowerCase())) return false;
+    return true;
+  }).sort((a, b) => backpackSortKey(a.name) - backpackSortKey(b.name));
+
   return (
     <>
-      <div className="section-header">
-        <span>&#x2699; ALL PLOT GENERATORS ({slots.length} SLOTS ACROSS ALL ACCOUNTS)</span>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
+        <input className="search-input" style={{ width: 220 }} placeholder="Search items, gears..." value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <div className="bp-cats">
+          {categories.map((c) => (
+            <button key={c} className={`bp-cat ${cat === c ? "active" : ""}`} onClick={() => setCat(c)}>
+              {c === "All" ? `All (${items.length})` : c}
+            </button>
+          ))}
+        </div>
       </div>
-      <div className="slot-grid">
-        {slots.map((s, i) => {
-          const rc = s.rarity ? rarityColor(s.rarity) : "var(--dim)";
-          return (
-            <div key={i} className="slot-card">
-              <div className="slot-header">
-                <span className="slot-badge">SLOT #{typeof s.slot === "number" ? s.slot : i + 1}</span>
-                <span className="ub" style={{ background: "rgba(34,211,238,.08)", color: "var(--cyan)", fontSize: 8 }}>@{s.owner}</span>
+
+      {filtered.length > 0 ? (
+        <div className="bp-grid">
+          {filtered.map((it, i) => (
+            <div key={i} className="bp-card">
+              <div className="bp-top">
+                <span className="bp-name">{it.name}</span>
+                <span className="bp-amount">x{it.amount.toLocaleString()}</span>
               </div>
-              <SlotCardContent s={s} rc={rc} />
+              <span className="bp-kind" style={{ color: rarityColor(it.rarity) }}>{getCategory(it.kind)}{it.slot ? ` · ${it.slot}` : ""}</span>
             </div>
-          );
-        })}
-      </div>
-    </>
-  );
-}
-
-function CombinedTowerTab({ units }: { units: (TowerUnit & { owner: string })[] }) {
-  if (units.length === 0) return <div className="detail-empty">No tower squad data available.</div>;
-  return (
-    <>
-      <div className="section-header">
-        <span>&#x1F3F0; ALL TOWER COMBAT FIGHTERS ({units.length} ACROSS ALL ACCOUNTS)</span>
-      </div>
-      <div className="tower-grid">
-        {units.map((u, i) => <TowerCardContent key={i} u={u} idx={i} ownerTag={u.owner} />)}
-      </div>
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <div className="detail-empty">No item data available.</div>
+      ) : (
+        <div className="detail-empty">No items match your filter.</div>
+      )}
     </>
   );
 }
@@ -921,7 +626,6 @@ function CombinedBackpackTab({ items }: { items: (BackpackItem & { owner: string
   });
   const filteredList = [...filtered].sort((a, b) => backpackSortKey(a.name) - backpackSortKey(b.name));
 
-  // Aggregate: group by name, sum amount across accounts, track owners
   const aggMap = new Map<string, { name: string; rarity: string; kind: string; slot?: string | null; total: number; owners: Set<string> }>();
   filtered.forEach((it) => {
     const key = it.name;
@@ -940,7 +644,7 @@ function CombinedBackpackTab({ items }: { items: (BackpackItem & { owner: string
       });
     }
   });
-  // Group aggregated items by kind
+
   const byKind = new Map<string, typeof aggMap extends Map<string, infer V> ? V[] : never>();
   aggMap.forEach((v) => {
     const g = getCategory(v.kind);
@@ -972,7 +676,7 @@ function CombinedBackpackTab({ items }: { items: (BackpackItem & { owner: string
 
       {mode === "summary" ? (
         kindEntries.length === 0 ? (
-          <div className="detail-empty">{items.length === 0 ? "No backpack item data available." : "No items match your filter."}</div>
+          <div className="detail-empty">{items.length === 0 ? "No item data available." : "No items match your filter."}</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {kindEntries.map((grp) => (
@@ -1015,363 +719,10 @@ function CombinedBackpackTab({ items }: { items: (BackpackItem & { owner: string
           ))}
         </div>
       ) : items.length === 0 ? (
-        <div className="detail-empty">No backpack item data available.</div>
+        <div className="detail-empty">No item data available.</div>
       ) : (
         <div className="detail-empty">No items match your filter.</div>
       )}
-    </>
-  );
-}
-
-function UnitCardContent({ u, rc, ownerTag }: { u: Unit; rc: string; ownerTag?: string }) {
-  return (
-    <div className="ucard" style={{ borderColor: rc + "25" }}>
-      {ownerTag && <div style={{ marginBottom: 6 }}><span className="ub" style={{ background: "rgba(34,211,238,.08)", color: "var(--cyan)", fontSize: 8 }}>@{ownerTag}</span></div>}
-      <div className="ucard-top">
-        {u.grade && !u.variant && <span className="ub" style={{ background: "rgba(251,191,36,.12)", color: "var(--gold)", fontWeight: 900 }}>{u.grade}</span>}
-        {u.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{u.variant === "Titanic" ? "S" : u.variant === "Huge" ? "A+" : u.variant[0]}</span>}
-        {u.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {u.level}</span>}
-        <span className="ub" style={{ background: rc + "20", color: rc }}>{u.rarity.toUpperCase()}</span>
-        {u.mutation && (() => {
-          const ms = MUTATION_STYLES[u.mutation];
-          return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{u.mutation}</span>;
-        })()}
-        {u.locked && <span className="ub" style={{ background: "rgba(239,68,68,.1)", color: "var(--red)" }}>LOCKED</span>}
-      </div>
-      <div className="ucard-name" style={{ color: rc }}>{u.variant ? `${u.variant} ` : ""}{u.name}</div>
-
-      {(u.chance != null || u.income != null) && (
-        <div className="unit-stats-box">
-          {u.chance != null && (
-            <div className="unit-stat-cell">
-              <div className="unit-stat-label">CHANCE</div>
-              <div className="unit-stat-val">1 in {fmtMoney(u.chance)}</div>
-            </div>
-          )}
-          {u.income != null && (
-            <div className="unit-stat-cell">
-              <div className="unit-stat-label">SPEED</div>
-              <div className="unit-stat-val" style={{ color: "var(--green)" }}>${fmtMoney(u.income)}/s</div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {u.trait && (
-        <div className="unit-trait-row">
-          <span style={{ color: "var(--dim)", fontSize: 11, marginRight: 6 }}>&#x2699;</span>
-          <span style={{ color: "var(--accent2)", fontSize: 12, fontWeight: 700 }}>{u.trait}</span>
-        </div>
-      )}
-
-      {u.placed && (
-        <div className="unit-placements">
-          {u.placed === "slot" && (
-            <div className="unit-placement slot"><span>PLOT SLOT</span><span style={{ color: "var(--green)" }}>&#x25CF;</span></div>
-          )}
-          {u.placed === "tower" && (
-            <div className="unit-placement tower"><span>TOWER SQUAD</span><span>&#x1F3F0;</span></div>
-          )}
-        </div>
-      )}
-
-      <div className="ucard-meta" style={{ marginTop: u.placed || u.trait ? 0 : 6 }}>
-        <span className="ucard-amount">x{u.amount}</span>
-      </div>
-    </div>
-  );
-}
-
-function UnitsTab({ units }: { units: Unit[] }) {
-  const [filter, setFilter] = useState("");
-  if (units.length === 0) return <div className="detail-empty">No unit data available.</div>;
-  const filtered = filter.trim()
-    ? units.filter((u) => u.name.toLowerCase().includes(filter.toLowerCase()) || u.rarity.toLowerCase().includes(filter.toLowerCase()) || (u.mutation || "").toLowerCase().includes(filter.toLowerCase()) || (u.trait || "").toLowerCase().includes(filter.toLowerCase()))
-    : units;
-  return (
-    <>
-      <input className="search-input" style={{ width: "100%", marginBottom: 14 }} placeholder="Search unit, rarity, mutation, trait..." value={filter} onChange={(e) => setFilter(e.target.value)} />
-      <div className="ugrid">
-        {filtered.map((u, i) => <UnitCardContent key={i} u={u} rc={rarityColor(u.rarity)} />)}
-      </div>
-    </>
-  );
-}
-
-function SlotCardContent({ s, rc }: { s: SlotData; rc: string }) {
-  return s.name ? (
-    <>
-      <div className="slot-name">{s.name}</div>
-      <div className="slot-tags">
-        {s.grade && !s.variant && <span className="ub" style={{ background: "rgba(251,191,36,.12)", color: "var(--gold)", fontWeight: 900 }}>{s.grade}</span>}
-        {s.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{s.variant === "Titanic" ? "S" : s.variant === "Huge" ? "A+" : s.variant[0]}</span>}
-        {s.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {s.level}</span>}
-        <span className="ub" style={{ background: rc + "20", color: rc }}>{(s.rarity || "").toUpperCase()}</span>
-        {s.mutation && (() => {
-          const ms = MUTATION_STYLES[s.mutation];
-          return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{s.mutation}</span>;
-        })()}
-      </div>
-      <div className="slot-stats">
-        {s.chance != null && (
-          <div className="slot-stat-row"><span className="slot-stat-l">Chance</span><span className="slot-stat-v">1 in {fmtMoney(s.chance)}</span></div>
-        )}
-        {s.income != null && (
-          <div className="slot-stat-row"><span className="slot-stat-l">Speed</span><span className="slot-stat-v" style={{ color: "var(--green)" }}>${fmtMoney(s.income)}/s</span></div>
-        )}
-        {s.damage != null && (
-          <div className="slot-stat-row"><span className="slot-stat-l">Damage</span><span className="slot-stat-v" style={{ color: "var(--red)" }}>{fmtMoney(s.damage)}</span></div>
-        )}
-        {s.trait && (
-          <div className="slot-stat-row"><span className="slot-stat-l">Trait</span><span className="slot-stat-v" style={{ color: "var(--accent2)" }}>{s.trait}</span></div>
-        )}
-      </div>
-      {s.balance != null && (
-        <div className="slot-balance">
-          <span className="slot-bl">SLOT BALANCE</span>
-          <span className="slot-bv">{fmtMoney(s.balance)}</span>
-        </div>
-      )}
-    </>
-  ) : (
-    <div className="slot-empty">Empty Slot</div>
-  );
-}
-
-function SlotsTab({ slots }: { slots: SlotData[] }) {
-  if (slots.length === 0) return <div className="detail-empty">No plot generator data available.</div>;
-  return (
-    <>
-      <div className="section-header">
-        <span>&#x2699; PLOT MONEY GENERATORS ({slots.length} PRODUCTION SLOTS)</span>
-        <span className="section-desc">Units placed on the plot continuously generate money.</span>
-      </div>
-      <div className="slot-grid">
-        {slots.map((s, i) => {
-          const rc = s.rarity ? rarityColor(s.rarity) : "var(--dim)";
-          return (
-            <div key={i} className="slot-card">
-              <div className="slot-header">
-                <span className="slot-badge">SLOT #{typeof s.slot === "number" ? s.slot : i + 1}</span>
-                {s.name && <span className="slot-dot" style={{ background: "var(--green)" }} />}
-                {!s.name && <span className="slot-dot" style={{ background: "var(--dim)" }} />}
-              </div>
-              <SlotCardContent s={s} rc={rc} />
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
-}
-
-function TowerCardContent({ u, idx, ownerTag }: { u: TowerUnit; idx: number; ownerTag?: string }) {
-  const rc = rarityColor(u.rarity);
-  return (
-    <div className="tower-card">
-      <div className="tower-header">
-        <span className="slot-badge">FIGHTER #{typeof u.slot === "number" ? u.slot : idx + 1}</span>
-        {ownerTag && <span className="ub" style={{ background: "rgba(34,211,238,.08)", color: "var(--cyan)", fontSize: 8 }}>@{ownerTag}</span>}
-        <span className="ub" style={{ background: rc + "20", color: rc }}>{u.rarity.toUpperCase()}</span>
-      </div>
-      <div className="tower-name">{u.variant ? `${u.variant} ` : ""}{u.name}</div>
-      <div className="tower-tags">
-        {u.variant && <span className="ub" style={{ background: "rgba(129,140,248,.1)", color: "var(--accent)" }}>{u.variant === "Titanic" ? "S" : u.variant[0]}</span>}
-        {u.level != null && <span className="ub" style={{ background: "rgba(255,255,255,.04)", color: "var(--dim)" }}>Lv. {u.level}</span>}
-        {u.mutation && (() => {
-          const ms = MUTATION_STYLES[u.mutation!];
-          return <span className="ub" style={ms ? { background: ms.bg, color: ms.color } : { background: "rgba(167,139,250,.1)", color: "#c4b5fd" }}>{u.mutation}</span>;
-        })()}
-      </div>
-      {(u.chance != null || u.damage != null || u.income != null) && (
-        <div className="slot-stats" style={{ marginTop: 10 }}>
-          {u.chance != null && <div className="slot-stat-row"><span className="slot-stat-l">Roll Chance</span><span className="slot-stat-v" style={{ color: "var(--cyan)" }}>1 in {fmtMoney(u.chance)}</span></div>}
-          {u.damage != null && <div className="slot-stat-row"><span className="slot-stat-l">Damage</span><span className="slot-stat-v" style={{ color: "var(--red)" }}>{fmtMoney(u.damage)} DMG</span></div>}
-          {u.income != null && <div className="slot-stat-row"><span className="slot-stat-l">Income</span><span className="slot-stat-v" style={{ color: "var(--green)" }}>${fmtMoney(u.income)}/s</span></div>}
-        </div>
-      )}
-      {u.trait && (
-        <div className="unit-trait-row">
-          <span style={{ color: "var(--dim)", fontSize: 11, marginRight: 6 }}>&#x2699;</span>
-          <span style={{ color: "var(--accent2)", fontSize: 12, fontWeight: 700 }}>{u.trait}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TowerTab({ data }: { data: { squad: TowerUnit[]; equipped: TowerUnit | null } }) {
-  if (!data.equipped && data.squad.length === 0) return <div className="detail-empty">No tower squad data available.</div>;
-  return (
-    <>
-      {data.equipped && (
-        <div className="equipped-section">
-          <div className="section-header">
-            <span>&#x2694; EQUIPPED FIGHTER</span>
-          </div>
-          <TowerCardContent u={data.equipped} idx={0} />
-        </div>
-      )}
-
-      {data.squad.length > 0 && (
-        <>
-          <div className="section-header" style={{ marginTop: 16 }}>
-            <span>&#x1F3F0; TOWER COMBAT BATTLE SQUAD ({data.squad.length} FIGHTERS)</span>
-            <span className="section-desc">Units dispatched to climb Infinity, Cursed, Dragon, and Pirate Towers.</span>
-          </div>
-          <div className="tower-grid">
-            {data.squad.map((u, i) => <TowerCardContent key={i} u={u} idx={i} />)}
-          </div>
-        </>
-      )}
-    </>
-  );
-}
-
-const BACKPACK_CATEGORIES: Record<string, string> = {
-  Currency: "Currencies",
-  "Damage Potion": "Damage Boosts",
-  "Income Potion": "Income Boosts",
-  "Luck Potion": "Luck Boosts",
-  "Reroll Potion": "Rerolls",
-};
-
-function getCategory(kind: string): string {
-  return BACKPACK_CATEGORIES[kind] || kind;
-}
-
-const BACKPACK_SORT_ORDER: string[] = [
-  "Gems", "Trait Reroll", "Ticket", "Jackpot Point", "Lucky Spin",
-  "Star Fragment", "Rebirth Token", "Auto Roll Ticket",
-];
-
-function backpackSortKey(name: string): number {
-  const lower = name.toLowerCase();
-  for (let i = 0; i < BACKPACK_SORT_ORDER.length; i++) {
-    if (lower.includes(BACKPACK_SORT_ORDER[i].toLowerCase())) return i;
-  }
-  return BACKPACK_SORT_ORDER.length;
-}
-
-function BackpackTab({ items, gamepasses }: { items: BackpackItem[]; gamepasses: Record<string, boolean> }) {
-  const [filter, setFilter] = useState("");
-  const [cat, setCat] = useState("All");
-
-  const categories = ["All", ...Array.from(new Set(items.map((it) => getCategory(it.kind)))).sort()];
-
-  const filtered = items.filter((it) => {
-    if (cat !== "All" && getCategory(it.kind) !== cat) return false;
-    if (filter.trim() && !it.name.toLowerCase().includes(filter.toLowerCase())) return false;
-    return true;
-  }).sort((a, b) => backpackSortKey(a.name) - backpackSortKey(b.name));
-
-  const gpEntries = Object.entries(gamepasses);
-
-  return (
-    <>
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
-        <input className="search-input" style={{ width: 220 }} placeholder="Search potions, currencies, boosts..." value={filter} onChange={(e) => setFilter(e.target.value)} />
-        <div className="bp-cats">
-          {categories.map((c) => (
-            <button key={c} className={`bp-cat ${cat === c ? "active" : ""}`} onClick={() => setCat(c)}>
-              {c === "All" ? `All (${items.length})` : c}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {filtered.length > 0 ? (
-        <div className="bp-grid">
-          {filtered.map((it, i) => (
-            <div key={i} className="bp-card">
-              <div className="bp-top">
-                <span className="bp-name">{it.name}</span>
-                <span className="bp-amount">x{it.amount.toLocaleString()}</span>
-              </div>
-              <span className="bp-kind" style={{ color: rarityColor(it.rarity) }}>{getCategory(it.kind)}</span>
-            </div>
-          ))}
-        </div>
-      ) : items.length === 0 ? (
-        <div className="detail-empty">No backpack item data available.</div>
-      ) : (
-        <div className="detail-empty">No items match your filter.</div>
-      )}
-
-      {gpEntries.length > 0 && (
-        <>
-          <div className="section-header" style={{ marginTop: 20 }}>
-            <span>&#x1F3AB; GAMEPASSES ({gpEntries.length})</span>
-          </div>
-          <div className="gp-list">
-            {gpEntries.map(([name, owned]) => (
-              <div key={name} className="gp-row">
-                <span className={`gp-dot ${owned ? "on" : "off"}`} />
-                <span className="gp-name">{name}</span>
-                <span className={`gp-status ${owned ? "on" : "off"}`}>{owned ? "OWNED" : "NOT OWNED"}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </>
-  );
-}
-
-function UpgradesDiceTab({ upgrades, upgradesList, dice, activeDice }: { upgrades: Record<string, number>; upgradesList: string[]; dice: string[]; activeDice: string }) {
-  const hasDetailedList = upgradesList.length > 0;
-  const entries = Object.entries(upgrades);
-  return (
-    <>
-      {hasDetailedList ? (
-        <>
-          <div className="section-header">
-            <span>&#x2B50; UNLOCKED SKILL & STAT UPGRADES ({upgradesList.length} ACTIVE)</span>
-            <span className="section-right">Permanent game boosts & multipliers</span>
-          </div>
-          <div className="up-pills">
-            {upgradesList.map((name) => (
-              <span key={name} className="up-pill">&#x2714; {name}</span>
-            ))}
-          </div>
-        </>
-      ) : entries.length > 0 ? (
-        <>
-          <div className="section-header">
-            <span>&#x2B50; UPGRADES</span>
-          </div>
-          <div className="upgrid">
-            {entries.map(([name, level]) => (
-              <div key={name} className="upcard">
-                <span className="up-name">{name}</span>
-                <span className="up-lv">Lv. {level}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      ) : null}
-
-      {dice.length > 0 && (
-        <>
-          <div className="section-header" style={{ marginTop: 20 }}>
-            <span>&#x1F3B2; OWNED DICE SKINS COLLECTION ({dice.length} UNLOCKED)</span>
-            {activeDice && <span className="section-right">Active: {activeDice}</span>}
-          </div>
-          <div className="dgrid">
-            {dice.map((d) => {
-              const c = diceColor(d);
-              const isActive = d === activeDice;
-              return (
-                <span key={d} className={`dchip ${isActive ? "active-dice" : ""}`} style={{ color: c, borderColor: c + "25", background: c + "08" }}>
-                  &#x1F3B2; {d} {isActive && <span className="dice-active-tag">ACTIVE</span>}
-                </span>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {(hasDetailedList ? false : entries.length === 0) && dice.length === 0 && <div className="detail-empty">No upgrade or dice data.</div>}
     </>
   );
 }
