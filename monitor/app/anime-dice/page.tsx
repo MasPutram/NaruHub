@@ -543,9 +543,9 @@ function CombinedModal({ combined, accounts, onClose }: {
 
 const BACKPACK_CATEGORIES: Record<string, string> = {
   Currency: "Currencies",
-  "Damage Potion": "Damage Boosts",
-  "Income Potion": "Income Boosts",
-  "Luck Potion": "Luck Boosts",
+  "Damage Potion": "Boost",
+  "Income Potion": "Boost",
+  "Luck Potion": "Boost",
   "Reroll Potion": "Rerolls",
 };
 
@@ -564,6 +564,24 @@ function backpackSortKey(name: string): number {
     if (lower.includes(BACKPACK_SORT_ORDER[i].toLowerCase())) return i;
   }
   return BACKPACK_SORT_ORDER.length;
+}
+
+function parseBoostLevel(name: string): { base: string; level: number; roman: string } | null {
+  const m = name.match(/^(.+)\s+(IV|III|II|I|V)$/);
+  if (!m) return null;
+  const romanToNum: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4, V: 5 };
+  const level = romanToNum[m[2]];
+  if (!level) return null;
+  return { base: m[1].trim(), level, roman: m[2] };
+}
+
+function isBoostItem(it: BackpackItem): boolean {
+  return it.kind.includes("Potion") && it.kind !== "Reroll Potion" && parseBoostLevel(it.name) !== null;
+}
+
+function fmtBoostVal(v: number): string {
+  if (Number.isInteger(v)) return v.toLocaleString("en-US");
+  return v.toLocaleString("en-US", { maximumFractionDigits: 3 });
 }
 
 function BackpackTab({ items }: { items: BackpackItem[] }) {
@@ -616,6 +634,8 @@ function CombinedBackpackTab({ items }: { items: (BackpackItem & { owner: string
   const [filter, setFilter] = useState("");
   const [cat, setCat] = useState("All");
   const [mode, setMode] = useState<"summary" | "list">("summary");
+  const [boostHighest, setBoostHighest] = useState(true);
+  const [gearDivine, setGearDivine] = useState(false);
 
   const categories = ["All", ...Array.from(new Set(items.map((it) => getCategory(it.kind)))).sort()];
 
@@ -653,9 +673,27 @@ function CombinedBackpackTab({ items }: { items: (BackpackItem & { owner: string
     byKind.set(g, arr);
   });
   const kindEntries = Array.from(byKind.entries()).map(([k, arr]) => {
-    arr.sort((a, b) => b.total - a.total);
-    return { kind: k, items: arr, totalItems: arr.reduce((s, x) => s + x.total, 0) };
-  }).sort((a, b) => b.totalItems - a.totalItems);
+    let items = [...arr];
+    if (k === "Boost" && boostHighest) {
+      const maxLvl = new Map<string, number>();
+      for (const it of items) {
+        const p = parseBoostLevel(it.name);
+        if (p) maxLvl.set(p.base, Math.max(maxLvl.get(p.base) || 0, p.level));
+      }
+      items = items.filter(it => {
+        const p = parseBoostLevel(it.name);
+        return !p || p.level >= (maxLvl.get(p.base) || 0);
+      });
+    }
+    if (k === "Gear" && gearDivine) {
+      items = items.filter(it => it.rarity === "Divine");
+    }
+    items.sort((a, b) => b.total - a.total);
+    return { kind: k, items, totalItems: items.reduce((s, x) => s + x.total, 0) };
+  }).filter(e => e.items.length > 0).sort((a, b) => b.totalItems - a.totalItems);
+
+  const showBoostFilter = cat === "All" || cat === "Boost";
+  const showGearFilter = cat === "All" || cat === "Gear";
 
   return (
     <>
@@ -673,6 +711,26 @@ function CombinedBackpackTab({ items }: { items: (BackpackItem & { owner: string
           ))}
         </div>
       </div>
+      {mode === "summary" && (showBoostFilter || showGearFilter) && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+          {showBoostFilter && (
+            <button
+              onClick={() => setBoostHighest(!boostHighest)}
+              style={{ padding: "5px 14px", fontSize: 11, fontWeight: 800, cursor: "pointer", borderRadius: 16, border: boostHighest ? "1px solid rgba(251,191,36,.35)" : "1px solid #222240", background: boostHighest ? "rgba(251,191,36,.12)" : "transparent", color: boostHighest ? "var(--gold)" : "var(--dim)", transition: "all .15s" }}
+            >
+              Highest Level Only
+            </button>
+          )}
+          {showGearFilter && (
+            <button
+              onClick={() => setGearDivine(!gearDivine)}
+              style={{ padding: "5px 14px", fontSize: 11, fontWeight: 800, cursor: "pointer", borderRadius: 16, border: gearDivine ? "1px solid rgba(168,85,247,.35)" : "1px solid #222240", background: gearDivine ? "rgba(168,85,247,.12)" : "transparent", color: gearDivine ? "var(--accent2)" : "var(--dim)", transition: "all .15s" }}
+            >
+              Divine Only
+            </button>
+          )}
+        </div>
+      )}
 
       {mode === "summary" ? (
         kindEntries.length === 0 ? (
@@ -693,7 +751,7 @@ function CombinedBackpackTab({ items }: { items: (BackpackItem & { owner: string
                         <span className="bp-amount" style={{ background: "rgba(52,211,153,.1)", color: "var(--green)" }}>×{it.total.toLocaleString()}</span>
                       </div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span className="bp-kind" style={{ color: rarityColor(it.rarity) }}>{it.rarity}{it.slot ? ` · ${it.slot}` : ""}</span>
+                        <span className="bp-kind" style={{ color: rarityColor(it.rarity) }}>{it.rarity} · {(() => { const p = parseBoostLevel(it.name); return p ? p.base : (it.slot || grp.kind); })()}</span>
                         <span style={{ fontSize: 9, fontWeight: 700, color: "var(--cyan)" }}>{it.owners.size} akun</span>
                       </div>
                     </div>

@@ -241,12 +241,12 @@ titleBar.BorderSizePixel = 0
 titleBar.Parent = mainFrame
 
 local titleLabel = Instance.new("TextLabel")
-titleLabel.Text = "NaruHub | Anime Dice v2.3.0"
+titleLabel.Text = "NaruHub | Anime Dice v2.4.0"
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 13
 titleLabel.TextColor3 = INK
 titleLabel.BackgroundTransparency = 1
-titleLabel.Size = UDim2.new(1, -80, 1, 0)
+titleLabel.Size = UDim2.new(1, -76, 1, 0)
 titleLabel.Position = UDim2.new(0, 12, 0, 0)
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 titleLabel.Parent = titleBar
@@ -259,24 +259,12 @@ badge.TextColor3 = ACCENT
 badge.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
 badge.BackgroundTransparency = 0.88
 badge.Size = UDim2.new(0, 62, 0, 20)
-badge.Position = UDim2.new(1, -106, 0, 8)
+badge.Position = UDim2.new(1, -74, 0, 8)
 badge.BorderSizePixel = 0
 badge.Parent = titleBar
 Instance.new("UICorner", badge).CornerRadius = UDim.new(0, 4)
 
--- Minimize button
-local minimized = false
-local minBtn = Instance.new("TextButton")
-minBtn.Text = "—"
-minBtn.Font = Enum.Font.GothamBold
-minBtn.TextSize = 14
-minBtn.TextColor3 = DIM
-minBtn.BackgroundTransparency = 1
-minBtn.Size = UDim2.new(0, 32, 0, 32)
-minBtn.Position = UDim2.new(1, -36, 0, 2)
-minBtn.Parent = titleBar
-
--- Draggable
+-- Draggable title bar
 do
 	local dragging, dragStart, startPos
 	titleBar.InputBegan:Connect(function(inp)
@@ -374,22 +362,86 @@ end
 local _, setUserContent = makePara("Username", LocalPlayer.Name, 2)
 local _, setMonitorContent = makePara("Monitor", "Starting...", 3)
 
--- Minimize / restore
-local fullSize = mainFrame.Size
-local miniSize = UDim2.fromOffset(fullSize.X.Offset, 36)
-minBtn.MouseButton1Click:Connect(function()
-	minimized = not minimized
-	if minimized then
-		content.Visible = false
-		TweenService:Create(mainFrame, TweenInfo.new(0.15), { Size = miniSize }):Play()
-		minBtn.Text = "+"
-	else
-		TweenService:Create(mainFrame, TweenInfo.new(0.15), { Size = fullSize }):Play()
-		task.wait(0.15)
-		content.Visible = true
-		minBtn.Text = "—"
+-- Launcher circle (NaruUI-style minimize/restore toggle)
+do
+	local launcherContainer
+	pcall(function() launcherContainer = gethui and gethui() end)
+	if not launcherContainer then pcall(function() launcherContainer = game:GetService("CoreGui") end) end
+	launcherContainer = launcherContainer or LocalPlayer:WaitForChild("PlayerGui")
+
+	pcall(function()
+		for _, o in ipairs(launcherContainer:GetChildren()) do
+			if o.Name == "AnimeDiceLauncher" then
+				pcall(function() o:Destroy() end)
+			end
+		end
+	end)
+
+	local launcher = Instance.new("ScreenGui")
+	launcher.Name = "AnimeDiceLauncher"
+	launcher.ResetOnSpawn = false
+	launcher.IgnoreGuiInset = true
+	launcher.DisplayOrder = 2000000000
+	launcher.Enabled = true
+	pcall(function() launcher.Parent = launcherContainer end)
+	if not launcher.Parent then
+		launcher.Parent = LocalPlayer:WaitForChild("PlayerGui")
 	end
-end)
+
+	local logoBtn = Instance.new("ImageButton")
+	logoBtn.Name = "Logo"
+	logoBtn.Size = UDim2.fromOffset(42, 42)
+	logoBtn.Position = UDim2.fromOffset(4, 100)
+	logoBtn.BackgroundColor3 = Color3.fromRGB(6, 6, 7)
+	logoBtn.BackgroundTransparency = 0.02
+	logoBtn.AutoButtonColor = false
+	logoBtn.Image = ""
+	logoBtn.Parent = launcher
+
+	Instance.new("UICorner", logoBtn).CornerRadius = UDim.new(1, 0)
+
+	local logoStroke = Instance.new("UIStroke", logoBtn)
+	logoStroke.Color = ACCENT
+	logoStroke.Thickness = 1.5
+
+	local lbl = Instance.new("TextLabel")
+	lbl.BackgroundTransparency = 1
+	lbl.Size = UDim2.fromScale(1, 1)
+	lbl.Font = Enum.Font.GothamBold
+	lbl.TextSize = 24
+	lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+	lbl.Text = "N"
+	lbl.Parent = logoBtn
+
+	local function setMinimized(state)
+		screenGui.Enabled = not state
+	end
+
+	local dragging, dragStart, startPos, movedFar = false, nil, nil, false
+	logoBtn.InputBegan:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			movedFar = false
+			dragStart = inp.Position
+			startPos = logoBtn.Position
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(inp)
+		if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
+			local delta = inp.Position - dragStart
+			if delta.Magnitude > 4 then movedFar = true end
+			logoBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+			if dragging and not movedFar then
+				setMinimized(screenGui.Enabled)
+			end
+			dragging = false
+		end
+	end)
+end
 
 ------------------------------------------------------------
 -- Username list detection
