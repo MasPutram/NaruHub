@@ -333,10 +333,65 @@ function ServerMap({ accounts, devices, activeJobId }: { accounts: ADAccount[]; 
     setTimeout(() => setCopied((c) => (c === jobId ? null : c)), 2000);
   }
 
+  // Per-user "visited" tracker, persisted in localStorage. Marks which
+  // server jobIds the operator has already hopped to this session so they
+  // don't double-visit when scanning the map.
+  const VISITED_KEY = "ad-event-visited";
+  const [visited, setVisited] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(VISITED_KEY);
+      if (raw) setVisited(new Set(JSON.parse(raw)));
+    } catch {}
+  }, []);
+  function persistVisited(next: Set<string>) {
+    try { localStorage.setItem(VISITED_KEY, JSON.stringify(Array.from(next))); } catch {}
+  }
+  function toggleVisited(jobId: string) {
+    setVisited((prev) => {
+      const next = new Set(prev);
+      if (next.has(jobId)) next.delete(jobId); else next.add(jobId);
+      persistVisited(next);
+      return next;
+    });
+  }
+  function clearAllVisited() {
+    if (!confirm("Hapus semua tanda visited?")) return;
+    setVisited(new Set());
+    try { localStorage.removeItem(VISITED_KEY); } catch {}
+  }
+  // Drop visited entries whose jobId is no longer in the current server list
+  // so the localStorage set doesn't grow unbounded over the days.
+  useEffect(() => {
+    if (visited.size === 0) return;
+    const live = new Set(Array.from(groups.keys()));
+    const stale: string[] = [];
+    visited.forEach((j) => { if (!live.has(j)) stale.push(j); });
+    if (stale.length > 0) {
+      setVisited((prev) => {
+        const next = new Set(prev);
+        stale.forEach((j) => next.delete(j));
+        persistVisited(next);
+        return next;
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries.length]);
+  const visitedCount = Array.from(groups.keys()).filter((j) => visited.has(j)).length;
+
   return (
     <div className="smap">
       <div className="smap-title">
         SERVER MAP <span>{entries.length} server &middot; {Array.from(groups.values()).reduce((s, a) => s + a.length, 0)} akun</span>
+        <div style={{ flex: 1 }} />
+        {visitedCount > 0 && (
+          <>
+            <span className="visited-count">{visitedCount}/{entries.length} visited</span>
+            <button className="clear-visited" onClick={clearAllVisited} title="Clear all visited marks">
+              &#x2715; Clear Visited
+            </button>
+          </>
+        )}
       </div>
       {entries.length === 0 ? (
         <div className="smap-empty">Belum ada akun online dengan jobId tercatat.</div>
@@ -344,8 +399,9 @@ function ServerMap({ accounts, devices, activeJobId }: { accounts: ADAccount[]; 
         <div className="smap-list">
           {entries.map(([jobId, accs], idx) => {
             const isActive = jobId === activeJobId;
+            const isVisited = visited.has(jobId);
             return (
-              <div key={jobId} className={`smap-server ${isActive ? "active" : ""}`}>
+              <div key={jobId} className={`smap-server ${isActive ? "active" : ""} ${isVisited ? "visited" : ""}`}>
                 <div className="ss-head">
                   <div className="ss-title">
                     <span className="ss-idx">Server #{idx + 1}</span>
@@ -368,13 +424,22 @@ function ServerMap({ accounts, devices, activeJobId }: { accounts: ADAccount[]; 
                     })()}
                     {isActive && <span className="ss-badge">EVENT HERE</span>}
                   </div>
-                  <button
-                    className="ss-copy"
-                    onClick={() => copyTeleport(jobId)}
-                    title="Copy teleport script"
-                  >
-                    {copied === jobId ? "✓ Copied" : "\u{1F4CB} Copy Teleport"}
-                  </button>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      className={`ss-visit ${isVisited ? "visited" : ""}`}
+                      onClick={() => toggleVisited(jobId)}
+                      title={isVisited ? "Click to unmark" : "Mark as visited"}
+                    >
+                      {isVisited ? "✓ Visited" : "\u{1F441} Visit"}
+                    </button>
+                    <button
+                      className="ss-copy"
+                      onClick={() => copyTeleport(jobId)}
+                      title="Copy teleport script"
+                    >
+                      {copied === jobId ? "✓ Copied" : "\u{1F4CB} Copy Teleport"}
+                    </button>
+                  </div>
                 </div>
                 <div className="ss-jobid">{jobId}</div>
                 <div className="ss-accs">
@@ -551,6 +616,32 @@ const styles = `
   font-family: inherit; transition: all .12s;
 }
 .ss-copy:hover { background: #3f3f46; border-color: #52525b; }
+
+.ss-visit {
+  background: #14141f; color: #cbd5e1; border: 1px solid #3f3f46;
+  font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+  font-family: inherit; transition: all .12s;
+}
+.ss-visit:hover { background: #262636; }
+.ss-visit.visited { background: rgba(52,211,153,.12); color: #34d399; border-color: rgba(52,211,153,.35); }
+.ss-visit.visited:hover { background: rgba(52,211,153,.18); }
+
+.smap-server.visited { opacity: .55; }
+.smap-server.visited.active { opacity: .85; }
+.smap-server.visited:hover { opacity: 1; }
+
+.visited-count {
+  font-size: 11px; font-weight: 700; color: #34d399;
+  background: rgba(52,211,153,.1); border: 1px solid rgba(52,211,153,.25);
+  padding: 3px 10px; border-radius: 999px; text-transform: none; letter-spacing: 0;
+}
+.clear-visited {
+  background: rgba(239,68,68,.1); color: #ef4444; border: 1px solid rgba(239,68,68,.25);
+  font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 6px; cursor: pointer;
+  font-family: inherit; text-transform: none; letter-spacing: 0;
+}
+.clear-visited:hover { background: rgba(239,68,68,.2); }
+.smap-title { align-items: center; gap: 10px; }
 .ss-jobid { font-size: 10px; color: #71717a; font-family: var(--font-numbers), monospace; margin-bottom: 10px; word-break: break-all; }
 .ss-accs { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid #262636; }
 .ss-acc { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 0; }
