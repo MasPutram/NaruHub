@@ -333,10 +333,9 @@ function ServerMap({ accounts, devices, activeJobId }: { accounts: ADAccount[]; 
     setTimeout(() => setCopied((c) => (c === jobId ? null : c)), 2000);
   }
 
-  // Per-user "visited" tracker, persisted in localStorage. Marks which
-  // server jobIds the operator has already hopped to this session so they
-  // don't double-visit when scanning the map.
-  const VISITED_KEY = "ad-event-visited";
+  // Per-ACCOUNT "visited" tracker, keyed by username, persisted in
+  // localStorage. Operator checks each account row off as they hop it.
+  const VISITED_KEY = "ad-event-visited-accs";
   const [visited, setVisited] = useState<Set<string>>(new Set());
   useEffect(() => {
     try {
@@ -347,10 +346,10 @@ function ServerMap({ accounts, devices, activeJobId }: { accounts: ADAccount[]; 
   function persistVisited(next: Set<string>) {
     try { localStorage.setItem(VISITED_KEY, JSON.stringify(Array.from(next))); } catch {}
   }
-  function toggleVisited(jobId: string) {
+  function toggleVisited(username: string) {
     setVisited((prev) => {
       const next = new Set(prev);
-      if (next.has(jobId)) next.delete(jobId); else next.add(jobId);
+      if (next.has(username)) next.delete(username); else next.add(username);
       persistVisited(next);
       return next;
     });
@@ -360,33 +359,39 @@ function ServerMap({ accounts, devices, activeJobId }: { accounts: ADAccount[]; 
     setVisited(new Set());
     try { localStorage.removeItem(VISITED_KEY); } catch {}
   }
-  // Drop visited entries whose jobId is no longer in the current server list
-  // so the localStorage set doesn't grow unbounded over the days.
+  // Drop visited entries for accounts no longer in the live map so storage
+  // doesn't grow forever as account rosters shift over days.
   useEffect(() => {
     if (visited.size === 0) return;
-    const live = new Set(Array.from(groups.keys()));
+    const live = new Set<string>();
+    accounts.forEach((a) => { if (a.online) live.add(a.sourceAccount); });
     const stale: string[] = [];
-    visited.forEach((j) => { if (!live.has(j)) stale.push(j); });
+    visited.forEach((u) => { if (!live.has(u)) stale.push(u); });
     if (stale.length > 0) {
       setVisited((prev) => {
         const next = new Set(prev);
-        stale.forEach((j) => next.delete(j));
+        stale.forEach((u) => next.delete(u));
         persistVisited(next);
         return next;
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries.length]);
-  const visitedCount = Array.from(groups.keys()).filter((j) => visited.has(j)).length;
+  }, [accounts.length]);
+  // Totals (across all shown servers)
+  const totalAccs = Array.from(groups.values()).reduce((s, a) => s + a.length, 0);
+  const visitedCount = Array.from(groups.values()).reduce(
+    (s, accs) => s + accs.filter((a) => visited.has(a.sourceAccount)).length,
+    0
+  );
 
   return (
     <div className="smap">
       <div className="smap-title">
-        SERVER MAP <span>{entries.length} server &middot; {Array.from(groups.values()).reduce((s, a) => s + a.length, 0)} akun</span>
+        SERVER MAP <span>{entries.length} server &middot; {totalAccs} akun</span>
         <div style={{ flex: 1 }} />
         {visitedCount > 0 && (
           <>
-            <span className="visited-count">{visitedCount}/{entries.length} visited</span>
+            <span className="visited-count">{visitedCount}/{totalAccs} akun visited</span>
             <button className="clear-visited" onClick={clearAllVisited} title="Clear all visited marks">
               &#x2715; Clear Visited
             </button>
@@ -399,12 +404,16 @@ function ServerMap({ accounts, devices, activeJobId }: { accounts: ADAccount[]; 
         <div className="smap-list">
           {entries.map(([jobId, accs], idx) => {
             const isActive = jobId === activeJobId;
-            const isVisited = visited.has(jobId);
+            const visitedInServer = accs.filter((a) => visited.has(a.sourceAccount)).length;
+            const allVisited = visitedInServer > 0 && visitedInServer === accs.length;
             return (
-              <div key={jobId} className={`smap-server ${isActive ? "active" : ""} ${isVisited ? "visited" : ""}`}>
+              <div key={jobId} className={`smap-server ${isActive ? "active" : ""} ${allVisited ? "visited" : ""}`}>
                 <div className="ss-head">
                   <div className="ss-title">
                     <span className="ss-idx">Server #{idx + 1}</span>
+                    {visitedInServer > 0 && (
+                      <span className="ss-visited-mini" title="Akun visited di server ini">{visitedInServer}/{accs.length}</span>
+                    )}
                     {(() => {
                       // Any of our accounts in this server reports the server-wide
                       // player count; they're all in the same server so take the max
@@ -424,32 +433,32 @@ function ServerMap({ accounts, devices, activeJobId }: { accounts: ADAccount[]; 
                     })()}
                     {isActive && <span className="ss-badge">EVENT HERE</span>}
                   </div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button
-                      className={`ss-visit ${isVisited ? "visited" : ""}`}
-                      onClick={() => toggleVisited(jobId)}
-                      title={isVisited ? "Click to unmark" : "Mark as visited"}
-                    >
-                      {isVisited ? "✓ Visited" : "\u{1F441} Visit"}
-                    </button>
-                    <button
-                      className="ss-copy"
-                      onClick={() => copyTeleport(jobId)}
-                      title="Copy teleport script"
-                    >
-                      {copied === jobId ? "✓ Copied" : "\u{1F4CB} Copy Teleport"}
-                    </button>
-                  </div>
+                  <button
+                    className="ss-copy"
+                    onClick={() => copyTeleport(jobId)}
+                    title="Copy teleport script"
+                  >
+                    {copied === jobId ? "✓ Copied" : "\u{1F4CB} Copy Teleport"}
+                  </button>
                 </div>
                 <div className="ss-jobid">{jobId}</div>
                 <div className="ss-accs">
-                  {accs.map((a) => (
-                    <div key={a.sourceAccount} className="ss-acc">
+                  {accs.map((a) => {
+                    const accVisited = visited.has(a.sourceAccount);
+                    return (
+                    <label key={a.sourceAccount} className={`ss-acc ${accVisited ? "visited" : ""}`}>
+                      <input
+                        type="checkbox"
+                        className="ss-acc-check"
+                        checked={accVisited}
+                        onChange={() => toggleVisited(a.sourceAccount)}
+                      />
                       <span className="ss-acc-name">{a.sourceAccount}</span>
                       <span className="ss-arrow">&rarr;</span>
                       <span className="ss-acc-dev">{deviceByUser.get(a.sourceAccount) || "?"}</span>
-                    </div>
-                  ))}
+                    </label>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -644,8 +653,13 @@ const styles = `
 .smap-title { align-items: center; gap: 10px; }
 .ss-jobid { font-size: 10px; color: #71717a; font-family: var(--font-numbers), monospace; margin-bottom: 10px; word-break: break-all; }
 .ss-accs { display: flex; flex-direction: column; gap: 4px; padding-top: 8px; border-top: 1px solid #262636; }
-.ss-acc { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 0; }
+.ss-acc { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 4px 0; cursor: pointer; user-select: none; }
+.ss-acc:hover .ss-acc-name { color: #ffffff; }
+.ss-acc.visited { opacity: .5; }
+.ss-acc.visited .ss-acc-name { text-decoration: line-through; }
+.ss-acc-check { width: 15px; height: 15px; accent-color: #34d399; cursor: pointer; margin: 0; flex-shrink: 0; }
 .ss-acc-name { font-weight: 800; color: #e8e8f0; min-width: 120px; }
+.ss-visited-mini { background: rgba(52,211,153,.1); color: #34d399; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 999px; border: 1px solid rgba(52,211,153,.3); font-family: var(--font-numbers), monospace; }
 .ss-arrow { color: #52525b; font-weight: 700; }
 .ss-acc-dev { color: #a78bfa; font-weight: 700; font-family: var(--font-numbers), monospace; }
 `;
