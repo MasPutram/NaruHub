@@ -402,7 +402,7 @@ const styles = `
   background: #0b0b14;
   color: #e8e8f0;
   padding: 24px;
-  max-width: 960px;
+  max-width: 1400px;
   margin: 0 auto;
   font-family: var(--font-poppins), -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -525,7 +525,8 @@ const styles = `
 .smap-title { font-size: 11px; font-weight: 800; color: #71717a; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
 .smap-title span { background: #1c1c2b; color: #cbd5e1; padding: 2px 10px; border-radius: 10px; font-size: 10px; font-weight: 700; letter-spacing: .3px; text-transform: none; }
 .smap-empty { color: #71717a; font-size: 12px; text-align: center; padding: 24px; background: #14141f; border: 1px dashed #262636; border-radius: 10px; }
-.smap-list { display: flex; flex-direction: column; gap: 10px; }
+.smap-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
+@media (max-width: 700px) { .smap-list { grid-template-columns: 1fr; } }
 .smap-server {
   background: #14141f; border: 1px solid #262636; border-radius: 12px; padding: 14px 16px;
 }
