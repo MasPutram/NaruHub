@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Monitoring Anime Dice v2.1.1 (ultra-lightweight)
+-- NaruHub | Monitoring Anime Dice v2.2.0
 -- Monitoring only -- no auto-roll/sell/equip, baca data → POST ke dashboard.
 
 ------------------------------------------------------------
@@ -172,10 +172,14 @@ end
 if not GRANTED_VIA_GLOBAL then return end
 
 ------------------------------------------------------------
--- Services
+-- NaruUI (loaded from GitHub)
 ------------------------------------------------------------
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+
+local httpGet = game.HttpGet or HttpGet
+local _naruSrc = httpGet(game, "https://raw.githubusercontent.com/MasPutram/NaruHub/main/NaruUI/NaruUI.luau?v=" .. tostring(tick()))
+local NaruUI = loadstring(_naruSrc)()
 
 ------------------------------------------------------------
 -- Game data access
@@ -298,24 +302,6 @@ local function collectInventory()
 	local inv = X.Inventory or {}
 	local allEntries = EntryRegistry:allEntries()
 
-	local slotUnitIds = {}
-	local slotsData = X.Slots or {}
-	for slotKey, slotVal in pairs(slotsData) do
-		if type(slotVal) == "table" and slotVal.unitId then
-			slotUnitIds[slotVal.unitId] = tonumber(slotKey) or slotKey
-		end
-	end
-
-	local towerUnitIds = {}
-	local towerData = X.TowerTeam or {}
-	if type(towerData) == "table" then
-		for _, uid in pairs(towerData) do
-			if type(uid) == "string" then
-				towerUnitIds[uid] = true
-			end
-		end
-	end
-
 	local units = {}
 	local backpack = {}
 	local totalUnitCount = 0
@@ -353,13 +339,6 @@ local function collectInventory()
 				if damage then damage = damage * traitDamage * mutCombatMult end
 				if health then health = health * traitHealth * mutCombatMult end
 
-				local placed = nil
-				if slotUnitIds[id] then
-					placed = "slot"
-				elseif towerUnitIds[id] then
-					placed = "tower"
-				end
-
 				local displayRarity = getDisplayRarity(cfg, attrs.mutation)
 
 				table.insert(units, {
@@ -380,16 +359,12 @@ local function collectInventory()
 					damage = damage,
 					chance = chance,
 					health = health,
-					placed = placed,
 					colors = cfg and gradientToHexArray(cfg.gradient) or nil,
 					modelName = cfg and cfg.baseModel and cfg.baseModel.Name or nil,
 					shirtId = cfg and getShirtId(cfg.baseModel) or nil,
 				})
 			else
 				totalItemCount += (entry.amount or 1)
-				-- Try to pull gear-specific fields (slot, tier) from cfg for
-				-- gear items so the dashboard can categorize by slot (Head,
-				-- Torso, Back, Upper, Waist) for the Obito Mask etc.
 				local slot, tier
 				if cfg then
 					slot = cfg.slot or cfg.Slot or cfg.gearSlot or cfg.GearSlot or cfg.category or cfg.Category
@@ -491,136 +466,6 @@ local function collectGamepasses()
 	return result
 end
 
-local function collectSlots()
-	local ok, result = pcall(function()
-		local X = DataController.___X
-		local slots = X.Slots or {}
-		local inv = X.Inventory or {}
-		local allEntries = EntryRegistry:allEntries()
-		local list = {}
-
-		for slotKey, slotVal in pairs(slots) do
-			local unitId = nil
-			local balance = nil
-
-			if type(slotVal) == "table" then
-				unitId = slotVal.unitId or slotVal.UnitId or slotVal.unit or slotVal[1]
-				balance = slotVal.balance or slotVal.Balance or slotVal.money or nil
-			elseif type(slotVal) == "string" then
-				unitId = slotVal
-			end
-
-			local slotInfo = { slot = tonumber(slotKey) or slotKey, balance = balance }
-
-			if unitId then
-				local entry = type(unitId) == "string" and inv[unitId] or nil
-				if entry and entry.name then
-					local cfg = allEntries[entry.name]
-					local attrs = entry.attributes or {}
-					slotInfo.name = entry.name
-					slotInfo.rarity = cfg and cfg.rarity or "Unknown"
-					slotInfo.displayRarity = getDisplayRarity(cfg, attrs.mutation)
-					slotInfo.variant = cfg and cfg.variant or nil
-					slotInfo.level = attrs.level
-					slotInfo.mutation = attrs.mutation
-					slotInfo.trait = attrs.trait
-					slotInfo.grade = attrs.grade
-					if cfg then
-						pcall(function() slotInfo.income = cfg:income() end)
-						pcall(function() slotInfo.chance = cfg:chance() end)
-						pcall(function() slotInfo.damage = cfg:damage() end)
-						pcall(function() slotInfo.health = cfg:health() end)
-
-						local mutCh = getMutationChanceMult(attrs.mutation)
-						if slotInfo.chance and mutCh ~= 1 then slotInfo.chance = slotInfo.chance * mutCh end
-
-						local gInc = getGradeIncomeMult(attrs.grade)
-						local tInc, tDmg, tHp = getTraitMults(attrs.trait)
-						local lvl = attrs.level or 1
-						local lvlMult = 0.75 + 0.25 * lvl
-						local mutIncMult = mutCh ~= 1 and mutCh ^ 0.725 or 1
-						local mutCbtMult = mutCh ~= 1 and mutCh ^ 0.58 or 1
-						if slotInfo.income then slotInfo.income = slotInfo.income * gInc * tInc * lvlMult * mutIncMult end
-						if slotInfo.damage then slotInfo.damage = slotInfo.damage * tDmg * mutCbtMult end
-						if slotInfo.health then slotInfo.health = slotInfo.health * tHp * mutCbtMult end
-
-						slotInfo.colors = gradientToHexArray(cfg.gradient)
-						slotInfo.modelName = cfg.baseModel and cfg.baseModel.Name or nil
-					end
-				end
-			end
-
-			table.insert(list, slotInfo)
-		end
-
-		table.sort(list, function(a, b)
-			return (tonumber(a.slot) or 0) < (tonumber(b.slot) or 0)
-		end)
-
-		return list
-	end)
-
-	return ok and result or {}
-end
-
-local function collectTowerSquad()
-	local ok, result = pcall(function()
-		local X = DataController.___X
-		local inv = X.Inventory or {}
-		local allEntries = EntryRegistry:allEntries()
-
-		local function resolveUnit(unitId)
-			if not unitId or type(unitId) ~= "string" then return nil end
-			local entry = inv[unitId]
-			if not entry or not entry.name then return nil end
-			local cfg = allEntries[entry.name]
-			return {
-				name = entry.name,
-				rarity = cfg and cfg.rarity or "Unknown",
-				variant = cfg and cfg.variant or nil,
-				level = entry.attributes and entry.attributes.level or nil,
-				mutation = entry.attributes and entry.attributes.mutation or nil,
-			}
-		end
-
-		local squadData = X.TowerTeam or {}
-		local squad = {}
-		if type(squadData) == "table" then
-			for idx, val in pairs(squadData) do
-				local uid = type(val) == "table" and (val.unitId or val[1]) or val
-				local u = resolveUnit(uid)
-				if u then
-					u.slot = idx
-					table.insert(squad, u)
-				end
-			end
-		end
-
-		local equipped = nil
-		local eqId = X.EquippedGear or nil
-		if eqId then
-			equipped = resolveUnit(type(eqId) == "table" and (eqId.unitId or eqId[1]) or eqId)
-		end
-
-		return { squad = squad, equipped = equipped }
-	end)
-
-	return ok and result or { squad = {}, equipped = nil }
-end
-
-local function collectUpgradesList()
-	local X = DataController.___X
-	local upgrades = X.Upgrades or {}
-	local list = {}
-	for name, unlocked in pairs(upgrades) do
-		if unlocked then
-			table.insert(list, name)
-		end
-	end
-	table.sort(list)
-	return list
-end
-
 ------------------------------------------------------------
 -- Active server event (weather system)
 ------------------------------------------------------------
@@ -660,11 +505,8 @@ local function reportToMonitor()
 		local units, totalUnitCount, backpackItems, totalItemCount = collectInventory()
 		local ownedDice = collectOwnedDice()
 		local upgradesSummary = collectUpgradesSummary()
-		local upgradesList = collectUpgradesList()
 		local discoveredCount = countDiscovered()
 		local gamepasses = collectGamepasses()
-		local slots = collectSlots()
-		local towerSquad = collectTowerSquad()
 
 		local topUnits = {}
 		for i = 1, math.min(5, #units) do
@@ -695,7 +537,6 @@ local function reportToMonitor()
 				damage = u.damage,
 				chance = u.chance,
 				health = u.health,
-				placed = u.placed,
 				colors = u.colors,
 				modelName = u.modelName,
 				shirtId = u.shirtId,
@@ -728,7 +569,6 @@ local function reportToMonitor()
 			unitsCount = totalUnitCount,
 			unitTypesCount = #units,
 			discoveredCount = discoveredCount,
-			slotsCount = #slots,
 			ownedDiceCount = #ownedDice,
 			ownedDice = ownedDice,
 			gamepasses = gamepasses,
@@ -736,9 +576,6 @@ local function reportToMonitor()
 			upgrades = upgradesSummary,
 			allUnits = allUnits,
 			backpack = backpackItems,
-			slots = slots,
-			towerSquad = towerSquad,
-			upgradesList = upgradesList,
 			totalItemCount = totalItemCount,
 			globalBuffs = globalBuffs,
 		}
@@ -778,54 +615,88 @@ local function reportToMonitor()
 end
 
 ------------------------------------------------------------
--- Minimal status GUI
+-- NaruUI Window
 ------------------------------------------------------------
-local statusLabel
+local Fluent = NaruUI.New({
+	ConfigPrefix = "AnimeDice",
+	BrandColor = Color3.fromRGB(255, 100, 100),
+})
+
+local Window = Fluent:CreateWindow({
+	Title = "NaruHub | Anime Dice v2.2.0",
+	Badge = "MONITOR",
+	TabWidth = 0,
+	Size = UDim2.fromOffset(380, 300),
+	AutoStartMinimized = false,
+})
+
+local Tab = Window:AddTab({ Title = "" })
+local section = Tab:AddSection(LocalPlayer.Name, { NoCollapse = true })
+
+local usernamePara = section:AddParagraph({
+	Title = "Username",
+	Content = LocalPlayer.Name,
+	ContentSize = 14,
+	Center = true,
+})
+
 do
-	local container
-	pcall(function() container = gethui and gethui() end)
-	container = container or game:GetService("CoreGui")
+	local myName = LocalPlayer.Name
+	local myPrefix = myName:match("^(%D+)%d+$")
 
-	local sg = Instance.new("ScreenGui")
-	sg.Name = "NaruHubAD"
-	sg.ResetOnSpawn = false
-	sg.DisplayOrder = 9998
-	sg.IgnoreGuiInset = true
-	sg.Parent = container
-
-	statusLabel = Instance.new("TextLabel")
-	statusLabel.Text = "[AD] " .. LocalPlayer.Name .. " — ..."
-	statusLabel.Font = Enum.Font.GothamBold
-	statusLabel.TextSize = 14
-	statusLabel.TextColor3 = Color3.fromRGB(220, 220, 230)
-	statusLabel.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-	statusLabel.BackgroundTransparency = 0.15
-	statusLabel.Size = UDim2.new(0, 280, 0, 28)
-	statusLabel.Position = UDim2.new(0, 8, 0, 38)
-	statusLabel.TextXAlignment = Enum.TextXAlignment.Left
-	statusLabel.BorderSizePixel = 0
-	statusLabel.Parent = sg
-	Instance.new("UICorner", statusLabel).CornerRadius = UDim.new(0, 6)
-	Instance.new("UIPadding", statusLabel).PaddingLeft = UDim.new(0, 8)
-	Instance.new("UIStroke", statusLabel).Color = Color3.fromRGB(60, 60, 80)
-end
-
-------------------------------------------------------------
--- Monitoring loop
-------------------------------------------------------------
-while statusLabel and statusLabel.Parent do
-	local ok, err = reportToMonitor()
-	local ping = 0
-	pcall(function()
-		ping = math.floor((LocalPlayer:GetNetworkPing() or 0) * 1000)
-	end)
-	local pingStr = ping > 0 and (" " .. ping .. "ms") or ""
-	if ok then
-		statusLabel.Text = "[AD] " .. LocalPlayer.Name .. " — OK" .. pingStr
-		statusLabel.TextColor3 = Color3.fromRGB(120, 220, 140)
-	else
-		statusLabel.Text = "[AD] " .. LocalPlayer.Name .. " — Gagal" .. pingStr
-		statusLabel.TextColor3 = Color3.fromRGB(248, 113, 113)
+	local function refreshUsernameList()
+		if not myPrefix then
+			usernamePara:SetContent(myName)
+			return
+		end
+		local matches = {}
+		for _, p in ipairs(Players:GetPlayers()) do
+			local prefix, num = p.Name:match("^(%D+)(%d+)$")
+			if prefix == myPrefix then
+				table.insert(matches, { name = p.Name, num = tonumber(num) or 0 })
+			end
+		end
+		if #matches <= 1 then
+			usernamePara:SetContent(myName)
+			return
+		end
+		table.sort(matches, function(a, b) return a.num < b.num end)
+		local names = {}
+		for _, m in ipairs(matches) do
+			local tag = m.name == myName and " ← ini" or ""
+			table.insert(names, m.name .. tag)
+		end
+		usernamePara:SetContent(table.concat(names, "\n"))
 	end
-	task.wait(30)
+
+	Players.PlayerAdded:Connect(function() task.wait(0.5) refreshUsernameList() end)
+	Players.PlayerRemoving:Connect(function() task.wait(0.5) refreshUsernameList() end)
+	task.spawn(refreshUsernameList)
 end
+
+local monitorPara = section:AddParagraph({
+	Title = "Monitor",
+	Content = "Starting...",
+	ContentSize = 14,
+	Center = true,
+})
+
+------------------------------------------------------------
+-- Auto-start monitoring loop
+------------------------------------------------------------
+task.spawn(function()
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		local ok, err = reportToMonitor()
+		local ping = 0
+		pcall(function()
+			ping = math.floor((LocalPlayer:GetNetworkPing() or 0) * 1000)
+		end)
+		local pingStr = ping > 0 and (" " .. ping .. "ms") or ""
+		if ok then
+			monitorPara:SetContent("OK" .. pingStr)
+		else
+			monitorPara:SetContent("Gagal" .. pingStr)
+		end
+		task.wait(30)
+	end
+end)
