@@ -476,7 +476,11 @@ export default function DeviceDetailPage() {
       setToast(
         data.ok
           ? `Launch queued for ${list.length} package${list.length !== 1 ? "s" : ""}` +
-            (shareServer && data.sharedCount ? ` — share: ${data.sharedCount} akun ke 1 server${data.sharedJobId ? ` (${String(data.sharedJobId).slice(0, 8)}…)` : ""}` : (spreadServers && data.spreadCount ? ` — spread ke ${data.spreadCount} server` : ""))
+            (shareServer
+              ? (data.sharedCount
+                  ? ` — share: ${data.sharedCount} akun ikut leader ${data.sharedJobId ? `(${String(data.sharedJobId).slice(0, 8)}…)` : ""}`
+                  : ` — share: belum ada leader online, launch random`)
+              : (spreadServers && data.spreadCount ? ` — spread ke ${data.spreadCount} server` : ""))
           : `Gagal: ${data.error}`
       );
       if (data.ok) fetchDevice();
@@ -1051,7 +1055,7 @@ export default function DeviceDetailPage() {
                   <input type="checkbox" checked={spreadServers && !shareServer} onChange={(e) => { setSpreadServers(e.target.checked); if (e.target.checked) setShareServer(false); }} />
                   <span style={{ fontSize: 12 }}>Spread server</span>
                 </label>
-                <label className="qc-switch" style={{ display: "inline-flex", marginRight: 4 }} title="Semua clone selected join ke SATU server yang sama (populated public server, atau server yg sudah ada clone kita di dalamnya)">
+                <label className="qc-switch" style={{ display: "inline-flex", marginRight: 4 }} title="Launch selected packages ikut ke jobId clone kita yang paling baru online (follow-the-leader). Launch #1 dulu normal, tunggu dia masuk game, baru checked Share + launch #2/3/...">
                   <input type="checkbox" checked={shareServer} onChange={(e) => { setShareServer(e.target.checked); if (e.target.checked) setSpreadServers(false); }} />
                   <span style={{ fontSize: 12 }}>Share server</span>
                 </label>

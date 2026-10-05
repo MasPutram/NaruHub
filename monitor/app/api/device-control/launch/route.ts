@@ -82,67 +82,53 @@ export async function POST(req: NextRequest) {
     const assigned: Record<string, string> = {};
 
     if (share) {
-      // Pick ONE server per placeId; every package of that placeId joins it.
+      // Follow-the-leader. Launch #1 yourself first (normal/random launch);
+      // once that clone is in-game, its presence reports a jobId. Then check
+      // 'Share server' + Launch Selected on packages #2, #3, ... and they
+      // all target the leader's jobId.
+      //
+      // We ONLY use this device's own presence — no fallback to Roblox's
+      // public server list, so the operator stays in control of which server.
       const byPlace: Record<string, string[]> = {};
       for (const pkg of packageNames) {
         const m = (targets[pkg] || "").match(/placeId=(\d+)/);
         if (m) (byPlace[m[1]] ||= []).push(pkg);
       }
-      for (const [placeId, pkgs] of Object.entries(byPlace)) {
-        let chosen = "";
-        // Prefer a jobId this device already sits in (fresh presence) -- hops
-        // into an existing clone's server. Otherwise pick a populated public
-        // server (same rank as spread, just take the first).
-        try {
-          const presPrefix = `presence:${deviceId}:`;
-          let cur = "0";
-          const keys: string[] = [];
-          do {
-            const [next, ks] = await redis.scan(cur, { match: `${presPrefix}*`, count: 100 });
-            cur = next;
-            keys.push(...ks);
-          } while (cur !== "0");
-          if (keys.length > 0) {
-            const vals = await redis.mget(...keys);
-            const now = Date.now();
-            for (const v of vals) {
-              if (!v) continue;
-              try {
-                const o = JSON.parse(v as string);
-                if (String(o.placeId) === placeId && o.jobId && o.ts && now - o.ts < 600 * 1000) {
-                  chosen = o.jobId;
-                  break;
-                }
-              } catch {}
+      try {
+        const presPrefix = `presence:${deviceId}:`;
+        let cur = "0";
+        const keys: string[] = [];
+        do {
+          const [next, ks] = await redis.scan(cur, { match: `${presPrefix}*`, count: 100 });
+          cur = next;
+          keys.push(...ks);
+        } while (cur !== "0");
+        if (keys.length > 0) {
+          const vals = await redis.mget(...keys);
+          const now = Date.now();
+          // Group fresh presence by placeId. Pick the MOST-RECENT jobId per
+          // placeId as the leader (the clone the operator most-recently
+          // launched is almost always the one they're trying to join).
+          const freshByPlace: Record<string, { jobId: string; ts: number }> = {};
+          for (const v of vals) {
+            if (!v) continue;
+            try {
+              const o = JSON.parse(v as string);
+              if (!o.placeId || !o.jobId || !o.ts) continue;
+              if (now - o.ts >= 600 * 1000) continue;
+              const key = String(o.placeId);
+              const prev = freshByPlace[key];
+              if (!prev || o.ts > prev.ts) freshByPlace[key] = { jobId: o.jobId, ts: o.ts };
+            } catch {}
+          }
+          for (const [placeId, pkgs] of Object.entries(byPlace)) {
+            const leader = freshByPlace[placeId];
+            if (leader) {
+              for (const pkg of pkgs) assigned[pkg] = leader.jobId;
             }
           }
-        } catch {}
-        if (!chosen) {
-          try {
-            const url = `https://games.roblox.com/v1/games/${placeId}/servers/Public?sortOrder=Asc&limit=100`;
-            const ctrl = new AbortController();
-            const to = setTimeout(() => ctrl.abort(), 6000);
-            const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "application/json" } });
-            clearTimeout(to);
-            if (res.ok) {
-              const data = await res.json();
-              const servers: any[] = Array.isArray(data?.data) ? data.data : [];
-              const best = servers
-                .filter((s) => s && s.id && typeof s.playing === "number" && s.playing < (s.maxPlayers || 999))
-                .sort((a, b) => {
-                  const ap = (a.playing || 0) >= 5 ? 0 : 1;
-                  const bp = (b.playing || 0) >= 5 ? 0 : 1;
-                  if (ap !== bp) return ap - bp;
-                  return (a.ping || 9999) - (b.ping || 9999);
-                })[0];
-              if (best?.id) chosen = String(best.id);
-            }
-          } catch {}
         }
-        if (chosen) {
-          for (const pkg of pkgs) assigned[pkg] = chosen;
-        }
-      }
+      } catch {}
     } else if (spread) {
       const byPlace: Record<string, string[]> = {};
       for (const pkg of packageNames) {
