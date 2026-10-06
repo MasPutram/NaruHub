@@ -73,63 +73,15 @@ export async function POST(req: NextRequest) {
       } catch {}
     }
 
-    // Server-assignment mode. Mutually exclusive:
-    //   spread: each clone gets a DIFFERENT populated server (anti-pile)
-    //   share : all clones get the SAME populated server (gang up / server hop)
-    // Default (both false): plain MAIN launch -> Roblox picks random.
-    const spread = body.spread === true && body.share !== true;
-    const share = body.share === true;
+    // Spread: assign each launching clone a DIFFERENT Roblox server so they
+    // don't all pile into one (they'd steal from each other -> less income).
+    // Opt-in via body.spread. Best-effort: excludes servers this device's own
+    // clones already sit in (presence) + assigns distinct within this batch;
+    // if the server list can't be fetched or runs out, those packages keep
+    // their plain place target (random server) -- never worse than before.
+    const spread = body.spread === true;
     const assigned: Record<string, string> = {};
-
-    if (share) {
-      // Follow-the-leader. Launch #1 yourself first (normal/random launch);
-      // once that clone is in-game, its presence reports a jobId. Then check
-      // 'Share server' + Launch Selected on packages #2, #3, ... and they
-      // all target the leader's jobId.
-      //
-      // We ONLY use this device's own presence — no fallback to Roblox's
-      // public server list, so the operator stays in control of which server.
-      const byPlace: Record<string, string[]> = {};
-      for (const pkg of packageNames) {
-        const m = (targets[pkg] || "").match(/placeId=(\d+)/);
-        if (m) (byPlace[m[1]] ||= []).push(pkg);
-      }
-      try {
-        const presPrefix = `presence:${deviceId}:`;
-        let cur = "0";
-        const keys: string[] = [];
-        do {
-          const [next, ks] = await redis.scan(cur, { match: `${presPrefix}*`, count: 100 });
-          cur = next;
-          keys.push(...ks);
-        } while (cur !== "0");
-        if (keys.length > 0) {
-          const vals = await redis.mget(...keys);
-          const now = Date.now();
-          // Group fresh presence by placeId. Pick the MOST-RECENT jobId per
-          // placeId as the leader (the clone the operator most-recently
-          // launched is almost always the one they're trying to join).
-          const freshByPlace: Record<string, { jobId: string; ts: number }> = {};
-          for (const v of vals) {
-            if (!v) continue;
-            try {
-              const o = JSON.parse(v as string);
-              if (!o.placeId || !o.jobId || !o.ts) continue;
-              if (now - o.ts >= 600 * 1000) continue;
-              const key = String(o.placeId);
-              const prev = freshByPlace[key];
-              if (!prev || o.ts > prev.ts) freshByPlace[key] = { jobId: o.jobId, ts: o.ts };
-            } catch {}
-          }
-          for (const [placeId, pkgs] of Object.entries(byPlace)) {
-            const leader = freshByPlace[placeId];
-            if (leader) {
-              for (const pkg of pkgs) assigned[pkg] = leader.jobId;
-            }
-          }
-        }
-      } catch {}
-    } else if (spread) {
+    if (spread) {
       const byPlace: Record<string, string[]> = {};
       for (const pkg of packageNames) {
         const m = (targets[pkg] || "").match(/placeId=(\d+)/);
@@ -281,9 +233,7 @@ export async function POST(req: NextRequest) {
       maxLen: TERMUX_COMMAND_LOG_MAX,
     });
 
-    const assignedCount = Object.keys(assigned).length;
-    const sharedJobId = share && assignedCount > 0 ? Object.values(assigned)[0] : null;
-    return NextResponse.json({ ok: true, commands, spreadCount: spread ? assignedCount : 0, sharedCount: share ? assignedCount : 0, sharedJobId, stalePreviousCommands });
+    return NextResponse.json({ ok: true, commands, spreadCount: Object.keys(assigned).length, stalePreviousCommands });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
