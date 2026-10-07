@@ -561,6 +561,25 @@ do
 		end,
 	})
 
+	local tradeActive = false
+	local startTradeCallback -- forward-declared, set after buildTradeQueue is defined
+
+	tradeSection:AddButton({
+		Title = "Send Request",
+		Callback = function()
+			if startTradeCallback then startTradeCallback() end
+		end,
+	})
+
+	tradeSection:AddButton({
+		Title = "Cancel Trade",
+		Callback = function()
+			tradeActive = false
+			CancelTrade:Fire()
+			tradeStatusPara:SetContent("Trade cancelled")
+		end,
+	})
+
 	-- Items to send
 	local itemSection = TradeTab:AddSection("Items to Send", { NoCollapse = true })
 
@@ -679,7 +698,6 @@ do
 	})
 
 	-- Trade execution state
-	local tradeActive = false
 	local tradePendingItems = {}
 	local tradePendingUnits = {}
 	local currentTradeState = nil
@@ -720,6 +738,21 @@ do
 		end
 
 		return itemQueue, unitQueue
+	end
+
+	startTradeCallback = function()
+		if not targetPlayer or not targetPlayer.Parent then
+			tradeStatusPara:SetContent("ERROR: Select a valid target player")
+			return
+		end
+		local itemQueue, unitQueue = buildTradeQueue()
+		if #itemQueue == 0 and #unitQueue == 0 then
+			tradeStatusPara:SetContent("ERROR: Nothing to send. Set items/units first")
+			return
+		end
+		tradeActive = true
+		tradeStatusPara:SetContent("Requesting trade with " .. targetPlayer.Name .. "...")
+		RequestTrade:Fire(targetPlayer)
 	end
 
 	local function offerAllItems()
@@ -793,38 +826,6 @@ do
 			tradeStatusPara:SetContent("Trade ended: " .. reason)
 		end
 	end)
-
-	-- Action buttons
-	local actionSection = TradeTab:AddSection("Action", { NoCollapse = true })
-
-	actionSection:AddButton({
-		Title = "Start Trade",
-		Callback = function()
-			if not targetPlayer or not targetPlayer.Parent then
-				tradeStatusPara:SetContent("ERROR: Select a valid target player")
-				return
-			end
-
-			local itemQueue, unitQueue = buildTradeQueue()
-			if #itemQueue == 0 and #unitQueue == 0 then
-				tradeStatusPara:SetContent("ERROR: Nothing to send. Set items/units first")
-				return
-			end
-
-			tradeActive = true
-			tradeStatusPara:SetContent("Requesting trade with " .. targetPlayer.Name .. "...")
-			RequestTrade:Fire(targetPlayer)
-		end,
-	})
-
-	actionSection:AddButton({
-		Title = "Cancel Trade",
-		Callback = function()
-			tradeActive = false
-			CancelTrade:Fire()
-			tradeStatusPara:SetContent("Trade cancelled")
-		end,
-	})
 
 	-- Refresh player list periodically
 	task.spawn(function()
