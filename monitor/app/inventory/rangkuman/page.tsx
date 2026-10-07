@@ -577,6 +577,7 @@ function SellRow({ u, state, rates }: { u: Unit; state: InventoryState; rates: R
       <div className="scd-info">
         <div className="scd-chance">1 in {fmtMoney(u.chance)}</div>
         <div className="scd-name">{u.variant ? `${u.variant} ` : ""}{u.name}</div>
+        <div className="scd-level">Lv.{u.level ?? "-"}{u.mutation ? ` · ${u.mutation}` : ""}{u.trait ? ` · ${u.trait}` : ""}</div>
       </div>
       <div className="scd-price">{price > 0 ? fmtRp(price) : "—"}</div>
     </div>
@@ -904,6 +905,15 @@ const styles = `
   text-overflow: ellipsis;
   line-height: 1.2;
   margin-top: 3px;
+}
+.scd-level {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .scd-price {
   font-size: 17px;
