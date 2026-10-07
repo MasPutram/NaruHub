@@ -580,9 +580,10 @@ do
 	local unitSection = TradeTab:AddSection("Units to Send", { NoCollapse = true })
 
 	local chanceFilterInput = unitSection:AddInput("TradeChanceFilter", {
-		Title = "Min Chance (1 in X)",
-		Placeholder = "e.g. 1e21",
-		Default = "1e21",
+		Title = "Min Chance (sx)",
+		Placeholder = "e.g. 21",
+		Default = "1",
+		Numeric = true,
 		Finished = true,
 	})
 
@@ -600,9 +601,14 @@ do
 		ContentSize = 11,
 	})
 
+	local function parseChanceSx()
+		local v = tonumber(chanceFilterInput.Value) or 1
+		return v * 1e21
+	end
+
 	local function previewUnits()
 		local units, _ = collectCatalog()
-		local minChance = tonumber(chanceFilterInput.Value) or 1e21
+		local minChance = parseChanceSx()
 		local maxCount = tonumber(unitCountInput.Value) or 0
 
 		local filtered = {}
@@ -697,7 +703,7 @@ do
 			end
 		end
 
-		local minChance = tonumber(chanceFilterInput.Value) or 1e21
+		local minChance = parseChanceSx()
 		local maxCount = tonumber(unitCountInput.Value) or 0
 		local unitQueue = {}
 
@@ -788,8 +794,10 @@ do
 		end
 	end)
 
-	-- Start trade button
-	tradeSection:AddButton({
+	-- Action buttons
+	local actionSection = TradeTab:AddSection("Action", { NoCollapse = true })
+
+	actionSection:AddButton({
 		Title = "Start Trade",
 		Callback = function()
 			if not targetPlayer or not targetPlayer.Parent then
@@ -809,7 +817,7 @@ do
 		end,
 	})
 
-	tradeSection:AddButton({
+	actionSection:AddButton({
 		Title = "Cancel Trade",
 		Callback = function()
 			tradeActive = false
