@@ -357,9 +357,35 @@ export default function RangkumanPage() {
   const totalSewaPerJam = sewaUnits.reduce((s, u) => s + (state.sewa[unitKey(u)]?.pricePerHour || 0), 0);
   const totalDeposit = sewaUnits.reduce((s, u) => s + (state.sewa[unitKey(u)]?.deposit || 0), 0);
 
-  const sellHalf = Math.ceil(sellUnits.length / 2);
-  const sellLeft = sellUnits.slice(0, sellHalf);
-  const sellRight = sellUnits.slice(sellHalf);
+  // Group identical sell units (same name + chance) into one row
+  const groupedSell: { name: string; variant: string | null; chance: number; minLevel: number; count: number; totalPrice: number; rarity: string }[] = [];
+  const sellGroupMap = new Map<string, number>();
+  for (const u of sellUnits) {
+    const gk = `${u.name}|${u.chance}`;
+    const idx = sellGroupMap.get(gk);
+    if (idx !== undefined) {
+      const g = groupedSell[idx];
+      g.count++;
+      g.minLevel = Math.min(g.minLevel, u.level ?? 0);
+      g.totalPrice += unitPriceOf(u);
+    } else {
+      sellGroupMap.set(gk, groupedSell.length);
+      groupedSell.push({
+        name: u.name,
+        variant: u.variant,
+        chance: u.chance ?? 0,
+        minLevel: u.level ?? 0,
+        count: 1,
+        totalPrice: unitPriceOf(u),
+        rarity: u.rarity,
+      });
+    }
+  }
+  groupedSell.sort((a, b) => b.chance - a.chance);
+
+  const sellHalf = Math.ceil(groupedSell.length / 2);
+  const sellLeft = groupedSell.slice(0, sellHalf);
+  const sellRight = groupedSell.slice(sellHalf);
 
   return (
     <>
@@ -484,15 +510,15 @@ export default function RangkumanPage() {
                 <div className="sec-bonus">bonus gems dan traits</div>
                 <div className="sec-line" />
               </div>
-              {sellUnits.length === 0 ? (
+              {groupedSell.length === 0 ? (
                 <div className="empty-box">Belum ada unit tersedia untuk dijual</div>
               ) : (
                 <div className="sell-plain">
                   <div className="sell-col">
-                    {sellLeft.map((u, i) => <SellRow key={i} u={u} state={state} rates={rates} />)}
+                    {sellLeft.map((g, i) => <SellRow key={i} g={g} />)}
                   </div>
                   <div className="sell-col">
-                    {sellRight.map((u, i) => <SellRow key={i} u={u} state={state} rates={rates} />)}
+                    {sellRight.map((g, i) => <SellRow key={i} g={g} />)}
                   </div>
                 </div>
               )}
@@ -568,18 +594,14 @@ export default function RangkumanPage() {
   );
 }
 
-function SellRow({ u, state, rates }: { u: Unit; state: InventoryState; rates: Rates }) {
-  const k = unitKey(u);
-  const s = state.unitData[k];
-  const price = s?.price || autoUnitPrice(u, rates);
+function SellRow({ g }: { g: { name: string; variant: string | null; chance: number; minLevel: number; count: number; totalPrice: number; rarity: string } }) {
   return (
     <div className="sell-card">
       <div className="scd-info">
-        <div className="scd-chance">1 in {fmtMoney(u.chance)}</div>
-        <div className="scd-name">{u.variant ? `${u.variant} ` : ""}{u.name}</div>
-        <div className="scd-level">Lv.{u.level ?? "-"}{u.mutation ? ` · ${u.mutation}` : ""}{u.trait ? ` · ${u.trait}` : ""}</div>
+        <div className="scd-chance">1 in {fmtMoney(g.chance)} Lvl {g.minLevel}{g.count > 1 ? ` (${g.count})` : ""}</div>
+        <div className="scd-name" style={{ color: rarityColor(g.rarity) }}>{g.variant ? `${g.variant} ` : ""}{g.name}</div>
       </div>
-      <div className="scd-price">{price > 0 ? fmtRp(price) : "—"}</div>
+      <div className="scd-price">{g.totalPrice > 0 ? fmtRp(g.totalPrice) : "—"}</div>
     </div>
   );
 }
@@ -905,15 +927,6 @@ const styles = `
   text-overflow: ellipsis;
   line-height: 1.2;
   margin-top: 3px;
-}
-.scd-level {
-  font-size: 11px;
-  font-weight: 700;
-  color: #64748b;
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .scd-price {
   font-size: 17px;
