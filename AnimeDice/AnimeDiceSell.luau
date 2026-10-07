@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | AnimeDice Sell Catalog v1.7.0
+-- NaruHub | AnimeDice Sell Catalog v1.8.0
 -- Sends enriched inventory data to dashboard catalog for marketplace listings.
 -- Separate loadstring — does NOT interfere with the monitoring script.
 
@@ -406,14 +406,14 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | AD Catalog v1.7.0",
+	Title = "NaruHub | AD Catalog v1.8.0",
 	Badge = "SELL",
-	TabWidth = 0,
+	TabWidth = 90,
 	Size = UDim2.fromOffset(420, 460),
 	AutoStartMinimized = false,
 })
 
-local Tab = Window:AddTab({ Title = "" })
+local Tab = Window:AddTab({ Title = "Catalog" })
 local section = Tab:AddSection(LocalPlayer.Name, { NoCollapse = true })
 
 local statusPara = section:AddParagraph({
@@ -510,3 +510,321 @@ task.spawn(function()
 		task.wait(60)
 	end
 end)
+
+------------------------------------------------------------
+-- Trade Tab
+------------------------------------------------------------
+do
+	local ClientComm = require(ReplicatedStorage.Packages.Network).ClientComm
+	local TradeComm = ClientComm.new(ReplicatedStorage.Network, false, "TradeService")
+	local RequestTrade = TradeComm:GetSignal("RequestTrade")
+	local ChangeOffer = TradeComm:GetSignal("ChangeOffer")
+	local AdvanceTrade = TradeComm:GetSignal("AdvanceTrade")
+	local CancelTrade = TradeComm:GetSignal("CancelTrade")
+	local TradeEvent = TradeComm:GetSignal("TradeEvent")
+
+	local TradeTab = Window:AddTab({ Title = "Trade" })
+	local tradeSection = TradeTab:AddSection("Smart Trade", { NoCollapse = true })
+
+	local tradeStatusPara = tradeSection:AddParagraph({
+		Title = "Status",
+		Content = "Idle",
+		ContentSize = 13,
+		Center = true,
+	})
+
+	-- Target player dropdown
+	local targetPlayer = nil
+	local function getPlayerNames()
+		local names = {}
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= LocalPlayer then
+				table.insert(names, p.Name)
+			end
+		end
+		table.sort(names)
+		return names
+	end
+
+	local targetDropdown = tradeSection:AddDropdown("TradeTarget", {
+		Title = "Target Player",
+		Values = getPlayerNames(),
+	})
+	targetDropdown:OnChanged(function(v)
+		targetPlayer = Players:FindFirstChild(v)
+	end)
+
+	tradeSection:AddButton({
+		Title = "Refresh Players",
+		Callback = function()
+			targetDropdown:SetValues(getPlayerNames())
+		end,
+	})
+
+	-- Items to send
+	local itemSection = TradeTab:AddSection("Items to Send", { NoCollapse = true })
+
+	local itemInputs = {}
+	local TRADE_ITEMS = { "Gem", "Trait Reroll Token", "Lucky Spin Token", "Jackpot Token" }
+	for _, itemName in ipairs(TRADE_ITEMS) do
+		itemInputs[itemName] = itemSection:AddInput("Trade_" .. itemName, {
+			Title = itemName,
+			Placeholder = "0",
+			Default = "0",
+			Numeric = true,
+			Finished = true,
+		})
+	end
+
+	-- Units to send
+	local unitSection = TradeTab:AddSection("Units to Send", { NoCollapse = true })
+
+	local chanceFilterInput = unitSection:AddInput("TradeChanceFilter", {
+		Title = "Min Chance (1 in X)",
+		Placeholder = "e.g. 1e21",
+		Default = "1e21",
+		Finished = true,
+	})
+
+	local unitCountInput = unitSection:AddInput("TradeUnitCount", {
+		Title = "Max Units to Send",
+		Placeholder = "0 = all",
+		Default = "0",
+		Numeric = true,
+		Finished = true,
+	})
+
+	local unitPreviewPara = unitSection:AddParagraph({
+		Title = "Preview",
+		Content = "Set filter to preview",
+		ContentSize = 11,
+	})
+
+	local function previewUnits()
+		local units, _ = collectCatalog()
+		local minChance = tonumber(chanceFilterInput.Value) or 1e21
+		local maxCount = tonumber(unitCountInput.Value) or 0
+
+		local filtered = {}
+		for _, u in ipairs(units) do
+			if u.chance and u.chance >= minChance and not u.placed and not u.locked then
+				table.insert(filtered, u)
+			end
+		end
+
+		table.sort(filtered, function(a, b)
+			return (a.chance or 0) > (b.chance or 0)
+		end)
+
+		if maxCount > 0 and #filtered > maxCount then
+			local trimmed = {}
+			for i = 1, maxCount do
+				trimmed[i] = filtered[i]
+			end
+			filtered = trimmed
+		end
+
+		if #filtered == 0 then
+			unitPreviewPara:SetContent("No matching units")
+			return
+		end
+
+		local groups = {}
+		local groupOrder = {}
+		for _, u in ipairs(filtered) do
+			local gk = u.name .. "|" .. tostring(u.chance)
+			if not groups[gk] then
+				groups[gk] = { name = u.name, chance = u.chance, count = 0, minLevel = 999 }
+				table.insert(groupOrder, gk)
+			end
+			groups[gk].count += 1
+			groups[gk].minLevel = math.min(groups[gk].minLevel, u.level or 0)
+		end
+
+		local lines = {}
+		for _, gk in ipairs(groupOrder) do
+			local g = groups[gk]
+			local countStr = g.count > 1 and (" (" .. g.count .. ")") or ""
+			table.insert(lines, "1 in " .. formatNum(g.chance) .. " Lvl " .. g.minLevel .. countStr .. "  " .. g.name)
+		end
+		unitPreviewPara:SetContent(table.concat(lines, "\n") .. "\n\nTotal: " .. #filtered .. " units")
+	end
+
+	unitSection:AddButton({
+		Title = "Preview Units",
+		Callback = previewUnits,
+	})
+
+	-- Auto toggles
+	local optSection = TradeTab:AddSection("Options", { NoCollapse = true })
+
+	local autoReady = false
+	optSection:AddToggle("TradeAutoReady", {
+		Title = "Auto Ready",
+		Default = false,
+		Callback = function(v) autoReady = v end,
+	})
+
+	local autoAccept = false
+	optSection:AddToggle("TradeAutoAccept", {
+		Title = "Auto Accept",
+		Default = false,
+		Callback = function(v) autoAccept = v end,
+	})
+
+	-- Trade execution state
+	local tradeActive = false
+	local tradePendingItems = {}
+	local tradePendingUnits = {}
+	local currentTradeState = nil
+
+	local function buildTradeQueue()
+		local itemQueue = {}
+		local units, backpack = collectCatalog()
+
+		for _, itemName in ipairs(TRADE_ITEMS) do
+			local qty = tonumber(itemInputs[itemName].Value) or 0
+			if qty > 0 then
+				for _, bp in ipairs(backpack) do
+					if bp.name == itemName then
+						local sendAmt = math.min(qty, bp.amount)
+						if sendAmt > 0 then
+							table.insert(itemQueue, { name = itemName, amount = sendAmt })
+						end
+						break
+					end
+				end
+			end
+		end
+
+		local minChance = tonumber(chanceFilterInput.Value) or 1e21
+		local maxCount = tonumber(unitCountInput.Value) or 0
+		local unitQueue = {}
+
+		for _, u in ipairs(units) do
+			if u.chance and u.chance >= minChance and not u.placed and not u.locked then
+				table.insert(unitQueue, { id = u.id, name = u.name, chance = u.chance, amount = 1 })
+			end
+		end
+		table.sort(unitQueue, function(a, b) return (a.chance or 0) > (b.chance or 0) end)
+		if maxCount > 0 and #unitQueue > maxCount then
+			local trimmed = {}
+			for i = 1, maxCount do trimmed[i] = unitQueue[i] end
+			unitQueue = trimmed
+		end
+
+		return itemQueue, unitQueue
+	end
+
+	local function offerAllItems()
+		if not currentTradeState then return end
+
+		local itemQueue, unitQueue = buildTradeQueue()
+		local totalOffered = 0
+
+		tradeStatusPara:SetContent("Offering items...")
+		for _, item in ipairs(itemQueue) do
+			local inv = DataController.___X.Inventory or {}
+			for entryId, entry in pairs(inv) do
+				if entry.name == item.name then
+					local alreadyOffered = currentTradeState.ownOffer[entryId] or 0
+					local canOffer = math.min(item.amount - alreadyOffered, (entry.amount or 0) - alreadyOffered)
+					if canOffer > 0 then
+						ChangeOffer:Fire(entryId, canOffer)
+						totalOffered += 1
+						task.wait(0.15)
+					end
+					break
+				end
+			end
+		end
+
+		tradeStatusPara:SetContent("Offering units...")
+		for _, unit in ipairs(unitQueue) do
+			if unit.id then
+				local alreadyOffered = currentTradeState.ownOffer[unit.id] or 0
+				if alreadyOffered == 0 then
+					ChangeOffer:Fire(unit.id, 1)
+					totalOffered += 1
+					task.wait(0.15)
+				end
+			end
+		end
+
+		tradeStatusPara:SetContent("Offered " .. totalOffered .. " entries. " .. (autoReady and "Auto-readying..." or "Waiting for Ready..."))
+
+		if autoReady then
+			task.wait(0.5)
+			AdvanceTrade:Fire()
+			tradeStatusPara:SetContent("Ready sent. Waiting for partner...")
+		end
+	end
+
+	-- Listen for trade events
+	TradeEvent:Connect(function(event, data)
+		if event == "Started" then
+			currentTradeState = { ownOffer = {}, otherOffer = {}, phase = "Offer" }
+			tradeStatusPara:SetContent("Trade started with " .. (data.partner and data.partner.Name or "?"))
+			if tradeActive then
+				task.spawn(function()
+					task.wait(0.5)
+					offerAllItems()
+				end)
+			end
+
+		elseif event == "Updated" then
+			currentTradeState = data
+			if tradeActive and data.phase == "Confirm" and autoAccept and not data.ownAccepted then
+				task.wait(0.3)
+				AdvanceTrade:Fire()
+				tradeStatusPara:SetContent("Auto-accepted!")
+			end
+
+		elseif event == "Ended" then
+			local reason = data.reason or "?"
+			currentTradeState = nil
+			tradeActive = false
+			tradeStatusPara:SetContent("Trade ended: " .. reason)
+		end
+	end)
+
+	-- Start trade button
+	tradeSection:AddButton({
+		Title = "Start Trade",
+		Callback = function()
+			if not targetPlayer or not targetPlayer.Parent then
+				tradeStatusPara:SetContent("ERROR: Select a valid target player")
+				return
+			end
+
+			local itemQueue, unitQueue = buildTradeQueue()
+			if #itemQueue == 0 and #unitQueue == 0 then
+				tradeStatusPara:SetContent("ERROR: Nothing to send. Set items/units first")
+				return
+			end
+
+			tradeActive = true
+			tradeStatusPara:SetContent("Requesting trade with " .. targetPlayer.Name .. "...")
+			RequestTrade:Fire(targetPlayer)
+		end,
+	})
+
+	tradeSection:AddButton({
+		Title = "Cancel Trade",
+		Callback = function()
+			tradeActive = false
+			CancelTrade:Fire()
+			tradeStatusPara:SetContent("Trade cancelled")
+		end,
+	})
+
+	-- Refresh player list periodically
+	task.spawn(function()
+		while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+			task.wait(15)
+			pcall(function()
+				targetDropdown:SetValues(getPlayerNames())
+			end)
+		end
+	end)
+end
