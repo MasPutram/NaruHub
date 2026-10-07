@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | AnimeDice Sell Catalog v2.0.0
+-- NaruHub | AnimeDice Sell Catalog v2.0.1
 -- Sends enriched inventory data to dashboard catalog for marketplace listings.
 -- Self-contained GUI (no external NaruUI fetch).
 
@@ -1233,7 +1233,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | AD Catalog v2.0.0",
+	Title = "NaruHub | AD Catalog v2.0.1",
 	Badge = "SELL",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(540, 460),
@@ -1355,6 +1355,7 @@ do
 	local RequestTrade, ChangeOffer, AdvanceTrade, CancelTrade, TradeEvent
 	local tradeReady = false
 	local tradeEventHandler -- set after offerAllItems is defined
+	local tradeInitError = nil
 	task.spawn(function()
 		local ok, err = pcall(function()
 			local ClientComm = require(ReplicatedStorage.Packages.Network).ClientComm
@@ -1366,16 +1367,20 @@ do
 			TradeEvent = TradeComm:GetSignal("TradeEvent")
 		end)
 		if not ok then
-			tradeStatusPara:SetContent("Trade error: " .. tostring(err))
+			tradeInitError = tostring(err)
 			return
 		end
 		tradeReady = true
-		tradeStatusPara:SetContent("Idle")
 	end)
 
-	-- Connect TradeEvent from a clean (untainted) thread
+	-- Update status + connect TradeEvent from a clean (untainted) thread
 	task.spawn(function()
-		while not tradeReady do task.wait(0.1) end
+		while not tradeReady and not tradeInitError do task.wait(0.1) end
+		if tradeInitError then
+			tradeStatusPara:SetContent("Trade error: " .. tradeInitError)
+			return
+		end
+		tradeStatusPara:SetContent("Idle")
 		while not tradeEventHandler do task.wait(0.1) end
 		TradeEvent:Connect(tradeEventHandler)
 	end)
