@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | AnimeDice Sell Catalog v1.9.1
+-- NaruHub | AnimeDice Sell Catalog v1.9.2
 -- Sends enriched inventory data to dashboard catalog for marketplace listings.
 -- Self-contained GUI (no external NaruUI fetch).
 
@@ -1233,10 +1233,10 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | AD Catalog v1.9.1",
+	Title = "NaruHub | AD Catalog v1.9.2",
 	Badge = "SELL",
 	TabWidth = 90,
-	Size = UDim2.fromOffset(420, 460),
+	Size = UDim2.fromOffset(440, 580),
 	AutoStartMinimized = false,
 })
 
@@ -1371,8 +1371,11 @@ do
 		end
 		tradeReady = true
 		tradeStatusPara:SetContent("Idle")
+	end)
 
-		-- Wait until tradeEventHandler is defined (set below after offerAllItems)
+	-- Connect TradeEvent from a clean (untainted) thread
+	task.spawn(function()
+		while not tradeReady do task.wait(0.1) end
 		while not tradeEventHandler do task.wait(0.1) end
 		TradeEvent:Connect(tradeEventHandler)
 	end)
@@ -1407,11 +1410,19 @@ do
 
 	local tradeActive = false
 	local startTradeCallback -- forward-declared, set after buildTradeQueue is defined
+	local offerAllItemsCallback -- forward-declared, set after offerAllItems is defined
 
 	tradeSection:AddButton({
 		Title = "Send Request",
 		Callback = function()
 			if startTradeCallback then startTradeCallback() end
+		end,
+	})
+
+	tradeSection:AddButton({
+		Title = "Offer Items",
+		Callback = function()
+			if offerAllItemsCallback then offerAllItemsCallback() end
 		end,
 	})
 
@@ -1605,21 +1616,33 @@ do
 	end
 
 	local function offerAllItems()
-		if not currentTradeState then return end
+		if not currentTradeState then
+			tradeStatusPara:SetContent("ERROR: No active trade")
+			return
+		end
+		if not tradeReady then
+			tradeStatusPara:SetContent("ERROR: Trade system not ready")
+			return
+		end
 
 		local itemQueue, unitQueue = buildTradeQueue()
 		local totalOffered = 0
 
-		tradeStatusPara:SetContent("Offering items...")
+		tradeStatusPara:SetContent("Offering " .. #itemQueue .. " items, " .. #unitQueue .. " units...")
 		for _, item in ipairs(itemQueue) do
 			local inv = DataController.___X.Inventory or {}
 			for entryId, entry in pairs(inv) do
 				if entry.name == item.name then
-					local alreadyOffered = currentTradeState.ownOffer[entryId] or 0
-					local canOffer = math.min(item.amount - alreadyOffered, (entry.amount or 0) - alreadyOffered)
+					local canOffer = item.amount
 					if canOffer > 0 then
-						ChangeOffer:Fire(entryId, canOffer)
-						totalOffered += 1
+						local offerOk, offerErr = pcall(function()
+							ChangeOffer:Fire(entryId, canOffer)
+						end)
+						if offerOk then
+							totalOffered += 1
+						else
+							tradeStatusPara:SetContent("Offer error: " .. tostring(offerErr))
+						end
 						task.wait(0.15)
 					end
 					break
@@ -1627,15 +1650,17 @@ do
 			end
 		end
 
-		tradeStatusPara:SetContent("Offering units...")
 		for _, unit in ipairs(unitQueue) do
 			if unit.id then
-				local alreadyOffered = currentTradeState.ownOffer[unit.id] or 0
-				if alreadyOffered == 0 then
+				local offerOk, offerErr = pcall(function()
 					ChangeOffer:Fire(unit.id, 1)
+				end)
+				if offerOk then
 					totalOffered += 1
-					task.wait(0.15)
+				else
+					tradeStatusPara:SetContent("Unit offer error: " .. tostring(offerErr))
 				end
+				task.wait(0.15)
 			end
 		end
 
@@ -1643,9 +1668,18 @@ do
 
 		if autoReady then
 			task.wait(0.5)
-			AdvanceTrade:Fire()
+			pcall(function() AdvanceTrade:Fire() end)
 			tradeStatusPara:SetContent("Ready sent. Waiting for partner...")
 		end
+	end
+
+	offerAllItemsCallback = function()
+		task.spawn(function()
+			local ok, err = pcall(offerAllItems)
+			if not ok then
+				tradeStatusPara:SetContent("Offer failed: " .. tostring(err))
+			end
+		end)
 	end
 
 	-- Set trade event handler so task.spawn above can connect it once ready
@@ -1656,7 +1690,10 @@ do
 			if tradeActive then
 				task.spawn(function()
 					task.wait(0.5)
-					offerAllItems()
+					local ok, err = pcall(offerAllItems)
+					if not ok then
+						tradeStatusPara:SetContent("Auto-offer error: " .. tostring(err))
+					end
 				end)
 			end
 
