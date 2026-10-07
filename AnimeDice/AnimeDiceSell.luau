@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | AnimeDice Sell Catalog v1.9.3
+-- NaruHub | AnimeDice Sell Catalog v2.0.0
 -- Sends enriched inventory data to dashboard catalog for marketplace listings.
 -- Self-contained GUI (no external NaruUI fetch).
 
@@ -1233,7 +1233,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | AD Catalog v1.9.3",
+	Title = "NaruHub | AD Catalog v2.0.0",
 	Badge = "SELL",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(540, 460),
@@ -1409,20 +1409,17 @@ do
 	})
 
 	local tradeActive = false
-	local startTradeCallback -- forward-declared, set after buildTradeQueue is defined
-	local offerAllItemsCallback -- forward-declared, set after offerAllItems is defined
+	local currentTradeState = nil
+	local offeredEntries = {} -- track { [entryId] = amount } for remove
 
 	tradeSection:AddButton({
 		Title = "Send Request",
 		Callback = function()
-			if startTradeCallback then startTradeCallback() end
-		end,
-	})
-
-	tradeSection:AddButton({
-		Title = "Offer Items",
-		Callback = function()
-			if offerAllItemsCallback then offerAllItemsCallback() end
+			if not tradeReady then tradeStatusPara:SetContent("ERROR: Trade not ready"); return end
+			if not targetPlayer or not targetPlayer.Parent then tradeStatusPara:SetContent("ERROR: Select target"); return end
+			tradeActive = true
+			tradeStatusPara:SetContent("Requesting trade with " .. targetPlayer.Name .. "...")
+			pcall(function() RequestTrade:Fire(targetPlayer) end)
 		end,
 	})
 
@@ -1431,13 +1428,25 @@ do
 		Callback = function()
 			if not tradeReady then return end
 			tradeActive = false
-			CancelTrade:Fire()
+			offeredEntries = {}
+			pcall(function() CancelTrade:Fire() end)
 			tradeStatusPara:SetContent("Trade cancelled")
 		end,
 	})
 
-	-- Items to send
-	local itemSection = TradeTab:AddSection("Items to Send", { NoCollapse = true })
+	-- Helper: find inventory entryId by name
+	local function findEntryId(itemName)
+		local inv = DataController.___X.Inventory or {}
+		for entryId, entry in pairs(inv) do
+			if type(entry) == "table" and entry.name == itemName then
+				return entryId, entry
+			end
+		end
+		return nil, nil
+	end
+
+	-- Items to offer (each with Offer + Remove buttons)
+	local itemSection = TradeTab:AddSection("Items to Offer", { NoCollapse = true })
 
 	local itemInputs = {}
 	local TRADE_ITEMS = { "Gem", "Trait Reroll Token", "Lucky Spin Token", "Jackpot Token" }
@@ -1449,10 +1458,61 @@ do
 			Numeric = true,
 			Finished = false,
 		})
+
+		itemSection:AddButton({
+			Title = "Offer " .. itemName,
+			Callback = function()
+				if not tradeReady or not currentTradeState then
+					tradeStatusPara:SetContent("ERROR: No active trade")
+					return
+				end
+				local qty = tonumber(itemInputs[itemName].Value) or 0
+				if qty <= 0 then tradeStatusPara:SetContent("Set " .. itemName .. " amount first"); return end
+
+				local entryId, entry = findEntryId(itemName)
+				if not entryId then
+					tradeStatusPara:SetContent("ERROR: " .. itemName .. " not found in inventory")
+					return
+				end
+				local sendAmt = math.min(qty, entry.amount or 0)
+				if sendAmt <= 0 then tradeStatusPara:SetContent(itemName .. " amount is 0"); return end
+
+				local ok, err = pcall(function() ChangeOffer:Fire(entryId, sendAmt) end)
+				if ok then
+					offeredEntries[entryId] = (offeredEntries[entryId] or 0) + sendAmt
+					tradeStatusPara:SetContent("Offered " .. sendAmt .. "x " .. itemName)
+				else
+					tradeStatusPara:SetContent("Error: " .. tostring(err))
+				end
+			end,
+		})
+
+		itemSection:AddButton({
+			Title = "Remove " .. itemName,
+			Callback = function()
+				if not tradeReady or not currentTradeState then
+					tradeStatusPara:SetContent("ERROR: No active trade")
+					return
+				end
+				local entryId = findEntryId(itemName)
+				if not entryId then tradeStatusPara:SetContent(itemName .. " not found"); return end
+
+				local offered = offeredEntries[entryId] or 0
+				if offered <= 0 then tradeStatusPara:SetContent(itemName .. " not offered"); return end
+
+				local ok, err = pcall(function() ChangeOffer:Fire(entryId, -offered) end)
+				if ok then
+					offeredEntries[entryId] = nil
+					tradeStatusPara:SetContent("Removed " .. itemName .. " from offer")
+				else
+					tradeStatusPara:SetContent("Error: " .. tostring(err))
+				end
+			end,
+		})
 	end
 
-	-- Units to send
-	local unitSection = TradeTab:AddSection("Units to Send", { NoCollapse = true })
+	-- Units to offer
+	local unitSection = TradeTab:AddSection("Units to Offer", { NoCollapse = true })
 
 	local chanceFilterInput = unitSection:AddInput("TradeChanceFilter", {
 		Title = "Min Chance (sx)",
@@ -1463,7 +1523,7 @@ do
 	})
 
 	local unitCountInput = unitSection:AddInput("TradeUnitCount", {
-		Title = "Max Units to Send",
+		Title = "Max Units",
 		Placeholder = "0 = all",
 		Default = "0",
 		Numeric = true,
@@ -1472,7 +1532,7 @@ do
 
 	local unitPreviewPara = unitSection:AddParagraph({
 		Title = "Preview",
-		Content = "Set filter to preview",
+		Content = "Set filter then Preview",
 		ContentSize = 11,
 	})
 
@@ -1481,29 +1541,28 @@ do
 		return v * 1e21
 	end
 
-	local function previewUnits()
+	local function buildUnitQueue()
 		local units, _ = collectCatalog()
 		local minChance = parseChanceSx()
 		local maxCount = tonumber(unitCountInput.Value) or 0
 
-		local filtered = {}
+		local unitQueue = {}
 		for _, u in ipairs(units) do
 			if u.chance and u.chance >= minChance and not u.placed and not u.locked then
-				table.insert(filtered, u)
+				table.insert(unitQueue, u)
 			end
 		end
-
-		table.sort(filtered, function(a, b)
-			return (a.chance or 0) > (b.chance or 0)
-		end)
-
-		if maxCount > 0 and #filtered > maxCount then
+		table.sort(unitQueue, function(a, b) return (a.chance or 0) > (b.chance or 0) end)
+		if maxCount > 0 and #unitQueue > maxCount then
 			local trimmed = {}
-			for i = 1, maxCount do
-				trimmed[i] = filtered[i]
-			end
-			filtered = trimmed
+			for i = 1, maxCount do trimmed[i] = unitQueue[i] end
+			unitQueue = trimmed
 		end
+		return unitQueue
+	end
+
+	local function previewUnits()
+		local filtered = buildUnitQueue()
 
 		if #filtered == 0 then
 			unitPreviewPara:SetContent("No matching units")
@@ -1536,6 +1595,67 @@ do
 		Callback = previewUnits,
 	})
 
+	unitSection:AddButton({
+		Title = "Offer Units",
+		Callback = function()
+			if not tradeReady or not currentTradeState then
+				tradeStatusPara:SetContent("ERROR: No active trade")
+				return
+			end
+			task.spawn(function()
+				local unitQueue = buildUnitQueue()
+				if #unitQueue == 0 then tradeStatusPara:SetContent("No units match filter"); return end
+
+				local offered = 0
+				tradeStatusPara:SetContent("Offering " .. #unitQueue .. " units...")
+				for _, u in ipairs(unitQueue) do
+					if u.id and not offeredEntries[u.id] then
+						local ok, err = pcall(function() ChangeOffer:Fire(u.id, 1) end)
+						if ok then
+							offeredEntries[u.id] = 1
+							offered += 1
+						else
+							tradeStatusPara:SetContent("Unit error: " .. tostring(err))
+							return
+						end
+						task.wait(0.15)
+					end
+				end
+				tradeStatusPara:SetContent("Offered " .. offered .. " units")
+
+				if autoReady then
+					task.wait(0.5)
+					pcall(function() AdvanceTrade:Fire() end)
+					tradeStatusPara:SetContent("Offered " .. offered .. " units + Ready sent")
+				end
+			end)
+		end,
+	})
+
+	unitSection:AddButton({
+		Title = "Remove All Units",
+		Callback = function()
+			if not tradeReady or not currentTradeState then
+				tradeStatusPara:SetContent("ERROR: No active trade")
+				return
+			end
+			task.spawn(function()
+				local removed = 0
+				for entryId, amt in pairs(offeredEntries) do
+					if amt == 1 then
+						local ok = pcall(function() ChangeOffer:Fire(entryId, -1) end)
+						if ok then
+							offeredEntries[entryId] = nil
+							removed += 1
+						end
+						task.wait(0.1)
+					end
+				end
+				tradeStatusPara:SetContent("Removed " .. removed .. " units from offer")
+			end)
+		end,
+	})
+
 	-- Auto toggles
 	local optSection = TradeTab:AddSection("Options", { NoCollapse = true })
 
@@ -1553,155 +1673,18 @@ do
 		Callback = function(v) autoAccept = v end,
 	})
 
-	-- Trade execution state
-	local tradePendingItems = {}
-	local tradePendingUnits = {}
-	local currentTradeState = nil
-
-	local function buildTradeQueue()
-		local itemQueue = {}
-		local units, backpack = collectCatalog()
-
-		for _, itemName in ipairs(TRADE_ITEMS) do
-			local qty = tonumber(itemInputs[itemName].Value) or 0
-			if qty > 0 then
-				for _, bp in ipairs(backpack) do
-					if bp.name == itemName then
-						local sendAmt = math.min(qty, bp.amount)
-						if sendAmt > 0 then
-							table.insert(itemQueue, { name = itemName, amount = sendAmt })
-						end
-						break
-					end
-				end
-			end
-		end
-
-		local minChance = parseChanceSx()
-		local maxCount = tonumber(unitCountInput.Value) or 0
-		local unitQueue = {}
-
-		for _, u in ipairs(units) do
-			if u.chance and u.chance >= minChance and not u.placed and not u.locked then
-				table.insert(unitQueue, { id = u.id, name = u.name, chance = u.chance, amount = 1 })
-			end
-		end
-		table.sort(unitQueue, function(a, b) return (a.chance or 0) > (b.chance or 0) end)
-		if maxCount > 0 and #unitQueue > maxCount then
-			local trimmed = {}
-			for i = 1, maxCount do trimmed[i] = unitQueue[i] end
-			unitQueue = trimmed
-		end
-
-		return itemQueue, unitQueue
-	end
-
-	startTradeCallback = function()
-		if not tradeReady then
-			tradeStatusPara:SetContent("ERROR: Trade system not available")
-			return
-		end
-		if not targetPlayer or not targetPlayer.Parent then
-			tradeStatusPara:SetContent("ERROR: Select a valid target player")
-			return
-		end
-		local itemQueue, unitQueue = buildTradeQueue()
-		if #itemQueue == 0 and #unitQueue == 0 then
-			tradeStatusPara:SetContent("ERROR: Nothing to send. Set items/units first")
-			return
-		end
-		tradeActive = true
-		tradeStatusPara:SetContent("Requesting trade with " .. targetPlayer.Name .. "...")
-		RequestTrade:Fire(targetPlayer)
-	end
-
-	local function offerAllItems()
-		if not currentTradeState then
-			tradeStatusPara:SetContent("ERROR: No active trade")
-			return
-		end
-		if not tradeReady then
-			tradeStatusPara:SetContent("ERROR: Trade system not ready")
-			return
-		end
-
-		local itemQueue, unitQueue = buildTradeQueue()
-		local totalOffered = 0
-
-		tradeStatusPara:SetContent("Offering " .. #itemQueue .. " items, " .. #unitQueue .. " units...")
-		for _, item in ipairs(itemQueue) do
-			local inv = DataController.___X.Inventory or {}
-			for entryId, entry in pairs(inv) do
-				if entry.name == item.name then
-					local canOffer = item.amount
-					if canOffer > 0 then
-						local offerOk, offerErr = pcall(function()
-							ChangeOffer:Fire(entryId, canOffer)
-						end)
-						if offerOk then
-							totalOffered += 1
-						else
-							tradeStatusPara:SetContent("Offer error: " .. tostring(offerErr))
-						end
-						task.wait(0.15)
-					end
-					break
-				end
-			end
-		end
-
-		for _, unit in ipairs(unitQueue) do
-			if unit.id then
-				local offerOk, offerErr = pcall(function()
-					ChangeOffer:Fire(unit.id, 1)
-				end)
-				if offerOk then
-					totalOffered += 1
-				else
-					tradeStatusPara:SetContent("Unit offer error: " .. tostring(offerErr))
-				end
-				task.wait(0.15)
-			end
-		end
-
-		tradeStatusPara:SetContent("Offered " .. totalOffered .. " entries. " .. (autoReady and "Auto-readying..." or "Waiting for Ready..."))
-
-		if autoReady then
-			task.wait(0.5)
-			pcall(function() AdvanceTrade:Fire() end)
-			tradeStatusPara:SetContent("Ready sent. Waiting for partner...")
-		end
-	end
-
-	offerAllItemsCallback = function()
-		task.spawn(function()
-			local ok, err = pcall(offerAllItems)
-			if not ok then
-				tradeStatusPara:SetContent("Offer failed: " .. tostring(err))
-			end
-		end)
-	end
-
-	-- Set trade event handler so task.spawn above can connect it once ready
+	-- Trade event handler
 	tradeEventHandler = function(event, data)
 		if event == "Started" then
 			currentTradeState = { ownOffer = {}, otherOffer = {}, phase = "Offer" }
+			offeredEntries = {}
 			tradeStatusPara:SetContent("Trade started with " .. (data.partner and data.partner.Name or "?"))
-			if tradeActive then
-				task.spawn(function()
-					task.wait(0.5)
-					local ok, err = pcall(offerAllItems)
-					if not ok then
-						tradeStatusPara:SetContent("Auto-offer error: " .. tostring(err))
-					end
-				end)
-			end
 
 		elseif event == "Updated" then
 			currentTradeState = data
 			if tradeActive and data.phase == "Confirm" and autoAccept and not data.ownAccepted then
 				task.wait(0.3)
-				AdvanceTrade:Fire()
+				pcall(function() AdvanceTrade:Fire() end)
 				tradeStatusPara:SetContent("Auto-accepted!")
 			end
 
@@ -1709,6 +1692,7 @@ do
 			local reason = data.reason or "?"
 			currentTradeState = nil
 			tradeActive = false
+			offeredEntries = {}
 			tradeStatusPara:SetContent("Trade ended: " .. reason)
 		end
 	end
