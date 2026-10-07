@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.0.6"
+local VERSION = "v3.0.7"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -700,6 +700,14 @@ local function getRarity(category)
 	return nil
 end
 
+local function getTextureId(category)
+	local cfg = Assets.Directory[category]
+	if cfg and cfg.Icon then
+		return tostring(cfg.Icon)
+	end
+	return nil
+end
+
 local function getMutationsForUid(uid)
 	if not uid then return {} end
 	local ok, result = pcall(function()
@@ -749,6 +757,7 @@ local function collectBackpackPets()
 				rate = rate,
 				weight = weight,
 				rarity = getRarity(category),
+				textureId = getTextureId(category),
 			})
 		end
 	end
@@ -773,6 +782,7 @@ local function collectActivePets()
 				rate = rec.MoneyPerSecond or 0,
 				weight = weight,
 				rarity = getRarity(item.Category),
+				textureId = getTextureId(item.Category),
 			})
 		end
 	end
@@ -839,6 +849,7 @@ local function collectGrowingEggs()
 				weight = weight,
 				rate = rate,
 				rarity = getRarity(rec.AssetCategory),
+				textureId = getTextureId(rec.AssetCategory),
 			})
 		end
 	end
@@ -876,6 +887,7 @@ local function collectBackpackEggs()
 				weight = weight,
 				rate = rate,
 				rarity = getRarity(rec.AssetCategory),
+				textureId = getTextureId(rec.AssetCategory),
 			})
 		end
 	end
@@ -996,6 +1008,7 @@ local function reportToMonitor()
 				mutations = p.mutations or {},
 				rate = p.rate or 0,
 				rarity = p.rarity,
+				textureId = p.textureId,
 			})
 		end
 
