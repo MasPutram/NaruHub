@@ -357,27 +357,33 @@ export default function RangkumanPage() {
   const totalSewaPerJam = sewaUnits.reduce((s, u) => s + (state.sewa[unitKey(u)]?.pricePerHour || 0), 0);
   const totalDeposit = sewaUnits.reduce((s, u) => s + (state.sewa[unitKey(u)]?.deposit || 0), 0);
 
-  // Group identical sell units (same name + chance) into one row
-  const groupedSell: { name: string; variant: string | null; chance: number; minLevel: number; count: number; totalPrice: number; rarity: string }[] = [];
-  const sellGroupMap = new Map<string, number>();
+  // Group sell units by CHANCE only (ignore name) — operator sells by rarity
+  // tier, not per unit identity. Rarest row color = highest-rarity unit in
+  // the bucket, so the row still reads as "which tier is this".
+  const RARITY_RANK: Record<string, number> = {
+    Exclusive: 11, "Secret II": 10, Heavenly: 10, "Secret I": 9, Celestial: 9,
+    Exotic: 8, Divine: 7, Mythical: 6, Legendary: 5, Epic: 4, Rare: 3, Uncommon: 2, Common: 1,
+  };
+  const groupedSell: { chance: number; minLevel: number; count: number; totalPrice: number; rarity: string }[] = [];
+  const sellGroupMap = new Map<number, number>();
   for (const u of sellUnits) {
-    const gk = `${u.name}|${u.chance}`;
-    const idx = sellGroupMap.get(gk);
+    const ch = u.chance ?? 0;
+    const idx = sellGroupMap.get(ch);
+    const displayR = rarityDisplayFor(u);
     if (idx !== undefined) {
       const g = groupedSell[idx];
       g.count++;
       g.minLevel = Math.min(g.minLevel, u.level ?? 0);
       g.totalPrice += unitPriceOf(u);
+      if ((RARITY_RANK[displayR] || 0) > (RARITY_RANK[g.rarity] || 0)) g.rarity = displayR;
     } else {
-      sellGroupMap.set(gk, groupedSell.length);
+      sellGroupMap.set(ch, groupedSell.length);
       groupedSell.push({
-        name: u.name,
-        variant: u.variant,
-        chance: u.chance ?? 0,
+        chance: ch,
         minLevel: u.level ?? 0,
         count: 1,
         totalPrice: unitPriceOf(u),
-        rarity: u.rarity,
+        rarity: displayR,
       });
     }
   }
@@ -442,15 +448,13 @@ export default function RangkumanPage() {
                 </div>
               </div>
 
-              {/* OPEN SEWA UNIT */}
+              {/* OPEN SEWA UNIT — only when at least one unit is open for rent */}
+              {sewaUnits.length > 0 && (<>
               <div className="sec-head">
                 <div className="sec-text">SEWA UNIT</div>
                 <div className="sec-bonus">bonus potion</div>
                 <div className="sec-line" />
               </div>
-              {sewaUnits.length === 0 ? (
-                <div className="empty-box">Belum ada unit yang dibuka untuk sewa</div>
-              ) : (
                 <div className="sewa-grid">
                   {sewaUnits.map((u, i) => {
                     const k = unitKey(u);
@@ -502,7 +506,7 @@ export default function RangkumanPage() {
                     );
                   })}
                 </div>
-              )}
+              </>)}
 
               {/* SELL UNIT SX — plain text rows, no cards */}
               <div className="sec-head">
@@ -594,12 +598,13 @@ export default function RangkumanPage() {
   );
 }
 
-function SellRow({ g }: { g: { name: string; variant: string | null; chance: number; minLevel: number; count: number; totalPrice: number; rarity: string } }) {
+function SellRow({ g }: { g: { chance: number; minLevel: number; count: number; totalPrice: number; rarity: string } }) {
   return (
     <div className="sell-card">
       <div className="scd-info">
-        <div className="scd-chance">1 in {fmtMoney(g.chance)} Lvl {g.minLevel}{g.count > 1 ? ` (${g.count})` : ""}</div>
-        <div className="scd-name" style={{ color: rarityColor(g.rarity) }}>{g.variant ? `${g.variant} ` : ""}{g.name}</div>
+        <div className="scd-chance" style={{ color: rarityColor(g.rarity) }}>
+          1 in {fmtMoney(g.chance)} Lvl {g.minLevel}{g.count > 1 ? ` (${g.count})` : ""}
+        </div>
       </div>
       <div className="scd-price">{g.totalPrice > 0 ? fmtRp(g.totalPrice) : "—"}</div>
     </div>
