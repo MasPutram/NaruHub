@@ -241,7 +241,7 @@ titleBar.BorderSizePixel = 0
 titleBar.Parent = mainFrame
 
 local titleLabel = Instance.new("TextLabel")
-titleLabel.Text = "NaruHub | Anime Dice v2.4.4"
+titleLabel.Text = "NaruHub | Anime Dice v2.4.5"
 titleLabel.Font = Enum.Font.GothamBold
 titleLabel.TextSize = 13
 titleLabel.TextColor3 = INK
@@ -448,10 +448,17 @@ end
 ------------------------------------------------------------
 do
 	local myName = LocalPlayer.Name
-	local currentJobId = game.JobId
 	local sameServerAccounts = {}
 
+	local function getJobId()
+		local jid = game.JobId
+		if jid and jid ~= "" then return jid end
+		return nil
+	end
+
 	local function fetchSameServerAccounts()
+		local currentJobId = getJobId()
+		if not currentJobId then return end
 		local ok, result = pcall(function()
 			local res = request({
 				Url = SERVER_BASE_URL .. "/api/anime-dice/accounts",
