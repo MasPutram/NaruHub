@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | AnimeDice Sell Catalog v1.9.0
+-- NaruHub | AnimeDice Sell Catalog v1.9.1
 -- Sends enriched inventory data to dashboard catalog for marketplace listings.
 -- Self-contained GUI (no external NaruUI fetch).
 
@@ -1233,7 +1233,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | AD Catalog v1.9.0",
+	Title = "NaruHub | AD Catalog v1.9.1",
 	Badge = "SELL",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(420, 460),
@@ -1436,7 +1436,7 @@ do
 			Placeholder = "0",
 			Default = "0",
 			Numeric = true,
-			Finished = true,
+			Finished = false,
 		})
 	end
 
@@ -1448,7 +1448,7 @@ do
 		Placeholder = "e.g. 21",
 		Default = "1",
 		Numeric = true,
-		Finished = true,
+		Finished = false,
 	})
 
 	local unitCountInput = unitSection:AddInput("TradeUnitCount", {
@@ -1456,7 +1456,7 @@ do
 		Placeholder = "0 = all",
 		Default = "0",
 		Numeric = true,
-		Finished = true,
+		Finished = false,
 	})
 
 	local unitPreviewPara = unitSection:AddParagraph({
