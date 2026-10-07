@@ -515,23 +515,35 @@ end)
 -- Trade Tab
 ------------------------------------------------------------
 do
-	local ClientComm = require(ReplicatedStorage.Packages.Network).ClientComm
-	local TradeComm = ClientComm.new(ReplicatedStorage.Network, false, "TradeService")
-	local RequestTrade = TradeComm:GetSignal("RequestTrade")
-	local ChangeOffer = TradeComm:GetSignal("ChangeOffer")
-	local AdvanceTrade = TradeComm:GetSignal("AdvanceTrade")
-	local CancelTrade = TradeComm:GetSignal("CancelTrade")
-	local TradeEvent = TradeComm:GetSignal("TradeEvent")
-
 	local TradeTab = Window:AddTab({ Title = "Trade" })
 	local tradeSection = TradeTab:AddSection("Smart Trade", { NoCollapse = true })
 
 	local tradeStatusPara = tradeSection:AddParagraph({
 		Title = "Status",
-		Content = "Idle",
+		Content = "Connecting...",
 		ContentSize = 13,
 		Center = true,
 	})
+
+	local RequestTrade, ChangeOffer, AdvanceTrade, CancelTrade, TradeEvent
+	local tradeReady = false
+	do
+		local ok, err = pcall(function()
+			local ClientComm = require(ReplicatedStorage.Packages.Network).ClientComm
+			local TradeComm = ClientComm.new(ReplicatedStorage.Network, false, "TradeService")
+			RequestTrade = TradeComm:GetSignal("RequestTrade")
+			ChangeOffer = TradeComm:GetSignal("ChangeOffer")
+			AdvanceTrade = TradeComm:GetSignal("AdvanceTrade")
+			CancelTrade = TradeComm:GetSignal("CancelTrade")
+			TradeEvent = TradeComm:GetSignal("TradeEvent")
+			tradeReady = true
+		end)
+		if not ok then
+			tradeStatusPara:SetContent("Trade error: " .. tostring(err))
+		else
+			tradeStatusPara:SetContent("Idle")
+		end
+	end
 
 	-- Target player dropdown
 	local targetPlayer = nil
@@ -574,6 +586,7 @@ do
 	tradeSection:AddButton({
 		Title = "Cancel Trade",
 		Callback = function()
+			if not tradeReady then return end
 			tradeActive = false
 			CancelTrade:Fire()
 			tradeStatusPara:SetContent("Trade cancelled")
@@ -741,6 +754,10 @@ do
 	end
 
 	startTradeCallback = function()
+		if not tradeReady then
+			tradeStatusPara:SetContent("ERROR: Trade system not available")
+			return
+		end
 		if not targetPlayer or not targetPlayer.Parent then
 			tradeStatusPara:SetContent("ERROR: Select a valid target player")
 			return
@@ -800,7 +817,7 @@ do
 	end
 
 	-- Listen for trade events
-	TradeEvent:Connect(function(event, data)
+	if tradeReady then TradeEvent:Connect(function(event, data)
 		if event == "Started" then
 			currentTradeState = { ownOffer = {}, otherOffer = {}, phase = "Offer" }
 			tradeStatusPara:SetContent("Trade started with " .. (data.partner and data.partner.Name or "?"))
@@ -825,7 +842,7 @@ do
 			tradeActive = false
 			tradeStatusPara:SetContent("Trade ended: " .. reason)
 		end
-	end)
+	end) end
 
 	-- Refresh player list periodically
 	task.spawn(function()
