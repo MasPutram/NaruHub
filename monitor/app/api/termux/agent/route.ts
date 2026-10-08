@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis } from "@/lib/redis";
-import { getTenantFromRequest } from "@/lib/auth";
+import { redis, termuxAgentConfigKey } from "@/lib/redis";
+import { getTenantFromRequest, isValidKey, tenantFromKey } from "@/lib/auth";
 
 export interface AgentConfig {
   HEARTBEAT_INTERVAL: number;
@@ -1657,18 +1657,16 @@ export async function OPTIONS() {
 }
 
 export async function GET(req: NextRequest) {
-  const { tenant, authed, error } = getTenantFromRequest(req);
-  if (!authed) return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
-
   const accessKey = req.nextUrl.searchParams.get("key");
-  if (!accessKey) {
-    return new NextResponse("-- Error: access key required\\nos.exit(1)\\n", {
-      status: 400,
+  if (!accessKey || !isValidKey(accessKey)) {
+    return new NextResponse("-- Error: valid access key required\nos.exit(1)\n", {
+      status: accessKey ? 401 : 400,
       headers: { "Content-Type": "text/plain" },
     });
   }
+  const tenant = tenantFromKey(accessKey);
 
-  const raw = await redis.get<string>(AGENT_CONFIG_KEY);
+  const raw = await redis.get<string>(termuxAgentConfigKey(tenant));
   const saved: Partial<AgentConfig> = raw
     ? typeof raw === "string" ? JSON.parse(raw) : raw
     : {};

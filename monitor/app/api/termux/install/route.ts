@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantFromRequest } from "@/lib/auth";
+import { isValidKey, tenantFromKey } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const { tenant, authed, error } = getTenantFromRequest(req);
-  if (!authed) return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
-
   const accessKey = req.nextUrl.searchParams.get("key") || "";
-  if (!accessKey) {
-    return new NextResponse("echo 'ERROR: access key required'; exit 1\n", {
-      status: 400,
+  if (!accessKey || !isValidKey(accessKey)) {
+    return new NextResponse("echo 'ERROR: valid access key required'; exit 1\n", {
+      status: accessKey ? 401 : 400,
       headers: { "Content-Type": "text/plain" },
     });
   }
