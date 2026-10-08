@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const { tenant, authed, error } = getTenantFromRequest(req);
-  if (!tenant) return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
+  if (!authed) return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
 
   const accessKey = req.nextUrl.searchParams.get("key") || "";
   if (!accessKey) {

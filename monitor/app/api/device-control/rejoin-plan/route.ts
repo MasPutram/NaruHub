@@ -147,8 +147,8 @@ async function chooseRejoinTarget(
 }
 
 export async function GET(req: NextRequest) {
-  const { tenant, error } = getTenantFromRequest(req);
-  if (!tenant) {
+  const { tenant, authed, error } = getTenantFromRequest(req);
+  if (!authed) {
     return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
   const deviceId = req.nextUrl.searchParams.get("deviceId");

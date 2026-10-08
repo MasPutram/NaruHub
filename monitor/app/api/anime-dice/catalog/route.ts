@@ -13,8 +13,8 @@ export async function OPTIONS() {
 // that the catalog / marketplace UI reads. Distinct from the monitor
 // endpoint (which stores a shorter-lived "is this account online" snapshot).
 export async function POST(req: NextRequest) {
-  const { tenant, error } = getTenantFromRequest(req);
-  if (!tenant) {
+  const { tenant, authed, error } = getTenantFromRequest(req);
+  if (!authed) {
     return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
 
@@ -60,8 +60,8 @@ export async function POST(req: NextRequest) {
 
 // GET ?account=Name -> single snapshot; no query -> list all account names.
 export async function GET(req: NextRequest) {
-  const { tenant, error } = getTenantFromRequest(req);
-  if (!tenant) {
+  const { tenant, authed, error } = getTenantFromRequest(req);
+  if (!authed) {
     return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
   try {
@@ -100,8 +100,8 @@ export async function GET(req: NextRequest) {
 // DELETE ?account=Name wipes a single account snapshot. No query wipes
 // every ad:catalog:* key — fresh slate (next Luau push repopulates).
 export async function DELETE(req: NextRequest) {
-  const { tenant, error } = getTenantFromRequest(req);
-  if (!tenant) {
+  const { tenant, authed, error } = getTenantFromRequest(req);
+  if (!authed) {
     return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
   try {

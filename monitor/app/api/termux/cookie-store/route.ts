@@ -18,7 +18,7 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
   const { tenant, authed, error } = getTenantFromRequest(req);
-  if (!tenant) return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
+  if (!authed) return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
 
   try {
     const body = await req.json();

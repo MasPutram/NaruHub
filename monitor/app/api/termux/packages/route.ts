@@ -16,7 +16,7 @@ export async function OPTIONS() {
 
 export async function GET(req: NextRequest) {
   const { tenant, authed, error } = getTenantFromRequest(req);
-  if (!tenant) return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
+  if (!authed) return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
 
   return NextResponse.json({ ok: true, packages: PACKAGES });
 }

@@ -568,7 +568,7 @@ export default function MonitorListPage() {
                 <button className="copy-btn" onClick={copyCommand}>{copied ? "Copied!" : "Copy"}</button>
               </div>
             ) : (
-              <div style={{ color: "var(--red)", fontSize: 13 }}>ACCESS_KEY belum diset di server (.env).</div>
+              <div style={{ color: "var(--red)", fontSize: 13 }}>ACCESS_KEYS belum diset di server (.env).</div>
             )}
             <div className="steps">
               1. Buka <code>Termux</code> di HP atau Cloud instance<br />

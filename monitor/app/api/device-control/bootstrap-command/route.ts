@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantFromRequest } from "@/lib/auth";
+import { getTenantFromRequest, getValidKeys, tenantFromKey, getDefaultKey } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
+function keyForTenant(tenant: string | undefined): string | undefined {
+  if (tenant === undefined) return getDefaultKey();
+  return getValidKeys().find((k) => tenantFromKey(k) === tenant);
+}
+
 export async function GET(req: NextRequest) {
-  const { tenant, error } = getTenantFromRequest(req);
-  if (!tenant) {
+  const { tenant, authed, error } = getTenantFromRequest(req);
+  if (!authed) {
     return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
 
-  // The bootstrap command embeds the caller's raw access key so the device
-  // can authenticate future API calls. Pull it from the header that
-  // getTenantFromRequest already validated.
-  const accessKey = req.headers.get("x-access-key") || "";
+  const accessKey = req.headers.get("x-access-key") || keyForTenant(tenant) || "";
   if (!accessKey) {
     return NextResponse.json({ ok: false, command: "" });
   }
