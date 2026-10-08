@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { writeFile } from "fs/promises";
 import { join } from "path";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  const { tenant } = getTenantFromRequest(req);
   const { base64, filename } = await req.json();
   if (!base64 || !filename) {
     return NextResponse.json({ ok: false, error: "missing params" }, { status: 400 });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isValidKey } from "@/lib/auth";
 
 // Serves heartbeatnaru.lua with the caller's access key baked in. The agent
 // fetches this on startup and writes it into every executor autoexec dir, so
@@ -63,9 +64,9 @@ export async function OPTIONS() {
 
 export async function GET(req: NextRequest) {
   const accessKey = req.nextUrl.searchParams.get("key");
-  if (!accessKey) {
-    return new NextResponse("-- Error: access key required\n", {
-      status: 400,
+  if (!accessKey || !isValidKey(accessKey)) {
+    return new NextResponse("-- Error: valid access key required\n", {
+      status: accessKey ? 401 : 400,
       headers: { "Content-Type": "text/plain" },
     });
   }

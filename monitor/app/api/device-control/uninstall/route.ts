@@ -5,6 +5,7 @@ import {
   TERMUX_COMMAND_QUEUE_TTL_S,
   TERMUX_COMMAND_QUEUE_MAX,
 } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // Queue an uninstall command per package. Agent runs `pm uninstall <pkg>`
 // via su. Accepts both a single packageName and a packageNames[] array so
@@ -18,6 +19,9 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
+    const t = tenant || undefined;
+
     const body = await req.json();
     const deviceId = String(body.deviceId || "");
     if (!deviceId) return NextResponse.json({ ok: false, error: "deviceId required" }, { status: 400 });
@@ -38,7 +42,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: `invalid package name(s): ${bad.join(", ")}` }, { status: 400 });
     }
 
-    const queueKey = termuxCommandQueueKey(deviceId);
+    const queueKey = termuxCommandQueueKey(deviceId, t);
     const commands: any[] = [];
     for (const pkg of packageNames) {
       const command = {

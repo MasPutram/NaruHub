@@ -28,9 +28,9 @@ function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
-async function verifyTokenEdge(token: string, secret: string): Promise<boolean> {
+async function verifyTokenEdge(token: string, secret: string): Promise<{ valid: boolean; tenant?: string }> {
   const [b64, sig] = token.split(".");
-  if (!b64 || !sig) return false;
+  if (!b64 || !sig) return { valid: false };
 
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
@@ -43,13 +43,14 @@ async function verifyTokenEdge(token: string, secret: string): Promise<boolean> 
   const expected = btoa(binary)
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
-  if (sig !== expected) return false;
+  if (sig !== expected) return { valid: false };
 
   try {
     const payload = JSON.parse(atob(b64.replace(/-/g, "+").replace(/_/g, "/")));
-    return payload.exp > Date.now();
+    if (payload.exp <= Date.now()) return { valid: false };
+    return { valid: true, tenant: payload.t || null };
   } catch {
-    return false;
+    return { valid: false };
   }
 }
 
@@ -65,13 +66,24 @@ export async function middleware(req: NextRequest) {
   const token = req.cookies.get("naruhub_session")?.value;
   const secret = process.env.AUTH_SECRET;
 
-  if (!secret || !token || !(await verifyTokenEdge(token, secret))) {
+  if (!secret || !token) {
     const loginUrl = req.nextUrl.clone();
     loginUrl.pathname = "/login";
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  const result = await verifyTokenEdge(token, secret);
+  if (!result.valid) {
+    const loginUrl = req.nextUrl.clone();
+    loginUrl.pathname = "/login";
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // Inject tenant id as request header so API routes can read it without
+  // re-parsing the cookie. "__default__" = owner/first key (no Redis prefix).
+  const response = NextResponse.next();
+  response.headers.set("x-tenant", result.tenant || "__default__");
+  return response;
 }
 
 export const config = {

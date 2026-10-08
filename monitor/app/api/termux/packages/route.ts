@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getTenantFromRequest } from "@/lib/auth";
 
 const PACKAGES = [
   {
@@ -13,6 +14,9 @@ export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const { tenant, authed, error } = getTenantFromRequest(req);
+  if (!tenant) return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
+
   return NextResponse.json({ ok: true, packages: PACKAGES });
 }

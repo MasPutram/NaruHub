@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   redis,
+  scanPattern,
+  stripTenantPrefix,
   termuxCommandQueueKey,
   termuxCommandLogKey,
   termuxDevicePolicyKey,
@@ -11,6 +13,7 @@ import {
   TERMUX_COMMAND_LOG_MAX,
   TERMUX_REJOIN_PAUSE_DEFAULT_S,
 } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // Find the live device that hosts a Roblox package logged in as `username`
 // and queue a launch command for that specific package -- used by the
@@ -21,6 +24,9 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
+    const t = tenant || undefined;
+
     const body = await req.json();
     const username: string = (body.username || body.account || "").toString().trim();
     if (!username) {
@@ -30,10 +36,11 @@ export async function POST(req: NextRequest) {
     // Scan live device keys only (skip meta keys).
     let cursor = "0";
     const deviceKeys: string[] = [];
+    const metaPattern = scanPattern(t, "termux:device:meta:");
     do {
-      const [next, keys] = await redis.scan(cursor, { match: "termux:device:*", count: 100 });
+      const [next, keys] = await redis.scan(cursor, { match: scanPattern(t, "termux:device:*"), count: 100 });
       cursor = next;
-      for (const k of keys) if (!k.startsWith("termux:device:meta:")) deviceKeys.push(k);
+      for (const k of keys) if (!k.startsWith(metaPattern)) deviceKeys.push(k);
     } while (cursor !== "0");
 
     if (deviceKeys.length === 0) {
@@ -75,7 +82,7 @@ export async function POST(req: NextRequest) {
     // closed), which is exactly the failure the operator hit.
     let sjBounds = "";
     try {
-      const polRaw = await redis.get<string>(termuxDevicePolicyKey(matchDevice.deviceId));
+      const polRaw = await redis.get<string>(termuxDevicePolicyKey(matchDevice.deviceId, t));
       if (polRaw) {
         const pol = typeof polRaw === "string" ? JSON.parse(polRaw) : polRaw;
         if (pol.packageBounds && typeof pol.packageBounds === "object" && pol.packageBounds[matchPkg]) {
@@ -100,7 +107,7 @@ export async function POST(req: NextRequest) {
       forceKill: true,
       createdAt: Date.now(),
     };
-    await redis.queuePush(termuxCommandQueueKey(matchDevice.deviceId), JSON.stringify(command), {
+    await redis.queuePush(termuxCommandQueueKey(matchDevice.deviceId, t), JSON.stringify(command), {
       ttl: TERMUX_COMMAND_QUEUE_TTL_S,
       maxLen: TERMUX_COMMAND_QUEUE_MAX,
     });
@@ -110,7 +117,7 @@ export async function POST(req: NextRequest) {
     // account out. Auto-clears after TTL, or when the operator (later)
     // explicitly resumes rejoin.
     await redis.set(
-      termuxPackageRejoinPauseKey(matchDevice.deviceId, matchPkg),
+      termuxPackageRejoinPauseKey(matchDevice.deviceId, matchPkg, t),
       JSON.stringify({ reason: "siap-jual", pausedAt: Date.now() }),
       { ex: TERMUX_REJOIN_PAUSE_DEFAULT_S }
     );
@@ -122,7 +129,7 @@ export async function POST(req: NextRequest) {
       packages: [matchPkg],
       username,
     };
-    await redis.queuePush(termuxCommandLogKey(matchDevice.deviceId), JSON.stringify(logEntry), {
+    await redis.queuePush(termuxCommandLogKey(matchDevice.deviceId, t), JSON.stringify(logEntry), {
       ttl: TERMUX_COMMAND_LOG_TTL_S,
       maxLen: TERMUX_COMMAND_LOG_MAX,
     });

@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis, forSaleKey } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
+    const t = tenant || undefined;
+
     const { account, price } = await req.json();
     if (!account) {
       return NextResponse.json({ ok: false, error: "Missing account" }, { status: 400 });
@@ -14,7 +18,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Harga tidak valid" }, { status: 400 });
     }
 
-    const fsKey = forSaleKey(account);
+    const fsKey = forSaleKey(account, t);
     const raw = await redis.get<string>(fsKey);
     if (!raw) {
       return NextResponse.json({ ok: false, error: "Akun tidak ditemukan di katalog." }, { status: 404 });

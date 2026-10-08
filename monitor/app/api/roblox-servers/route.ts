@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const { tenant } = getTenantFromRequest(req);
   const placeId = req.nextUrl.searchParams.get("placeId");
   if (!placeId || !/^\d+$/.test(placeId)) {
     return NextResponse.json({ ok: false, error: "placeId required" }, { status: 400 });

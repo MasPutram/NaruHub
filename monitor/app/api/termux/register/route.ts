@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis, termuxDeviceKey, termuxDeviceMetaKey, TERMUX_DEVICE_TTL_S } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
 }
 
 export async function POST(req: NextRequest) {
-  const accessKey = process.env.ACCESS_KEY;
-  const headerKey = req.headers.get("x-access-key");
-  if (accessKey && headerKey !== accessKey) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const { tenant, authed, error } = getTenantFromRequest(req);
+  if (!authed) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
 
   try {
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     }
 
     const now = Date.now();
-    const metaRaw = await redis.get<string>(termuxDeviceMetaKey(deviceId));
+    const metaRaw = await redis.get<string>(termuxDeviceMetaKey(deviceId, tenant));
     const meta = metaRaw ? (typeof metaRaw === "string" ? JSON.parse(metaRaw) : metaRaw) : null;
 
     const device: Record<string, any> = {
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     };
     if (meta?.customName) device.customName = meta.customName;
 
-    await redis.set(termuxDeviceKey(deviceId), JSON.stringify(device), { ex: TERMUX_DEVICE_TTL_S });
+    await redis.set(termuxDeviceKey(deviceId, tenant), JSON.stringify(device), { ex: TERMUX_DEVICE_TTL_S });
 
     // Persist a snapshot so an offline device still shows its last-known
     // hostname/platform (and any prior stats) on the dashboard.
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
       lastSeen: device.lastSeen,
     };
     if (device.customName) snapshot.customName = device.customName;
-    await redis.set(termuxDeviceMetaKey(deviceId), JSON.stringify(snapshot));
+    await redis.set(termuxDeviceMetaKey(deviceId, tenant), JSON.stringify(snapshot));
 
     return NextResponse.json({ ok: true, device });
   } catch (e: any) {

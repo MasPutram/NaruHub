@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis } from "@/lib/redis";
+import { redis, termuxAgentConfigKey } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 import {
   AgentConfig,
   AGENT_CONFIG_DEFAULTS,
@@ -7,11 +8,10 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const AGENT_CONFIG_KEY = "termux:agent-config";
-
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const raw = await redis.get<string>(AGENT_CONFIG_KEY);
+    const { tenant } = getTenantFromRequest(req);
+    const raw = await redis.get<string>(termuxAgentConfigKey(tenant || undefined));
     const saved: Partial<AgentConfig> = raw
       ? typeof raw === "string" ? JSON.parse(raw) : raw
       : {};
@@ -24,6 +24,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
     const body = await req.json();
     const cfg: Partial<AgentConfig> = {};
     for (const key of Object.keys(AGENT_CONFIG_DEFAULTS) as (keyof AgentConfig)[]) {
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
         cfg[key] = body[key];
       }
     }
-    await redis.set(AGENT_CONFIG_KEY, JSON.stringify(cfg));
+    await redis.set(termuxAgentConfigKey(tenant || undefined), JSON.stringify(cfg));
     const merged: AgentConfig = { ...AGENT_CONFIG_DEFAULTS, ...cfg };
     return NextResponse.json({ ok: true, config: merged });
   } catch (e: any) {

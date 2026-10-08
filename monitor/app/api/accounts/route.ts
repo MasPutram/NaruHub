@@ -1,15 +1,16 @@
-import { NextResponse } from "next/server";
-import { redis, ONLINE_TIMEOUT_S, forSaleKey, ACCOUNT_DEVICE_MAP_KEY } from "@/lib/redis";
+import { NextRequest, NextResponse } from "next/server";
+import { redis, ONLINE_TIMEOUT_S, forSaleKey, accountDeviceMapKey, scanPattern, stripTenantPrefix } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const { tenant } = getTenantFromRequest(req);
   try {
     const keys: string[] = [];
     let cursor = "0";
     do {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result: any = await redis.scan(cursor, { match: "account:*", count: 200 });
+      const result: any = await redis.scan(cursor, { match: scanPattern(tenant || undefined, "account:*"), count: 200 });
       cursor = String(result[0]);
       const batch: string[] = result[1] || [];
       keys.push(...batch);
@@ -19,11 +20,13 @@ export async function GET() {
       return NextResponse.json({ accounts: [] });
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const values: any[] = await redis.mget(...keys);
     const now = Date.now() / 1000;
-    const accountNames = keys.map((k) => k.replace(/^account:/, ""));
-    const fsKeys = accountNames.map(forSaleKey);
+    const accountNames = keys.map((k) => {
+      const base = stripTenantPrefix(k, tenant || undefined);
+      return base.replace(/^account:/, "");
+    });
+    const fsKeys = accountNames.map((n) => forSaleKey(n, tenant || undefined));
     const fsValues: (string | null)[] = fsKeys.length > 0 ? await redis.mget(...fsKeys) : [];
 
     const rows = keys.map((key, i) => {
@@ -40,7 +43,7 @@ export async function GET() {
 
     let deviceMap: Record<string, string> = {};
     try {
-      const mapRaw = await redis.get<string>(ACCOUNT_DEVICE_MAP_KEY);
+      const mapRaw = await redis.get<string>(accountDeviceMapKey(tenant || undefined));
       if (mapRaw) deviceMap = typeof mapRaw === "string" ? JSON.parse(mapRaw) : mapRaw;
     } catch {}
 

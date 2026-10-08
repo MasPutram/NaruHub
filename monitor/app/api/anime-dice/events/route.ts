@@ -1,14 +1,17 @@
-import { NextResponse } from "next/server";
-import { redis, adEventKey, AD_EVENT_HISTORY_KEY } from "@/lib/redis";
+import { NextRequest, NextResponse } from "next/server";
+import { redis, adEventKey, adEventHistoryKey } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 // Current server event (nil if nothing active) + last ~N history entries.
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
+
     const [raw, hist] = await Promise.all([
-      redis.get<string>(adEventKey()),
-      (redis as any).queuePeek(AD_EVENT_HISTORY_KEY, 20).catch(() => []),
+      redis.get<string>(adEventKey(tenant || undefined)),
+      (redis as any).queuePeek(adEventHistoryKey(tenant || undefined), 20).catch(() => []),
     ]);
 
     let event: any = null;

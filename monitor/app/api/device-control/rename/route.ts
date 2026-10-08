@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis, termuxDeviceKey, termuxDeviceMetaKey, TERMUX_DEVICE_TTL_S } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // Admin-only (protected by middleware session auth -- outside /api/termux/).
 // Sets a custom display name for a device, shown instead of its raw hostname.
@@ -9,6 +10,9 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
+    const t = tenant || undefined;
+
     const body = await req.json();
     const { deviceId, name } = body;
 
@@ -19,20 +23,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "name required, max 60 chars" }, { status: 400 });
     }
 
-    const existing = await redis.get<string>(termuxDeviceKey(deviceId));
+    const existing = await redis.get<string>(termuxDeviceKey(deviceId, t));
     if (!existing) {
       return NextResponse.json({ ok: false, error: "Device tidak ditemukan" }, { status: 404 });
     }
     const device = typeof existing === "string" ? JSON.parse(existing) : existing;
     device.customName = name.trim();
 
-    await redis.set(termuxDeviceKey(deviceId), JSON.stringify(device), { ex: TERMUX_DEVICE_TTL_S });
+    await redis.set(termuxDeviceKey(deviceId, t), JSON.stringify(device), { ex: TERMUX_DEVICE_TTL_S });
 
-    const metaRaw = await redis.get<string>(termuxDeviceMetaKey(deviceId));
+    const metaRaw = await redis.get<string>(termuxDeviceMetaKey(deviceId, t));
     const meta = metaRaw ? (typeof metaRaw === "string" ? JSON.parse(metaRaw) : metaRaw) : {};
     meta.customName = name.trim();
     if (!meta.registeredAt) meta.registeredAt = device.registeredAt || Date.now();
-    await redis.set(termuxDeviceMetaKey(deviceId), JSON.stringify(meta));
+    await redis.set(termuxDeviceMetaKey(deviceId, t), JSON.stringify(meta));
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {

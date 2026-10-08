@@ -3,7 +3,10 @@ import {
   redis,
   termuxAgentLogKey,
   termuxDeviceKey,
+  scanPattern,
+  stripTenantPrefix,
 } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // Access-key-gated log tail for diagnostics. Same data as the dashboard's
 // /api/device-control/agent-logs endpoint, but this one lives under
@@ -16,10 +19,9 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const accessKey = process.env.ACCESS_KEY;
-  const headerKey = req.headers.get("x-access-key") || req.nextUrl.searchParams.get("key");
-  if (accessKey && headerKey !== accessKey) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const { tenant, authed, error } = getTenantFromRequest(req);
+  if (!authed) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
 
   const requestedDevice = req.nextUrl.searchParams.get("deviceId");
@@ -33,16 +35,17 @@ export async function GET(req: NextRequest) {
     } else {
       let cursor = "0";
       do {
-        const [next, keys] = await redis.scan(cursor, { match: "termux:device:*", count: 200 });
+        const [next, keys] = await redis.scan(cursor, { match: scanPattern(tenant, "termux:device:*"), count: 200 });
         cursor = next;
         for (const k of keys) {
-          if (k.startsWith("termux:device:meta:")) continue;
-          deviceIds.push(k.replace(/^termux:device:/, ""));
+          const bare = stripTenantPrefix(k, tenant);
+          if (bare.startsWith("termux:device:meta:")) continue;
+          deviceIds.push(bare.replace(/^termux:device:/, ""));
         }
       } while (cursor !== "0");
     }
 
-    const devKeys = deviceIds.map((id) => termuxDeviceKey(id));
+    const devKeys = deviceIds.map((id) => termuxDeviceKey(id, tenant));
     const devVals = devKeys.length > 0 ? await redis.mget(...devKeys) : [];
     const deviceInfo: Record<string, { name: string; status: string }> = {};
     for (let i = 0; i < deviceIds.length; i++) {
@@ -59,7 +62,7 @@ export async function GET(req: NextRequest) {
 
     const devices = await Promise.all(
       deviceIds.map(async (id) => {
-        const raw = await redis.queuePeek(termuxAgentLogKey(id), limit);
+        const raw = await redis.queuePeek(termuxAgentLogKey(id, tenant), limit);
         const entries = raw
           .map((r) => {
             try {

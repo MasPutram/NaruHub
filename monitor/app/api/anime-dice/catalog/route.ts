@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, adCatalogKey, AD_CATALOG_TTL_S } from "@/lib/redis";
+import { redis, adCatalogKey, AD_CATALOG_TTL_S, scanPattern, stripTenantPrefix } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +13,9 @@ export async function OPTIONS() {
 // that the catalog / marketplace UI reads. Distinct from the monitor
 // endpoint (which stores a shorter-lived "is this account online" snapshot).
 export async function POST(req: NextRequest) {
-  const accessKey = process.env.ACCESS_KEY;
-  const headerKey = req.headers.get("x-access-key");
-  if (accessKey && headerKey !== accessKey) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const { tenant, error } = getTenantFromRequest(req);
+  if (!tenant) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
 
   try {
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     const now = Date.now() / 1000;
     let firstSeen = now;
-    const existing = await redis.get<string>(adCatalogKey(name));
+    const existing = await redis.get<string>(adCatalogKey(name, tenant));
     if (existing) {
       try {
         const prev = typeof existing === "string" ? JSON.parse(existing) : existing;
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       deviceId: req.headers.get("x-device-id") || "unknown",
     };
 
-    await redis.set(adCatalogKey(name), JSON.stringify(snapshot), { ex: AD_CATALOG_TTL_S });
+    await redis.set(adCatalogKey(name, tenant), JSON.stringify(snapshot), { ex: AD_CATALOG_TTL_S });
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
@@ -60,10 +60,14 @@ export async function POST(req: NextRequest) {
 
 // GET ?account=Name -> single snapshot; no query -> list all account names.
 export async function GET(req: NextRequest) {
+  const { tenant, error } = getTenantFromRequest(req);
+  if (!tenant) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
+  }
   try {
     const account = req.nextUrl.searchParams.get("account");
     if (account) {
-      const raw = await redis.get<string>(adCatalogKey(account));
+      const raw = await redis.get<string>(adCatalogKey(account, tenant));
       if (!raw) return NextResponse.json({ ok: false, error: "Not found" }, { status: 404 });
       const snap = typeof raw === "string" ? JSON.parse(raw) : raw;
       return NextResponse.json({ ok: true, snapshot: snap });
@@ -72,7 +76,7 @@ export async function GET(req: NextRequest) {
     const keys: string[] = [];
     let cursor = "0";
     do {
-      const res = await redis.scan(cursor, { match: "ad:catalog:*", count: 200 });
+      const res = await redis.scan(cursor, { match: scanPattern(tenant, "ad:catalog:*"), count: 200 });
       cursor = String(res[0]);
       keys.push(...(res[1] || []));
     } while (cursor !== "0");
@@ -96,17 +100,21 @@ export async function GET(req: NextRequest) {
 // DELETE ?account=Name wipes a single account snapshot. No query wipes
 // every ad:catalog:* key — fresh slate (next Luau push repopulates).
 export async function DELETE(req: NextRequest) {
+  const { tenant, error } = getTenantFromRequest(req);
+  if (!tenant) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
+  }
   try {
     const account = req.nextUrl.searchParams.get("account");
     if (account) {
-      await redis.del(adCatalogKey(account));
+      await redis.del(adCatalogKey(account, tenant));
       return NextResponse.json({ ok: true, deleted: account });
     }
 
     const keys: string[] = [];
     let cursor = "0";
     do {
-      const res = await redis.scan(cursor, { match: "ad:catalog:*", count: 200 });
+      const res = await redis.scan(cursor, { match: scanPattern(tenant, "ad:catalog:*"), count: 200 });
       cursor = String(res[0]);
       keys.push(...(res[1] || []));
     } while (cursor !== "0");

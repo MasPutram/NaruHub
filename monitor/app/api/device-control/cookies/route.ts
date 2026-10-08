@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis } from "@/lib/redis";
+import { redis, termuxCookiesKey } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,10 +10,10 @@ interface CookieEntry {
   cookie: string;
 }
 
-const COOKIES_KEY = "termux:cookies";
-
 export async function POST(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
+    const t = tenant || undefined;
     const body = await req.json();
     const { deviceId, cookies } = body as {
       deviceId: string;
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "missing fields" }, { status: 400 });
     }
 
-    const existing = await redis.get<Record<string, CookieEntry & { deviceId: string; updatedAt: number }>>(COOKIES_KEY);
+    const existing = await redis.get<Record<string, CookieEntry & { deviceId: string; updatedAt: number }>>(termuxCookiesKey(t));
     const store: Record<string, CookieEntry & { deviceId: string; updatedAt: number }> =
       (existing && typeof existing === "object") ? existing : {};
 
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    await redis.set(COOKIES_KEY, JSON.stringify(store));
+    await redis.set(termuxCookiesKey(t), JSON.stringify(store));
 
     return NextResponse.json({ ok: true, stored: cookies.length });
   } catch (e: any) {
@@ -46,9 +47,11 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const raw = await redis.get<string>(COOKIES_KEY);
+    const { tenant } = getTenantFromRequest(req);
+    const t = tenant || undefined;
+    const raw = await redis.get<string>(termuxCookiesKey(t));
     const store = raw
       ? typeof raw === "string" ? JSON.parse(raw) : raw
       : {};

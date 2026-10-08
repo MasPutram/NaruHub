@@ -1,19 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, termuxDevicePolicyKey, termuxDeviceKey, accountKey, ONLINE_TIMEOUT_S } from "@/lib/redis";
+import { redis, termuxDevicePolicyKey, termuxDeviceKey, accountKey, ONLINE_TIMEOUT_S, scanPattern, stripTenantPrefix } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // Scan every termux:pkgpause:<deviceId>:<pkg> key that currently exists (its
 // TTL hasn't expired yet) and return just the package names. Agent uses this
 // to skip auto-rejoin on packages under a temporary pause (e.g. "Siap Jual"
 // flow where the operator is logging an account out).
-async function readPausedPackages(deviceId: string): Promise<string[]> {
-  const prefix = `termux:pkgpause:${deviceId}:`;
+async function readPausedPackages(deviceId: string, tenant?: string): Promise<string[]> {
+  const basePrefix = `termux:pkgpause:${deviceId}:`;
   const paused: string[] = [];
   let cursor = "0";
   do {
-    const [next, keys] = await redis.scan(cursor, { match: `${prefix}*`, count: 100 });
+    const [next, keys] = await redis.scan(cursor, { match: scanPattern(tenant, `${basePrefix}*`), count: 100 });
     cursor = next;
     for (const k of keys) {
-      const pkg = k.slice(prefix.length);
+      const base = stripTenantPrefix(k, tenant);
+      const pkg = base.slice(basePrefix.length);
       if (pkg) paused.push(pkg);
     }
   } while (cursor !== "0");
@@ -28,11 +30,12 @@ async function readPausedPackages(deviceId: string): Promise<string[]> {
 // Only packages with a target are considered (rejoin needs somewhere to go).
 async function readOfflineTargetPackages(
   deviceId: string,
-  packageTargets: Record<string, string>
+  packageTargets: Record<string, string>,
+  tenant?: string
 ): Promise<string[]> {
   const targetPkgs = Object.keys(packageTargets);
   if (targetPkgs.length === 0) return [];
-  const raw = await redis.get<string>(termuxDeviceKey(deviceId));
+  const raw = await redis.get<string>(termuxDeviceKey(deviceId, tenant));
   if (!raw) return [];
   let device: any;
   try { device = typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return []; }
@@ -41,7 +44,7 @@ async function readOfflineTargetPackages(
     (p: any) => p && typeof p === "object" && p.username && packageTargets[p.pkg]
   );
   if (withUser.length === 0) return [];
-  const vals = await redis.mget(...withUser.map((p: any) => accountKey(p.username)));
+  const vals = await redis.mget(...withUser.map((p: any) => accountKey(p.username, tenant)));
   const now = Date.now() / 1000;
   const offline: string[] = [];
   for (let i = 0; i < withUser.length; i++) {
@@ -124,13 +127,9 @@ export async function OPTIONS() {
 }
 
 export async function GET(req: NextRequest) {
-  // Public read (also read by the agent). Access key check only when the
-  // request carries one -- keeps the endpoint usable from both admin UI
-  // and license-keyed agent.
-  const accessKey = process.env.ACCESS_KEY;
-  const headerKey = req.headers.get("x-access-key");
-  if (accessKey && headerKey && headerKey !== accessKey) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const { tenant, error } = getTenantFromRequest(req);
+  if (!tenant) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
 
   const deviceId = req.nextUrl.searchParams.get("deviceId");
@@ -139,11 +138,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const raw = await redis.get<string>(termuxDevicePolicyKey(deviceId));
+    const raw = await redis.get<string>(termuxDevicePolicyKey(deviceId, tenant));
     const parsed = raw ? (typeof raw === "string" ? JSON.parse(raw) : raw) : null;
     const policy = normalize(parsed);
-    const pausedPackages = await readPausedPackages(deviceId);
-    const offlinePackages = await readOfflineTargetPackages(deviceId, policy.packageTargets);
+    const pausedPackages = await readPausedPackages(deviceId, tenant);
+    const offlinePackages = await readOfflineTargetPackages(deviceId, policy.packageTargets, tenant);
     return NextResponse.json({ ok: true, policy, pausedPackages, offlinePackages });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message, policy: DEFAULT_POLICY, pausedPackages: [], offlinePackages: [] }, { status: 500 });
@@ -151,6 +150,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const { tenant, error } = getTenantFromRequest(req);
+  if (!tenant) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
+  }
   try {
     const body = await req.json();
     const { deviceId } = body;
@@ -159,13 +162,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Merge with existing policy so partial updates don't wipe untouched fields.
-    const existingRaw = await redis.get<string>(termuxDevicePolicyKey(deviceId));
+    const existingRaw = await redis.get<string>(termuxDevicePolicyKey(deviceId, tenant));
     const existing = existingRaw
       ? (typeof existingRaw === "string" ? JSON.parse(existingRaw) : existingRaw)
       : {};
     const merged = normalize({ ...existing, ...body, updatedAt: Date.now() });
 
-    await redis.set(termuxDevicePolicyKey(deviceId), JSON.stringify(merged));
+    await redis.set(termuxDevicePolicyKey(deviceId, tenant), JSON.stringify(merged));
     return NextResponse.json({ ok: true, policy: merged });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });

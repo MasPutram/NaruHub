@@ -6,6 +6,7 @@ import {
   termuxCommandQueueKey,
   termuxCommandLogKey,
 } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
@@ -13,6 +14,8 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
+    const t = tenant || undefined;
     const body = await req.json();
     const { deviceId } = body;
 
@@ -20,10 +23,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "deviceId required" }, { status: 400 });
     }
 
-    await redis.del(termuxDeviceKey(deviceId));
-    await redis.del(termuxDeviceMetaKey(deviceId));
-    await redis.del(termuxCommandQueueKey(deviceId));
-    await redis.del(termuxCommandLogKey(deviceId));
+    await redis.del(termuxDeviceKey(deviceId, t));
+    await redis.del(termuxDeviceMetaKey(deviceId, t));
+    await redis.del(termuxCommandQueueKey(deviceId, t));
+    await redis.del(termuxCommandLogKey(deviceId, t));
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {

@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis } from "@/lib/redis";
+import { redis, adInventoryStateKey } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
-
-const STATE_KEY = "ad:inventory:state";
 
 interface InventoryState {
   unitData: Record<string, { price: number; sold: boolean }>;
@@ -13,9 +12,10 @@ interface InventoryState {
 
 const DEFAULT_STATE: InventoryState = { unitData: {}, bpSold: {}, sewa: {} };
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const raw = await redis.get<string>(STATE_KEY);
+    const { tenant } = getTenantFromRequest(req);
+    const raw = await redis.get<string>(adInventoryStateKey(tenant || undefined));
     const state: InventoryState = raw
       ? { ...DEFAULT_STATE, ...(typeof raw === "string" ? JSON.parse(raw) : raw) }
       : DEFAULT_STATE;
@@ -27,9 +27,11 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
+    const stateKey = adInventoryStateKey(tenant || undefined);
     const body = await req.json();
 
-    const raw = await redis.get<string>(STATE_KEY);
+    const raw = await redis.get<string>(stateKey);
     const current: InventoryState = raw
       ? { ...DEFAULT_STATE, ...(typeof raw === "string" ? JSON.parse(raw) : raw) }
       : DEFAULT_STATE;
@@ -48,7 +50,7 @@ export async function POST(req: NextRequest) {
       current.bpSold[item] = qty;
     }
 
-    await redis.set(STATE_KEY, JSON.stringify(current));
+    await redis.set(stateKey, JSON.stringify(current));
     return NextResponse.json({ ok: true, state: current });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
@@ -57,9 +59,10 @@ export async function POST(req: NextRequest) {
 
 // Wipe all per-unit/per-item tracking (prices, sold toggles, sewa, bp sold).
 // Rates (ad:inventory:rates) and the catalog snapshots are NOT touched.
-export async function DELETE() {
+export async function DELETE(req: NextRequest) {
   try {
-    await redis.set(STATE_KEY, JSON.stringify(DEFAULT_STATE));
+    const { tenant } = getTenantFromRequest(req);
+    await redis.set(adInventoryStateKey(tenant || undefined), JSON.stringify(DEFAULT_STATE));
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });

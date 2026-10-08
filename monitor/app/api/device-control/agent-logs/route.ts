@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis, termuxAgentLogKey } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // Read the agent's streamed runtime log for one device, for the dashboard
 // console. Admin-only (this path is under /api/device-control/, protected by
 // the middleware session auth -- no public access-key bypass).
 export async function GET(req: NextRequest) {
+  const { tenant } = getTenantFromRequest(req);
   const deviceId = req.nextUrl.searchParams.get("deviceId");
   if (!deviceId) {
     return NextResponse.json({ ok: false, error: "deviceId required" }, { status: 400 });
   }
   const limit = Math.min(300, Math.max(1, Number(req.nextUrl.searchParams.get("limit")) || 200));
   try {
-    const raw = await redis.queuePeek(termuxAgentLogKey(deviceId), limit);
+    const raw = await redis.queuePeek(termuxAgentLogKey(deviceId, tenant || undefined), limit);
     const entries = raw
       .map((r) => {
         try {

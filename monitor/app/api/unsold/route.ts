@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis, soldKey, forSaleKey } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
+    const t = tenant || undefined;
+
     const { account } = await req.json();
     if (!account) {
       return NextResponse.json({ ok: false, error: "Missing account" }, { status: 400 });
     }
 
-    const sKey = soldKey(account);
+    const sKey = soldKey(account, t);
     const raw = await redis.get<string>(sKey);
     if (!raw) {
       return NextResponse.json({ ok: false, error: "Akun tidak ditemukan di daftar terjual." }, { status: 404 });
@@ -21,7 +25,7 @@ export async function POST(req: NextRequest) {
     delete acc.soldPrice;
     delete acc.snapshotDetail;
 
-    const fsKey = forSaleKey(account);
+    const fsKey = forSaleKey(account, t);
     await redis.set(fsKey, JSON.stringify(acc));
     await redis.del(sKey);
 

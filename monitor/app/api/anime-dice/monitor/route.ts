@@ -11,19 +11,19 @@ import {
   DEVICE_ACCOUNTS_TTL_S,
   adEventKey,
   AD_EVENT_TTL_S,
-  AD_EVENT_HISTORY_KEY,
+  adEventHistoryKey,
   AD_EVENT_HISTORY_MAX,
 } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
 }
 
 export async function POST(req: NextRequest) {
-  const accessKey = process.env.ACCESS_KEY;
-  const headerKey = req.headers.get("x-access-key");
-  if (accessKey && headerKey !== accessKey) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const { tenant, error } = getTenantFromRequest(req);
+  if (!tenant) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
 
   try {
@@ -31,12 +31,12 @@ export async function POST(req: NextRequest) {
     const name = data.sourceAccount || "?";
 
     const [fsExists, kickExists] = await Promise.all([
-      redis.get<string>(adForSaleKey(name)),
-      redis.get<string>(adForSaleKickKey(name)),
+      redis.get<string>(adForSaleKey(name, tenant)),
+      redis.get<string>(adForSaleKickKey(name, tenant)),
     ]);
     const shouldKick = !!kickExists;
     if (shouldKick) {
-      await redis.del(adForSaleKickKey(name));
+      await redis.del(adForSaleKickKey(name, tenant));
     }
     if (fsExists) {
       return NextResponse.json({
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     const now = Date.now() / 1000;
 
     let firstSeen = now;
-    const existing = await redis.get<string>(adAccountKey(name));
+    const existing = await redis.get<string>(adAccountKey(name, tenant));
     if (existing) {
       try {
         const prev = typeof existing === "string" ? JSON.parse(existing) : existing;
@@ -99,8 +99,8 @@ export async function POST(req: NextRequest) {
     };
 
     const pipeline = redis.pipeline();
-    pipeline.set(adAccountKey(name), JSON.stringify(summary), { ex: ACCOUNT_TTL_S });
-    pipeline.set(adDetailKey(name), JSON.stringify(detail), { ex: ACCOUNT_TTL_S });
+    pipeline.set(adAccountKey(name, tenant), JSON.stringify(summary), { ex: ACCOUNT_TTL_S });
+    pipeline.set(adDetailKey(name, tenant), JSON.stringify(detail), { ex: ACCOUNT_TTL_S });
     await pipeline.exec();
 
     // Weather / server event — any client that sees ActiveWeather != nil
@@ -122,9 +122,9 @@ export async function POST(req: NextRequest) {
           reportedBy: name,
           reportedAt: Math.floor(Date.now() / 1000),
         };
-        const prevRaw = await redis.get<string>(adEventKey());
+        const prevRaw = await redis.get<string>(adEventKey(tenant));
         const prev = prevRaw ? (typeof prevRaw === "string" ? JSON.parse(prevRaw) : prevRaw) : null;
-        await redis.set(adEventKey(), JSON.stringify(payload), { ex: AD_EVENT_TTL_S });
+        await redis.set(adEventKey(tenant), JSON.stringify(payload), { ex: AD_EVENT_TTL_S });
         // Push to history list only when this is a genuinely new event. Many
         // accounts in the same server all push the same event — gate on the
         // (jobId, name) tuple so one server's event appears once, not once
@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
         const prevKey = prev ? `${prev.jobId || "?"}|${prev.name}|${Math.floor((prev.startedAt || 0) / 60)}` : null;
         if (!prev || curKey !== prevKey) {
           try {
-            await (redis as any).queuePush(AD_EVENT_HISTORY_KEY, JSON.stringify(payload), { ttl: 60 * 60 * 24 * 7, maxLen: AD_EVENT_HISTORY_MAX });
+            await (redis as any).queuePush(adEventHistoryKey(tenant), JSON.stringify(payload), { ttl: 60 * 60 * 24 * 7, maxLen: AD_EVENT_HISTORY_MAX });
           } catch {}
         }
       }
@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
     const hbDeviceId = req.headers.get("x-device-id") || "unknown";
     if (hbDeviceId !== "unknown" && name !== "?") {
       try {
-        const mapKey = deviceAccountsKey(hbDeviceId);
+        const mapKey = deviceAccountsKey(hbDeviceId, tenant);
         const existingMap = await redis.get<string>(mapKey);
         const map: Record<string, number> = existingMap
           ? (typeof existingMap === "string" ? JSON.parse(existingMap) : existingMap)

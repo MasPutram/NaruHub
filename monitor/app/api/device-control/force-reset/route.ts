@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resetDeviceSession } from "@/lib/reset-session";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // Operator-triggered "reset device" from the device dashboard. Same logic as
 // the agent-fired reset-session but authenticated by the session cookie the
@@ -11,12 +12,13 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
     const body = await req.json();
     const deviceId = (body.deviceId || "").toString();
     if (!deviceId) {
       return NextResponse.json({ ok: false, error: "deviceId required" }, { status: 400 });
     }
-    const result = await resetDeviceSession(deviceId);
+    const result = await resetDeviceSession(deviceId, [], tenant || undefined);
     return NextResponse.json({ ok: true, ...result });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });

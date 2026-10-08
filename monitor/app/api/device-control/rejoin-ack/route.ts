@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis, rejoinStateKey, REJOIN_STATE_TTL_S } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // The agent calls this right after it actually executes a rejoin action, so
 // the brain measures the "waited long enough to escalate" window from the real
@@ -11,10 +12,9 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
-  const accessKey = process.env.ACCESS_KEY;
-  const headerKey = req.headers.get("x-access-key");
-  if (accessKey && headerKey !== accessKey) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const { tenant, error } = getTenantFromRequest(req);
+  if (!tenant) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
   try {
     const body = await req.json();
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     if (!deviceId || !pkg) {
       return NextResponse.json({ ok: false, error: "deviceId and pkg required" }, { status: 400 });
     }
-    const key = rejoinStateKey(deviceId, pkg);
+    const key = rejoinStateKey(deviceId, pkg, tenant);
     const raw = await redis.get<string>(key);
     if (raw) {
       const st = typeof raw === "string" ? JSON.parse(raw) : raw;

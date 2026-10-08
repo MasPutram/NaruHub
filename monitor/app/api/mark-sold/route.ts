@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis, forSaleKey, soldKey, detailKey } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  const { tenant } = getTenantFromRequest(req);
+  const t = tenant || undefined;
+
   try {
     const { account, price } = await req.json();
     if (!account) {
@@ -13,7 +17,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "Harga tidak valid" }, { status: 400 });
     }
 
-    const fsKey = forSaleKey(account);
+    const fsKey = forSaleKey(account, t);
     const raw = await redis.get<string>(fsKey);
     if (!raw) {
       return NextResponse.json(
@@ -24,10 +28,10 @@ export async function POST(req: NextRequest) {
 
     const acc = typeof raw === "string" ? JSON.parse(raw) : raw;
 
-    const detRaw = await redis.get<string>(detailKey(account));
+    const detRaw = await redis.get<string>(detailKey(account, t));
     const detail = detRaw ? (typeof detRaw === "string" ? JSON.parse(detRaw) : detRaw) : null;
 
-    const sKey = soldKey(account);
+    const sKey = soldKey(account, t);
     await redis.set(sKey, JSON.stringify({
       ...acc,
       sourceAccount: account,

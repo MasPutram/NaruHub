@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, PRESENCE_FRESH_S, deviceAccountsKey, DEVICE_ACCOUNTS_TTL_S } from "@/lib/redis";
+import { redis, scanPattern, stripTenantPrefix, PRESENCE_FRESH_S, deviceAccountsKey, DEVICE_ACCOUNTS_TTL_S } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // Global fleet overview: every clone's current Roblox server (jobId) across ALL
 // devices, so the operator can see the spread at a glance and spot any two
@@ -23,21 +24,25 @@ function deriveDeviceName(account: string): string | null {
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
+    const t = tenant || undefined;
+
     // account -> { name, deviceId } from the live device records' package lists.
     const devKeys: string[] = [];
     let cursor = "0";
+    const metaPrefix = scanPattern(t, "termux:device:meta:");
     do {
-      const [next, keys] = await redis.scan(cursor, { match: "termux:device:*", count: 200 });
+      const [next, keys] = await redis.scan(cursor, { match: scanPattern(t, "termux:device:*"), count: 200 });
       cursor = next;
-      for (const k of keys) if (!k.startsWith("termux:device:meta:")) devKeys.push(k);
+      for (const k of keys) if (!k.startsWith(metaPrefix)) devKeys.push(k);
     } while (cursor !== "0");
     const accountToDev: Record<string, { name: string; deviceId: string }> = {};
     if (devKeys.length > 0) {
       const devVals = await redis.mget(...devKeys);
       for (let i = 0; i < devKeys.length; i++) {
-        const id = devKeys[i].replace(/^termux:device:/, "");
+        const id = stripTenantPrefix(devKeys[i], t).replace(/^termux:device:/, "");
         const v = devVals[i];
         if (!v) continue;
         try {
@@ -57,7 +62,7 @@ export async function GET(_req: NextRequest) {
     const presKeys: string[] = [];
     cursor = "0";
     do {
-      const [next, keys] = await redis.scan(cursor, { match: "presence:*", count: 300 });
+      const [next, keys] = await redis.scan(cursor, { match: scanPattern(t, "presence:*"), count: 300 });
       cursor = next;
       presKeys.push(...keys);
     } while (cursor !== "0");
@@ -84,14 +89,14 @@ export async function GET(_req: NextRequest) {
     const metaKeys: string[] = [];
     cursor = "0";
     do {
-      const [next, keys] = await redis.scan(cursor, { match: "termux:device:meta:*", count: 200 });
+      const [next, keys] = await redis.scan(cursor, { match: scanPattern(t, "termux:device:meta:*"), count: 200 });
       cursor = next;
       metaKeys.push(...keys);
     } while (cursor !== "0");
     if (metaKeys.length > 0) {
       const metaVals = await redis.mget(...metaKeys);
       for (let i = 0; i < metaKeys.length; i++) {
-        const id = metaKeys[i].replace(/^termux:device:meta:/, "");
+        const id = stripTenantPrefix(metaKeys[i], t).replace(/^termux:device:meta:/, "");
         if (deviceIdToName[id]) continue;
         const v = metaVals[i];
         if (!v) continue;
@@ -107,7 +112,7 @@ export async function GET(_req: NextRequest) {
     const daKeys: string[] = [];
     cursor = "0";
     do {
-      const [next, keys] = await redis.scan(cursor, { match: "device-accounts:*", count: 200 });
+      const [next, keys] = await redis.scan(cursor, { match: scanPattern(t, "device-accounts:*"), count: 200 });
       cursor = next;
       daKeys.push(...keys);
     } while (cursor !== "0");
@@ -115,7 +120,7 @@ export async function GET(_req: NextRequest) {
       const daVals = await redis.mget(...daKeys);
       const cutoff = Date.now() - DEVICE_ACCOUNTS_TTL_S * 1000;
       for (let i = 0; i < daKeys.length; i++) {
-        const devId = daKeys[i].replace(/^device-accounts:/, "");
+        const devId = stripTenantPrefix(daKeys[i], t).replace(/^device-accounts:/, "");
         const v = daVals[i];
         if (!v) continue;
         try {

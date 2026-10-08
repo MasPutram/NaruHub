@@ -4,8 +4,7 @@ import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [key, setKey] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -19,14 +18,14 @@ export default function LoginPage() {
       const res = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ key }),
       });
 
       if (res.ok) {
         router.push("/");
         router.refresh();
       } else {
-        setError("Username atau password salah");
+        setError("Access key tidak valid");
       }
     } catch {
       setError("Gagal menghubungi server");
@@ -70,40 +69,18 @@ export default function LoginPage() {
             fontSize: "13px",
             textAlign: "center",
             margin: "0 0 32px",
-          }}>Steal An Egg — Control Dashboard</p>
+          }}>Control Dashboard</p>
 
           <label style={{ color: "#a1a1aa", fontSize: "13px", fontWeight: 600 }}>
-            Username
-          </label>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-            autoFocus
-            style={{
-              width: "100%",
-              padding: "10px 12px",
-              marginTop: "6px",
-              marginBottom: "16px",
-              background: "#09090b",
-              border: "1px solid #27272a",
-              borderRadius: "8px",
-              color: "#fafafa",
-              fontSize: "14px",
-              outline: "none",
-              boxSizing: "border-box",
-            }}
-          />
-
-          <label style={{ color: "#a1a1aa", fontSize: "13px", fontWeight: 600 }}>
-            Password
+            Access Key
           </label>
           <input
             type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            placeholder="Masukkan access key"
             required
+            autoFocus
             style={{
               width: "100%",
               padding: "10px 12px",

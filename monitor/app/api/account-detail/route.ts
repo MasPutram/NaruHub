@@ -1,22 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis, detailKey, forSaleKey, soldKey } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const { tenant } = getTenantFromRequest(req);
+  const t = tenant || undefined;
+
   const account = req.nextUrl.searchParams.get("account") || "";
   if (!account) {
     return NextResponse.json({ ok: false, error: "Missing account param" }, { status: 400 });
   }
 
   try {
-    let raw = await redis.get<string>(detailKey(account));
+    let raw = await redis.get<string>(detailKey(account, t));
     let data: any = null;
 
     if (raw) {
       data = typeof raw === "string" ? JSON.parse(raw) : raw;
     } else {
-      const fsRaw = await redis.get<string>(forSaleKey(account));
+      const fsRaw = await redis.get<string>(forSaleKey(account, t));
       if (fsRaw) {
         const fs = typeof fsRaw === "string" ? JSON.parse(fsRaw) : fsRaw;
         data = fs.detail || null;
@@ -24,7 +28,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (!data) {
-      const soldRaw = await redis.get<string>(soldKey(account));
+      const soldRaw = await redis.get<string>(soldKey(account, t));
       if (soldRaw) {
         const sold = typeof soldRaw === "string" ? JSON.parse(soldRaw) : soldRaw;
         data = sold.snapshotDetail || sold.detail || null;
