@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isValidKey } from "@/lib/auth";
 
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
@@ -7,11 +8,10 @@ export async function OPTIONS() {
 export async function POST(req: NextRequest) {
   try {
     const { key } = await req.json();
-    const accessKey = process.env.ACCESS_KEY;
-    if (!accessKey) {
-      return NextResponse.json({ ok: false, error: "Server belum dikonfigurasi." }, { status: 500 });
+    if (!key || typeof key !== "string") {
+      return NextResponse.json({ ok: false, error: "Key diperlukan." }, { status: 400 });
     }
-    if (key === accessKey) {
+    if (isValidKey(key)) {
       return NextResponse.json({ ok: true });
     }
     return NextResponse.json({ ok: false, error: "Key salah atau belum diisi." }, { status: 401 });

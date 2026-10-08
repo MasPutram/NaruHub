@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   redis,
+  scanPattern,
   termuxDeviceKey,
   termuxDevicePolicyKey,
   termuxCommandQueueKey,
@@ -12,6 +13,7 @@ import {
   TERMUX_COMMAND_LOG_TTL_S,
   TERMUX_COMMAND_LOG_MAX,
 } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // Admin-only (protected by middleware session auth -- this path is NOT under
 // /api/termux/ so it does not get the public device access-key bypass).
@@ -25,6 +27,9 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
+    const t = tenant || undefined;
+
     const body = await req.json();
     // Accept both the current batch shape and the older single-package
     // shape (packageName) for backward compatibility.
@@ -54,7 +59,7 @@ export async function POST(req: NextRequest) {
     const c = Math.max(1, Number(cols) || 1);
     const r = Math.max(1, Number(rows) || 1);
 
-    const deviceRaw = await redis.get<string>(termuxDeviceKey(deviceId));
+    const deviceRaw = await redis.get<string>(termuxDeviceKey(deviceId, t));
     if (!deviceRaw) {
       return NextResponse.json({ ok: false, error: "Device tidak ditemukan / offline" }, { status: 404 });
     }
@@ -65,7 +70,7 @@ export async function POST(req: NextRequest) {
     let savedBounds: Record<string, string> = {};
     if (!applyResize) {
       try {
-        const policyRaw = await redis.get<string>(termuxDevicePolicyKey(deviceId));
+        const policyRaw = await redis.get<string>(termuxDevicePolicyKey(deviceId, t));
         if (policyRaw) {
           const pol = typeof policyRaw === "string" ? JSON.parse(policyRaw) : policyRaw;
           if (pol.packageBounds && typeof pol.packageBounds === "object") savedBounds = pol.packageBounds;
@@ -90,11 +95,10 @@ export async function POST(req: NextRequest) {
       // Occupied jobIds from this device's own presence.
       const occupiedByPlace: Record<string, Set<string>> = {};
       try {
-        const presPrefix = `presence:${deviceId}:`;
         let cur = "0";
         const keys: string[] = [];
         do {
-          const [next, ks] = await redis.scan(cur, { match: `${presPrefix}*`, count: 100 });
+          const [next, ks] = await redis.scan(cur, { match: scanPattern(t, `presence:${deviceId}:*`), count: 100 });
           cur = next;
           keys.push(...ks);
         } while (cur !== "0");
@@ -143,7 +147,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const queueKey = termuxCommandQueueKey(deviceId);
+    const queueKey = termuxCommandQueueKey(deviceId, t);
 
     // Drop any commands still queued from a previous Launch Selected. Those
     // carry the spread jobIds that were fresh at their queue time -- but if
@@ -219,7 +223,7 @@ export async function POST(req: NextRequest) {
         maxLen: TERMUX_COMMAND_QUEUE_MAX,
       });
       // Anchor the auto-rejoin stuck grace on each clone's own launch time.
-      await redis.set(lastLaunchKey(deviceId, packageName), String(Date.now()), { ex: LAST_LAUNCH_TTL_S });
+      await redis.set(lastLaunchKey(deviceId, packageName, t), String(Date.now()), { ex: LAST_LAUNCH_TTL_S });
     }
 
     const logEntry = {
@@ -228,7 +232,7 @@ export async function POST(req: NextRequest) {
       action: applyResize ? "launch+resize" : "launch",
       packages: packageNames,
     };
-    await redis.queuePush(termuxCommandLogKey(deviceId), JSON.stringify(logEntry), {
+    await redis.queuePush(termuxCommandLogKey(deviceId, t), JSON.stringify(logEntry), {
       ttl: TERMUX_COMMAND_LOG_TTL_S,
       maxLen: TERMUX_COMMAND_LOG_MAX,
     });

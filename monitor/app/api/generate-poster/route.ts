@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
 }
 
 export async function POST(req: NextRequest) {
+  const { tenant } = getTenantFromRequest(req);
   const posterServer = process.env.POSTER_SERVER_URL;
   if (!posterServer) {
     return NextResponse.json(
@@ -19,7 +21,6 @@ export async function POST(req: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Access-Key": process.env.ACCESS_KEY || "",
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(30_000),

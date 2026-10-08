@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, termuxDevicePolicyKey, termuxDeviceKey } from "@/lib/redis";
+import { redis, scanPattern, stripTenantPrefix, termuxDevicePolicyKey, termuxDeviceKey } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
+    const t = tenant || undefined;
+
     const body = await req.json();
     const { psLink, cols, rows, rejoinDelay, launchDelay } = body as {
       psLink?: string;
@@ -17,7 +21,7 @@ export async function POST(req: NextRequest) {
     const deviceKeys: string[] = [];
     let cursor = "0";
     do {
-      const [next, found] = await redis.scan(cursor, { match: "termux:device:*", count: 100 });
+      const [next, found] = await redis.scan(cursor, { match: scanPattern(t, "termux:device:*"), count: 100 });
       cursor = next;
       deviceKeys.push(...found);
     } while (cursor !== "0");
@@ -31,8 +35,8 @@ export async function POST(req: NextRequest) {
       if (!deviceRaw) continue;
       const device = typeof deviceRaw === "string" ? JSON.parse(deviceRaw) : deviceRaw;
 
-      const deviceId = devKey.replace("termux:device:", "");
-      const policyRaw = await redis.get<string>(termuxDevicePolicyKey(deviceId));
+      const deviceId = stripTenantPrefix(devKey, t).replace("termux:device:", "");
+      const policyRaw = await redis.get<string>(termuxDevicePolicyKey(deviceId, t));
       const existing = policyRaw ? (typeof policyRaw === "string" ? JSON.parse(policyRaw) : policyRaw) : {};
 
       let packages: string[] = (device.packages || []).map((p: any) =>
@@ -71,7 +75,7 @@ export async function POST(req: NextRequest) {
         merged.packageBounds = bounds;
       }
 
-      await redis.set(termuxDevicePolicyKey(deviceId), JSON.stringify(merged));
+      await redis.set(termuxDevicePolicyKey(deviceId, t), JSON.stringify(merged));
       updated++;
     }
 

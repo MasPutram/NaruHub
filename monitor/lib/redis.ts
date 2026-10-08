@@ -8,54 +8,65 @@ const client = new IORedis(process.env.REDIS_URL || "redis://127.0.0.1:6379", {
 export const ONLINE_TIMEOUT_S = 45;
 export const ACCOUNT_TTL_S = 120;
 
-export function accountKey(name: string) {
-  return `account:${name}`;
+// Tenant prefix helper — all per-tenant Redis keys go through this.
+function tp(tenant: string | undefined, base: string): string {
+  return tenant ? `t:${tenant}:${base}` : base;
 }
 
-export function detailKey(name: string) {
-  return `detail:${name}`;
+// Build a SCAN match pattern scoped to a tenant.
+// e.g. scanPattern("abc123", "account:*") => "t:abc123:account:*"
+export function scanPattern(tenant: string | undefined, pattern: string): string {
+  return tenant ? `t:${tenant}:${pattern}` : pattern;
 }
 
-export function forSaleKey(name: string) {
-  return `forsale:${name}`;
+// Strip tenant prefix from a key to get the base key.
+export function stripTenantPrefix(key: string, tenant: string | undefined): string {
+  if (!tenant) return key;
+  const prefix = `t:${tenant}:`;
+  return key.startsWith(prefix) ? key.slice(prefix.length) : key;
 }
 
-// One-shot Kick signal for the in-game script. Set by /api/mark-forsale when
-// the operator clicks "Siap Jual"; the script polls /api/monitor and, when the
-// response echoes forSale:true, LocalPlayer:Kick("Siap Jual") -> Roblox home.
-// Distinct prefix from forSaleKey so /api/catalog-accounts' `forsale:*` scan
-// never picks this up. TTL is short: if the clone is offline when Siap Jual is
-// clicked, the signal auto-expires and the operator can just click again after
-// the clone comes back.
-export function forSaleKickKey(name: string) {
-  return `forsalekick:${name}`;
+export function accountKey(name: string, tenant?: string) {
+  return tp(tenant, `account:${name}`);
+}
+
+export function detailKey(name: string, tenant?: string) {
+  return tp(tenant, `detail:${name}`);
+}
+
+export function forSaleKey(name: string, tenant?: string) {
+  return tp(tenant, `forsale:${name}`);
+}
+
+export function forSaleKickKey(name: string, tenant?: string) {
+  return tp(tenant, `forsalekick:${name}`);
 }
 export const FORSALE_KICK_TTL_S = 300; // 5 minutes
 
-export function soldKey(name: string) {
-  return `sold:${name}`;
+export function soldKey(name: string, tenant?: string) {
+  return tp(tenant, `sold:${name}`);
 }
 
-export function moderatedKey(name: string) {
-  return `moderated:${name}`;
+export function moderatedKey(name: string, tenant?: string) {
+  return tp(tenant, `moderated:${name}`);
 }
 
-export function resolvedModeratedKey(name: string) {
-  return `modresolved:${name}`;
+export function resolvedModeratedKey(name: string, tenant?: string) {
+  return tp(tenant, `modresolved:${name}`);
 }
 
-export function termuxDeviceKey(deviceId: string) {
-  return `termux:device:${deviceId}`;
+export function termuxDeviceKey(deviceId: string, tenant?: string) {
+  return tp(tenant, `termux:device:${deviceId}`);
 }
 
-export function termuxDeviceMetaKey(deviceId: string) {
-  return `termux:device:meta:${deviceId}`;
+export function termuxDeviceMetaKey(deviceId: string, tenant?: string) {
+  return tp(tenant, `termux:device:meta:${deviceId}`);
 }
 
 export const TERMUX_DEVICE_TTL_S = 90;
 
 export function petIconKey(category: string) {
-  return `peticon:${category}`;
+  return `peticon:${category}`; // shared across tenants (icon cache)
 }
 
 // Live server presence reported by the in-game heartbeat script: which Roblox
@@ -64,8 +75,8 @@ export function petIconKey(category: string) {
 // names repeat across cloud phones -- account alone would collide. The brain
 // reads this to tell "in a game" (fresh) from "stuck/dropped" (stale). TTL is
 // long enough to still measure staleness past the give-up point.
-export function presenceKey(deviceId: string, account: string) {
-  return `presence:${deviceId}:${account}`;
+export function presenceKey(deviceId: string, account: string, tenant?: string) {
+  return tp(tenant, `presence:${deviceId}:${account}`);
 }
 export const PRESENCE_TTL_S = 600; // 10 min -- outlives the stuck/give-up window
 export const PRESENCE_FRESH_S = 60; // seen within this = currently in-game
@@ -73,16 +84,16 @@ export const PRESENCE_FRESH_S = 60; // seen within this = currently in-game
 // Per-device reverse map of accounts detected via game heartbeat (/api/monitor).
 // JSON object: { accountName: lastSeenMs, ... }. Used by /api/termux/heartbeat
 // to enrich packages whose prefs.xml-based username detection failed.
-export function deviceAccountsKey(deviceId: string) {
-  return `device-accounts:${deviceId}`;
+export function deviceAccountsKey(deviceId: string, tenant?: string) {
+  return tp(tenant, `device-accounts:${deviceId}`);
 }
 export const DEVICE_ACCOUNTS_TTL_S = ACCOUNT_TTL_S * 2; // 240s
 
 // Per-package auto-rejoin state machine (server-side brain). Tracks how long a
 // clone has been stuck, how many rejoin attempts have fired, which servers
 // failed, and whether we've given up (sent it home).
-export function rejoinStateKey(deviceId: string, pkg: string) {
-  return `rejoinstate:${deviceId}:${pkg}`;
+export function rejoinStateKey(deviceId: string, pkg: string, tenant?: string) {
+  return tp(tenant, `rejoinstate:${deviceId}:${pkg}`);
 }
 export const REJOIN_STATE_TTL_S = 60 * 60; // 1h; refreshed on every touch
 
@@ -90,17 +101,20 @@ export const REJOIN_STATE_TTL_S = 60 * 60; // 1h; refreshed on every touch
 // "no heartbeat for 300s = stuck" grace on this so a clone that failed early
 // in a long batch is judged from its OWN launch, not from when the batch
 // finished (the agent can't poll the brain while it's busy launching).
-export function lastLaunchKey(deviceId: string, pkg: string) {
-  return `lastlaunch:${deviceId}:${pkg}`;
+export function lastLaunchKey(deviceId: string, pkg: string, tenant?: string) {
+  return tp(tenant, `lastlaunch:${deviceId}:${pkg}`);
 }
 export const LAST_LAUNCH_TTL_S = 60 * 60; // 1h
 
 export const PET_ICON_TTL_S = 60 * 60 * 24 * 30; // 30 days
 
-export const ACCOUNT_DEVICE_MAP_KEY = "account-device-map";
+export function accountDeviceMapKey(tenant?: string): string {
+  return tp(tenant, "account-device-map");
+}
+export const ACCOUNT_DEVICE_MAP_KEY = "account-device-map"; // legacy compat
 
-export function termuxCommandQueueKey(deviceId: string) {
-  return `termux:cmdqueue:${deviceId}`;
+export function termuxCommandQueueKey(deviceId: string, tenant?: string) {
+  return tp(tenant, `termux:cmdqueue:${deviceId}`);
 }
 
 export const TERMUX_COMMAND_QUEUE_TTL_S = 60 * 10; // 10 minutes -- commands go stale fast
@@ -108,8 +122,8 @@ export const TERMUX_COMMAND_QUEUE_MAX = 50; // cap so a dead/offline device can'
 
 // Separate from the delivery queue above: a persistent (non-consumed) log of
 // admin actions per device, for the web UI's "command console" panel.
-export function termuxCommandLogKey(deviceId: string) {
-  return `termux:cmdlog:${deviceId}`;
+export function termuxCommandLogKey(deviceId: string, tenant?: string) {
+  return tp(tenant, `termux:cmdlog:${deviceId}`);
 }
 
 export const TERMUX_COMMAND_LOG_TTL_S = 60 * 60 * 24; // 24 hours
@@ -118,8 +132,8 @@ export const TERMUX_COMMAND_LOG_MAX = 30;
 // Live runtime log streamed by the agent itself (force-stop, trim, launch,
 // rejoin, RAM warnings...) so the dashboard's console shows what's actually
 // happening on-device -- separate from the admin-action command log above.
-export function termuxAgentLogKey(deviceId: string) {
-  return `termux:agentlog:${deviceId}`;
+export function termuxAgentLogKey(deviceId: string, tenant?: string) {
+  return tp(tenant, `termux:agentlog:${deviceId}`);
 }
 export const TERMUX_AGENT_LOG_TTL_S = 60 * 60 * 6; // 6 hours
 export const TERMUX_AGENT_LOG_MAX = 300; // keep the last 300 lines per device
@@ -127,8 +141,8 @@ export const TERMUX_AGENT_LOG_MAX = 300; // keep the last 300 lines per device
 // Persistent execution policy per device: auto-rejoin, per-package opt-in
 // list, launch delay, retry limit. Read by both the dashboard and the
 // Termux agent so the agent can act on disconnected packages autonomously.
-export function termuxDevicePolicyKey(deviceId: string) {
-  return `termux:policy:${deviceId}`;
+export function termuxDevicePolicyKey(deviceId: string, tenant?: string) {
+  return tp(tenant, `termux:policy:${deviceId}`);
 }
 
 // Per-package temporary rejoin pause. Set (with TTL) by flows like
@@ -136,63 +150,73 @@ export function termuxDevicePolicyKey(deviceId: string) {
 // screen for a moment (to log the account out) without auto-rejoin kicking
 // it back into the private server. Agent checks this before firing any
 // auto-rejoin launch.
-export function termuxPackageRejoinPauseKey(deviceId: string, pkg: string) {
-  return `termux:pkgpause:${deviceId}:${pkg}`;
+export function termuxPackageRejoinPauseKey(deviceId: string, pkg: string, tenant?: string) {
+  return tp(tenant, `termux:pkgpause:${deviceId}:${pkg}`);
 }
 export const TERMUX_REJOIN_PAUSE_DEFAULT_S = 600; // 10 minutes -- enough to log out
 
 // Global script library, shared across all devices. Each entry keys by a
 // slug derived from the filename. Persistent (no TTL).
-export function autoexecLibraryKey(slug: string) {
-  return `autoexec:library:${slug}`;
+export function termuxAgentConfigKey(tenant?: string): string {
+  return tp(tenant, "termux:agent-config");
 }
-export const AUTOEXEC_LIBRARY_INDEX = "autoexec:library:_index";
 
-// Which library scripts (by slug) are currently deployed to a device. Set
-// members. Lets the UI show "deployed to this device" without agent scan.
-export function autoexecDeployedKey(deviceId: string) {
-  return `autoexec:deployed:${deviceId}`;
+export function termuxCookiesKey(tenant?: string): string {
+  return tp(tenant, "termux:cookies");
+}
+
+export function autoexecLibraryKey(slug: string, tenant?: string) {
+  return tp(tenant, `autoexec:library:${slug}`);
+}
+export function autoexecLibraryIndexKey(tenant?: string): string {
+  return tp(tenant, "autoexec:library:_index");
+}
+export const AUTOEXEC_LIBRARY_INDEX = "autoexec:library:_index"; // legacy compat
+
+export function autoexecDeployedKey(deviceId: string, tenant?: string) {
+  return tp(tenant, `autoexec:deployed:${deviceId}`);
 }
 
 // ── Anime Dice ──────────────────────────────────────────────────────────
-export function adAccountKey(name: string) {
-  return `ad:account:${name}`;
+export function adAccountKey(name: string, tenant?: string) {
+  return tp(tenant, `ad:account:${name}`);
 }
 
-export function adDetailKey(name: string) {
-  return `ad:detail:${name}`;
+export function adDetailKey(name: string, tenant?: string) {
+  return tp(tenant, `ad:detail:${name}`);
 }
 
-export function adForSaleKey(name: string) {
-  return `ad:forsale:${name}`;
+export function adForSaleKey(name: string, tenant?: string) {
+  return tp(tenant, `ad:forsale:${name}`);
 }
 
-export function adForSaleKickKey(name: string) {
-  return `ad:forsalekick:${name}`;
+export function adForSaleKickKey(name: string, tenant?: string) {
+  return tp(tenant, `ad:forsalekick:${name}`);
 }
 
-export const AD_INVENTORY_RATES_KEY = "ad:inventory:rates";
+export function adInventoryRatesKey(tenant?: string): string {
+  return tp(tenant, "ad:inventory:rates");
+}
+export const AD_INVENTORY_RATES_KEY = "ad:inventory:rates"; // legacy compat
 
-// Enriched marketplace catalog snapshot per account (units with visuals,
-// backpack, stats). Written by AnimeDiceSell.luau, read by the catalog UI.
-// Persists longer than monitor: listings stay visible even when the account
-// is offline (24h TTL, refreshed on each push).
-export function adCatalogKey(name: string) {
-  return `ad:catalog:${name}`;
+export function adInventoryStateKey(tenant?: string): string {
+  return tp(tenant, "ad:inventory:state");
+}
+
+export function adCatalogKey(name: string, tenant?: string) {
+  return tp(tenant, `ad:catalog:${name}`);
 }
 export const AD_CATALOG_TTL_S = 60 * 60 * 24; // 24 hours
 
-// Weather / server event in Anime Dice: Luck Event, Cash Event, Roll Speed
-// Event, Trait Event, Grade Event. Server picks one every ~15-30 min and it
-// lasts 5 min. Any monitoring client that sees ActiveWeather != nil reports
-// it; dashboard reads this key to surface the current event + remaining time.
-export function adEventKey() {
-  return "ad:event:active";
+export function adEventKey(tenant?: string) {
+  return tp(tenant, "ad:event:active");
 }
 export const AD_EVENT_TTL_S = 360; // 6 min (slightly longer than 5min event)
 
-// Short rolling history of the last ~50 events for the dashboard timeline.
-export const AD_EVENT_HISTORY_KEY = "ad:event:history";
+export function adEventHistoryKey(tenant?: string): string {
+  return tp(tenant, "ad:event:history");
+}
+export const AD_EVENT_HISTORY_KEY = "ad:event:history"; // legacy compat
 export const AD_EVENT_HISTORY_MAX = 50;
 
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, TERMUX_DEVICE_TTL_S } from "@/lib/redis";
+import { redis, TERMUX_DEVICE_TTL_S, scanPattern, stripTenantPrefix } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
@@ -7,15 +8,20 @@ export async function OPTIONS() {
 
 export async function GET(_req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(_req);
+    const t = tenant || undefined;
+
     const liveByKey: Record<string, any> = {};
     const metaByKey: Record<string, any> = {};
 
     // Scan LIVE device keys (short TTL) -- exclude meta keys.
+    const livePattern = scanPattern(t, "termux:device:*");
+    const metaPrefix = scanPattern(t, "termux:device:meta:");
     let cursor = "0";
     do {
-      const [next, keys] = await redis.scan(cursor, { match: "termux:device:*", count: 100 });
+      const [next, keys] = await redis.scan(cursor, { match: livePattern, count: 100 });
       cursor = next;
-      const liveKeys = keys.filter((k) => !k.startsWith("termux:device:meta:"));
+      const liveKeys = keys.filter((k) => !k.startsWith(metaPrefix));
       if (liveKeys.length > 0) {
         const values = await redis.mget(...liveKeys);
         for (let i = 0; i < liveKeys.length; i++) {
@@ -30,9 +36,10 @@ export async function GET(_req: NextRequest) {
     } while (cursor !== "0");
 
     // Scan META keys (persistent, holds last snapshot for offline history).
+    const metaPattern = scanPattern(t, "termux:device:meta:*");
     cursor = "0";
     do {
-      const [next, keys] = await redis.scan(cursor, { match: "termux:device:meta:*", count: 100 });
+      const [next, keys] = await redis.scan(cursor, { match: metaPattern, count: 100 });
       cursor = next;
       if (keys.length > 0) {
         const values = await redis.mget(...keys);
@@ -41,7 +48,8 @@ export async function GET(_req: NextRequest) {
           if (!v) continue;
           try {
             const meta = JSON.parse(v);
-            const id = keys[i].replace("termux:device:meta:", "");
+            const baseKey = stripTenantPrefix(keys[i], t);
+            const id = baseKey.replace("termux:device:meta:", "");
             if (id) metaByKey[id] = meta;
           } catch {}
         }

@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis, termuxCommandLogKey } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // Admin-only (protected by middleware session auth). Returns recent admin
 // actions for a device -- the web UI's "command console" panel. Read-only,
 // does not consume the log (unlike the device-facing command queue).
 export async function GET(req: NextRequest) {
+  const { tenant } = getTenantFromRequest(req);
+  const t = tenant || undefined;
+
   const deviceId = req.nextUrl.searchParams.get("deviceId");
   if (!deviceId) {
     return NextResponse.json({ ok: false, error: "deviceId required", entries: [] }, { status: 400 });
   }
 
   try {
-    const raw = await redis.queuePeek(termuxCommandLogKey(deviceId), 30);
+    const raw = await redis.queuePeek(termuxCommandLogKey(deviceId, t), 30);
     const entries = raw
       .map((r) => {
         try {

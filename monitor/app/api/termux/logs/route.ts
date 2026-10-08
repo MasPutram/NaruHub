@@ -5,6 +5,7 @@ import {
   TERMUX_AGENT_LOG_TTL_S,
   TERMUX_AGENT_LOG_MAX,
 } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // Webhook the Termux agent POSTs its runtime log lines to. Public path (it
 // lives under /api/termux/, which the middleware bypasses for session auth);
@@ -17,10 +18,9 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
-  const accessKey = process.env.ACCESS_KEY;
-  const headerKey = req.headers.get("x-access-key");
-  if (accessKey && headerKey !== accessKey) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const { tenant, authed, error } = getTenantFromRequest(req);
+  if (!authed) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
 
   try {
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, stored: 0 });
     }
 
-    const key = termuxAgentLogKey(deviceId);
+    const key = termuxAgentLogKey(deviceId, tenant);
     for (const line of lines) {
       // Hard cap each line so a runaway log can't blow up a single entry.
       const entry = JSON.stringify({ ts: Date.now(), line: line.slice(0, 500) });

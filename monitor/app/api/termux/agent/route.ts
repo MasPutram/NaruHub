@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export interface AgentConfig {
   HEARTBEAT_INTERVAL: number;
@@ -1656,6 +1657,9 @@ export async function OPTIONS() {
 }
 
 export async function GET(req: NextRequest) {
+  const { tenant, authed, error } = getTenantFromRequest(req);
+  if (!tenant) return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
+
   const accessKey = req.nextUrl.searchParams.get("key");
   if (!accessKey) {
     return new NextResponse("-- Error: access key required\\nos.exit(1)\\n", {

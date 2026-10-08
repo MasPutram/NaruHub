@@ -6,6 +6,7 @@ import {
   rejoinStateKey,
   PRESENCE_FRESH_S,
 } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // Dashboard-facing status for the presence / auto-rejoin panel: for each
 // package on the device, its current Roblox server (jobId), last heartbeat,
@@ -14,20 +15,23 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const { tenant } = getTenantFromRequest(req);
+  const t = tenant || undefined;
+
   const deviceId = req.nextUrl.searchParams.get("deviceId");
   if (!deviceId) {
     return NextResponse.json({ ok: false, error: "deviceId required" }, { status: 400 });
   }
   try {
-    const devRaw = await redis.get<string>(termuxDeviceKey(deviceId));
+    const devRaw = await redis.get<string>(termuxDeviceKey(deviceId, t));
     if (!devRaw) return NextResponse.json({ ok: true, rows: [] });
     const device = typeof devRaw === "string" ? JSON.parse(devRaw) : devRaw;
     const packages: any[] = Array.isArray(device.packages) ? device.packages : [];
     const withUser = packages.filter((p) => p && typeof p === "object" && p.pkg && p.username);
     if (withUser.length === 0) return NextResponse.json({ ok: true, rows: [] });
 
-    const presVals = await redis.mget(...withUser.map((p) => presenceKey(deviceId, p.username)));
-    const stVals = await redis.mget(...withUser.map((p) => rejoinStateKey(deviceId, p.pkg)));
+    const presVals = await redis.mget(...withUser.map((p) => presenceKey(deviceId, p.username, t)));
+    const stVals = await redis.mget(...withUser.map((p) => rejoinStateKey(deviceId, p.pkg, t)));
     const now = Date.now();
 
     const rows = withUser.map((p, i) => {

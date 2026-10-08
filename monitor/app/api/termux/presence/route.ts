@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis, presenceKey, PRESENCE_TTL_S } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // Presence webhook for the in-game heartbeat script (heartbeatnaru.lua). Each
 // clone reports which Roblox server (jobId) it's currently in, so a launch or
@@ -13,10 +14,9 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
-  const accessKey = process.env.ACCESS_KEY;
-  const headerKey = req.headers.get("x-access-key");
-  if (accessKey && headerKey !== accessKey) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const { tenant, authed, error } = getTenantFromRequest(req);
+  if (!authed) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
 
   try {
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
 
     // Track when the clone entered THIS server (arrival time) so the hop
     // coordinator can pick "earliest stays". Reset only when jobId changes.
-    const key = presenceKey(deviceId, account);
+    const key = presenceKey(deviceId, account, tenant);
     const nowTs = Date.now();
     let jobIdSince = nowTs;
     try {

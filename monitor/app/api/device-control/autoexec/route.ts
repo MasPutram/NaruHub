@@ -6,6 +6,7 @@ import {
   TERMUX_COMMAND_QUEUE_MAX,
   autoexecDeployedKey,
 } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // Just place a .lua file into the executor autoexec directories on the
 // target device, or remove one. No library, no history -- the operator
@@ -29,6 +30,8 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
+    const t = tenant || undefined;
     const body = await req.json();
     const deviceId = String(body.deviceId || "");
     const filename = sanitizeFilename(body.filename);
@@ -50,14 +53,14 @@ export async function POST(req: NextRequest) {
       content,
       createdAt: Date.now(),
     };
-    await redis.queuePush(termuxCommandQueueKey(deviceId), JSON.stringify(command), {
+    await redis.queuePush(termuxCommandQueueKey(deviceId, t), JSON.stringify(command), {
       ttl: TERMUX_COMMAND_QUEUE_TTL_S,
       maxLen: TERMUX_COMMAND_QUEUE_MAX,
     });
     // Track deployment so the UI can show "deployed to this device" without
     // asking the agent to scan. Uses the filename (not the library slug) so
     // ad-hoc deploys without a library entry are trackable too.
-    await redis.sadd(autoexecDeployedKey(deviceId), filename);
+    await redis.sadd(autoexecDeployedKey(deviceId, t), filename);
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
@@ -66,6 +69,8 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
+    const t = tenant || undefined;
     const deviceId = req.nextUrl.searchParams.get("deviceId");
     const filename = sanitizeFilename(req.nextUrl.searchParams.get("filename") || "");
     if (!deviceId) return NextResponse.json({ ok: false, error: "deviceId required" }, { status: 400 });
@@ -77,11 +82,11 @@ export async function DELETE(req: NextRequest) {
       filename,
       createdAt: Date.now(),
     };
-    await redis.queuePush(termuxCommandQueueKey(deviceId), JSON.stringify(command), {
+    await redis.queuePush(termuxCommandQueueKey(deviceId, t), JSON.stringify(command), {
       ttl: TERMUX_COMMAND_QUEUE_TTL_S,
       maxLen: TERMUX_COMMAND_QUEUE_MAX,
     });
-    await redis.srem(autoexecDeployedKey(deviceId), filename);
+    await redis.srem(autoexecDeployedKey(deviceId, t), filename);
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
@@ -91,9 +96,11 @@ export async function DELETE(req: NextRequest) {
 // List which filenames are deployed to this device (from our own tracking).
 export async function GET(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
+    const t = tenant || undefined;
     const deviceId = req.nextUrl.searchParams.get("deviceId");
     if (!deviceId) return NextResponse.json({ ok: false, error: "deviceId required" }, { status: 400 });
-    const files = await redis.smembers(autoexecDeployedKey(deviceId));
+    const files = await redis.smembers(autoexecDeployedKey(deviceId, t));
     return NextResponse.json({ ok: true, files });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message, files: [] }, { status: 500 });

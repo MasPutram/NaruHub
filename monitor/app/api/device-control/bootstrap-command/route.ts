@@ -1,9 +1,18 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const accessKey = process.env.ACCESS_KEY || "";
+export async function GET(req: NextRequest) {
+  const { tenant, error } = getTenantFromRequest(req);
+  if (!tenant) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
+  }
+
+  // The bootstrap command embeds the caller's raw access key so the device
+  // can authenticate future API calls. Pull it from the header that
+  // getTenantFromRequest already validated.
+  const accessKey = req.headers.get("x-access-key") || "";
   if (!accessKey) {
     return NextResponse.json({ ok: false, command: "" });
   }

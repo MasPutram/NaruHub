@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resetDeviceSession } from "@/lib/reset-session";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // Called by the agent once per process start (a device/agent restart) to wipe
 // this device's stale session state so everything re-arms cleanly: the rejoin
@@ -12,10 +13,9 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
-  const accessKey = process.env.ACCESS_KEY;
-  const headerKey = req.headers.get("x-access-key");
-  if (accessKey && headerKey !== accessKey) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const { tenant, authed, error } = getTenantFromRequest(req);
+  if (!authed) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
   try {
     const body = await req.json();
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     if (!deviceId) {
       return NextResponse.json({ ok: false, error: "deviceId required" }, { status: 400 });
     }
-    const result = await resetDeviceSession(deviceId, Array.isArray(body.packages) ? body.packages : []);
+    const result = await resetDeviceSession(deviceId, Array.isArray(body.packages) ? body.packages : [], tenant);
     return NextResponse.json({ ok: true, ...result });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });

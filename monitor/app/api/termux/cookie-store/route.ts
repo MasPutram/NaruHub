@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis } from "@/lib/redis";
+import { redis, scanPattern } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,13 +10,16 @@ interface CookieEntry {
   cookie: string;
 }
 
-const COOKIES_KEY = "termux:cookies";
+const COOKIES_BASE = "termux:cookies";
 
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
 }
 
 export async function POST(req: NextRequest) {
+  const { tenant, authed, error } = getTenantFromRequest(req);
+  if (!tenant) return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
+
   try {
     const body = await req.json();
     const { deviceId, cookies } = body as {
@@ -26,7 +30,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "missing fields" }, { status: 400 });
     }
 
-    const existing = await redis.get<Record<string, CookieEntry & { deviceId: string; updatedAt: number }>>(COOKIES_KEY);
+    const cookiesKey = scanPattern(tenant, COOKIES_BASE);
+    const existing = await redis.get<Record<string, CookieEntry & { deviceId: string; updatedAt: number }>>(cookiesKey);
     const store: Record<string, CookieEntry & { deviceId: string; updatedAt: number }> =
       (existing && typeof existing === "object") ? existing : {};
 
@@ -42,7 +47,7 @@ export async function POST(req: NextRequest) {
       };
     }
 
-    await redis.set(COOKIES_KEY, JSON.stringify(store));
+    await redis.set(cookiesKey, JSON.stringify(store));
 
     return NextResponse.json({ ok: true, stored: cookies.length });
   } catch (e: any) {

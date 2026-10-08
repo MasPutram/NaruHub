@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, presenceKey, PRESENCE_TTL_S, PRESENCE_FRESH_S } from "@/lib/redis";
+import { redis, presenceKey, PRESENCE_TTL_S, PRESENCE_FRESH_S, scanPattern } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // Global duplicate-clone coordinator. The in-game script calls this after each
 // join: it (1) freshens this clone's presence with its current server + arrival
@@ -25,10 +26,9 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
-  const accessKey = process.env.ACCESS_KEY;
-  const headerKey = req.headers.get("x-access-key");
-  if (accessKey && headerKey !== accessKey) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const { tenant, authed, error } = getTenantFromRequest(req);
+  if (!authed) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
   try {
     const data = await req.json();
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     // (1) Freshen this clone's presence. Reset jobIdSince only when the server
     // actually changed, so "arrival time" reflects when it entered THIS server.
-    const key = presenceKey(deviceId, account);
+    const key = presenceKey(deviceId, account, tenant);
     let jobIdSince = now;
     try {
       const prevRaw = await redis.get<string>(key);
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     const presKeys: string[] = [];
     let cursor = "0";
     do {
-      const [next, keys] = await redis.scan(cursor, { match: "presence:*", count: 300 });
+      const [next, keys] = await redis.scan(cursor, { match: scanPattern(tenant, "presence:*"), count: 300 });
       cursor = next;
       presKeys.push(...keys);
     } while (cursor !== "0");
@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
       // to leave, hold off so leaves are serialized (one at a time per device,
       // ~40s apart). Key name stays `hop-cooldown` for backward compat with
       // any deployed instance still reading it -- semantics are now "leave".
-      const cooldownKey = `hop-cooldown:${deviceId}`;
+      const cooldownKey = scanPattern(tenant, `hop-cooldown:${deviceId}`);
       const cooldownActive = await redis.get(cooldownKey);
       if (cooldownActive) {
         return NextResponse.json({ ok: true, hop: false, action: "stay", count: byAccount.size, queued: true });

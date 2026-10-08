@@ -1,14 +1,18 @@
-import { NextResponse } from "next/server";
-import { redis } from "@/lib/redis";
+import { NextRequest, NextResponse } from "next/server";
+import { redis, scanPattern, stripTenantPrefix } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const { tenant } = getTenantFromRequest(req);
+  const t = tenant || undefined;
+
   try {
     const keys: string[] = [];
     let cursor = "0";
     do {
-      const result: any = await redis.scan(cursor, { match: "modresolved:*", count: 200 });
+      const result: any = await redis.scan(cursor, { match: scanPattern(t, "modresolved:*"), count: 200 });
       cursor = String(result[0]);
       const batch: string[] = result[1] || [];
       keys.push(...batch);
@@ -23,7 +27,7 @@ export async function GET() {
       const raw = values[i];
       if (!raw) return null;
       const acc = typeof raw === "string" ? JSON.parse(raw) : raw;
-      const name = key.replace(/^modresolved:/, "");
+      const name = stripTenantPrefix(key, t).replace(/^modresolved:/, "");
       return {
         ...acc,
         sourceAccount: name,

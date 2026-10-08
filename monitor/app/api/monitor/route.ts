@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis, accountKey, detailKey, forSaleKey, soldKey, ACCOUNT_TTL_S, petIconKey, PET_ICON_TTL_S, forSaleKickKey, deviceAccountsKey, DEVICE_ACCOUNTS_TTL_S } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
 }
 
 export async function POST(req: NextRequest) {
-  const accessKey = process.env.ACCESS_KEY;
-  const headerKey = req.headers.get("x-access-key");
-  if (accessKey && headerKey !== accessKey) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const { tenant, authed, error } = getTenantFromRequest(req);
+  if (!authed) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
 
   try {
@@ -25,9 +25,9 @@ export async function POST(req: NextRequest) {
     // "Siap Jual" a sticky state: nothing an executor sends can bring the
     // account back onto the main dashboard.
     const [fsExists, soldExists, kickExists] = await Promise.all([
-      redis.get<string>(forSaleKey(name)),
-      redis.get<string>(soldKey(name)),
-      redis.get<string>(forSaleKickKey(name)),
+      redis.get<string>(forSaleKey(name, tenant)),
+      redis.get<string>(soldKey(name, tenant)),
+      redis.get<string>(forSaleKickKey(name, tenant)),
     ]);
     // One-shot Kick signal: armed by /api/mark-forsale, consumed on the first
     // heartbeat that sees it so the script LocalPlayer:Kick("Siap Jual")s exactly
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     // to trigger another Kick (unless Siap Jual is re-clicked).
     const shouldKick = !!kickExists;
     if (shouldKick) {
-      await redis.del(forSaleKickKey(name));
+      await redis.del(forSaleKickKey(name, tenant));
     }
     if (fsExists || soldExists) {
       return NextResponse.json({
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     const now = Date.now() / 1000;
 
     let firstSeen = now;
-    const existing = await redis.get<string>(accountKey(name));
+    const existing = await redis.get<string>(accountKey(name, tenant));
     if (existing) {
       try {
         const prev = typeof existing === "string" ? JSON.parse(existing) : existing;
@@ -112,10 +112,10 @@ export async function POST(req: NextRequest) {
     };
 
     const pipeline = redis.pipeline();
-    pipeline.set(accountKey(name), JSON.stringify(summary));
+    pipeline.set(accountKey(name, tenant), JSON.stringify(summary));
 
     if (data.fullData) {
-      pipeline.set(detailKey(name), JSON.stringify(data.fullData));
+      pipeline.set(detailKey(name, tenant), JSON.stringify(data.fullData));
     }
 
     const allPets = [
@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
     const hbDeviceId = req.headers.get("x-device-id") || "unknown";
     if (hbDeviceId !== "unknown" && name !== "?") {
       try {
-        const mapKey = deviceAccountsKey(hbDeviceId);
+        const mapKey = deviceAccountsKey(hbDeviceId, tenant);
         const existingMap = await redis.get<string>(mapKey);
         const map: Record<string, number> = existingMap
           ? (typeof existingMap === "string" ? JSON.parse(existingMap) : existingMap)

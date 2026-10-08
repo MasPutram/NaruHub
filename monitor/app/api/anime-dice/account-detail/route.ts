@@ -1,22 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis, adDetailKey, adForSaleKey, adCatalogKey } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const { tenant } = getTenantFromRequest(req);
   const account = req.nextUrl.searchParams.get("account") || "";
   if (!account) {
     return NextResponse.json({ ok: false, error: "Missing account param" }, { status: 400 });
   }
 
   try {
-    let raw = await redis.get<string>(adDetailKey(account));
+    let raw = await redis.get<string>(adDetailKey(account, tenant || undefined));
     let data: any = null;
 
     if (raw) {
       data = typeof raw === "string" ? JSON.parse(raw) : raw;
     } else {
-      const fsRaw = await redis.get<string>(adForSaleKey(account));
+      const fsRaw = await redis.get<string>(adForSaleKey(account, tenant || undefined));
       if (fsRaw) {
         const fs = typeof fsRaw === "string" ? JSON.parse(fsRaw) : fsRaw;
         data = fs.detail || null;
@@ -30,7 +32,7 @@ export async function GET(req: NextRequest) {
     let catalogUnits: any[] = [];
     let catalogBackpack: any[] = [];
     try {
-      const catRaw = await redis.get<string>(adCatalogKey(account));
+      const catRaw = await redis.get<string>(adCatalogKey(account, tenant || undefined));
       if (catRaw) {
         const cat = typeof catRaw === "string" ? JSON.parse(catRaw) : catRaw;
         catalogUnits = Array.isArray(cat.units) ? cat.units : [];

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { redis, petIconKey, PET_ICON_TTL_S } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 import fs from "fs";
 import path from "path";
 
@@ -23,6 +24,8 @@ const CACHE_KEY_PREFIX = "peticondata:";
 const IMAGE_CACHE_TTL = 60 * 60 * 24 * 30; // 30 days
 
 export async function GET(req: NextRequest) {
+  const { tenant } = getTenantFromRequest(req);
+
   const category = req.nextUrl.searchParams.get("category");
   if (!category) {
     return NextResponse.json({ error: "category required" }, { status: 400 });

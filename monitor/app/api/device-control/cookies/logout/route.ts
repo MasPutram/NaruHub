@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis } from "@/lib/redis";
+import { redis, termuxCookiesKey } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
-
-const COOKIES_KEY = "termux:cookies";
 
 async function getCsrf(cookie: string): Promise<string> {
   // Use a safe endpoint to get CSRF without side effects (v2/logout would actually log out)
@@ -59,12 +58,14 @@ async function tryLogoutAll(cookie: string, csrf: string): Promise<{ status: num
 
 export async function POST(req: NextRequest) {
   try {
+    const { tenant } = getTenantFromRequest(req);
+    const t = tenant || undefined;
     const { pkg } = (await req.json()) as { pkg: string };
     if (!pkg) {
       return NextResponse.json({ ok: false, error: "missing pkg" }, { status: 400 });
     }
 
-    const raw = await redis.get<string>(COOKIES_KEY);
+    const raw = await redis.get<string>(termuxCookiesKey(t));
     const store: Record<string, any> = raw
       ? typeof raw === "string" ? JSON.parse(raw) : raw
       : {};
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
 
     if (result.status === 200) {
       store[pkg] = { ...entry, loggedOut: true, loggedOutAt: Date.now() };
-      await redis.set(COOKIES_KEY, JSON.stringify(store));
+      await redis.set(termuxCookiesKey(t), JSON.stringify(store));
     }
 
     return NextResponse.json({

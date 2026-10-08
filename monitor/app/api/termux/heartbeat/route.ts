@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, termuxDeviceKey, termuxDeviceMetaKey, TERMUX_DEVICE_TTL_S, deviceAccountsKey, DEVICE_ACCOUNTS_TTL_S, ACCOUNT_DEVICE_MAP_KEY } from "@/lib/redis";
+import { redis, termuxDeviceKey, termuxDeviceMetaKey, TERMUX_DEVICE_TTL_S, deviceAccountsKey, DEVICE_ACCOUNTS_TTL_S, accountDeviceMapKey } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 export async function OPTIONS() {
   return NextResponse.json(null, { status: 204 });
 }
 
 export async function POST(req: NextRequest) {
-  const accessKey = process.env.ACCESS_KEY;
-  const headerKey = req.headers.get("x-access-key");
-  if (accessKey && headerKey !== accessKey) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const { tenant, authed, error } = getTenantFromRequest(req);
+  if (!authed) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
 
   try {
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "deviceId required" }, { status: 400 });
     }
 
-    const existing = await redis.get<string>(termuxDeviceKey(deviceId));
+    const existing = await redis.get<string>(termuxDeviceKey(deviceId, tenant));
     let device: Record<string, any>;
 
     if (existing) {
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       if (model) device.model = model;
       if (sdkInt) device.sdkInt = sdkInt;
     } else {
-      const metaRaw = await redis.get<string>(termuxDeviceMetaKey(deviceId));
+      const metaRaw = await redis.get<string>(termuxDeviceMetaKey(deviceId, tenant));
       const meta = metaRaw ? (typeof metaRaw === "string" ? JSON.parse(metaRaw) : metaRaw) : null;
       device = {
         deviceId,
@@ -56,11 +56,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Enrich packages with empty usernames from game heartbeat data.
-    // When prefs.xml detection fails, the per-device account mapping
-    // (populated by /api/monitor) provides a fallback.
     if (Array.isArray(device.packages) && device.packages.length > 0) {
       try {
-        const mapRaw = await redis.get<string>(deviceAccountsKey(deviceId));
+        const mapRaw = await redis.get<string>(deviceAccountsKey(deviceId, tenant));
         if (mapRaw) {
           const accountMap: Record<string, number> = typeof mapRaw === "string" ? JSON.parse(mapRaw) : mapRaw;
           const now = Date.now();
@@ -80,24 +78,19 @@ export async function POST(req: NextRequest) {
               (p: any) => typeof p !== "string" && !p.username
             );
 
-            // 1:1 match: assign unambiguously
             if (emptyPkgs.length === 1 && unassigned.length === 1) {
               emptyPkgs[0].username = unassigned[0];
             }
 
-            // Store all heartbeat-detected accounts on the device record
-            // so the dashboard can display them even without 1:1 match.
             device.heartbeatAccounts = activeAccounts;
           }
         }
       } catch {}
     }
 
-    await redis.set(termuxDeviceKey(deviceId), JSON.stringify(device), { ex: TERMUX_DEVICE_TTL_S });
+    await redis.set(termuxDeviceKey(deviceId, tenant), JSON.stringify(device), { ex: TERMUX_DEVICE_TTL_S });
 
-    // Persist a full snapshot in the meta key so an offline device still
-    // shows its last-known state (packages, stats, screen) on the dashboard.
-    const metaRawExisting = await redis.get<string>(termuxDeviceMetaKey(deviceId));
+    const metaRawExisting = await redis.get<string>(termuxDeviceMetaKey(deviceId, tenant));
     const metaExisting = metaRawExisting
       ? (typeof metaRawExisting === "string" ? JSON.parse(metaRawExisting) : metaRawExisting)
       : {};
@@ -115,14 +108,12 @@ export async function POST(req: NextRequest) {
       sdkInt: device.sdkInt,
     };
     if (device.customName) snapshot.customName = device.customName;
-    await redis.set(termuxDeviceMetaKey(deviceId), JSON.stringify(snapshot));
+    await redis.set(termuxDeviceMetaKey(deviceId, tenant), JSON.stringify(snapshot));
 
-    // Persist account → device hostname mapping (no TTL) so the dashboard
-    // can show device labels even when the agent is offline.
     const hostname = device.customName || device.hostname;
     if (hostname && hostname !== "unknown" && Array.isArray(device.packages)) {
       try {
-        const mapRaw = await redis.get<string>(ACCOUNT_DEVICE_MAP_KEY);
+        const mapRaw = await redis.get<string>(accountDeviceMapKey(tenant));
         const map: Record<string, string> = mapRaw
           ? (typeof mapRaw === "string" ? JSON.parse(mapRaw) : mapRaw)
           : {};
@@ -134,7 +125,7 @@ export async function POST(req: NextRequest) {
             changed = true;
           }
         }
-        if (changed) await redis.set(ACCOUNT_DEVICE_MAP_KEY, JSON.stringify(map));
+        if (changed) await redis.set(accountDeviceMapKey(tenant), JSON.stringify(map));
       } catch {}
     }
 

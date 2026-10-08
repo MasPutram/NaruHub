@@ -8,7 +8,10 @@ import {
   lastLaunchKey,
   PRESENCE_FRESH_S,
   REJOIN_STATE_TTL_S,
+  scanPattern,
+  stripTenantPrefix,
 } from "@/lib/redis";
+import { getTenantFromRequest } from "@/lib/auth";
 
 // Server-side auto-rejoin brain. The agent polls this per device; the server
 // runs the whole state machine (using the in-game presence heartbeats to tell
@@ -144,10 +147,9 @@ async function chooseRejoinTarget(
 }
 
 export async function GET(req: NextRequest) {
-  const accessKey = process.env.ACCESS_KEY;
-  const headerKey = req.headers.get("x-access-key");
-  if (accessKey && headerKey !== accessKey) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const { tenant, error } = getTenantFromRequest(req);
+  if (!tenant) {
+    return NextResponse.json({ ok: false, error: error || "Unauthorized" }, { status: 401 });
   }
   const deviceId = req.nextUrl.searchParams.get("deviceId");
   if (!deviceId) {
@@ -155,7 +157,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const polRaw = await redis.get<string>(termuxDevicePolicyKey(deviceId));
+    const polRaw = await redis.get<string>(termuxDevicePolicyKey(deviceId, tenant));
     const policy = polRaw ? (typeof polRaw === "string" ? JSON.parse(polRaw) : polRaw) : null;
     if (!policy || !policy.autoRejoinEnabled) {
       return NextResponse.json({ ok: true, actions: [] });
@@ -169,7 +171,7 @@ export async function GET(req: NextRequest) {
     const optInAll = !("autoRejoinPackages" in policy);
     const notRunningGraceMs = jitterMs(Math.max(1, Number(policy.rejoinDelay) || 30) * 1000, 0.2);
 
-    const devRaw = await redis.get<string>(termuxDeviceKey(deviceId));
+    const devRaw = await redis.get<string>(termuxDeviceKey(deviceId, tenant));
     if (!devRaw) return NextResponse.json({ ok: true, actions: [] });
     const device = typeof devRaw === "string" ? JSON.parse(devRaw) : devRaw;
     const packages: any[] = Array.isArray(device.packages) ? device.packages : [];
@@ -180,9 +182,9 @@ export async function GET(req: NextRequest) {
     const paused = new Set<string>();
     let cursor = "0";
     do {
-      const [next, keys] = await redis.scan(cursor, { match: `${pausePrefix}*`, count: 100 });
+      const [next, keys] = await redis.scan(cursor, { match: scanPattern(tenant, `${pausePrefix}*`), count: 100 });
       cursor = next;
-      for (const k of keys) paused.add(k.slice(pausePrefix.length));
+      for (const k of keys) paused.add(stripTenantPrefix(k, tenant).slice(pausePrefix.length));
     } while (cursor !== "0");
 
     // Cross-clone spread: collect jobIds this device's OTHER clones are already
@@ -196,7 +198,7 @@ export async function GET(req: NextRequest) {
       let pc = "0";
       const presKeys: string[] = [];
       do {
-        const [next, keys] = await redis.scan(pc, { match: `${presPrefix}*`, count: 100 });
+        const [next, keys] = await redis.scan(pc, { match: scanPattern(tenant, `${presPrefix}*`), count: 100 });
         pc = next;
         presKeys.push(...keys);
       } while (pc !== "0");
@@ -245,23 +247,23 @@ export async function GET(req: NextRequest) {
       if (!optInAll && !optIn.includes(pkg)) continue;
       if (paused.has(pkg)) continue;
 
-      const presRaw = await redis.get<string>(presenceKey(deviceId, account));
+      const presRaw = await redis.get<string>(presenceKey(deviceId, account, tenant));
       const pres = presRaw ? (typeof presRaw === "string" ? JSON.parse(presRaw) : presRaw) : null;
       const inGame = pres && pres.ts && now - pres.ts < PRESENCE_FRESH_S * 1000;
 
-      const stRaw = await redis.get<string>(rejoinStateKey(deviceId, pkg));
+      const stRaw = await redis.get<string>(rejoinStateKey(deviceId, pkg, tenant));
       let st: RejoinState = stRaw ? { ...freshState(), ...(typeof stRaw === "string" ? JSON.parse(stRaw) : stRaw) } : freshState();
 
-      const llRaw = await redis.get<string>(lastLaunchKey(deviceId, pkg));
+      const llRaw = await redis.get<string>(lastLaunchKey(deviceId, pkg, tenant));
       const lastLaunchAt = llRaw ? Number(llRaw) || 0 : 0;
       const lastHeartbeatAt = pres && pres.ts ? Number(pres.ts) || 0 : 0;
 
       const save = async () => {
-        await redis.set(rejoinStateKey(deviceId, pkg), JSON.stringify(st), { ex: REJOIN_STATE_TTL_S });
+        await redis.set(rejoinStateKey(deviceId, pkg, tenant), JSON.stringify(st), { ex: REJOIN_STATE_TTL_S });
       };
 
       if (inGame) {
-        if (stRaw) await redis.del(rejoinStateKey(deviceId, pkg));
+        if (stRaw) await redis.del(rejoinStateKey(deviceId, pkg, tenant));
         continue;
       }
       // Running but not in-game: loading, home screen, or error screen.
