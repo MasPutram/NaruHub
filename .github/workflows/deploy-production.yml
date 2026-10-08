@@ -125,14 +125,12 @@ jobs:
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
           AUTH_USERNAME: ${{ secrets.AUTH_USERNAME }}
           AUTH_PASSWORD: ${{ secrets.AUTH_PASSWORD }}
-          ACCESS_KEY: ${{ secrets.ACCESS_KEY }}
+          ACCESS_KEYS: ${{ secrets.ACCESS_KEYS }}
         run: |
           cat > dotenv.txt <<ENVEOF
           REDIS_URL=${REDIS_URL}
           AUTH_SECRET=${AUTH_SECRET}
-          AUTH_USERNAME=${AUTH_USERNAME}
-          AUTH_PASSWORD=${AUTH_PASSWORD}
-          ACCESS_KEY=${ACCESS_KEY}
+          ACCESS_KEYS=${ACCESS_KEYS}
           PORT=3000
           HOSTNAME=0.0.0.0
           ENVEOF
