@@ -723,12 +723,13 @@ export default function CatalogPage() {
               <col style="width:10%">
               <col style="width:10%">
               <col style="width:9%">
-              <col style="width:18%">
+              <col style="width:16%">
               <col style="width:5%">
               <col style="width:5%">
               <col style="width:6%">
               <col style="width:7%">
-              <col style="width:15%">
+              <col style="width:7%">
+              <col style="width:10%">
             </colgroup>
             <thead>
               <tr>
