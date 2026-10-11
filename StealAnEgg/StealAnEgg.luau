@@ -1831,13 +1831,8 @@ local function doAutoHatch()
 		table.sort(placed, function(a, b) return a.rate > b.rate end)
 
 		local hatched = 0
-		local skipUid = nil
-		if #placed > 0 and placed[1].remaining > 0 then
-			skipUid = placed[1].uid
-		end
-
-		for _, egg in ipairs(placed) do
-			if egg.uid ~= skipUid and egg.remaining <= 0 then
+		for i, egg in ipairs(placed) do
+			if i >= 2 and egg.remaining <= 0 then
 				local ok1, r1 = pcall(function()
 					return Remotes.EggWorld.AskHatch:InvokeServer(egg.uid)
 				end)
