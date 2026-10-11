@@ -639,15 +639,6 @@ section:AddToggle("AutoPlaceToggle", {
 	end,
 })
 
-local autoBuyScrambledEnabled = false
-section:AddToggle("AutoBuyScrambledToggle", {
-	Title = "Buy Dr Scramble Auto (Token > Treadmill)",
-	Default = false,
-	Callback = function(val)
-		autoBuyScrambledEnabled = val
-	end,
-})
-
 local autoBuyNitroEnabled = false
 section:AddToggle("AutoBuyNitroToggle", {
 	Title = "Buy RaceRally Auto (Token > Treadmill)",
@@ -1215,93 +1206,6 @@ task.spawn(function()
 	end
 end)
 
-
-------------------------------------------------------------
--- Auto Buy Dr Scramble Shop
--- Detects event via Window.Active from snapshot. Waits until
--- event ends (Active=false), then buys all Scrambled tokens
--- first, treadmill with leftovers. Checks every 30s.
-------------------------------------------------------------
-task.spawn(function()
-	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	local wasActive = false
-	local lastSamples = -1
-
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		if autoBuyScrambledEnabled then
-			pcall(function()
-				local snap = Remotes.Scramble.Request:InvokeServer("snapshot")
-				if not snap or not snap.Snapshot then return end
-
-				local currentSamples = (snap.Snapshot.State and snap.Snapshot.State.Samples) or 0
-				local samplesIncreasing = lastSamples >= 0 and currentSamples > lastSamples
-				lastSamples = currentSamples
-
-				local isActive = (snap.Snapshot.Window and snap.Snapshot.Window.Active == true) or samplesIncreasing
-				if isActive then
-					wasActive = true
-					return
-				end
-
-				if not wasActive then return end
-				wasActive = false
-
-				local state = snap.Snapshot.State
-				if not state then return end
-				local samples = state.Samples or 0
-				local shop = snap.Snapshot.Shop
-				if not shop then return end
-
-				local function refreshShop()
-					snap = Remotes.Scramble.Request:InvokeServer("snapshot")
-					if not snap or not snap.Snapshot then return nil, nil, 0 end
-					state = snap.Snapshot.State
-					if not state then return nil, nil, 0 end
-					samples = state.Samples or 0
-					shop = snap.Snapshot.Shop
-					if not shop then return nil, nil, 0 end
-					local mut, tread
-					for _, item in ipairs(shop) do
-						if item.Id == "MutationConsumable" and item.Quote then mut = item end
-						if item.Id == "TreadmillBooster" and item.Quote then tread = item end
-					end
-					return mut, tread, samples
-				end
-
-				local mutItem, treadItem
-				for _, item in ipairs(shop) do
-					if item.Id == "MutationConsumable" and item.Quote then mutItem = item end
-					if item.Id == "TreadmillBooster" and item.Quote then treadItem = item end
-				end
-
-				while mutItem and samples >= mutItem.Price do
-					pcall(function()
-						Remotes.Scramble.Request:InvokeServer("Shop", mutItem.Id, {
-							Quote = mutItem.Quote,
-							Sequence = state.ShopSequence,
-						})
-					end)
-					task.wait(1)
-					mutItem, treadItem, samples = refreshShop()
-					if not mutItem then break end
-				end
-
-				if treadItem and samples >= treadItem.Price then
-					pcall(function()
-						Remotes.Scramble.Request:InvokeServer("Shop", treadItem.Id, {
-							Quote = treadItem.Quote,
-							Sequence = state.ShopSequence,
-						})
-					end)
-				end
-			end)
-		else
-			wasActive = false
-			lastSamples = -1
-		end
-		task.wait(30)
-	end
-end)
 
 ------------------------------------------------------------
 -- Auto Buy RaceRally Shop
@@ -1895,7 +1799,8 @@ local function doAutoHatch()
 		local Remotes = require(ReplicatedStorage.Shared.Remotes)
 		local records = getMyOwnedEggs()
 		local now = Workspace:GetServerTimeNow()
-		local hatched = 0
+
+		local placed = {}
 		for uid, rec in pairs(records) do
 			if rec.Placement ~= nil then
 				local speed = rec.GrowthSpeedMultiplier or 1
@@ -1907,18 +1812,37 @@ local function doAutoHatch()
 				pcall(function()
 					remaining = EggRecords.GrowthSecondsRemaining(rec, now, speed, nightCredit, LocalPlayer)
 				end)
-				if remaining <= 0 then
-					local ok1, r1 = pcall(function()
-						return Remotes.EggWorld.AskHatch:InvokeServer(uid)
+				local rate = 0
+				pcall(function()
+					rate = AssetEarnings.RatePerSecond({
+						Category = rec.AssetCategory,
+						Scale = rec.AssetScale or 1,
+						Mutations = rec.Mutations or {},
+					})
+				end)
+				table.insert(placed, {
+					uid = uid,
+					rate = rate,
+					remaining = remaining,
+				})
+			end
+		end
+
+		table.sort(placed, function(a, b) return a.rate > b.rate end)
+
+		local hatched = 0
+		for i, egg in ipairs(placed) do
+			if i >= 2 and egg.remaining <= 0 then
+				local ok1, r1 = pcall(function()
+					return Remotes.EggWorld.AskHatch:InvokeServer(egg.uid)
+				end)
+				if ok1 and r1 == true then
+					pcall(function()
+						Remotes.EggWorld.AskFinishHatch:InvokeServer(egg.uid)
 					end)
-					if ok1 and r1 == true then
-						pcall(function()
-							Remotes.EggWorld.AskFinishHatch:InvokeServer(uid)
-						end)
-						hatched = hatched + 1
-					end
-					task.wait(0.3)
+					hatched = hatched + 1
 				end
+				task.wait(0.3)
 			end
 		end
 		if hatched > 0 then
