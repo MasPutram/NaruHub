@@ -74,7 +74,7 @@ function fmtMoney(v: number | null | undefined): string {
   return "$" + n.toFixed(0);
 }
 
-function fmtRate(v: number): string {
+function fmtRate(v: number | null | undefined): string {
   return fmtMoney(v) + "/s";
 }
 
@@ -2065,7 +2065,7 @@ export default function CatalogPage() {
         const pricedCount = preview.filter((p) => p.price > 0).length;
         return (
           <div className="modal-backdrop" onClick={() => { if (!rateApplying) setRateModalOpen(false); }}>
-            <div className="modal-box" style={{ width: 720, maxHeight: "88vh", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-box" style={{ width: 900, maxHeight: "88vh", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
               <h2>Edit All Harga — Rate Calculator</h2>
               <div className="modal-sub">
                 Set rate, langsung liat harga per akun di preview. Terapkan sekali klik ke <strong>{accounts.length} akun</strong>.
@@ -2180,8 +2180,9 @@ export default function CatalogPage() {
                     <tr>
                       <th style={{ textAlign: "left", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>AKUN</th>
                       <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SPEED</th>
-                      <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>POTENSI PET</th>
-                      <th style={{ textAlign: "center", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>MUTASI</th>
+                      <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>INCOME POTENSI</th>
+                      <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>INCOME AKTIF</th>
+                      <th style={{ textAlign: "center", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>FRACTURE</th>
                       <th style={{ textAlign: "center", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SCRAMBLE</th>
                       <th style={{ textAlign: "center", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>NITRO</th>
                       <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SEBELUM</th>
@@ -2196,6 +2197,7 @@ export default function CatalogPage() {
                           <td style={{ padding: "6px 10px", fontWeight: 700 }}>{acc.sourceAccount}</td>
                           <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{fmtCompact(acc.speed)}</td>
                           <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{fmtRate(potensiEquip(acc))}</td>
+                          <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{fmtRate(acc.incomeAktif)}</td>
                           <td style={{ padding: "6px 10px", textAlign: "center", color: (acc.mutationToken || 0) > 0 ? "var(--accent)" : "var(--dim)", fontWeight: 800 }}>{acc.mutationToken || 0}</td>
                           <td style={{ padding: "6px 10px", textAlign: "center", color: (acc.scrambleToken || 0) > 0 ? "var(--green)" : "var(--dim)", fontWeight: 800 }}>{acc.scrambleToken || 0}</td>
                           <td style={{ padding: "6px 10px", textAlign: "center", color: (acc.nitroToken || 0) > 0 ? "#d97706" : "var(--dim)", fontWeight: 800 }}>{acc.nitroToken || 0}</td>
