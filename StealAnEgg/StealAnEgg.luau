@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.1.9"
+local VERSION = "v3.2.0"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -481,104 +481,101 @@ local Window = Fluent:CreateWindow({
 	AutoStartMinimized = false,
 })
 
--- Force NaruUI launcher circle to be ALWAYS visible and act as a
--- min/restore toggle (fixes the case where the built-in "−" is
--- covered by an App Cloner / Zetsu window header). Also cleans up
--- any stale floating N from older script versions.
 do
 	local hui = (gethui and gethui()) or game:GetService("CoreGui")
 	for _, o in ipairs(hui:GetChildren()) do
-		if o.Name == "StealAnEggMinBtn" then pcall(function() o:Destroy() end) end
+		if o.Name == "StealAnEggMinBtn" or o.Name == "StealAnEggLauncher" or o.Name == "StealAnEggDragOverlay" then
+			pcall(function() o:Destroy() end)
+		end
 	end
 
-	task.spawn(function()
-		local wiredLogo
-		while Fluent.GUI and Fluent.GUI.Parent do
-			local lc = hui:FindFirstChild("StealAnEggLauncher")
-			if lc then
-				if not lc.Enabled then lc.Enabled = true end
-				local logo = lc:FindFirstChild("Logo")
-				if logo then
-					-- Force logo below the Roblox topbar (default 20,20 lands on
-					-- the menu/chat/backpack icons that steal our taps)
-					if logo.Position ~= UDim2.fromOffset(4, 88) then
-						logo.Position = UDim2.fromOffset(4, 88)
-					end
-				end
-				if logo and logo ~= wiredLogo then
-					wiredLogo = logo
-					if getconnections then
-						pcall(function()
-							for _, c in ipairs(getconnections(logo.MouseButton1Click)) do
-								pcall(function()
-									if c.Disable then c:Disable()
-									elseif c.Disconnect then c:Disconnect() end
-								end)
-							end
-						end)
-						pcall(function()
-							for _, c in ipairs(getconnections(logo.InputBegan)) do
-								pcall(function()
-									if c.Disable then c:Disable()
-									elseif c.Disconnect then c:Disconnect() end
-								end)
-							end
-						end)
-					end
-					local dragging, dragStart, startPos, movedFar = false, nil, nil, false
-					logo.InputBegan:Connect(function(input)
-						if input.UserInputType == Enum.UserInputType.MouseButton1
-							or input.UserInputType == Enum.UserInputType.Touch then
-							dragging = true
-							movedFar = false
-							dragStart = input.Position
-							startPos = logo.Position
-						end
-					end)
-					UserInputService.InputChanged:Connect(function(input)
-						if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
-							or input.UserInputType == Enum.UserInputType.Touch) then
-							local delta = input.Position - dragStart
-							if delta.Magnitude > 4 then movedFar = true end
-							logo.Position = UDim2.new(
-								startPos.X.Scale, startPos.X.Offset + delta.X,
-								startPos.Y.Scale, startPos.Y.Offset + delta.Y
-							)
-						end
-					end)
-					UserInputService.InputEnded:Connect(function(input)
-						if input.UserInputType == Enum.UserInputType.MouseButton1
-							or input.UserInputType == Enum.UserInputType.Touch then
-							if dragging and not movedFar then
-								if Fluent.GUI and Fluent.GUI.Enabled then
-									if Window.Minimize then Window.Minimize() end
-								else
-									if Window.Restore then Window.Restore() end
-								end
-							end
-							dragging = false
-						end
-					end)
-				end
-			end
-			task.wait(0.3)
+	if Fluent.GUI then Fluent.GUI.DisplayOrder = -1000 end
+
+	local lsg = Instance.new("ScreenGui")
+	lsg.Name = "StealAnEggLauncher"
+	lsg.ResetOnSpawn = false
+	lsg.IgnoreGuiInset = true
+	lsg.DisplayOrder = 2000000000
+	lsg.Enabled = true
+	pcall(function() lsg.Parent = hui end)
+	if not lsg.Parent then
+		lsg.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	end
+
+	local overlaySG = Instance.new("ScreenGui")
+	overlaySG.Name = "StealAnEggDragOverlay"
+	overlaySG.ResetOnSpawn = false
+	overlaySG.IgnoreGuiInset = true
+	overlaySG.DisplayOrder = 2000000001
+	overlaySG.Enabled = false
+	overlaySG.Parent = lsg.Parent
+
+	local overlay = Instance.new("Frame")
+	overlay.Size = UDim2.fromScale(1, 1)
+	overlay.BackgroundTransparency = 1
+	overlay.Active = true
+	overlay.Parent = overlaySG
+
+	local logoBtn = Instance.new("ImageButton")
+	logoBtn.Name = "Logo"
+	logoBtn.Size = UDim2.fromOffset(42, 42)
+	logoBtn.Position = UDim2.fromOffset(4, 88)
+	logoBtn.BackgroundColor3 = Color3.fromRGB(6, 6, 7)
+	logoBtn.BackgroundTransparency = 0.02
+	logoBtn.AutoButtonColor = false
+	logoBtn.Active = true
+	logoBtn.Image = ""
+	logoBtn.Parent = lsg
+
+	Instance.new("UICorner", logoBtn).CornerRadius = UDim.new(1, 0)
+	local logoStroke = Instance.new("UIStroke")
+	logoStroke.Color = Color3.fromRGB(255, 200, 0)
+	logoStroke.Thickness = 1.5
+	logoStroke.Parent = logoBtn
+
+	local lbl = Instance.new("TextLabel")
+	lbl.BackgroundTransparency = 1
+	lbl.Size = UDim2.fromScale(1, 1)
+	lbl.Font = Enum.Font.GothamBold
+	lbl.TextSize = 30
+	lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+	lbl.Text = "N"
+	lbl.Parent = logoBtn
+
+	local dragging, dragStart, startPos, movedFar = false, nil, nil, false
+	logoBtn.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			movedFar = false
+			dragStart = input.Position
+			startPos = logoBtn.Position
+			overlaySG.Enabled = true
 		end
 	end)
-end
-
--- Keep our GUI + launcher BELOW Roblox's core menu (Esc / settings) so it doesn't cover it
-do
-	local hui = (gethui and gethui()) or game:GetService("CoreGui")
-	if Fluent.GUI then Fluent.GUI.DisplayOrder = -1000 end
-	local function pushLauncher()
-		local lc = hui:FindFirstChild("StealAnEggLauncher")
-		if lc then lc.DisplayOrder = -999 end
-	end
-	pushLauncher()
-	hui.ChildAdded:Connect(function(c)
-		if c.Name == "StealAnEggLauncher" then
-			task.wait()
-			pushLauncher()
+	overlay.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+			or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStart
+			if delta.Magnitude > 4 then movedFar = true end
+			logoBtn.Position = UDim2.new(
+				startPos.X.Scale, startPos.X.Offset + delta.X,
+				startPos.Y.Scale, startPos.Y.Offset + delta.Y
+			)
+		end
+	end)
+	overlay.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			if dragging and not movedFar then
+				if Fluent.GUI and Fluent.GUI.Enabled then
+					if Window.Minimize then Window.Minimize() end
+				else
+					if Window.Restore then Window.Restore() end
+				end
+			end
+			dragging = false
+			overlaySG.Enabled = false
 		end
 	end)
 end
