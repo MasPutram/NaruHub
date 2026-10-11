@@ -41,6 +41,7 @@ interface Account {
   bossToken?: number | null;
   mutationToken?: number | null;
   scrambleToken?: number | null;
+  nitroToken?: number | null;
   trail?: string | null;
   growingEggCount?: number;
   backpackEggCount?: number;
@@ -330,16 +331,18 @@ function potensiEquip(a: Account): number {
   return total;
 }
 
-function calcAccountPrice(a: Account, rInc: number, rSpd: number, rMutasi: number, rScramble: number): number {
+function calcAccountPrice(a: Account, rInc: number, rSpd: number, rMutasi: number, rScramble: number, rNitro: number): number {
   const incB = potensiEquip(a) / 1e9;
   const spdB = (Number(a.speed) || 0) / 1e9;
   const mutasi = Number(a.mutationToken) || 0;
   const scramble = Number(a.scrambleToken) || 0;
+  const nitro = Number(a.nitroToken) || 0;
   const priceValue = Math.round(
     incB * (rInc * 1000) +
     spdB * (rSpd * 1000) +
     mutasi * (rMutasi * 1000) +
-    scramble * (rScramble * 1000)
+    scramble * (rScramble * 1000) +
+    nitro * (rNitro * 1000)
   );
   return priceValue > 0 ? priceValue : 0;
 }
@@ -368,6 +371,7 @@ export default function CatalogPage() {
   const [editRateSpd, setEditRateSpd] = useState("");
   const [editRateMutasi, setEditRateMutasi] = useState("");
   const [editRateScramble, setEditRateScramble] = useState("");
+  const [editRateNitro, setEditRateNitro] = useState("");
   const [priceSaving, setPriceSaving] = useState(false);
   const [soldModal, setSoldModal] = useState<string | null>(null);
   const [soldPrice, setSoldPrice] = useState("");
@@ -379,6 +383,7 @@ export default function CatalogPage() {
   const [rateSpeed, setRateSpeed] = useState("0");
   const [rateMutasi, setRateMutasi] = useState("0");
   const [rateScramble, setRateScramble] = useState("0");
+  const [rateNitro, setRateNitro] = useState("0");
   const [rateApplying, setRateApplying] = useState(false);
 
   async function unmarkForSale(account: string) {
@@ -596,6 +601,7 @@ export default function CatalogPage() {
         <td class="c-num" style="color:#6d28d9;font-weight:900">${divineCount(a) || "—"}</td>
         <td class="c-mut">${(a.mutationToken || 0) > 0 ? `<span class="mut-pill">${a.mutationToken}</span>` : "—"}</td>
         <td class="c-mut">${(a.scrambleToken || 0) > 0 ? `<span class="mut-pill" style="background:#34d399">${a.scrambleToken}</span>` : "—"}</td>
+        <td class="c-mut">${(a.nitroToken || 0) > 0 ? `<span class="mut-pill" style="background:#d97706">${a.nitroToken}</span>` : "—"}</td>
         <td class="c-price">${a.catalogPrice ? fmtRupiah(a.catalogPrice) : "—"}</td>
       </tr>
     `;
@@ -732,6 +738,7 @@ export default function CatalogPage() {
                 <th style="text-align:center">Divine</th>
                 <th style="text-align:center">Boss</th>
                 <th style="text-align:center">Scramble</th>
+                <th style="text-align:center">Nitro</th>
                 <th style="text-align:center">Harga</th>
               </tr>
             </thead>
@@ -922,7 +929,8 @@ export default function CatalogPage() {
     const rSpd = parseFloat(rateSpeed) || 0;
     const rMut = parseFloat(rateMutasi) || 0;
     const rScr = parseFloat(rateScramble) || 0;
-    if (rInc <= 0 && rSpd <= 0 && rMut <= 0 && rScr <= 0) {
+    const rNit = parseFloat(rateNitro) || 0;
+    if (rInc <= 0 && rSpd <= 0 && rMut <= 0 && rScr <= 0 && rNit <= 0) {
       alert("Isi minimal salah satu rate!");
       return;
     }
@@ -930,7 +938,7 @@ export default function CatalogPage() {
     try {
       const updates: { account: string; price: number }[] = [];
       const updatedAccounts = accounts.map((a) => {
-        const newPrice = calcAccountPrice(a, rInc, rSpd, rMut, rScr);
+        const newPrice = calcAccountPrice(a, rInc, rSpd, rMut, rScr, rNit);
         if (newPrice > 0) updates.push({ account: a.sourceAccount, price: newPrice });
         return { ...a, catalogPrice: newPrice > 0 ? newPrice : a.catalogPrice };
       });
@@ -1091,8 +1099,9 @@ export default function CatalogPage() {
   const previewSpeedRate = parseFloat(rateSpeed) || 0;
   const previewMutasiRate = parseFloat(rateMutasi) || 0;
   const previewScrambleRate = parseFloat(rateScramble) || 0;
-  const previewTotalRev = accounts.reduce((sum, a) => sum + calcAccountPrice(a, previewIncRate, previewSpeedRate, previewMutasiRate, previewScrambleRate), 0);
-  const previewPricedCount = accounts.filter((a) => calcAccountPrice(a, previewIncRate, previewSpeedRate, previewMutasiRate, previewScrambleRate) > 0).length;
+  const previewNitroRate = parseFloat(rateNitro) || 0;
+  const previewTotalRev = accounts.reduce((sum, a) => sum + calcAccountPrice(a, previewIncRate, previewSpeedRate, previewMutasiRate, previewScrambleRate, previewNitroRate), 0);
+  const previewPricedCount = accounts.filter((a) => calcAccountPrice(a, previewIncRate, previewSpeedRate, previewMutasiRate, previewScrambleRate, previewNitroRate) > 0).length;
 
   return (
     <div>
@@ -1194,6 +1203,9 @@ export default function CatalogPage() {
         .cc-stat.cc-scramble { background: linear-gradient(135deg, #059669, #34d399); border-radius: 8px; padding: 5px 8px; }
         .cc-stat.cc-scramble .cslabel { color: #fff; }
         .cc-stat.cc-scramble .csval { color: #fff; font-weight: 800; }
+        .cc-stat.cc-nitro { background: linear-gradient(135deg, #d97706, #fbbf24); border-radius: 8px; padding: 5px 8px; }
+        .cc-stat.cc-nitro .cslabel { color: #fff; }
+        .cc-stat.cc-nitro .csval { color: #fff; font-weight: 800; }
 
         .btn-download-all {
           background: #8b5cf6; color: #fff; border: none; border-radius: 10px;
@@ -1757,6 +1769,10 @@ export default function CatalogPage() {
                   <div className="cslabel">&#x1F500; TOKEN SCRAMBLE</div>
                   <div className="csval">{a.scrambleToken != null ? a.scrambleToken : "—"}</div>
                 </div>
+                <div className="cc-stat cc-nitro">
+                  <div className="cslabel">&#x1F3CE;&#xFE0F; TOKEN NITRO</div>
+                  <div className="csval">{a.nitroToken != null ? a.nitroToken : "—"}</div>
+                </div>
               </div>
 
               {(a.topPets || []).length > 0 && (
@@ -1792,6 +1808,7 @@ export default function CatalogPage() {
                       setEditRateSpd(rateSpeed);
                       setEditRateMutasi(rateMutasi);
                       setEditRateScramble(rateScramble);
+                      setEditRateNitro(rateNitro);
                     }}
                   >
                     {a.catalogPrice ? fmtRupiah(a.catalogPrice) : "Set Harga"}
@@ -2027,6 +2044,7 @@ export default function CatalogPage() {
         const rSpd = parseFloat(rateSpeed) || 0;
         const rMut = parseFloat(rateMutasi) || 0;
         const rScr = parseFloat(rateScramble) || 0;
+        const rNit = parseFloat(rateNitro) || 0;
         const preview = accounts
           .slice()
           .sort((a, b) => {
@@ -2034,7 +2052,7 @@ export default function CatalogPage() {
             const nb = accountNumber(b.sourceAccount) ?? 0;
             return na - nb;
           })
-          .map((a) => ({ acc: a, price: calcAccountPrice(a, rInc, rSpd, rMut, rScr) }));
+          .map((a) => ({ acc: a, price: calcAccountPrice(a, rInc, rSpd, rMut, rScr, rNit) }));
         const totalPreview = preview.reduce((s, p) => s + p.price, 0);
         const pricedCount = preview.filter((p) => p.price > 0).length;
         return (
@@ -2109,6 +2127,22 @@ export default function CatalogPage() {
                     <span style={{ color: "var(--dim)", fontSize: 11, fontWeight: 700 }}>k/token</span>
                   </div>
                 </div>
+
+                <div>
+                  <label>Rate Token Nitro / token</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ color: "var(--dim)", fontSize: 12, fontWeight: 700 }}>Rp</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      placeholder="0"
+                      value={rateNitro}
+                      onChange={(e) => setRateNitro(e.target.value)}
+                      style={{ margin: 0 }}
+                    />
+                    <span style={{ color: "var(--dim)", fontSize: 11, fontWeight: 700 }}>k/token</span>
+                  </div>
+                </div>
               </div>
 
               <div style={{ background: "#1c1c2b", border: "1px solid var(--card-border)", borderRadius: 10, padding: "10px 14px", marginBottom: 10, fontSize: 12, display: "flex", justifyContent: "space-between", gap: 20 }}>
@@ -2125,6 +2159,7 @@ export default function CatalogPage() {
                       <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>POTENSI PET</th>
                       <th style={{ textAlign: "center", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>MUTASI</th>
                       <th style={{ textAlign: "center", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SCRAMBLE</th>
+                      <th style={{ textAlign: "center", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>NITRO</th>
                       <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SEBELUM</th>
                       <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SESUDAH</th>
                     </tr>
@@ -2139,6 +2174,7 @@ export default function CatalogPage() {
                           <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{fmtRate(potensiEquip(acc))}</td>
                           <td style={{ padding: "6px 10px", textAlign: "center", color: (acc.mutationToken || 0) > 0 ? "var(--accent)" : "var(--dim)", fontWeight: 800 }}>{acc.mutationToken || 0}</td>
                           <td style={{ padding: "6px 10px", textAlign: "center", color: (acc.scrambleToken || 0) > 0 ? "var(--green)" : "var(--dim)", fontWeight: 800 }}>{acc.scrambleToken || 0}</td>
+                          <td style={{ padding: "6px 10px", textAlign: "center", color: (acc.nitroToken || 0) > 0 ? "#d97706" : "var(--dim)", fontWeight: 800 }}>{acc.nitroToken || 0}</td>
                           <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{acc.catalogPrice ? fmtRupiah(acc.catalogPrice) : "—"}</td>
                           <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: 900, color: price > 0 ? (changed ? "#4ade80" : "var(--ink)") : "var(--dim)" }}>
                             {price > 0 ? fmtRupiah(price) : "—"}
@@ -2231,7 +2267,8 @@ export default function CatalogPage() {
         const rSpd = parseFloat(editRateSpd) || 0;
         const rMut = parseFloat(editRateMutasi) || 0;
         const rScr = parseFloat(editRateScramble) || 0;
-        const suggested = calcAccountPrice(editingAcc, rInc, rSpd, rMut, rScr);
+        const rNit = parseFloat(editRateNitro) || 0;
+        const suggested = calcAccountPrice(editingAcc, rInc, rSpd, rMut, rScr, rNit);
         return (
           <div className="modal-backdrop" onClick={() => { if (!priceSaving) setPriceEditing(null); }}>
             <div className="modal-box" style={{ width: 460 }} onClick={(e) => e.stopPropagation()}>
@@ -2283,7 +2320,7 @@ export default function CatalogPage() {
               </div>
 
               <label>Rate Token Scramble / token</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                 <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700 }}>Rp</span>
                 <input
                   type="number"
@@ -2291,6 +2328,20 @@ export default function CatalogPage() {
                   placeholder="0"
                   value={editRateScramble}
                   onChange={(e) => setEditRateScramble(e.target.value)}
+                  style={{ margin: 0 }}
+                />
+                <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / token</span>
+              </div>
+
+              <label>Rate Token Nitro / token</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700 }}>Rp</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  placeholder="0"
+                  value={editRateNitro}
+                  onChange={(e) => setEditRateNitro(e.target.value)}
                   style={{ margin: 0 }}
                 />
                 <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / token</span>
@@ -2423,6 +2474,7 @@ export default function CatalogPage() {
                     <div className="dms"><div className="dms-label">INCOME POTENSI</div><div className="dms-val" style={{ color: "var(--green)" }}>{fmtMoney(potensiVal)}/s</div></div>
                     <div className="dms"><div className="dms-label">TOKEN MUTASI</div><div className="dms-val" style={{ color: "#a78bfa" }}>{acc.mutationToken ?? 0}</div></div>
                     <div className="dms"><div className="dms-label">TOKEN SCRAMBLE</div><div className="dms-val" style={{ color: "var(--green)" }}>{acc.scrambleToken != null ? acc.scrambleToken : "—"}</div></div>
+                    <div className="dms"><div className="dms-label">TOKEN NITRO</div><div className="dms-val" style={{ color: "#d97706" }}>{acc.nitroToken != null ? acc.nitroToken : "—"}</div></div>
                     {acc.trail && <div className="dms"><div className="dms-label">TRAIL</div><div className="dms-val" style={{ color: "var(--accent2)" }}>{acc.trail}</div></div>}
                   </div>
                   <div className="dm-tabs">

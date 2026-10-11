@@ -72,6 +72,7 @@ function mutationClass(name: string): string {
   if (/^rainbow/.test(k)) return "pg-mutation mut-rainbow";
   if (/^fract/.test(k) || k === "boss fractured") return "pg-mutation mut-fractured";
   if (/^boss/.test(k)) return "pg-mutation mut-boss";
+  if (/^nitro/.test(k)) return "pg-mutation mut-nitro";
   if (/^sakura/.test(k)) return "pg-mutation mut-sakura";
   if (/^froz/.test(k) || k === "ice") return "pg-mutation mut-frozen";
   if (/^magma/.test(k) || k === "lava") return "pg-mutation mut-magma";
@@ -132,6 +133,7 @@ interface Account {
   bossToken?: number | null;
   mutationToken?: number | null;
   scrambleToken?: number | null;
+  nitroToken?: number | null;
   trail?: string | null;
   growingEggCount?: number;
   backpackEggCount?: number;
@@ -532,6 +534,9 @@ export default function DashboardPage() {
         .st.scramble { background: linear-gradient(135deg, #059669, #34d399); border-radius: 8px; padding: 5px 10px; }
         .st.scramble .sl { color: #fff; }
         .st.scramble .sv { color: #fff; font-size: 18px; }
+        .st.nitro { background: linear-gradient(135deg, #d97706, #fbbf24); border-radius: 8px; padding: 5px 10px; }
+        .st.nitro .sl { color: #fff; }
+        .st.nitro .sv { color: #fff; font-size: 18px; }
         .time-tag { font-size: 10px; font-weight: 700; flex-shrink: 0; }
         .time-tag.on { color: var(--dim); }
         .time-tag.off { color: var(--red); }
@@ -651,6 +656,7 @@ export default function DashboardPage() {
         .pg-mutation.mut-rainbow { color: #fff; background: linear-gradient(90deg, #ef4444, #f59e0b, #22d3ee, #22c55e, #a855f7); border-color: rgba(255,255,255,.2); text-shadow: 0 1px 2px rgba(0,0,0,.4); }
         .pg-mutation.mut-fractured { color: #fff; background: linear-gradient(135deg, #1a1030, #6d28d9); border-color: rgba(139,92,246,.5); text-shadow: 0 1px 2px rgba(0,0,0,.4); }
         .pg-mutation.mut-boss { color: #fff; background: linear-gradient(135deg, #7f1d1d, #b91c1c); border-color: rgba(239,68,68,.4); }
+        .pg-mutation.mut-nitro { color: #fff; background: linear-gradient(135deg, #92400e, #d97706); border-color: rgba(217,119,6,.5); }
         .pg-mutation.mut-sakura { color: #831843; background: linear-gradient(135deg, #fbcfe8, #f472b6); border-color: rgba(244,114,182,.4); }
         .pg-mutation.mut-frozen { color: #0c4a6e; background: linear-gradient(135deg, #bae6fd, #38bdf8); border-color: rgba(56,189,248,.4); text-shadow: 0 1px 0 rgba(255,255,255,.35); }
         .pg-mutation.mut-magma { color: #fff; background: linear-gradient(135deg, #ea580c, #dc2626); border-color: rgba(220,38,38,.5); text-shadow: 0 1px 2px rgba(0,0,0,.35); }
@@ -901,6 +907,7 @@ function AccountCard({ account: a, onOpen, onSell, onModerated, onDelete, delete
         <div className="st"><div className="sl">TOTAL EGG</div><div className="sv">{fmtNum((a.growingEggCount || 0) + (a.backpackEggCount || 0))}</div></div>
         <div className="st boss"><div className="sl">&#x1F9EC; TOKEN MUTASI</div><div className="sv">{fmtNum(a.mutationToken ?? 0)}</div></div>
         <div className="st scramble"><div className="sl">&#x1F500; TOKEN SCRAMBLE</div><div className="sv">{a.scrambleToken != null ? fmtNum(a.scrambleToken) : "—"}</div></div>
+        <div className="st nitro"><div className="sl">&#x1F3CE;&#xFE0F; TOKEN NITRO</div><div className="sv">{a.nitroToken != null ? fmtNum(a.nitroToken) : "—"}</div></div>
       </div>
       {eggCount > 0 && (
         <div className="egg-bar">

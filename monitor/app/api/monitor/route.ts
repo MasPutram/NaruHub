@@ -102,6 +102,7 @@ export async function POST(req: NextRequest) {
       // boss token. Lua sends `mutationToken`.
       mutationToken: data.mutationToken ?? null,
       scrambleToken: data.scrambleToken ?? null,
+      nitroToken: data.nitroToken ?? null,
       trail: data.trail ?? null,
       growingEggCount: data.fullData?.growingEggs?.length ?? 0,
       backpackEggCount: data.fullData?.backpackEggs?.length ?? 0,

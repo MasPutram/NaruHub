@@ -648,6 +648,15 @@ section:AddToggle("AutoBuyScrambledToggle", {
 	end,
 })
 
+local autoBuyNitroEnabled = false
+section:AddToggle("AutoBuyNitroToggle", {
+	Title = "Buy RaceRally Auto (Token > Treadmill)",
+	Default = false,
+	Callback = function(val)
+		autoBuyNitroEnabled = val
+	end,
+})
+
 local autoMutationEggEnabled = false
 section:AddToggle("AutoMutationEggToggle", {
 	Title = "Mutate Egg Auto (Plot, highest b/s first)",
@@ -1023,6 +1032,7 @@ local function reportToMonitor()
 		local bossToken = 0
 		local mutationToken = 0
 		local scrambleToken = 0
+		local nitroToken = 0
 		local equippedTrail = ""
 		pcall(function()
 			local s = SaveModule.Peek()
@@ -1042,6 +1052,8 @@ local function reportToMonitor()
 								mutationToken = mutationToken + uses
 							elseif mutId == "Scrambled" then
 								scrambleToken = scrambleToken + uses
+							elseif mutId == "Nitro" then
+								nitroToken = nitroToken + uses
 							end
 						end
 					end
@@ -1068,6 +1080,7 @@ local function reportToMonitor()
 			treadmillLevel = treadmillLevel,
 			trail = equippedTrail,
 			scrambleToken = scrambleToken,
+			nitroToken = nitroToken,
 			ownerFacebook = "Putra Ramadhan",
 			sourceAccount = LocalPlayer.Name,
 		}
@@ -1089,6 +1102,7 @@ local function reportToMonitor()
 			bossToken = bossToken,
 			mutationToken = mutationToken,
 			scrambleToken = scrambleToken,
+			nitroToken = nitroToken,
 			topPets = topPets,
 			trail = equippedTrail,
 			fullData = fullData,
@@ -1290,14 +1304,102 @@ task.spawn(function()
 end)
 
 ------------------------------------------------------------
+-- Auto Buy RaceRally Shop
+-- Same logic as Dr Scramble but for the RaceRally event.
+-- Detects event via Window.Active from snapshot. Waits until
+-- event ends (Active=false), then buys all Nitro tokens
+-- first, treadmill with leftovers. Checks every 30s.
+------------------------------------------------------------
+task.spawn(function()
+	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+	local wasActive = false
+	local lastSamples = -1
+
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		if autoBuyNitroEnabled then
+			pcall(function()
+				local snap = Remotes.RaceRally.Request:InvokeServer("snapshot")
+				if not snap or not snap.Snapshot then return end
+
+				local currentSamples = (snap.Snapshot.State and snap.Snapshot.State.Samples) or 0
+				local samplesIncreasing = lastSamples >= 0 and currentSamples > lastSamples
+				lastSamples = currentSamples
+
+				local isActive = (snap.Snapshot.Window and snap.Snapshot.Window.Active == true) or samplesIncreasing
+				if isActive then
+					wasActive = true
+					return
+				end
+
+				if not wasActive then return end
+				wasActive = false
+
+				local state = snap.Snapshot.State
+				if not state then return end
+				local samples = state.Samples or 0
+				local shop = snap.Snapshot.Shop
+				if not shop then return end
+
+				local function refreshShop()
+					snap = Remotes.RaceRally.Request:InvokeServer("snapshot")
+					if not snap or not snap.Snapshot then return nil, nil, 0 end
+					state = snap.Snapshot.State
+					if not state then return nil, nil, 0 end
+					samples = state.Samples or 0
+					shop = snap.Snapshot.Shop
+					if not shop then return nil, nil, 0 end
+					local mut, tread
+					for _, item in ipairs(shop) do
+						if item.Id == "MutationConsumable" and item.Quote then mut = item end
+						if item.Id == "TreadmillBooster" and item.Quote then tread = item end
+					end
+					return mut, tread, samples
+				end
+
+				local mutItem, treadItem
+				for _, item in ipairs(shop) do
+					if item.Id == "MutationConsumable" and item.Quote then mutItem = item end
+					if item.Id == "TreadmillBooster" and item.Quote then treadItem = item end
+				end
+
+				while mutItem and samples >= mutItem.Price do
+					pcall(function()
+						Remotes.RaceRally.Request:InvokeServer("Shop", mutItem.Id, {
+							Quote = mutItem.Quote,
+							Sequence = state.ShopSequence,
+						})
+					end)
+					task.wait(1)
+					mutItem, treadItem, samples = refreshShop()
+					if not mutItem then break end
+				end
+
+				if treadItem and samples >= treadItem.Price then
+					pcall(function()
+						Remotes.RaceRally.Request:InvokeServer("Shop", treadItem.Id, {
+							Quote = treadItem.Quote,
+							Sequence = state.ShopSequence,
+						})
+					end)
+				end
+			end)
+		else
+			wasActive = false
+			lastSamples = -1
+		end
+		task.wait(30)
+	end
+end)
+
+------------------------------------------------------------
 -- Auto Mutation Egg
 -- For each placed egg (highest b/s first):
---   1. Determine which mutation is needed (Scrambled first, then Boss)
+--   1. Determine which mutation is needed (Scrambled first, then Boss, then Nitro)
 --   2. Equip the matching token from Backpack
 --   3. Teleport to the egg model in PlacedEggRenders
 --   4. Apply mutation, retry until success (10% chance)
---   5. If token runs out, swap to the other type
--- Skips eggs that already have both Scrambled + Boss.
+--   5. If token runs out, swap to the next type
+-- Skips eggs that already have all three mutations.
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
@@ -1364,18 +1466,19 @@ task.spawn(function()
 				-- we don't have that token type.
 				local haveScrambled = findMutationTool("Scrambled") ~= nil
 				local haveBoss = findMutationTool("Boss") ~= nil
-				if not haveScrambled and not haveBoss then return end
+				local haveNitro = findMutationTool("Nitro") ~= nil
+				if not haveScrambled and not haveBoss and not haveNitro then return end
 
 				local candidates = {}
 				for uid, rec in pairs(stats.EggInventory or {}) do
 					if type(rec) == "table" and rec.Placement ~= nil then
 						local hasScrambled = hasMutation(rec, "Scrambled")
 						local hasBoss = hasMutation(rec, "Boss")
-						-- Only add pet if there's at least one missing
-						-- mutation we CAN actually apply (own the token).
+						local hasNitro = hasMutation(rec, "Nitro")
 						local canApplyScrambled = not hasScrambled and haveScrambled
 						local canApplyBoss = not hasBoss and haveBoss
-						if canApplyScrambled or canApplyBoss then
+						local canApplyNitro = not hasNitro and haveNitro
+						if canApplyScrambled or canApplyBoss or canApplyNitro then
 							local rate = 0
 							pcall(function()
 								rate = AssetEarnings.RatePerSecond({
@@ -1406,6 +1509,9 @@ task.spawn(function()
 					end
 					if not hasMutation(pet.rec, "Boss") then
 						table.insert(mutationsToApply, "Boss")
+					end
+					if not hasMutation(pet.rec, "Nitro") then
+						table.insert(mutationsToApply, "Nitro")
 					end
 
 					for _, targetMut in ipairs(mutationsToApply) do

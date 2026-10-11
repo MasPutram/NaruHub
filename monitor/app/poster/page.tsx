@@ -37,6 +37,7 @@ interface AccountSummary {
   stolenCount: number;
   mutationToken?: number | null;
   scrambleToken?: number | null;
+  nitroToken?: number | null;
   trail?: string | null;
   topPets: Pet[];
   online: boolean;
@@ -146,18 +147,21 @@ function computeAutoPrice(
   rateSpeedPerBStr: string,
   rateMutasiPerUnitStr: string,
   rateScramblePerUnitStr: string,
+  rateNitroPerUnitStr: string,
 ): string {
   if (!detail) return "";
   const rateIncomePerB = (parseFloat(rateIncomePerBStr) || 0) * 1000;
   const rateSpeedPerB = (parseFloat(rateSpeedPerBStr) || 0) * 1000;
   const rateMutasi = (parseFloat(rateMutasiPerUnitStr) || 0) * 1000;
   const rateScramble = (parseFloat(rateScramblePerUnitStr) || 0) * 1000;
-  if (rateIncomePerB === 0 && rateSpeedPerB === 0 && rateMutasi === 0 && rateScramble === 0) return "";
+  const rateNitro = (parseFloat(rateNitroPerUnitStr) || 0) * 1000;
+  if (rateIncomePerB === 0 && rateSpeedPerB === 0 && rateMutasi === 0 && rateScramble === 0 && rateNitro === 0) return "";
   const incomeB = computeIncomePotensiPetAktif(detail, POTENSI_EQUIP) / 1e9;
   const speedB = (Number(summary?.speed) || 0) / 1e9;
   const mutasiCount = Number(summary?.mutationToken) || 0;
   const scrambleCount = Number(summary?.scrambleToken) || 0;
-  const priceValue = Math.round(incomeB * rateIncomePerB + speedB * rateSpeedPerB + mutasiCount * rateMutasi + scrambleCount * rateScramble);
+  const nitroCount = Number(summary?.nitroToken) || 0;
+  const priceValue = Math.round(incomeB * rateIncomePerB + speedB * rateSpeedPerB + mutasiCount * rateMutasi + scrambleCount * rateScramble + nitroCount * rateNitro);
   if (priceValue <= 0) return "";
   return formatRupiah(priceValue);
 }
@@ -514,6 +518,7 @@ function PosterPage() {
   const [rateSpeedPerB, setRateSpeedPerB] = useState("");
   const [rateMutasiPerUnit, setRateMutasiPerUnit] = useState("");
   const [rateScramblePerUnit, setRateScramblePerUnit] = useState("");
+  const [rateNitroPerUnit, setRateNitroPerUnit] = useState("");
   const [title, setTitle] = useState("Jual Akun GACOR");
   const [badge, setBadge] = useState(accountInitials(accountName));
   const [owner, setOwner] = useState("Mas Naru");
@@ -661,7 +666,7 @@ function PosterPage() {
       const num = Number(price.replace(/[^\d]/g, ""));
       return isNaN(num) ? 0 : num;
     }
-    const auto = computeAutoPrice(detail, summary, ratePerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit);
+    const auto = computeAutoPrice(detail, summary, ratePerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit, rateNitroPerUnit);
     if (auto) {
       const num = Number(auto.replace(/[^\d]/g, ""));
       return isNaN(num) ? 0 : num;
@@ -884,6 +889,9 @@ function PosterPage() {
     ...(Number(summary.scrambleToken) > 0
       ? [{ label: "TOKEN SCRAMBLE", value: "× " + Math.round(Number(summary.scrambleToken)), accent: "scramble" as const }]
       : []),
+    ...(Number(summary.nitroToken) > 0
+      ? [{ label: "TOKEN NITRO", value: "× " + Math.round(Number(summary.nitroToken)), accent: "nitro" as const }]
+      : []),
     { label: "TRAIL", value: summary.trail || "-", accent: "trail" },
   ];
 
@@ -945,6 +953,9 @@ function PosterPage() {
         .stat-cell.scramble-cell-stat { background: #ecfdf5; border-color: #166534; }
         .stat-cell.scramble-cell-stat .slabel { color: #166534; }
         .stat-cell.scramble-cell-stat .sval { color: #14532d; }
+        .stat-cell.nitro-cell-stat { background: #fffbeb; border-color: #d97706; }
+        .stat-cell.nitro-cell-stat .slabel { color: #92400e; }
+        .stat-cell.nitro-cell-stat .sval { color: #78350f; }
         .stat-cell.speed-cell-stat { background: #eff6ff; border-color: #2563eb; }
         .stat-cell.speed-cell-stat .slabel { color: #2563eb; }
         .stat-cell.speed-cell-stat .sval { color: #1d4ed8; }
@@ -1202,6 +1213,8 @@ function PosterPage() {
         <input value={rateMutasiPerUnit} onChange={(e) => setRateMutasiPerUnit(e.target.value)} placeholder="" style={{ width: 50 }} />
         <label>Rate Scramble/token (rb):</label>
         <input value={rateScramblePerUnit} onChange={(e) => setRateScramblePerUnit(e.target.value)} placeholder="" style={{ width: 50 }} />
+        <label>Rate Nitro/token (rb):</label>
+        <input value={rateNitroPerUnit} onChange={(e) => setRateNitroPerUnit(e.target.value)} placeholder="" style={{ width: 50 }} />
         <label>Owner:</label>
         <input value={owner} onChange={(e) => setOwner(e.target.value)} placeholder="nama Facebook" />
         <label>Checklist:</label>
@@ -1393,8 +1406,8 @@ function PosterPage() {
               <div className="price-label">{isSold ? "TERJUAL" : "PRICE ACC"}</div>
               {isSold && soldPrice > 0 ? (
                 <div className="price-value">{formatRupiah(soldPrice)}</div>
-              ) : (price || computeAutoPrice(detail, summary, ratePerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit)) ? (
-                <div className="price-value">{price || computeAutoPrice(detail, summary, ratePerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit)}</div>
+              ) : (price || computeAutoPrice(detail, summary, ratePerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit, rateNitroPerUnit)) ? (
+                <div className="price-value">{price || computeAutoPrice(detail, summary, ratePerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit, rateNitroPerUnit)}</div>
               ) : (
                 <div className="price-empty">Isi harga atau rate di controls atas</div>
               )}
