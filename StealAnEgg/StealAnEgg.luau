@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.1.3"
+local VERSION = "v3.1.4"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -1240,10 +1240,10 @@ task.spawn(function()
 						return Remotes.RaceRally.AskBuy:InvokeServer("MutationToken")
 					end)
 					bought = ok and result == true
-					if bought then task.wait(2) end
+					if bought then task.wait(1) end
 				end
 
-				task.wait(2)
+				task.wait(1)
 				pcall(function()
 					Remotes.RaceRally.AskBuy:InvokeServer("TreadmillBoost")
 				end)
