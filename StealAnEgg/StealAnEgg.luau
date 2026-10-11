@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.0.7"
+local VERSION = "v3.1.0"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
