@@ -1209,87 +1209,29 @@ end)
 
 ------------------------------------------------------------
 -- Auto Buy RaceRally Shop
--- Same logic as Dr Scramble but for the RaceRally event.
--- Detects event via Window.Active from snapshot. Waits until
--- event ends (Active=false), then buys all Nitro tokens
--- first, treadmill with leftovers. Checks every 30s.
+-- Polls every 30s. Buys MutationToken first (loop until
+-- AskBuy returns false = out of trophies), then TreadmillBoost
+-- with leftover trophies.
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	local wasActive = false
-	local lastSamples = -1
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoBuyNitroEnabled then
 			pcall(function()
-				local snap = Remotes.RaceRally.Request:InvokeServer("snapshot")
-				if not snap or not snap.Snapshot then return end
-
-				local currentSamples = (snap.Snapshot.State and snap.Snapshot.State.Samples) or 0
-				local samplesIncreasing = lastSamples >= 0 and currentSamples > lastSamples
-				lastSamples = currentSamples
-
-				local isActive = (snap.Snapshot.Window and snap.Snapshot.Window.Active == true) or samplesIncreasing
-				if isActive then
-					wasActive = true
-					return
-				end
-
-				if not wasActive then return end
-				wasActive = false
-
-				local state = snap.Snapshot.State
-				if not state then return end
-				local samples = state.Samples or 0
-				local shop = snap.Snapshot.Shop
-				if not shop then return end
-
-				local function refreshShop()
-					snap = Remotes.RaceRally.Request:InvokeServer("snapshot")
-					if not snap or not snap.Snapshot then return nil, nil, 0 end
-					state = snap.Snapshot.State
-					if not state then return nil, nil, 0 end
-					samples = state.Samples or 0
-					shop = snap.Snapshot.Shop
-					if not shop then return nil, nil, 0 end
-					local mut, tread
-					for _, item in ipairs(shop) do
-						if item.Id == "MutationConsumable" and item.Quote then mut = item end
-						if item.Id == "TreadmillBooster" and item.Quote then tread = item end
-					end
-					return mut, tread, samples
-				end
-
-				local mutItem, treadItem
-				for _, item in ipairs(shop) do
-					if item.Id == "MutationConsumable" and item.Quote then mutItem = item end
-					if item.Id == "TreadmillBooster" and item.Quote then treadItem = item end
-				end
-
-				while mutItem and samples >= mutItem.Price do
-					pcall(function()
-						Remotes.RaceRally.Request:InvokeServer("Shop", mutItem.Id, {
-							Quote = mutItem.Quote,
-							Sequence = state.ShopSequence,
-						})
+				local bought = true
+				while bought and autoBuyNitroEnabled do
+					local ok, result = pcall(function()
+						return Remotes.RaceRally.AskBuy:InvokeServer("MutationToken")
 					end)
-					task.wait(1)
-					mutItem, treadItem, samples = refreshShop()
-					if not mutItem then break end
+					bought = ok and result == true
+					if bought then task.wait(0.5) end
 				end
 
-				if treadItem and samples >= treadItem.Price then
-					pcall(function()
-						Remotes.RaceRally.Request:InvokeServer("Shop", treadItem.Id, {
-							Quote = treadItem.Quote,
-							Sequence = state.ShopSequence,
-						})
-					end)
-				end
+				pcall(function()
+					Remotes.RaceRally.AskBuy:InvokeServer("TreadmillBoost")
+				end)
 			end)
-		else
-			wasActive = false
-			lastSamples = -1
 		end
 		task.wait(30)
 	end
