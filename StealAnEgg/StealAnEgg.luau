@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.1.0"
+local VERSION = "v3.1.1"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -1235,6 +1235,8 @@ task.spawn(function()
 				if not wasRacing then return end
 				wasRacing = false
 
+				task.wait(3)
+
 				local bought = true
 				while bought and autoBuyNitroEnabled do
 					local ok, result = pcall(function()
@@ -1251,7 +1253,7 @@ task.spawn(function()
 		else
 			wasRacing = false
 		end
-		task.wait(10)
+		task.wait(5)
 	end
 end)
 
