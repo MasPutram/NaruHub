@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.1.6"
+local VERSION = "v3.1.7"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -1218,13 +1218,18 @@ task.spawn(function()
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoBuyNitroEnabled then
 			pcall(function()
-				local bought = true
-				while bought and autoBuyNitroEnabled do
+				local fails = 0
+				while fails < 2 and autoBuyNitroEnabled do
 					local ok, result = pcall(function()
 						return Remotes.RaceRally.AskBuy:InvokeServer("MutationToken")
 					end)
-					bought = ok and result == true
-					if bought then task.wait(1 + math.random()) end
+					if ok and result == true then
+						fails = 0
+						task.wait(1 + math.random())
+					else
+						fails = fails + 1
+						if fails < 2 then task.wait(3) end
+					end
 				end
 
 				task.wait(1 + math.random())
