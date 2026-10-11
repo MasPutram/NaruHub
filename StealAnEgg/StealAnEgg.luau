@@ -1209,16 +1209,32 @@ end)
 
 ------------------------------------------------------------
 -- Auto Buy RaceRally Shop
--- Polls every 30s. Buys MutationToken first (loop until
--- AskBuy returns false = out of trophies), then TreadmillBoost
--- with leftover trophies.
+-- Detects race via RaceTimer.Visible in HUD. Waits until
+-- race ends (Visible=false after being true), then buys all
+-- MutationToken first, TreadmillBoost with leftovers.
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+	local wasRacing = false
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoBuyNitroEnabled then
 			pcall(function()
+				local timer = LocalPlayer:FindFirstChild("PlayerGui")
+					and LocalPlayer.PlayerGui:FindFirstChild("HUD")
+					and LocalPlayer.PlayerGui.HUD:FindFirstChild("GameHUD")
+					and LocalPlayer.PlayerGui.HUD.GameHUD:FindFirstChild("BottomRight")
+					and LocalPlayer.PlayerGui.HUD.GameHUD.BottomRight:FindFirstChild("RaceTimer")
+
+				local isRacing = timer ~= nil and timer.Visible == true
+				if isRacing then
+					wasRacing = true
+					return
+				end
+
+				if not wasRacing then return end
+				wasRacing = false
+
 				local bought = true
 				while bought and autoBuyNitroEnabled do
 					local ok, result = pcall(function()
@@ -1232,8 +1248,10 @@ task.spawn(function()
 					Remotes.RaceRally.AskBuy:InvokeServer("TreadmillBoost")
 				end)
 			end)
+		else
+			wasRacing = false
 		end
-		task.wait(30)
+		task.wait(10)
 	end
 end)
 
