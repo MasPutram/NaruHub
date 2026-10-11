@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.1.1"
+local VERSION = "v3.1.2"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -1209,13 +1209,12 @@ end)
 
 ------------------------------------------------------------
 -- Auto Buy RaceRally Shop
--- Detects race via RaceTimer.Visible in HUD. Waits until
--- race ends (Visible=false after being true), then buys all
--- MutationToken first, TreadmillBoost with leftovers.
+-- RaceTimer.Visible=true = countdown (after race ended, got
+-- trophies) → buy. Visible=false = race ongoing or idle.
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	local wasRacing = false
+	local alreadyBought = false
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoBuyNitroEnabled then
@@ -1226,16 +1225,14 @@ task.spawn(function()
 					and LocalPlayer.PlayerGui.HUD.GameHUD:FindFirstChild("BottomRight")
 					and LocalPlayer.PlayerGui.HUD.GameHUD.BottomRight:FindFirstChild("RaceTimer")
 
-				local isRacing = timer ~= nil and timer.Visible == true
-				if isRacing then
-					wasRacing = true
+				local isCountdown = timer ~= nil and timer.Visible == true
+				if not isCountdown then
+					alreadyBought = false
 					return
 				end
 
-				if not wasRacing then return end
-				wasRacing = false
-
-				task.wait(3)
+				if alreadyBought then return end
+				alreadyBought = true
 
 				local bought = true
 				while bought and autoBuyNitroEnabled do
@@ -1251,7 +1248,7 @@ task.spawn(function()
 				end)
 			end)
 		else
-			wasRacing = false
+			alreadyBought = false
 		end
 		task.wait(5)
 	end
