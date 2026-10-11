@@ -144,6 +144,7 @@ function computeAutoPrice(
   detail: AccountDetail | null,
   summary: AccountSummary | null,
   rateIncomePerBStr: string,
+  rateIncomeAktifPerBStr: string,
   rateSpeedPerBStr: string,
   rateMutasiPerUnitStr: string,
   rateScramblePerUnitStr: string,
@@ -151,17 +152,19 @@ function computeAutoPrice(
 ): string {
   if (!detail) return "";
   const rateIncomePerB = (parseFloat(rateIncomePerBStr) || 0) * 1000;
+  const rateIncomeAktifPerB = (parseFloat(rateIncomeAktifPerBStr) || 0) * 1000;
   const rateSpeedPerB = (parseFloat(rateSpeedPerBStr) || 0) * 1000;
   const rateMutasi = (parseFloat(rateMutasiPerUnitStr) || 0) * 1000;
   const rateScramble = (parseFloat(rateScramblePerUnitStr) || 0) * 1000;
   const rateNitro = (parseFloat(rateNitroPerUnitStr) || 0) * 1000;
-  if (rateIncomePerB === 0 && rateSpeedPerB === 0 && rateMutasi === 0 && rateScramble === 0 && rateNitro === 0) return "";
+  if (rateIncomePerB === 0 && rateIncomeAktifPerB === 0 && rateSpeedPerB === 0 && rateMutasi === 0 && rateScramble === 0 && rateNitro === 0) return "";
   const incomeB = computeIncomePotensiPetAktif(detail, POTENSI_EQUIP) / 1e9;
+  const incomeAktifB = (Number(summary?.incomeAktif) || 0) / 1e9;
   const speedB = (Number(summary?.speed) || 0) / 1e9;
   const mutasiCount = Number(summary?.mutationToken) || 0;
   const scrambleCount = Number(summary?.scrambleToken) || 0;
   const nitroCount = Number(summary?.nitroToken) || 0;
-  const priceValue = Math.round(incomeB * rateIncomePerB + speedB * rateSpeedPerB + mutasiCount * rateMutasi + scrambleCount * rateScramble + nitroCount * rateNitro);
+  const priceValue = Math.round(incomeB * rateIncomePerB + incomeAktifB * rateIncomeAktifPerB + speedB * rateSpeedPerB + mutasiCount * rateMutasi + scrambleCount * rateScramble + nitroCount * rateNitro);
   if (priceValue <= 0) return "";
   return formatRupiah(priceValue);
 }
@@ -515,6 +518,7 @@ function PosterPage() {
   const [soldPrice, setSoldPrice] = useState(paramSoldPrice);
   const [price, setPrice] = useState(isTemplate ? "Rp 25.000" : (paramCatalogPrice ? formatRupiah(paramCatalogPrice) : ""));
   const [ratePerB, setRatePerB] = useState("");
+  const [rateIncomeAktifPerB, setRateIncomeAktifPerB] = useState("");
   const [rateSpeedPerB, setRateSpeedPerB] = useState("");
   const [rateMutasiPerUnit, setRateMutasiPerUnit] = useState("");
   const [rateScramblePerUnit, setRateScramblePerUnit] = useState("");
@@ -666,7 +670,7 @@ function PosterPage() {
       const num = Number(price.replace(/[^\d]/g, ""));
       return isNaN(num) ? 0 : num;
     }
-    const auto = computeAutoPrice(detail, summary, ratePerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit, rateNitroPerUnit);
+    const auto = computeAutoPrice(detail, summary, ratePerB, rateIncomeAktifPerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit, rateNitroPerUnit);
     if (auto) {
       const num = Number(auto.replace(/[^\d]/g, ""));
       return isNaN(num) ? 0 : num;
@@ -1205,8 +1209,10 @@ function PosterPage() {
         <input value={badge} onChange={(e) => setBadge(e.target.value)} placeholder="contoh: TERMURAH" />
         <label>Harga (langsung):</label>
         <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="kosongin = auto" style={{ width: 120 }} />
-        <label>Rate Income/1B (rb):</label>
+        <label>Rate Income Potensi/1B (rb):</label>
         <input value={ratePerB} onChange={(e) => setRatePerB(e.target.value)} placeholder="" style={{ width: 50 }} />
+        <label>Rate Income Aktif/1B (rb):</label>
+        <input value={rateIncomeAktifPerB} onChange={(e) => setRateIncomeAktifPerB(e.target.value)} placeholder="" style={{ width: 50 }} />
         <label>Rate Speed/1B (rb):</label>
         <input value={rateSpeedPerB} onChange={(e) => setRateSpeedPerB(e.target.value)} placeholder="" style={{ width: 50 }} />
         <label>Rate Mutasi/token (rb):</label>
@@ -1406,8 +1412,8 @@ function PosterPage() {
               <div className="price-label">{isSold ? "TERJUAL" : "PRICE ACC"}</div>
               {isSold && soldPrice > 0 ? (
                 <div className="price-value">{formatRupiah(soldPrice)}</div>
-              ) : (price || computeAutoPrice(detail, summary, ratePerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit, rateNitroPerUnit)) ? (
-                <div className="price-value">{price || computeAutoPrice(detail, summary, ratePerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit, rateNitroPerUnit)}</div>
+              ) : (price || computeAutoPrice(detail, summary, ratePerB, rateIncomeAktifPerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit, rateNitroPerUnit)) ? (
+                <div className="price-value">{price || computeAutoPrice(detail, summary, ratePerB, rateIncomeAktifPerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit, rateNitroPerUnit)}</div>
               ) : (
                 <div className="price-empty">Isi harga atau rate di controls atas</div>
               )}

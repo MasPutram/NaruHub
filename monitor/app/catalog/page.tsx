@@ -331,14 +331,16 @@ function potensiEquip(a: Account): number {
   return total;
 }
 
-function calcAccountPrice(a: Account, rInc: number, rSpd: number, rMutasi: number, rScramble: number, rNitro: number): number {
+function calcAccountPrice(a: Account, rInc: number, rIncAktif: number, rSpd: number, rMutasi: number, rScramble: number, rNitro: number): number {
   const incB = potensiEquip(a) / 1e9;
+  const incAktifB = (Number(a.incomeAktif) || 0) / 1e9;
   const spdB = (Number(a.speed) || 0) / 1e9;
   const mutasi = Number(a.mutationToken) || 0;
   const scramble = Number(a.scrambleToken) || 0;
   const nitro = Number(a.nitroToken) || 0;
   const priceValue = Math.round(
     incB * (rInc * 1000) +
+    incAktifB * (rIncAktif * 1000) +
     spdB * (rSpd * 1000) +
     mutasi * (rMutasi * 1000) +
     scramble * (rScramble * 1000) +
@@ -368,6 +370,7 @@ export default function CatalogPage() {
   // computed suggested price alongside the manual field so the operator can
   // apply the rate formula per-account (fills 0 if any rate is blank).
   const [editRateInc, setEditRateInc] = useState("");
+  const [editRateIncAktif, setEditRateIncAktif] = useState("");
   const [editRateSpd, setEditRateSpd] = useState("");
   const [editRateMutasi, setEditRateMutasi] = useState("");
   const [editRateScramble, setEditRateScramble] = useState("");
@@ -380,6 +383,7 @@ export default function CatalogPage() {
 
   const [rateModalOpen, setRateModalOpen] = useState(false);
   const [rateIncome, setRateIncome] = useState("0");
+  const [rateIncomeAktif, setRateIncomeAktif] = useState("0");
   const [rateSpeed, setRateSpeed] = useState("0");
   const [rateMutasi, setRateMutasi] = useState("0");
   const [rateScramble, setRateScramble] = useState("0");
@@ -926,11 +930,12 @@ export default function CatalogPage() {
 
   async function applyBulkRates() {
     const rInc = parseFloat(rateIncome) || 0;
+    const rIncAkt = parseFloat(rateIncomeAktif) || 0;
     const rSpd = parseFloat(rateSpeed) || 0;
     const rMut = parseFloat(rateMutasi) || 0;
     const rScr = parseFloat(rateScramble) || 0;
     const rNit = parseFloat(rateNitro) || 0;
-    if (rInc <= 0 && rSpd <= 0 && rMut <= 0 && rScr <= 0 && rNit <= 0) {
+    if (rInc <= 0 && rIncAkt <= 0 && rSpd <= 0 && rMut <= 0 && rScr <= 0 && rNit <= 0) {
       alert("Isi minimal salah satu rate!");
       return;
     }
@@ -938,7 +943,7 @@ export default function CatalogPage() {
     try {
       const updates: { account: string; price: number }[] = [];
       const updatedAccounts = accounts.map((a) => {
-        const newPrice = calcAccountPrice(a, rInc, rSpd, rMut, rScr, rNit);
+        const newPrice = calcAccountPrice(a, rInc, rIncAkt, rSpd, rMut, rScr, rNit);
         if (newPrice > 0) updates.push({ account: a.sourceAccount, price: newPrice });
         return { ...a, catalogPrice: newPrice > 0 ? newPrice : a.catalogPrice };
       });
@@ -1096,12 +1101,13 @@ export default function CatalogPage() {
   const estimasiPendapatan = accounts.reduce((s, a) => s + (a.catalogPrice || 0), 0);
 
   const previewIncRate = parseFloat(rateIncome) || 0;
+  const previewIncAktifRate = parseFloat(rateIncomeAktif) || 0;
   const previewSpeedRate = parseFloat(rateSpeed) || 0;
   const previewMutasiRate = parseFloat(rateMutasi) || 0;
   const previewScrambleRate = parseFloat(rateScramble) || 0;
   const previewNitroRate = parseFloat(rateNitro) || 0;
-  const previewTotalRev = accounts.reduce((sum, a) => sum + calcAccountPrice(a, previewIncRate, previewSpeedRate, previewMutasiRate, previewScrambleRate, previewNitroRate), 0);
-  const previewPricedCount = accounts.filter((a) => calcAccountPrice(a, previewIncRate, previewSpeedRate, previewMutasiRate, previewScrambleRate, previewNitroRate) > 0).length;
+  const previewTotalRev = accounts.reduce((sum, a) => sum + calcAccountPrice(a, previewIncRate, previewIncAktifRate, previewSpeedRate, previewMutasiRate, previewScrambleRate, previewNitroRate), 0);
+  const previewPricedCount = accounts.filter((a) => calcAccountPrice(a, previewIncRate, previewIncAktifRate, previewSpeedRate, previewMutasiRate, previewScrambleRate, previewNitroRate) > 0).length;
 
   return (
     <div>
@@ -1805,6 +1811,7 @@ export default function CatalogPage() {
                       // Seed rate fields from the last bulk-rate values so the
                       // per-account modal picks up where the operator left off.
                       setEditRateInc(rateIncome);
+                      setEditRateIncAktif(rateIncomeAktif);
                       setEditRateSpd(rateSpeed);
                       setEditRateMutasi(rateMutasi);
                       setEditRateScramble(rateScramble);
@@ -2041,6 +2048,7 @@ export default function CatalogPage() {
 
       {rateModalOpen && (() => {
         const rInc = parseFloat(rateIncome) || 0;
+        const rIncAkt = parseFloat(rateIncomeAktif) || 0;
         const rSpd = parseFloat(rateSpeed) || 0;
         const rMut = parseFloat(rateMutasi) || 0;
         const rScr = parseFloat(rateScramble) || 0;
@@ -2052,7 +2060,7 @@ export default function CatalogPage() {
             const nb = accountNumber(b.sourceAccount) ?? 0;
             return na - nb;
           })
-          .map((a) => ({ acc: a, price: calcAccountPrice(a, rInc, rSpd, rMut, rScr, rNit) }));
+          .map((a) => ({ acc: a, price: calcAccountPrice(a, rInc, rIncAkt, rSpd, rMut, rScr, rNit) }));
         const totalPreview = preview.reduce((s, p) => s + p.price, 0);
         const pricedCount = preview.filter((p) => p.price > 0).length;
         return (
@@ -2074,6 +2082,22 @@ export default function CatalogPage() {
                       placeholder="5"
                       value={rateIncome}
                       onChange={(e) => setRateIncome(e.target.value)}
+                      style={{ margin: 0 }}
+                    />
+                    <span style={{ color: "var(--dim)", fontSize: 11, fontWeight: 700 }}>k/1B</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label>Rate Income Aktif / 1B</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ color: "var(--dim)", fontSize: 12, fontWeight: 700 }}>Rp</span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      placeholder="0"
+                      value={rateIncomeAktif}
+                      onChange={(e) => setRateIncomeAktif(e.target.value)}
                       style={{ margin: 0 }}
                     />
                     <span style={{ color: "var(--dim)", fontSize: 11, fontWeight: 700 }}>k/1B</span>
@@ -2264,11 +2288,12 @@ export default function CatalogPage() {
         const editingAcc = accounts.find((a) => a.sourceAccount === priceEditing);
         if (!editingAcc) return null;
         const rInc = parseFloat(editRateInc) || 0;
+        const rIncAkt = parseFloat(editRateIncAktif) || 0;
         const rSpd = parseFloat(editRateSpd) || 0;
         const rMut = parseFloat(editRateMutasi) || 0;
         const rScr = parseFloat(editRateScramble) || 0;
         const rNit = parseFloat(editRateNitro) || 0;
-        const suggested = calcAccountPrice(editingAcc, rInc, rSpd, rMut, rScr, rNit);
+        const suggested = calcAccountPrice(editingAcc, rInc, rIncAkt, rSpd, rMut, rScr, rNit);
         return (
           <div className="modal-backdrop" onClick={() => { if (!priceSaving) setPriceEditing(null); }}>
             <div className="modal-box" style={{ width: 460 }} onClick={(e) => e.stopPropagation()}>
@@ -2277,7 +2302,7 @@ export default function CatalogPage() {
                 Isi rate buat auto-hitung harga, atau ketik harga manual di kolom bawah. Rate kosong = 0.
               </div>
 
-              <label>Rate Income / 1B</label>
+              <label>Rate Income Potensi / 1B</label>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
                 <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700 }}>Rp</span>
                 <input
@@ -2286,6 +2311,20 @@ export default function CatalogPage() {
                   placeholder="0"
                   value={editRateInc}
                   onChange={(e) => setEditRateInc(e.target.value)}
+                  style={{ margin: 0 }}
+                />
+                <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / 1B</span>
+              </div>
+
+              <label>Rate Income Aktif / 1B</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700 }}>Rp</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  placeholder="0"
+                  value={editRateIncAktif}
+                  onChange={(e) => setEditRateIncAktif(e.target.value)}
                   style={{ margin: 0 }}
                 />
                 <span style={{ color: "var(--dim)", fontSize: 13, fontWeight: 700, minWidth: 50 }}>.000 / 1B</span>
