@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.1.5"
+local VERSION = "v3.1.6"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -1209,31 +1209,15 @@ end)
 
 ------------------------------------------------------------
 -- Auto Buy RaceRally Shop
--- RaceTimer.Visible=true = countdown (after race ended, got
--- trophies) → buy. Visible=false = race ongoing or idle.
+-- Loop setiap 60 detik, coba buy MutationToken sampai habis,
+-- sisa trophy buat TreadmillBoost.
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	local alreadyBought = false
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoBuyNitroEnabled then
 			pcall(function()
-				local timer = LocalPlayer:FindFirstChild("PlayerGui")
-					and LocalPlayer.PlayerGui:FindFirstChild("HUD")
-					and LocalPlayer.PlayerGui.HUD:FindFirstChild("GameHUD")
-					and LocalPlayer.PlayerGui.HUD.GameHUD:FindFirstChild("BottomRight")
-					and LocalPlayer.PlayerGui.HUD.GameHUD.BottomRight:FindFirstChild("RaceTimer")
-
-				local isCountdown = timer ~= nil and timer.Visible == true
-				if not isCountdown then
-					alreadyBought = false
-					return
-				end
-
-				if alreadyBought then return end
-				alreadyBought = true
-
 				local bought = true
 				while bought and autoBuyNitroEnabled do
 					local ok, result = pcall(function()
@@ -1248,10 +1232,8 @@ task.spawn(function()
 					Remotes.RaceRally.AskBuy:InvokeServer("TreadmillBoost")
 				end)
 			end)
-		else
-			alreadyBought = false
 		end
-		task.wait(5)
+		task.wait(60)
 	end
 end)
 
