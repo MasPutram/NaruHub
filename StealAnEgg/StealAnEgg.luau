@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.1.8"
+local VERSION = "v3.1.9"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -507,27 +507,56 @@ do
 				end
 				if logo and logo ~= wiredLogo then
 					wiredLogo = logo
-					-- Disconnect NaruUI's existing MouseButton1Click handlers so
-					-- our toggle isn't racing against them (they'd flip state
-					-- right back).
 					if getconnections then
-						local ok, conns = pcall(function()
-							return getconnections(logo.MouseButton1Click)
-						end)
-						if ok and conns then
-							for _, c in ipairs(conns) do
+						pcall(function()
+							for _, c in ipairs(getconnections(logo.MouseButton1Click)) do
 								pcall(function()
 									if c.Disable then c:Disable()
 									elseif c.Disconnect then c:Disconnect() end
 								end)
 							end
-						end
+						end)
+						pcall(function()
+							for _, c in ipairs(getconnections(logo.InputBegan)) do
+								pcall(function()
+									if c.Disable then c:Disable()
+									elseif c.Disconnect then c:Disconnect() end
+								end)
+							end
+						end)
 					end
-					logo.MouseButton1Click:Connect(function()
-						if Fluent.GUI and Fluent.GUI.Enabled then
-							if Window.Minimize then Window.Minimize() end
-						else
-							if Window.Restore then Window.Restore() end
+					local dragging, dragStart, startPos, movedFar = false, nil, nil, false
+					logo.InputBegan:Connect(function(input)
+						if input.UserInputType == Enum.UserInputType.MouseButton1
+							or input.UserInputType == Enum.UserInputType.Touch then
+							dragging = true
+							movedFar = false
+							dragStart = input.Position
+							startPos = logo.Position
+						end
+					end)
+					UserInputService.InputChanged:Connect(function(input)
+						if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+							or input.UserInputType == Enum.UserInputType.Touch) then
+							local delta = input.Position - dragStart
+							if delta.Magnitude > 4 then movedFar = true end
+							logo.Position = UDim2.new(
+								startPos.X.Scale, startPos.X.Offset + delta.X,
+								startPos.Y.Scale, startPos.Y.Offset + delta.Y
+							)
+						end
+					end)
+					UserInputService.InputEnded:Connect(function(input)
+						if input.UserInputType == Enum.UserInputType.MouseButton1
+							or input.UserInputType == Enum.UserInputType.Touch then
+							if dragging and not movedFar then
+								if Fluent.GUI and Fluent.GUI.Enabled then
+									if Window.Minimize then Window.Minimize() end
+								else
+									if Window.Restore then Window.Restore() end
+								end
+							end
+							dragging = false
 						end
 					end)
 				end
