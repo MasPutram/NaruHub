@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.1.7"
+local VERSION = "v3.1.8"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -1209,15 +1209,29 @@ end)
 
 ------------------------------------------------------------
 -- Auto Buy RaceRally Shop
--- Loop setiap 60 detik, coba buy MutationToken sampai habis,
--- sisa trophy buat TreadmillBoost.
+-- Loop setiap 60 detik, buy MutationToken sampai habis.
+-- TreadmillBoost cuma dibeli kalau token < 475.
 ------------------------------------------------------------
 task.spawn(function()
 	local Remotes = require(ReplicatedStorage.Shared.Remotes)
+	local SaveModule = require(ReplicatedStorage.Shared.Save)
 
 	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
 		if autoBuyNitroEnabled then
 			pcall(function()
+				local tokens = 0
+				pcall(function()
+					tokens = SaveModule.Peek(LocalPlayer).RaceRally.Tokens or 0
+				end)
+
+				if tokens < 475 then
+					pcall(function()
+						Remotes.RaceRally.AskBuy:InvokeServer("TreadmillBoost")
+					end)
+					task.wait(60)
+					return
+				end
+
 				local fails = 0
 				while fails < 2 and autoBuyNitroEnabled do
 					local ok, result = pcall(function()
@@ -1232,10 +1246,15 @@ task.spawn(function()
 					end
 				end
 
-				task.wait(1 + math.random())
 				pcall(function()
-					Remotes.RaceRally.AskBuy:InvokeServer("TreadmillBoost")
+					tokens = SaveModule.Peek(LocalPlayer).RaceRally.Tokens or 0
 				end)
+				if tokens < 475 then
+					task.wait(1 + math.random())
+					pcall(function()
+						Remotes.RaceRally.AskBuy:InvokeServer("TreadmillBoost")
+					end)
+				end
 			end)
 		end
 		task.wait(60)
