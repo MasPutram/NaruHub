@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | AnimeDice Sell Catalog v2.0.1
+-- NaruHub | AnimeDice Sell Catalog v2.1.0
 -- Sends enriched inventory data to dashboard catalog for marketplace listings.
 -- Self-contained GUI (no external NaruUI fetch).
 
@@ -1233,7 +1233,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | AD Catalog v2.0.1",
+	Title = "NaruHub | AD Catalog v2.1.0",
 	Badge = "SELL",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(540, 460),
@@ -1709,6 +1709,129 @@ do
 			pcall(function()
 				targetDropdown:SetValues(getPlayerNames())
 			end)
+		end
+	end)
+end
+
+------------------------------------------------------------
+-- Equip Tab
+------------------------------------------------------------
+do
+	local EquipTab = Window:AddTab({ Title = "Equip" })
+	local equipSection = EquipTab:AddSection("Auto Equip Quirk", { NoCollapse = true })
+
+	local equipStatusPara = equipSection:AddParagraph({
+		Title = "Status",
+		Content = "Idle",
+	})
+
+	local EquipRF = ReplicatedStorage.Network.UnitService.RF.Equip
+	local InteractSlot = ReplicatedStorage.Network.PlotService.RE.InteractSlot
+
+	local function equipQuirkUnits(targetQuirk)
+		local inv = DataController.___X.Inventory or {}
+		local slots = DataController.___X.Slots or {}
+
+		local equippedIds = {}
+		for _, s in pairs(slots) do
+			if type(s) == "table" then equippedIds[s.unitId] = true end
+		end
+
+		local toEquip = {}
+		for entryId, entry in pairs(inv) do
+			if type(entry) == "table" and entry.attributes and entry.attributes.quirk == targetQuirk and not equippedIds[entryId] then
+				table.insert(toEquip, { id = entryId, name = entry.name })
+			end
+		end
+
+		if #toEquip == 0 then return 0 end
+
+		local slotList = {}
+		for slotId, slotData in pairs(slots) do
+			if type(slotData) == "table" then
+				local entry = inv[slotData.unitId]
+				local quirk = entry and entry.attributes and entry.attributes.quirk or "none"
+				if quirk ~= targetQuirk then
+					table.insert(slotList, {
+						slot = tonumber(slotId),
+						balance = slotData.balance or 0,
+					})
+				end
+			end
+		end
+		table.sort(slotList, function(a, b) return a.balance < b.balance end)
+
+		local placed = 0
+		for i, unit in ipairs(toEquip) do
+			local target = slotList[i]
+			if not target then break end
+			pcall(function() EquipRF:InvokeServer(unit.id) end)
+			task.wait(0.5)
+			pcall(function() InteractSlot:FireServer(target.slot) end)
+			task.wait(0.5)
+			placed += 1
+		end
+		return placed
+	end
+
+	local selectedQuirk = "Prodigy"
+	local quirkNames = {
+		"Prodigy", "Fortune's Favor", "Midas Touch", "Tycoon",
+		"Fortune I", "Fortune II", "Fortune III",
+		"Wealth I", "Wealth II", "Wealth III",
+		"Swift I", "Swift II", "Swift III",
+		"Gifted I", "Gifted II", "Gifted III",
+		"Refined I", "Refined II", "Refined III",
+	}
+
+	local quirkDropdown = equipSection:AddDropdown("EquipQuirk", {
+		Title = "Target Quirk",
+		Values = quirkNames,
+		Default = "Prodigy",
+	})
+	quirkDropdown:OnChanged(function(val)
+		if val then selectedQuirk = val end
+	end)
+
+	equipSection:AddButton({
+		Title = "Equip Now",
+		Callback = function()
+			equipStatusPara:SetContent("Equipping " .. selectedQuirk .. "...")
+			local placed = equipQuirkUnits(selectedQuirk)
+			equipStatusPara:SetContent("Equipped " .. placed .. "x " .. selectedQuirk .. " units")
+		end,
+	})
+
+	equipSection:AddButton({
+		Title = "Equip Best (Reset)",
+		Callback = function()
+			equipStatusPara:SetContent("Equipping best units...")
+			pcall(function()
+				ReplicatedStorage.Network.PlotService.RE.EquipBest:FireServer()
+			end)
+			equipStatusPara:SetContent("Equip Best sent!")
+		end,
+	})
+
+	local autoEquipEnabled = false
+
+	equipSection:AddToggle("AutoEquipQuirk", {
+		Title = "Auto Equip",
+		Default = false,
+		Callback = function(v)
+			autoEquipEnabled = v
+		end,
+	})
+
+	task.spawn(function()
+		while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+			if autoEquipEnabled then
+				local placed = equipQuirkUnits(selectedQuirk)
+				if placed > 0 then
+					equipStatusPara:SetContent("Auto: +" .. placed .. "x " .. selectedQuirk)
+				end
+			end
+			task.wait(10)
 		end
 	end)
 end
