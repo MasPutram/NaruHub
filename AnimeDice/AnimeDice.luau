@@ -1,7 +1,6 @@
 --!nocheck
--- NaruHub | Monitoring Anime Dice v2.3.0
--- Monitoring only -- no auto-roll/sell/equip, baca data → POST ke dashboard.
--- Self-contained GUI (no external NaruUI fetch).
+-- NaruHub | Anime Dice v2.4.0
+-- Monitoring + Features. Self-contained GUI (inline NaruUI).
 
 ------------------------------------------------------------
 -- Key Gate
@@ -180,268 +179,671 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
 
 ------------------------------------------------------------
--- Inline GUI builder (replaces external NaruUI)
+-- NaruUI (inline)
 ------------------------------------------------------------
-local GUI_ALIVE = true
-local screenGui
+local NaruUI = (function()
+	local DEFAULT_LOGO_ASSET = nil
 
-do
-	local container
-	pcall(function() container = gethui and gethui() end)
-	if not container then pcall(function() container = game:GetService("CoreGui") end) end
-	container = container or LocalPlayer:WaitForChild("PlayerGui")
+	local _NaruUI = {}
 
-	-- Clean up old copies
-	pcall(function()
-		for _, o in ipairs(container:GetChildren()) do
-			if o.Name == "AnimeDiceGUI" then
-				pcall(function() o:Destroy() end)
+	function _NaruUI.New(cfg)
+		cfg = cfg or {}
+		local BRAND = cfg.BrandColor or Color3.fromRGB(255, 214, 10)
+		local configPrefix = cfg.ConfigPrefix or "NaruUI"
+
+		local ConfigData: { [string]: any } = {}
+		local CONFIG_PATH
+		do
+			local ok, hwid = pcall(function()
+				return gethwid and gethwid() or "default"
+			end)
+			local safeId = (ok and hwid and tostring(hwid):gsub("[^%w]", "")) or "default"
+			CONFIG_PATH = configPrefix .. "_Config_" .. safeId .. ".json"
+		end
+
+		local function saveConfig()
+			if not writefile then return end
+			pcall(function()
+				writefile(CONFIG_PATH, HttpService:JSONEncode(ConfigData))
+			end)
+		end
+
+		do
+			local ok = pcall(function()
+				if isfile and isfile(CONFIG_PATH) then
+					local decoded = HttpService:JSONDecode(readfile(CONFIG_PATH))
+					if type(decoded) == "table" then ConfigData = decoded end
+				end
+			end)
+			if not ok then ConfigData = {} end
+		end
+
+		local NaruTween = TweenService
+
+		local UI_FONT = Enum.Font.GothamMedium
+		local UI_FONT_BOLD = Enum.Font.GothamBold
+		local UI_COL_BG = Color3.fromRGB(8, 8, 9)
+		local UI_COL_SIDEBAR = Color3.fromRGB(4, 4, 5)
+		local UI_COL_ROW = Color3.fromRGB(17, 17, 18)
+		local UI_COL_ROW2 = Color3.fromRGB(24, 24, 26)
+		local UI_COL_TEXT = Color3.fromRGB(250, 250, 250)
+		local UI_COL_DIM = Color3.fromRGB(145, 145, 148)
+		local UI_COL_ACCENT = BRAND
+		local UI_COL_ACCENT_DIM = Color3.fromRGB(
+			math.floor(BRAND.R * 255 * 0.36), math.floor(BRAND.G * 255 * 0.36), math.floor(BRAND.B * 255 * 0.36))
+		local UI_COL_OFF = Color3.fromRGB(48, 48, 50)
+
+		local function uiNew(class, props, parent)
+			local o = Instance.new(class)
+			for k, v in pairs(props) do o[k] = v end
+			if parent then o.Parent = parent end
+			return o
+		end
+
+		local function uiCorner(radius, parent)
+			return uiNew("UICorner", { CornerRadius = UDim.new(0, radius) }, parent)
+		end
+
+		local function uiStroke(color, thickness, parent)
+			return uiNew("UIStroke", { Color = color, Thickness = thickness or 1 }, parent)
+		end
+
+		local Fluent = {}
+		Fluent.Options = {}
+		Fluent.Unloaded = false
+		Fluent.OnWindowClose = nil
+
+		function Fluent:Notify(cfg2)
+			if Fluent._notify then Fluent._notify(cfg2) end
+		end
+		function Fluent:ToggleTransparency(_state) end
+		function Fluent:Destroy()
+			if self.GUI then pcall(function() self.GUI:Destroy() end) end
+			self.Unloaded = true
+		end
+
+		function Fluent:CreateWindow(wcfg)
+			local guiParent
+			pcall(function() guiParent = gethui and gethui() end)
+			guiParent = guiParent or game:GetService("CoreGui")
+
+			local screenGui = uiNew("ScreenGui", {
+				Name = (wcfg.GuiName or configPrefix) .. "GUI",
+				ResetOnSpawn = false,
+				ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+				DisplayOrder = 100,
+			}, guiParent)
+			self.GUI = screenGui
+
+			local size = wcfg.Size or UDim2.fromOffset(720, 480)
+			local main = uiNew("Frame", {
+				Name = "Main",
+				Size = size,
+				Position = UDim2.new(0.5, 0, 0.5, 0),
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				BackgroundColor3 = UI_COL_BG,
+				BackgroundTransparency = 0.06,
+				BorderSizePixel = 0,
+				ClipsDescendants = true,
+			}, screenGui)
+			uiCorner(10, main)
+			uiStroke(Color3.fromRGB(38, 38, 40), 1, main)
+
+			local titleBar = uiNew("Frame", {
+				Name = "TitleBar",
+				Size = UDim2.new(1, 0, 0, 46),
+				BackgroundColor3 = UI_COL_SIDEBAR,
+				BorderSizePixel = 0,
+			}, main)
+			uiCorner(10, titleBar)
+			uiNew("Frame", {
+				Size = UDim2.new(1, 0, 0, 10),
+				Position = UDim2.new(0, 0, 1, -10),
+				BackgroundColor3 = UI_COL_SIDEBAR,
+				BorderSizePixel = 0,
+				ZIndex = 0,
+			}, titleBar)
+
+			local titleHolder = uiNew("Frame", {
+				Name = "TitleHolder",
+				BackgroundTransparency = 1,
+				Position = UDim2.new(0, 20, 0, 0),
+				Size = UDim2.new(1, -150, 1, 0),
+			}, titleBar)
+			uiNew("UIListLayout", {
+				FillDirection = Enum.FillDirection.Horizontal,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+				Padding = UDim.new(0, 8),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}, titleHolder)
+			local logoImage = wcfg.LogoImage or DEFAULT_LOGO_ASSET
+			if logoImage then
+				uiNew("ImageLabel", {
+					BackgroundTransparency = 1,
+					Size = UDim2.fromOffset(28, 28),
+					Image = logoImage,
+					ScaleType = Enum.ScaleType.Fit,
+					LayoutOrder = 0,
+				}, titleHolder)
 			end
-		end
-	end)
-
-	screenGui = Instance.new("ScreenGui")
-	screenGui.Name = "AnimeDiceGUI"
-	screenGui.ResetOnSpawn = false
-	screenGui.DisplayOrder = 100
-	screenGui.IgnoreGuiInset = true
-	screenGui.Parent = container
-end
-
--- Main window frame
-local BG = Color3.fromRGB(15, 15, 25)
-local CARD = Color3.fromRGB(22, 22, 38)
-local INK = Color3.fromRGB(232, 232, 240)
-local DIM = Color3.fromRGB(100, 100, 130)
-local ACCENT = Color3.fromRGB(255, 100, 100)
-
-local mainFrame = Instance.new("Frame")
-mainFrame.Name = "Main"
-mainFrame.Size = UDim2.fromOffset(360, 260)
-mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-mainFrame.BackgroundColor3 = BG
-mainFrame.BackgroundTransparency = 0.04
-mainFrame.BorderSizePixel = 0
-mainFrame.ClipsDescendants = true
-mainFrame.Parent = screenGui
-Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
-local stroke = Instance.new("UIStroke", mainFrame)
-stroke.Color = Color3.fromRGB(40, 40, 55)
-stroke.Thickness = 1
-
--- Title bar
-local titleBar = Instance.new("Frame")
-titleBar.Name = "TitleBar"
-titleBar.Size = UDim2.new(1, 0, 0, 36)
-titleBar.BackgroundColor3 = CARD
-titleBar.BorderSizePixel = 0
-titleBar.Parent = mainFrame
-
-local titleLabel = Instance.new("TextLabel")
-titleLabel.Text = "NaruHub | Anime Dice v2.4.5"
-titleLabel.Font = Enum.Font.GothamBold
-titleLabel.TextSize = 13
-titleLabel.TextColor3 = INK
-titleLabel.BackgroundTransparency = 1
-titleLabel.Size = UDim2.new(1, -76, 1, 0)
-titleLabel.Position = UDim2.new(0, 12, 0, 0)
-titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-titleLabel.Parent = titleBar
-
-local badge = Instance.new("TextLabel")
-badge.Text = "MONITOR"
-badge.Font = Enum.Font.GothamBold
-badge.TextSize = 9
-badge.TextColor3 = ACCENT
-badge.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
-badge.BackgroundTransparency = 0.88
-badge.Size = UDim2.new(0, 62, 0, 20)
-badge.Position = UDim2.new(1, -74, 0, 8)
-badge.BorderSizePixel = 0
-badge.Parent = titleBar
-Instance.new("UICorner", badge).CornerRadius = UDim.new(0, 4)
-
--- Draggable title bar
-do
-	local dragging, dragStart, startPos
-	titleBar.InputBegan:Connect(function(inp)
-		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			dragStart = inp.Position
-			startPos = mainFrame.Position
-		end
-	end)
-	titleBar.InputEnded:Connect(function(inp)
-		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
-			dragging = false
-		end
-	end)
-	UserInputService.InputChanged:Connect(function(inp)
-		if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
-			local delta = inp.Position - dragStart
-			mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-		end
-	end)
-end
-
--- Content area
-local content = Instance.new("Frame")
-content.Name = "Content"
-content.Size = UDim2.new(1, -24, 1, -48)
-content.Position = UDim2.new(0, 12, 0, 42)
-content.BackgroundTransparency = 1
-content.Parent = mainFrame
-local layout = Instance.new("UIListLayout", content)
-layout.SortOrder = Enum.SortOrder.LayoutOrder
-layout.Padding = UDim.new(0, 8)
-
--- Section header
-local sectionLabel = Instance.new("TextLabel")
-sectionLabel.Text = LocalPlayer.Name
-sectionLabel.Font = Enum.Font.GothamBold
-sectionLabel.TextSize = 14
-sectionLabel.TextColor3 = INK
-sectionLabel.BackgroundTransparency = 1
-sectionLabel.Size = UDim2.new(1, 0, 0, 22)
-sectionLabel.TextXAlignment = Enum.TextXAlignment.Left
-sectionLabel.LayoutOrder = 1
-sectionLabel.Parent = content
-
--- Username paragraph
-local function makePara(title, initialContent, order)
-	local frame = Instance.new("Frame")
-	frame.Name = title
-	frame.BackgroundColor3 = CARD
-	frame.BackgroundTransparency = 0.3
-	frame.Size = UDim2.new(1, 0, 0, 50)
-	frame.AutomaticSize = Enum.AutomaticSize.Y
-	frame.BorderSizePixel = 0
-	frame.LayoutOrder = order
-	frame.Parent = content
-	Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
-	local pad = Instance.new("UIPadding", frame)
-	pad.PaddingLeft = UDim.new(0, 10)
-	pad.PaddingRight = UDim.new(0, 10)
-	pad.PaddingTop = UDim.new(0, 8)
-	pad.PaddingBottom = UDim.new(0, 8)
-
-	local tl = Instance.new("TextLabel")
-	tl.Text = title
-	tl.Font = Enum.Font.GothamBold
-	tl.TextSize = 10
-	tl.TextColor3 = DIM
-	tl.BackgroundTransparency = 1
-	tl.Size = UDim2.new(1, 0, 0, 14)
-	tl.TextXAlignment = Enum.TextXAlignment.Left
-	tl.Parent = frame
-
-	local cl = Instance.new("TextLabel")
-	cl.Name = "Value"
-	cl.Text = initialContent
-	cl.Font = Enum.Font.Gotham
-	cl.TextSize = 14
-	cl.TextColor3 = INK
-	cl.TextWrapped = true
-	cl.RichText = true
-	cl.BackgroundTransparency = 1
-	cl.Size = UDim2.new(1, 0, 0, 18)
-	cl.AutomaticSize = Enum.AutomaticSize.Y
-	cl.Position = UDim2.new(0, 0, 0, 16)
-	cl.TextXAlignment = Enum.TextXAlignment.Center
-	cl.Parent = frame
-
-	local function setContent(text)
-		cl.Text = text
-	end
-	return frame, setContent
-end
-
-local _, setUserContent = makePara("Username", LocalPlayer.Name, 2)
-local _, setMonitorContent = makePara("Monitor", "Starting...", 3)
-
--- Launcher circle (NaruUI-style minimize/restore toggle)
-do
-	local launcherContainer
-	pcall(function() launcherContainer = gethui and gethui() end)
-	if not launcherContainer then pcall(function() launcherContainer = game:GetService("CoreGui") end) end
-	launcherContainer = launcherContainer or LocalPlayer:WaitForChild("PlayerGui")
-
-	pcall(function()
-		for _, o in ipairs(launcherContainer:GetChildren()) do
-			if o.Name == "AnimeDiceLauncher" then
-				pcall(function() o:Destroy() end)
+			uiNew("TextLabel", {
+				BackgroundTransparency = 1,
+				AutomaticSize = Enum.AutomaticSize.X,
+				Size = UDim2.new(0, 0, 0, 20),
+				Font = UI_FONT_BOLD,
+				TextSize = 17,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextColor3 = UI_COL_TEXT,
+				Text = wcfg.Title or "Window",
+				LayoutOrder = 1,
+			}, titleHolder)
+			if wcfg.Badge then
+				local premiumBadge = uiNew("Frame", {
+					BackgroundColor3 = UI_COL_ACCENT_DIM,
+					AutomaticSize = Enum.AutomaticSize.X,
+					Size = UDim2.fromOffset(0, 18),
+					LayoutOrder = 2,
+				}, titleHolder)
+				uiCorner(4, premiumBadge)
+				uiNew("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, premiumBadge)
+				uiNew("TextLabel", {
+					BackgroundTransparency = 1,
+					AutomaticSize = Enum.AutomaticSize.X,
+					Size = UDim2.new(0, 0, 1, 0),
+					Font = UI_FONT_BOLD,
+					TextSize = 11,
+					TextColor3 = UI_COL_ACCENT,
+					Text = wcfg.Badge,
+				}, premiumBadge)
 			end
-		end
-	end)
 
-	local launcher = Instance.new("ScreenGui")
-	launcher.Name = "AnimeDiceLauncher"
-	launcher.ResetOnSpawn = false
-	launcher.IgnoreGuiInset = true
-	launcher.DisplayOrder = 2000000000
-	launcher.Enabled = true
-	pcall(function() launcher.Parent = launcherContainer end)
-	if not launcher.Parent then
-		launcher.Parent = LocalPlayer:WaitForChild("PlayerGui")
-	end
-
-	local logoBtn = Instance.new("ImageButton")
-	logoBtn.Name = "Logo"
-	logoBtn.Size = UDim2.fromOffset(42, 42)
-	logoBtn.Position = UDim2.fromOffset(4, 100)
-	logoBtn.BackgroundColor3 = Color3.fromRGB(6, 6, 7)
-	logoBtn.BackgroundTransparency = 0.02
-	logoBtn.AutoButtonColor = false
-	logoBtn.Image = ""
-	logoBtn.Parent = launcher
-
-	Instance.new("UICorner", logoBtn).CornerRadius = UDim.new(1, 0)
-
-	local logoStroke = Instance.new("UIStroke", logoBtn)
-	logoStroke.Color = ACCENT
-	logoStroke.Thickness = 1.5
-
-	local lbl = Instance.new("TextLabel")
-	lbl.BackgroundTransparency = 1
-	lbl.Size = UDim2.fromScale(1, 1)
-	lbl.Font = Enum.Font.GothamBold
-	lbl.TextSize = 24
-	lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-	lbl.Text = "N"
-	lbl.Parent = logoBtn
-
-	local function setMinimized(state)
-		screenGui.Enabled = not state
-	end
-
-	local dragging, dragStart, startPos, movedFar = false, nil, nil, false
-	logoBtn.InputBegan:Connect(function(inp)
-		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			movedFar = false
-			dragStart = inp.Position
-			startPos = logoBtn.Position
-		end
-	end)
-	UserInputService.InputChanged:Connect(function(inp)
-		if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
-			local delta = inp.Position - dragStart
-			if delta.Magnitude > 4 then movedFar = true end
-			logoBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-		end
-	end)
-	UserInputService.InputEnded:Connect(function(inp)
-		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
-			if dragging and not movedFar then
-				setMinimized(screenGui.Enabled)
+			local function titleBtn(text, xOffsetFromRight)
+				local btn = uiNew("TextButton", {
+					Size = UDim2.fromOffset(28, 28),
+					Position = UDim2.new(1, xOffsetFromRight, 0.5, 0),
+					AnchorPoint = Vector2.new(0, 0.5),
+					BackgroundColor3 = UI_COL_ROW,
+					BackgroundTransparency = 0.2,
+					AutoButtonColor = true,
+					Font = UI_FONT_BOLD,
+					TextSize = 16,
+					TextColor3 = UI_COL_TEXT,
+					Text = text,
+				}, titleBar)
+				uiCorner(6, btn)
+				return btn
 			end
-			dragging = false
+
+			local closeBtn = titleBtn("\226\156\149", -36)
+			local minBtn = titleBtn("\226\128\148", -72)
+
+			local sidebar = uiNew("Frame", {
+				Name = "Sidebar",
+				Position = UDim2.new(0, 0, 0, 46),
+				Size = UDim2.new(0, wcfg.TabWidth or 150, 1, -46),
+				BackgroundColor3 = UI_COL_SIDEBAR,
+				BorderSizePixel = 0,
+			}, main)
+			local sideList = uiNew("Frame", {
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, -12, 1, -12),
+				Position = UDim2.fromOffset(6, 6),
+			}, sidebar)
+			uiNew("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, sideList)
+
+			local content = uiNew("Frame", {
+				Name = "Content",
+				Position = UDim2.new(0, wcfg.TabWidth or 150, 0, 46),
+				Size = UDim2.new(1, -(wcfg.TabWidth or 150), 1, -46),
+				BackgroundTransparency = 1,
+			}, main)
+
+			uiNew("Frame", {
+				Size = UDim2.new(1, 0, 0, 1),
+				Position = UDim2.new(0, 0, 0, 46),
+				BackgroundColor3 = Color3.fromRGB(34, 34, 36),
+				BorderSizePixel = 0,
+				ZIndex = 5,
+			}, main)
+			uiNew("Frame", {
+				Size = UDim2.new(0, 1, 1, -46),
+				Position = UDim2.new(0, wcfg.TabWidth or 150, 0, 46),
+				BackgroundColor3 = Color3.fromRGB(34, 34, 36),
+				BorderSizePixel = 0,
+				ZIndex = 5,
+			}, main)
+
+			do
+				local dragging, dragStart, startPos = false, nil, nil
+				titleBar.InputBegan:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+						dragging = true; dragStart = input.Position; startPos = main.Position
+					end
+				end)
+				UserInputService.InputChanged:Connect(function(input)
+					if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+						local delta = input.Position - dragStart
+						main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+					end
+				end)
+				UserInputService.InputEnded:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+				end)
+			end
+
+			local Window = {}
+			Window.Root = main
+			Window.ContainerHolder = content
+			Window.Minimize = function() end
+			Window.Maximize = function() end
+
+			local maxBtnFrame = uiNew("Frame", { Visible = false, Size = UDim2.fromOffset(0, 0) }, titleBar)
+			Window.TitleBar = {
+				Frame = titleBar,
+				MinButton = { SetCallback = function(_self, fn) minBtn.MouseButton1Click:Connect(fn) end },
+				MaxButton = { Frame = maxBtnFrame, SetCallback = function() end },
+				CloseButton = { SetCallback = function(_self, fn) closeBtn.MouseButton1Click:Connect(fn) end },
+			}
+			closeBtn.MouseButton1Click:Connect(function()
+				if Fluent.OnWindowClose then pcall(Fluent.OnWindowClose) end
+				Fluent:Destroy()
+			end)
+
+			-- Launcher circle
+			do
+				local coreGui
+				pcall(function() coreGui = game:GetService("CoreGui") end)
+				local altHui
+				pcall(function() altHui = gethui and gethui() end)
+				local hui = altHui or coreGui
+
+				pcall(function()
+					if hui then
+						for _, o in ipairs(hui:GetChildren()) do
+							if o.Name == (configPrefix .. "Launcher") then pcall(function() o:Destroy() end) end
+						end
+					end
+					if altHui and coreGui and altHui ~= coreGui then
+						for _, o in ipairs(coreGui:GetChildren()) do
+							if o.Name == (configPrefix .. "Launcher") then pcall(function() o:Destroy() end) end
+						end
+					end
+				end)
+
+				local launcher = Instance.new("ScreenGui")
+				launcher.Name = configPrefix .. "Launcher"
+				launcher.ResetOnSpawn = false
+				launcher.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+				launcher.IgnoreGuiInset = true
+				launcher.DisplayOrder = 2_000_000_000
+				launcher.Enabled = true
+				pcall(function() launcher.Parent = hui end)
+				if not launcher.Parent then pcall(function() launcher.Parent = coreGui end) end
+				if not launcher.Parent then launcher.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui") end
+
+				local logoBtn = Instance.new("ImageButton")
+				logoBtn.Name = "Logo"
+				logoBtn.Size = UDim2.fromOffset(42, 42)
+				logoBtn.Position = UDim2.fromOffset(4, 100)
+				logoBtn.BackgroundColor3 = Color3.fromRGB(6, 6, 7)
+				logoBtn.BackgroundTransparency = 0.02
+				logoBtn.AutoButtonColor = false
+				logoBtn.Image = ""
+				logoBtn.Parent = launcher
+
+				Instance.new("UICorner", logoBtn).CornerRadius = UDim.new(1, 0)
+				local logoStroke = Instance.new("UIStroke")
+				logoStroke.Color = BRAND
+				logoStroke.Thickness = 1.5
+				logoStroke.Parent = logoBtn
+
+				if logoImage then
+					local logoImg = Instance.new("ImageLabel")
+					logoImg.Name = "Img"
+					logoImg.BackgroundTransparency = 1
+					logoImg.Size = UDim2.fromScale(0.78, 0.78)
+					logoImg.Position = UDim2.fromScale(0.5, 0.5)
+					logoImg.AnchorPoint = Vector2.new(0.5, 0.5)
+					logoImg.Image = logoImage
+					logoImg.ScaleType = Enum.ScaleType.Fit
+					logoImg.Parent = logoBtn
+				else
+					local lbl = Instance.new("TextLabel")
+					lbl.BackgroundTransparency = 1
+					lbl.Size = UDim2.fromScale(1, 1)
+					lbl.Font = Enum.Font.GothamBold
+					lbl.TextSize = 30
+					lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+					lbl.Text = (wcfg.Title or "?"):sub(1, 1):upper()
+					lbl.Parent = logoBtn
+				end
+
+				local function setMinimized(state: boolean)
+					pcall(function() Fluent.GUI.Enabled = not state end)
+				end
+
+				pcall(function()
+					Window.TitleBar.MinButton:SetCallback(function() setMinimized(true) end)
+				end)
+				Window.Minimize = function() setMinimized(true) end
+				Window.Restore = function() setMinimized(false) end
+
+				if wcfg.AutoStartMinimized then
+					task.defer(function() setMinimized(true) end)
+				end
+
+				local dragging, dragStart, startPos, movedFar = false, nil, nil, false
+				logoBtn.InputBegan:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+						dragging = true; movedFar = false; dragStart = input.Position; startPos = logoBtn.Position
+					end
+				end)
+				UserInputService.InputChanged:Connect(function(input)
+					if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+						local delta = input.Position - dragStart
+						if delta.Magnitude > 4 then movedFar = true end
+						logoBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+					end
+				end)
+				UserInputService.InputEnded:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+						if dragging and not movedFar then
+							local visible = Fluent.GUI and Fluent.GUI.Enabled
+							setMinimized(visible)
+						end
+						dragging = false
+					end
+				end)
+			end
+
+			local tabs = {}
+			local tabButtons = {}
+
+			function Window:AddTab(tcfg)
+				local idx = #tabs + 1
+				local btn = uiNew("TextButton", {
+					Size = UDim2.new(1, 0, 0, 32),
+					BackgroundColor3 = idx == 1 and UI_COL_ACCENT_DIM or UI_COL_ROW,
+					BackgroundTransparency = idx == 1 and 0.15 or 1,
+					AutoButtonColor = false,
+					Font = UI_FONT,
+					TextSize = 14,
+					TextColor3 = idx == 1 and UI_COL_ACCENT or UI_COL_DIM,
+					Text = "   " .. (tcfg.Title or ("Tab " .. idx)),
+					TextXAlignment = Enum.TextXAlignment.Left,
+					LayoutOrder = idx,
+				}, sideList)
+				uiCorner(6, btn)
+				local tabAccentBar = uiNew("Frame", {
+					Size = UDim2.new(0, 3, 0.6, 0),
+					Position = UDim2.new(0, 0, 0.5, 0),
+					AnchorPoint = Vector2.new(0, 0.5),
+					BackgroundColor3 = UI_COL_ACCENT,
+					BorderSizePixel = 0,
+					Visible = idx == 1,
+				}, btn)
+				uiCorner(2, tabAccentBar)
+				tabButtons[idx] = { Btn = btn, Bar = tabAccentBar }
+
+				local scroll = uiNew("ScrollingFrame", {
+					Name = tcfg.Title or ("Tab" .. idx),
+					Size = UDim2.fromScale(1, 1),
+					BackgroundTransparency = 1,
+					BorderSizePixel = 0,
+					ScrollBarThickness = 4,
+					ScrollBarImageColor3 = UI_COL_ACCENT,
+					CanvasSize = UDim2.new(0, 0, 0, 0),
+					AutomaticCanvasSize = Enum.AutomaticSize.Y,
+					Visible = idx == 1,
+				}, content)
+				uiNew("UIPadding", {
+					PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14),
+					PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 14),
+				}, scroll)
+				uiNew("UIListLayout", { Padding = UDim.new(0, 14), SortOrder = Enum.SortOrder.LayoutOrder }, scroll)
+
+				local Tab = { ScrollFrame = scroll, Index = idx }
+				btn.MouseButton1Click:Connect(function() Window:SelectTab(idx) end)
+
+				function Tab:AddSection(title, secCfg)
+					secCfg = secCfg or {}
+					local secFrame = uiNew("Frame", {
+						BackgroundTransparency = 1,
+						AutomaticSize = Enum.AutomaticSize.Y,
+						Size = UDim2.new(1, 0, 0, 0),
+					}, scroll)
+					uiNew("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, secFrame)
+
+					local noCollapse = secCfg.NoCollapse == true
+					local expanded = noCollapse or (secCfg.DefaultExpanded == true)
+
+					if not noCollapse then
+						local headerBtn = uiNew("TextButton", {
+							BackgroundColor3 = UI_COL_ROW, BackgroundTransparency = 0.1,
+							AutoButtonColor = false, BorderSizePixel = 0,
+							Size = UDim2.new(1, 0, 0, 38), Text = "", LayoutOrder = 0,
+						}, secFrame)
+						uiCorner(8, headerBtn)
+						uiNew("Frame", {
+							BackgroundColor3 = UI_COL_ACCENT, Size = UDim2.new(0, 3, 0, 16),
+							Position = UDim2.new(0, 12, 0.5, 0), AnchorPoint = Vector2.new(0, 0.5), BorderSizePixel = 0,
+						}, headerBtn)
+						uiNew("TextLabel", {
+							BackgroundTransparency = 1, Position = UDim2.new(0, 24, 0, 0),
+							Size = UDim2.new(1, -50, 1, 0), Font = UI_FONT_BOLD, TextSize = 15,
+							TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = UI_COL_TEXT, Text = title,
+						}, headerBtn)
+						local chevron = uiNew("TextLabel", {
+							BackgroundTransparency = 1, Position = UDim2.new(1, -30, 0, 0),
+							Size = UDim2.new(0, 20, 1, 0), Font = UI_FONT_BOLD, TextSize = 14,
+							TextColor3 = UI_COL_ACCENT, Text = expanded and "\226\136\168" or "\226\128\186",
+						}, headerBtn)
+						headerBtn.MouseButton1Click:Connect(function()
+							expanded = not expanded
+							contentHolder.Visible = expanded
+							chevron.Text = expanded and "\226\136\168" or "\226\128\186"
+						end)
+					end
+
+					local contentHolder = uiNew("Frame", {
+						BackgroundColor3 = UI_COL_ROW, BackgroundTransparency = 0.15,
+						BorderSizePixel = 0, AutomaticSize = Enum.AutomaticSize.Y,
+						Size = UDim2.new(1, 0, 0, 0), Visible = expanded, LayoutOrder = 1,
+					}, secFrame)
+					uiCorner(8, contentHolder)
+					uiNew("UIPadding", {
+						PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14),
+						PaddingTop = UDim.new(0, 13), PaddingBottom = UDim.new(0, 13),
+					}, contentHolder)
+					uiNew("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }, contentHolder)
+
+					local Section = { Frame = contentHolder, _order = 0 }
+					local function nextOrder() Section._order += 1; return Section._order end
+					local function srow(height)
+						return uiNew("Frame", {
+							BackgroundTransparency = 1,
+							Size = UDim2.new(1, 0, 0, height or 36),
+							LayoutOrder = nextOrder(),
+						}, contentHolder)
+					end
+
+					function Section:AddParagraph(pcfg2)
+						local titleSize = pcfg2.TitleSize or 13
+						local contentSize = pcfg2.ContentSize or 13
+						local align = pcfg2.Center and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left
+						local r = srow(0)
+						r.AutomaticSize = Enum.AutomaticSize.Y
+						uiNew("TextLabel", {
+							BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, titleSize + 6),
+							Font = UI_FONT_BOLD, TextSize = titleSize, TextXAlignment = align,
+							TextColor3 = UI_COL_TEXT, Text = pcfg2.Title or "",
+						}, r)
+						local contentLbl = uiNew("TextLabel", {
+							BackgroundTransparency = 1, Position = UDim2.new(0, 0, 0, titleSize + 6),
+							Size = UDim2.new(1, 0, 0, contentSize + 4),
+							AutomaticSize = Enum.AutomaticSize.Y, Font = UI_FONT,
+							TextSize = contentSize, TextWrapped = true, TextXAlignment = align,
+							TextYAlignment = Enum.TextYAlignment.Top, TextColor3 = UI_COL_DIM,
+							Text = pcfg2.Content or "",
+						}, r)
+						uiNew("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder }, r)
+						local obj = {}
+						function obj:SetDesc(t) contentLbl.Text = t end
+						function obj:SetContent(t) contentLbl.Text = t end
+						return obj
+					end
+
+					function Section:AddButton(bcfg)
+						local r = srow(32)
+						local btn2 = uiNew("TextButton", {
+							Size = UDim2.fromScale(1, 1), BackgroundColor3 = UI_COL_ROW2,
+							AutoButtonColor = true, Font = UI_FONT, TextSize = 13,
+							TextColor3 = UI_COL_TEXT, Text = bcfg.Title or "Button",
+						}, r)
+						uiCorner(6, btn2)
+						if bcfg.Callback then btn2.MouseButton1Click:Connect(bcfg.Callback) end
+						return {}
+					end
+
+					function Section:AddToggle(id, tcfg2)
+						local r = srow(30)
+						uiNew("TextLabel", {
+							BackgroundTransparency = 1, Position = UDim2.new(0, 48, 0, 0),
+							Size = UDim2.new(1, -56, 1, 0), Font = UI_FONT, TextSize = 14,
+							TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = UI_COL_TEXT,
+							Text = tcfg2.Title or id,
+						}, r)
+						local pill = uiNew("Frame", {
+							Size = UDim2.fromOffset(40, 22), Position = UDim2.new(0, 0, 0.5, 0),
+							AnchorPoint = Vector2.new(0, 0.5),
+							BackgroundColor3 = tcfg2.Default and UI_COL_ACCENT or UI_COL_OFF,
+						}, r)
+						uiCorner(11, pill)
+						local knob = uiNew("Frame", {
+							Size = UDim2.fromOffset(18, 18),
+							Position = tcfg2.Default and UDim2.new(1, -2, 0.5, 0) or UDim2.new(0, 2, 0.5, 0),
+							AnchorPoint = tcfg2.Default and Vector2.new(1, 0.5) or Vector2.new(0, 0.5),
+							BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+						}, pill)
+						uiCorner(9, knob)
+						local click = uiNew("TextButton", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "" }, pill)
+
+						local state = tcfg2.Default or false
+						local obj = {}
+						local function apply(v, fire)
+							state = v; obj.Value = v
+							pill.BackgroundColor3 = v and UI_COL_ACCENT or UI_COL_OFF
+							NaruTween:Create(knob, TweenInfo.new(0.12), {
+								Position = v and UDim2.new(1, -2, 0.5, 0) or UDim2.new(0, 2, 0.5, 0),
+								AnchorPoint = v and Vector2.new(1, 0.5) or Vector2.new(0, 0.5),
+							}):Play()
+							if fire then
+								ConfigData[id] = v; saveConfig()
+								if tcfg2.Callback then tcfg2.Callback(v) end
+							end
+						end
+						click.MouseButton1Click:Connect(function() apply(not state, true) end)
+						function obj:SetValue(v) apply(v, true) end
+						obj.Value = state
+						Fluent.Options[id] = obj
+						if ConfigData[id] ~= nil then
+							task.defer(function() apply(ConfigData[id] and true or false, true) end)
+						elseif tcfg2.Default then
+							task.defer(function() if tcfg2.Callback then tcfg2.Callback(true) end end)
+						end
+						return obj
+					end
+
+					function Section:AddInput(id, icfg)
+						local r = srow(36)
+						uiNew("TextLabel", {
+							BackgroundTransparency = 1, Size = UDim2.new(0.55, 0, 1, 0),
+							Font = UI_FONT, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left,
+							TextColor3 = UI_COL_TEXT, Text = icfg.Title or id,
+						}, r)
+						local box = uiNew("TextBox", {
+							Size = UDim2.new(0.42, 0, 0, 26),
+							Position = UDim2.new(1, 0, 0.5, 0), AnchorPoint = Vector2.new(1, 0.5),
+							BackgroundColor3 = UI_COL_ROW2, Font = UI_FONT, TextSize = 13,
+							TextColor3 = UI_COL_TEXT, PlaceholderText = icfg.Placeholder or "",
+							Text = tostring(icfg.Default or ""), ClearTextOnFocus = false,
+						}, r)
+						uiCorner(6, box)
+						uiNew("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, box)
+
+						local obj = { Value = tostring(icfg.Default or "") }
+						local function commit()
+							local v = box.Text
+							if icfg.Numeric then v = tostring(tonumber(v) or icfg.Default or 0); box.Text = v end
+							obj.Value = v; ConfigData[id] = v; saveConfig()
+							if icfg.Callback then icfg.Callback(v) end
+						end
+						if icfg.Finished then box.FocusLost:Connect(commit)
+						else box:GetPropertyChangedSignal("Text"):Connect(commit) end
+						function obj:SetValue(v) box.Text = tostring(v); commit() end
+						Fluent.Options[id] = obj
+						if ConfigData[id] ~= nil then task.defer(function() obj:SetValue(ConfigData[id]) end) end
+						return obj
+					end
+
+					return Section
+				end
+
+				tabs[idx] = Tab
+				return Tab
+			end
+
+			function Window:SelectTab(idx2)
+				if type(idx2) == "table" then idx2 = idx2.Index end
+				for i, t in ipairs(tabs) do
+					local active = (i == idx2)
+					t.ScrollFrame.Visible = active
+					local tb = tabButtons[i]
+					tb.Btn.BackgroundColor3 = active and UI_COL_ACCENT_DIM or UI_COL_ROW
+					tb.Btn.BackgroundTransparency = active and 0.15 or 1
+					tb.Btn.TextColor3 = active and UI_COL_ACCENT or UI_COL_DIM
+					tb.Bar.Visible = active
+				end
+			end
+
+			self.Window = Window
+			return Window
 		end
-	end)
-end
+
+		return Fluent
+	end
+
+	return _NaruUI
+end)()
+
+------------------------------------------------------------
+-- NaruUI Window
+------------------------------------------------------------
+local Fluent = NaruUI.New({
+	ConfigPrefix = "AnimeDice",
+	BrandColor = Color3.fromRGB(255, 100, 100),
+})
+
+local Window = Fluent:CreateWindow({
+	Title = "NaruHub | Anime Dice v2.4.0",
+	Badge = "MONITOR",
+	TabWidth = 90,
+	Size = UDim2.fromOffset(440, 340),
+	AutoStartMinimized = false,
+})
+
+-- Status Tab
+local StatusTab = Window:AddTab({ Title = "Status" })
+local section = StatusTab:AddSection(LocalPlayer.Name, { NoCollapse = true })
+
+local userPara = section:AddParagraph({ Title = "Username", Content = LocalPlayer.Name })
+local monitorPara = section:AddParagraph({ Title = "Monitor", Content = "Starting..." })
+
+local function setUserContent(text) userPara:SetContent(text) end
+local function setMonitorContent(text) monitorPara:SetContent(text) end
 
 ------------------------------------------------------------
 -- My accounts in this server (same JobId from dashboard API)
@@ -466,7 +868,7 @@ do
 				Headers = { ["Content-Type"] = "application/json" },
 			})
 			if res and res.Body then
-				local parsed = game:GetService("HttpService"):JSONDecode(res.Body)
+				local parsed = HttpService:JSONDecode(res.Body)
 				if parsed and parsed.accounts then
 					local set = {}
 					for _, acc in ipairs(parsed.accounts) do
@@ -503,7 +905,7 @@ do
 	end)
 
 	task.spawn(function()
-		while GUI_ALIVE and screenGui and screenGui.Parent do
+		while not Fluent.Unloaded do
 			task.wait(35)
 			fetchSameServerAccounts()
 			refreshPlayerList()
@@ -515,7 +917,6 @@ end
 -- Game data access
 ------------------------------------------------------------
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local HttpService = game:GetService("HttpService")
 
 local DataController = require(ReplicatedStorage.Framework.Features.Data.DataController)
 local EntryRegistry = require(ReplicatedStorage.Framework.Features.Inventory.EntryRegistry)
@@ -950,7 +1351,7 @@ end
 -- Monitoring loop
 ------------------------------------------------------------
 task.spawn(function()
-	while GUI_ALIVE and screenGui and screenGui.Parent do
+	while not Fluent.Unloaded do
 		local ok, err = reportToMonitor()
 		local ping = 0
 		pcall(function()
@@ -963,5 +1364,96 @@ task.spawn(function()
 			setMonitorContent("Gagal" .. pingStr)
 		end
 		task.wait(30)
+	end
+end)
+
+------------------------------------------------------------
+-- Features Tab
+------------------------------------------------------------
+local FeatTab = Window:AddTab({ Title = "Features" })
+local equipSection = FeatTab:AddSection("Auto Equip", { NoCollapse = true })
+
+local equipStatusPara = equipSection:AddParagraph({
+	Title = "Equip Status",
+	Content = "Idle",
+})
+
+local autoEquipProdigy = false
+local EquipRF = ReplicatedStorage.Network.UnitService.RF.Equip
+local UnequipRF = ReplicatedStorage.Network.UnitService.RF.Unequip
+local InteractSlot = ReplicatedStorage.Network.PlotService.RE.InteractSlot
+
+local function equipProdigyUnits()
+	local inv = DataController.___X.Inventory or {}
+	local slots = DataController.___X.Slots or {}
+
+	local equippedIds = {}
+	for _, s in pairs(slots) do
+		if type(s) == "table" then equippedIds[s.unitId] = true end
+	end
+
+	local prodigyToEquip = {}
+	for entryId, entry in pairs(inv) do
+		if type(entry) == "table" and entry.attributes and entry.attributes.quirk == "Prodigy" and not equippedIds[entryId] then
+			table.insert(prodigyToEquip, { id = entryId, name = entry.name })
+		end
+	end
+
+	if #prodigyToEquip == 0 then return 0 end
+
+	local slotList = {}
+	for slotId, slotData in pairs(slots) do
+		if type(slotData) == "table" then
+			local entry = inv[slotData.unitId]
+			local quirk = entry and entry.attributes and entry.attributes.quirk or "none"
+			if quirk ~= "Prodigy" then
+				table.insert(slotList, {
+					slot = tonumber(slotId),
+					balance = slotData.balance or 0,
+				})
+			end
+		end
+	end
+	table.sort(slotList, function(a, b) return a.balance < b.balance end)
+
+	local placed = 0
+	for i, prodigy in ipairs(prodigyToEquip) do
+		local target = slotList[i]
+		if not target then break end
+		pcall(function() EquipRF:InvokeServer(prodigy.id) end)
+		task.wait(0.5)
+		pcall(function() InteractSlot:FireServer(target.slot) end)
+		task.wait(0.5)
+		placed += 1
+	end
+	return placed
+end
+
+equipSection:AddToggle("AutoEquipProdigy", {
+	Title = "Auto Equip Prodigy",
+	Default = false,
+	Callback = function(v)
+		autoEquipProdigy = v
+	end,
+})
+
+equipSection:AddButton({
+	Title = "Equip Prodigy Now",
+	Callback = function()
+		equipStatusPara:SetContent("Equipping...")
+		local placed = equipProdigyUnits()
+		equipStatusPara:SetContent("Equipped " .. placed .. " Prodigy units")
+	end,
+})
+
+task.spawn(function()
+	while not Fluent.Unloaded do
+		if autoEquipProdigy then
+			local placed = equipProdigyUnits()
+			if placed > 0 then
+				equipStatusPara:SetContent("Auto-equipped " .. placed .. " Prodigy units")
+			end
+		end
+		task.wait(10)
 	end
 end)
