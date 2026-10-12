@@ -365,6 +365,20 @@ return (function()
 					launcher.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
 				end
 
+				local dragOverlaySG = Instance.new("ScreenGui")
+				dragOverlaySG.Name = configPrefix .. "DragOverlay"
+				dragOverlaySG.ResetOnSpawn = false
+				dragOverlaySG.IgnoreGuiInset = true
+				dragOverlaySG.DisplayOrder = 2_000_000_001
+				dragOverlaySG.Enabled = false
+				dragOverlaySG.Parent = launcher.Parent
+
+				local dragOverlay = Instance.new("Frame")
+				dragOverlay.Size = UDim2.fromScale(1, 1)
+				dragOverlay.BackgroundTransparency = 1
+				dragOverlay.Active = true
+				dragOverlay.Parent = dragOverlaySG
+
 				local logoBtn = Instance.new("ImageButton")
 				logoBtn.Name = "Logo"
 				logoBtn.Size = UDim2.fromOffset(42, 42)
@@ -430,7 +444,7 @@ return (function()
 					end)
 				end
 
-				-- drag + click (klik logo = restore, drag = pindah posisi badge)
+				-- drag + click via fullscreen overlay (klik logo = restore, drag = pindah posisi badge)
 				local dragging, dragStart, startPos, movedFar = false, nil, nil, false
 				logoBtn.InputBegan:Connect(function(input)
 					if input.UserInputType == Enum.UserInputType.MouseButton1
@@ -439,9 +453,10 @@ return (function()
 						movedFar = false
 						dragStart = input.Position
 						startPos = logoBtn.Position
+						dragOverlaySG.Enabled = true
 					end
 				end)
-				UserInputService.InputChanged:Connect(function(input)
+				dragOverlay.InputChanged:Connect(function(input)
 					if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
 						or input.UserInputType == Enum.UserInputType.Touch) then
 						local delta = input.Position - dragStart
@@ -454,15 +469,15 @@ return (function()
 						)
 					end
 				end)
-				UserInputService.InputEnded:Connect(function(input)
+				dragOverlay.InputEnded:Connect(function(input)
 					if input.UserInputType == Enum.UserInputType.MouseButton1
 						or input.UserInputType == Enum.UserInputType.Touch then
 						if dragging and not movedFar then
-							-- Toggle: minimize if visible, restore if hidden
 							local visible = Fluent.GUI and Fluent.GUI.Enabled
 							setMinimized(visible)
 						end
 						dragging = false
+						dragOverlaySG.Enabled = false
 					end
 				end)
 			end
