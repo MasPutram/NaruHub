@@ -511,14 +511,17 @@ export default function DeviceDetailPage() {
 
     const sw = device!.screen?.width || 1920;
     const sh = device!.screen?.height || 1080;
-    const cellW = Math.floor(sw / dims.cols);
-    const cellH = Math.floor(sh / dims.rows);
+    const pad = 8;
+    const usableW = sw - pad * 2;
+    const usableH = sh - pad * 2;
+    const cellW = Math.floor(usableW / dims.cols);
+    const cellH = Math.floor(usableH / dims.rows);
     const newBounds: Record<string, string> = { ...packageBounds };
     for (let i = 0; i < selectedPkgs.length; i++) {
       const col = i % dims.cols;
       const row = Math.floor(i / dims.cols);
-      const left = col * cellW;
-      const top = row * cellH;
+      const left = pad + col * cellW;
+      const top = pad + row * cellH;
       newBounds[selectedPkgs[i].pkg] = `${left},${top},${left + cellW},${top + cellH}`;
     }
     setPackageBounds(newBounds);
@@ -546,14 +549,17 @@ export default function DeviceDetailPage() {
 
     const sw = device!.screen?.width || 1920;
     const sh = device!.screen?.height || 1080;
-    const cellW = Math.floor(sw / draftLayout.cols);
-    const cellH = Math.floor(sh / draftLayout.rows);
+    const pad = 8;
+    const usableW = sw - pad * 2;
+    const usableH = sh - pad * 2;
+    const cellW = Math.floor(usableW / draftLayout.cols);
+    const cellH = Math.floor(usableH / draftLayout.rows);
     const newBounds: Record<string, string> = { ...packageBounds };
     for (let i = 0; i < selectedPkgs.length; i++) {
       const col = i % draftLayout.cols;
       const row = Math.floor(i / draftLayout.cols);
-      const left = col * cellW;
-      const top = row * cellH;
+      const left = pad + col * cellW;
+      const top = pad + row * cellH;
       newBounds[selectedPkgs[i].pkg] = `${left},${top},${left + cellW},${top + cellH}`;
     }
     setPackageBounds(newBounds);

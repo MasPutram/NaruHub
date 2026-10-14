@@ -389,7 +389,18 @@ local function collect_running()
 end
 
 -- ─── Screen detection ───
+-- Use app= (usable area excluding nav bar / status bar) instead of cur=
+-- (full display). In landscape the nav bar sits on the right edge, so cur=
+-- reports wider than the area freeform windows can actually occupy.
 local function collect_screen()
+  local app = shell('su -c "dumpsys window displays" | grep -m1 -oE "app=[0-9]+x[0-9]+"')
+  if app == "" then
+    app = shell('su -c "dumpsys window" | grep -m1 -oE "app=[0-9]+x[0-9]+"')
+  end
+  if app ~= "" then
+    local w, h = app:match("app=(%d+)x(%d+)")
+    if w and h then return { width = tonumber(w), height = tonumber(h) } end
+  end
   local cur = shell('su -c "dumpsys window displays" | grep -m1 -oE "cur=[0-9]+x[0-9]+"')
   if cur == "" then
     cur = shell('su -c "dumpsys window" | grep -m1 -oE "cur=[0-9]+x[0-9]+"')

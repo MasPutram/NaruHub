@@ -225,12 +225,15 @@ export async function GET(req: NextRequest) {
     const rows = Math.ceil(totalClones / cols);
     const computeFallbackBounds = (idx: number): string => {
       if (!screen || !screen.width || !screen.height) return "";
-      const cellW = Math.floor(screen.width / cols);
-      const cellH = Math.floor(screen.height / rows);
+      const pad = 8;
+      const usableW = screen.width - pad * 2;
+      const usableH = screen.height - pad * 2;
+      const cellW = Math.floor(usableW / cols);
+      const cellH = Math.floor(usableH / rows);
       const col = idx % cols;
       const row = Math.floor(idx / cols);
-      const left = col * cellW;
-      const top = row * cellH;
+      const left = pad + col * cellW;
+      const top = pad + row * cellH;
       return `${left},${top},${left + cellW},${top + cellH}`;
     }
 
