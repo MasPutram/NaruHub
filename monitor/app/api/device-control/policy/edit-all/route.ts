@@ -10,13 +10,12 @@ export async function POST(req: NextRequest) {
     const t = tenant || undefined;
 
     const body = await req.json();
-    const { psLink, cols, rows, rejoinDelay, launchDelay, gridMode } = body as {
+    const { psLink, cols, rows, rejoinDelay, launchDelay } = body as {
       psLink?: string;
       cols?: number;
       rows?: number;
       rejoinDelay?: number;
       launchDelay?: number;
-      gridMode?: "normal" | "extreme";
     };
 
     const deviceKeys: string[] = [];
@@ -57,15 +56,10 @@ export async function POST(req: NextRequest) {
         merged.packageTargets = targets;
       }
 
-      if (typeof gridMode === "string") merged.gridMode = gridMode === "extreme" ? "extreme" : "normal";
-
       if (cols && rows && cols > 0 && rows > 0 && packages.length > 0) {
-        const gm = merged.gridMode || existing.gridMode || "normal";
-        const padX = gm === "extreme" ? 2 : 8;
-        const padY = gm === "extreme" ? 8 : 8;
-        const gap = gm === "extreme" ? 0 : 4;
-        const usableW = screen.width - padX * 2 - gap * (cols - 1);
-        const usableH = screen.height - padY * 2 - gap * (rows - 1);
+        const pad = 8;
+        const usableW = screen.width - pad * 2;
+        const usableH = screen.height - pad * 2;
         const cellW = Math.floor(usableW / cols);
         const cellH = Math.floor(usableH / rows);
         const bounds: Record<string, string> = {};
@@ -73,8 +67,8 @@ export async function POST(req: NextRequest) {
           const col = i % cols;
           const row = Math.floor(i / cols);
           if (row >= rows) break;
-          const left = padX + col * (cellW + gap);
-          const top = padY + row * (cellH + gap);
+          const left = pad + col * cellW;
+          const top = pad + row * cellH;
           bounds[packages[i]] = `${left},${top},${left + cellW},${top + cellH}`;
         }
         merged.packageBounds = bounds;

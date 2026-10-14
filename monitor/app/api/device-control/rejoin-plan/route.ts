@@ -164,7 +164,7 @@ export async function GET(req: NextRequest) {
     }
     const targets: Record<string, string> = policy.packageTargets || {};
     const bounds: Record<string, string> = policy.packageBounds || {};
-    const gridMode: "normal" | "extreme" = policy.gridMode === "extreme" ? "extreme" : "normal";
+
     const optIn: string[] = Array.isArray(policy.autoRejoinPackages) ? policy.autoRejoinPackages : [];
     // If autoRejoinPackages was explicitly set (field exists on policy),
     // an empty array means NO packages opted in, not all.
@@ -226,17 +226,15 @@ export async function GET(req: NextRequest) {
     const rows = Math.ceil(totalClones / cols);
     const computeFallbackBounds = (idx: number): string => {
       if (!screen || !screen.width || !screen.height) return "";
-      const padX = gridMode === "extreme" ? 2 : 8;
-      const padY = gridMode === "extreme" ? 8 : 8;
-      const gap = gridMode === "extreme" ? 0 : 4;
-      const usableW = screen.width - padX * 2 - gap * (cols - 1);
-      const usableH = screen.height - padY * 2 - gap * (rows - 1);
+      const pad = 8;
+      const usableW = screen.width - pad * 2;
+      const usableH = screen.height - pad * 2;
       const cellW = Math.floor(usableW / cols);
       const cellH = Math.floor(usableH / rows);
       const col = idx % cols;
       const row = Math.floor(idx / cols);
-      const left = padX + col * (cellW + gap);
-      const top = padY + row * (cellH + gap);
+      const left = pad + col * cellW;
+      const top = pad + row * cellH;
       return `${left},${top},${left + cellW},${top + cellH}`;
     }
 

@@ -66,15 +66,13 @@ export async function POST(req: NextRequest) {
     const device = typeof deviceRaw === "string" ? JSON.parse(deviceRaw) : deviceRaw;
     const screen = device.screen;
 
-    // Read saved bounds + gridMode from policy (set by Auto Grid).
+    // Read saved bounds from policy (set by Auto Grid).
     let savedBounds: Record<string, string> = {};
-    let gridMode: "normal" | "extreme" = (body.gridMode === "extreme") ? "extreme" : "normal";
     try {
       const policyRaw = await redis.get<string>(termuxDevicePolicyKey(deviceId, t));
       if (policyRaw) {
         const pol = typeof policyRaw === "string" ? JSON.parse(policyRaw) : policyRaw;
         if (!applyResize && pol.packageBounds && typeof pol.packageBounds === "object") savedBounds = pol.packageBounds;
-        if (!body.gridMode && pol.gridMode === "extreme") gridMode = "extreme";
       }
     } catch {}
 
@@ -168,33 +166,29 @@ export async function POST(req: NextRequest) {
       let useResize = applyResize;
 
       if (applyResize && screen && screen.width && screen.height) {
-        const padX = gridMode === "extreme" ? 2 : 8;
-        const padY = gridMode === "extreme" ? 8 : 8;
-        const gap = gridMode === "extreme" ? 0 : 4;
-        const usableW = screen.width - padX * 2 - gap * (c - 1);
-        const usableH = screen.height - padY * 2 - gap * (r - 1);
+        const pad = 8;
+        const usableW = screen.width - pad * 2;
+        const usableH = screen.height - pad * 2;
         const cellW = Math.floor(usableW / c);
         const cellH = Math.floor(usableH / r);
         const col = i % c;
         const row = Math.floor(i / c);
-        const left = padX + col * (cellW + gap);
-        const top = padY + row * (cellH + gap);
+        const left = pad + col * cellW;
+        const top = pad + row * cellH;
         bounds = `${left},${top},${left + cellW},${top + cellH}`;
       } else if (!applyResize && savedBounds[packageName]) {
         bounds = savedBounds[packageName];
         useResize = true;
       } else if (!applyResize && screen && screen.width && screen.height) {
-        const padX = gridMode === "extreme" ? 2 : 8;
-        const padY = gridMode === "extreme" ? 8 : 8;
-        const gap = gridMode === "extreme" ? 0 : 4;
-        const usableW = screen.width - padX * 2 - gap * (c - 1);
-        const usableH = screen.height - padY * 2 - gap * (r - 1);
+        const pad = 8;
+        const usableW = screen.width - pad * 2;
+        const usableH = screen.height - pad * 2;
         const cellW = Math.floor(usableW / c);
         const cellH = Math.floor(usableH / r);
         const col = i % c;
         const row = Math.floor(i / c);
-        const left = padX + col * (cellW + gap);
-        const top = padY + row * (cellH + gap);
+        const left = pad + col * cellW;
+        const top = pad + row * cellH;
         bounds = `${left},${top},${left + cellW},${top + cellH}`;
         useResize = true;
       }
