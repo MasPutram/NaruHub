@@ -27,8 +27,6 @@ export async function POST(req: NextRequest) {
     } while (cursor !== "0");
 
     let updated = 0;
-    const gap = 16;
-    const topPad = 50;
 
     for (const devKey of deviceKeys) {
       const deviceRaw = await redis.get<string>(devKey);
@@ -61,15 +59,15 @@ export async function POST(req: NextRequest) {
       if (cols && rows && cols > 0 && rows > 0 && packages.length > 0) {
         const sw = screen.width;
         const sh = screen.height;
-        const cellW = Math.floor((sw - gap * (cols + 1)) / cols);
-        const cellH = Math.floor((sh - topPad - gap * rows) / rows);
+        const cellW = Math.floor(sw / cols);
+        const cellH = Math.floor(sh / rows);
         const bounds: Record<string, string> = {};
         for (let i = 0; i < packages.length; i++) {
           const col = i % cols;
           const row = Math.floor(i / cols);
           if (row >= rows) break;
-          const left = gap + col * (cellW + gap);
-          const top = topPad + row * (cellH + gap);
+          const left = col * cellW;
+          const top = row * cellH;
           bounds[packages[i]] = `${left},${top},${left + cellW},${top + cellH}`;
         }
         merged.packageBounds = bounds;

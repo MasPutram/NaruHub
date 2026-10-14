@@ -168,35 +168,23 @@ export async function POST(req: NextRequest) {
       let useResize = applyResize;
 
       if (applyResize && screen && screen.width && screen.height) {
-        const gap = 16;
-        const topPad = 50;
-        const cellW = Math.floor((screen.width - gap * (c + 1)) / c);
-        const cellH = Math.floor((screen.height - topPad - gap * r) / r);
+        const cellW = Math.floor(screen.width / c);
+        const cellH = Math.floor(screen.height / r);
         const col = i % c;
         const row = Math.floor(i / c);
-        const left = gap + col * (cellW + gap);
-        const top = topPad + row * (cellH + gap);
-        const right = left + cellW;
-        const bottom = top + cellH;
-        bounds = `${left},${top},${right},${bottom}`;
+        const left = col * cellW;
+        const top = row * cellH;
+        bounds = `${left},${top},${left + cellW},${top + cellH}`;
       } else if (!applyResize && savedBounds[packageName]) {
         bounds = savedBounds[packageName];
         useResize = true;
       } else if (!applyResize && screen && screen.width && screen.height) {
-        // No saved bounds for this package -> DON'T let it open fullscreen.
-        // A fullscreen Roblox launch collapses the other floating clones,
-        // which the operator sees as the running accounts getting force-
-        // closed. Compute a grid tile from cols/rows so every launch opens
-        // as a freeform window instead (HipHub keeps every clone floating,
-        // which is why opening 10 there never closes the rest).
-        const gap = 16;
-        const topPad = 50;
-        const cellW = Math.floor((screen.width - gap * (c + 1)) / c);
-        const cellH = Math.floor((screen.height - topPad - gap * r) / r);
+        const cellW = Math.floor(screen.width / c);
+        const cellH = Math.floor(screen.height / r);
         const col = i % c;
         const row = Math.floor(i / c);
-        const left = gap + col * (cellW + gap);
-        const top = topPad + row * (cellH + gap);
+        const left = col * cellW;
+        const top = row * cellH;
         bounds = `${left},${top},${left + cellW},${top + cellH}`;
         useResize = true;
       }
