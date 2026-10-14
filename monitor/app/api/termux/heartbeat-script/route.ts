@@ -9,10 +9,11 @@ const HEARTBEAT_SCRIPT = `-- heartbeatnaru.lua (auto-deployed by NaruHub agent)
 local BASE_URL = "https://naruhub.my.id"
 local ACCESS_KEY = "$$LICENSE$$"
 local DEVICE_ID = "$$DEVICEID$$"
-local INTERVAL = 60
+local INTERVAL = 20
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
 
 local httpreq = (syn and syn.request) or (http and http.request) or http_request or request
 if not httpreq then return end
@@ -33,6 +34,21 @@ local function post(path, tbl)
 	end)
 end
 
+local function get(path)
+	local ok, res = pcall(function()
+		return httpreq({
+			Url = BASE_URL .. path,
+			Method = "GET",
+			Headers = { ["X-Access-Key"] = ACCESS_KEY },
+		})
+	end)
+	if ok and res and res.Body then
+		local okDec, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
+		if okDec then return data end
+	end
+	return nil
+end
+
 task.spawn(function()
 	local lp = Players.LocalPlayer
 	while not lp do
@@ -50,8 +66,17 @@ task.spawn(function()
 				jobId = jobId,
 				placeId = placeId,
 			})
+			local cmd = get("/api/termux/teleport-command?account=" .. name .. "&deviceId=" .. DEVICE_ID)
+			if cmd and cmd.teleport then
+				local tp = cmd.teleport
+				if tp.placeId and tp.jobId and tp.jobId ~= jobId then
+					pcall(function()
+						TeleportService:TeleportToPlaceInstance(tonumber(tp.placeId), tp.jobId, lp)
+					end)
+				end
+			end
 		end
-		task.wait(INTERVAL + math.random(-12, 12))
+		task.wait(INTERVAL + math.random(-5, 5))
 	end
 end)
 `;

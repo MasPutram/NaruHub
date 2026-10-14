@@ -177,6 +177,15 @@ export function autoexecDeployedKey(deviceId: string, tenant?: string) {
   return tp(tenant, `autoexec:deployed:${deviceId}`);
 }
 
+// In-game teleport command: the heartbeat script polls this key and, when
+// set, executes TeleportToPlaceInstance to move the clone to a different
+// server without killing the app.  Written by should-hop, rejoin-plan, or
+// the dashboard; consumed (GET+DEL) by the heartbeat script.
+export function teleportCommandKey(deviceId: string, account: string, tenant?: string) {
+  return tp(tenant, `teleport:${deviceId}:${account}`);
+}
+export const TELEPORT_COMMAND_TTL_S = 120;
+
 // ── Anime Dice ──────────────────────────────────────────────────────────
 export function adAccountKey(name: string, tenant?: string) {
   return tp(tenant, `ad:account:${name}`);

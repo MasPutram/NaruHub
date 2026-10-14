@@ -5,16 +5,21 @@
 -- stacking our own accounts onto one server. Reports ONLY presence -- it does
 -- NOT touch the account stats that the main reporter (StealAnEgg) writes.
 --
+-- Also polls for teleport commands: when the server sets a teleport target
+-- (via should-hop or rejoin-plan), the script executes TeleportToPlaceInstance
+-- to move the clone to a different server without killing the app.
+--
 -- The agent serves this file with $$LICENSE$$ replaced by the device access
 -- key before writing it into the autoexec dirs.
 
 local BASE_URL = "https://naruhub.my.id"
 local ACCESS_KEY = "$$LICENSE$$"
 local DEVICE_ID = "$$DEVICEID$$"
-local INTERVAL = 20 -- seconds between presence pings
+local INTERVAL = 20
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
 
 -- Executors expose their HTTP call under different globals -- try them all.
 local httpreq = (syn and syn.request) or (http and http.request) or http_request or request
@@ -36,6 +41,21 @@ local function post(path, tbl)
 	end)
 end
 
+local function get(path)
+	local ok, res = pcall(function()
+		return httpreq({
+			Url = BASE_URL .. path,
+			Method = "GET",
+			Headers = { ["X-Access-Key"] = ACCESS_KEY },
+		})
+	end)
+	if ok and res and res.Body then
+		local okDec, data = pcall(function() return HttpService:JSONDecode(res.Body) end)
+		if okDec then return data end
+	end
+	return nil
+end
+
 task.spawn(function()
 	local lp = Players.LocalPlayer
 	while not lp do
@@ -53,7 +73,16 @@ task.spawn(function()
 				jobId = jobId,
 				placeId = placeId,
 			})
+			local cmd = get("/api/termux/teleport-command?account=" .. name .. "&deviceId=" .. DEVICE_ID)
+			if cmd and cmd.teleport then
+				local tp = cmd.teleport
+				if tp.placeId and tp.jobId and tp.jobId ~= jobId then
+					pcall(function()
+						TeleportService:TeleportToPlaceInstance(tonumber(tp.placeId), tp.jobId, lp)
+					end)
+				end
+			end
 		end
-		task.wait(INTERVAL)
+		task.wait(INTERVAL + math.random(-5, 5))
 	end
 end)
