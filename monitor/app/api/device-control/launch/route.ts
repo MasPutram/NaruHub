@@ -166,29 +166,27 @@ export async function POST(req: NextRequest) {
       let useResize = applyResize;
 
       if (applyResize && screen && screen.width && screen.height) {
-        const pad = 8;
-        const usableW = screen.width - pad * 2;
-        const usableH = screen.height - pad * 2;
-        const cellW = Math.floor(usableW / c);
-        const cellH = Math.floor(usableH / r);
+        const gap = 16;
+        const topPad = 50;
+        const cellW = Math.floor((screen.width - gap * (c + 1)) / c);
+        const cellH = Math.floor((screen.height - topPad - gap * r) / r);
         const col = i % c;
         const row = Math.floor(i / c);
-        const left = pad + col * cellW;
-        const top = pad + row * cellH;
+        const left = gap + col * (cellW + gap);
+        const top = topPad + row * (cellH + gap);
         bounds = `${left},${top},${left + cellW},${top + cellH}`;
       } else if (!applyResize && savedBounds[packageName]) {
         bounds = savedBounds[packageName];
         useResize = true;
       } else if (!applyResize && screen && screen.width && screen.height) {
-        const pad = 8;
-        const usableW = screen.width - pad * 2;
-        const usableH = screen.height - pad * 2;
-        const cellW = Math.floor(usableW / c);
-        const cellH = Math.floor(usableH / r);
+        const gap = 16;
+        const topPad = 50;
+        const cellW = Math.floor((screen.width - gap * (c + 1)) / c);
+        const cellH = Math.floor((screen.height - topPad - gap * r) / r);
         const col = i % c;
         const row = Math.floor(i / c);
-        const left = pad + col * cellW;
-        const top = pad + row * cellH;
+        const left = gap + col * (cellW + gap);
+        const top = topPad + row * (cellH + gap);
         bounds = `${left},${top},${left + cellW},${top + cellH}`;
         useResize = true;
       }

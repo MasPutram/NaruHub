@@ -513,17 +513,16 @@ export default function DeviceDetailPage() {
 
     const sw = device!.screen?.width || 1920;
     const sh = device!.screen?.height || 1080;
-    const pad = 8;
-    const usableW = sw - pad * 2;
-    const usableH = sh - pad * 2;
-    const cellW = Math.floor(usableW / dims.cols);
-    const cellH = Math.floor(usableH / dims.rows);
+    const gap = 16;
+    const topPad = 50;
+    const cellW = Math.floor((sw - gap * (dims.cols + 1)) / dims.cols);
+    const cellH = Math.floor((sh - topPad - gap * dims.rows) / dims.rows);
     const newBounds: Record<string, string> = { ...packageBounds };
     for (let i = 0; i < selectedPkgs.length; i++) {
       const col = i % dims.cols;
       const row = Math.floor(i / dims.cols);
-      const left = pad + col * cellW;
-      const top = pad + row * cellH;
+      const left = gap + col * (cellW + gap);
+      const top = topPad + row * (cellH + gap);
       newBounds[selectedPkgs[i].pkg] = `${left},${top},${left + cellW},${top + cellH}`;
     }
     setPackageBounds(newBounds);
@@ -551,17 +550,16 @@ export default function DeviceDetailPage() {
 
     const sw = device!.screen?.width || 1920;
     const sh = device!.screen?.height || 1080;
-    const pad = 8;
-    const usableW = sw - pad * 2;
-    const usableH = sh - pad * 2;
-    const cellW = Math.floor(usableW / draftLayout.cols);
-    const cellH = Math.floor(usableH / draftLayout.rows);
+    const gap = 16;
+    const topPad = 50;
+    const cellW = Math.floor((sw - gap * (draftLayout.cols + 1)) / draftLayout.cols);
+    const cellH = Math.floor((sh - topPad - gap * draftLayout.rows) / draftLayout.rows);
     const newBounds: Record<string, string> = { ...packageBounds };
     for (let i = 0; i < selectedPkgs.length; i++) {
       const col = i % draftLayout.cols;
       const row = Math.floor(i / draftLayout.cols);
-      const left = pad + col * cellW;
-      const top = pad + row * cellH;
+      const left = gap + col * (cellW + gap);
+      const top = topPad + row * (cellH + gap);
       newBounds[selectedPkgs[i].pkg] = `${left},${top},${left + cellW},${top + cellH}`;
     }
     setPackageBounds(newBounds);
