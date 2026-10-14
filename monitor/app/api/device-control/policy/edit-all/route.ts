@@ -62,8 +62,9 @@ export async function POST(req: NextRequest) {
       if (cols && rows && cols > 0 && rows > 0 && packages.length > 0) {
         const gm = merged.gridMode || existing.gridMode || "normal";
         const pad = gm === "extreme" ? 2 : 8;
-        const usableW = screen.width - pad * 2;
-        const usableH = screen.height - pad * 2;
+        const gap = gm === "extreme" ? 0 : 4;
+        const usableW = screen.width - pad * 2 - gap * (cols - 1);
+        const usableH = screen.height - pad * 2 - gap * (rows - 1);
         const cellW = Math.floor(usableW / cols);
         const cellH = Math.floor(usableH / rows);
         const bounds: Record<string, string> = {};
@@ -71,8 +72,8 @@ export async function POST(req: NextRequest) {
           const col = i % cols;
           const row = Math.floor(i / cols);
           if (row >= rows) break;
-          const left = pad + col * cellW;
-          const top = pad + row * cellH;
+          const left = pad + col * (cellW + gap);
+          const top = pad + row * (cellH + gap);
           bounds[packages[i]] = `${left},${top},${left + cellW},${top + cellH}`;
         }
         merged.packageBounds = bounds;
