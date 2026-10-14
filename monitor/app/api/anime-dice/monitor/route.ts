@@ -10,6 +10,7 @@ import {
   deviceAccountsKey,
   DEVICE_ACCOUNTS_TTL_S,
   adEventKey,
+  adEventKeyByJob,
   AD_EVENT_TTL_S,
   adEventHistoryKey,
   AD_EVENT_HISTORY_MAX,
@@ -122,8 +123,17 @@ export async function POST(req: NextRequest) {
           reportedBy: name,
           reportedAt: Math.floor(Date.now() / 1000),
         };
-        const prevRaw = await redis.get<string>(adEventKey(tenant));
+        // Write per-jobId so multiple servers can each have their own active
+        // event without overwriting each other. Also write the legacy single
+        // key (last-writer-wins) for backward compat with any older consumer.
+        const perJobKey = payload.jobId ? adEventKeyByJob(payload.jobId, tenant) : null;
+        const prevRaw = perJobKey
+          ? await redis.get<string>(perJobKey)
+          : await redis.get<string>(adEventKey(tenant));
         const prev = prevRaw ? (typeof prevRaw === "string" ? JSON.parse(prevRaw) : prevRaw) : null;
+        if (perJobKey) {
+          await redis.set(perJobKey, JSON.stringify(payload), { ex: AD_EVENT_TTL_S });
+        }
         await redis.set(adEventKey(tenant), JSON.stringify(payload), { ex: AD_EVENT_TTL_S });
         // Push to history list only when this is a genuinely new event. Many
         // accounts in the same server all push the same event — gate on the

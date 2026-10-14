@@ -21,7 +21,8 @@ interface ActiveEvent {
 
 interface EventsResponse {
   ok: boolean;
-  event: ActiveEvent | null;
+  event: ActiveEvent | null;        // freshest-reported event (legacy field)
+  events?: ActiveEvent[];           // all currently-active server events
   history?: ActiveEvent[];
 }
 
@@ -117,36 +118,16 @@ export default function AnimeDiceEventPage() {
 
   if (!mounted) return null;
 
-  const event = data?.event || null;
+  const events = data?.events && data.events.length > 0
+    ? data.events
+    : (data?.event ? [data.event] : []);
+  const event = events[0] || null; // single-event contexts (badge LIVE)
   const history = data?.history || [];
+  // Map jobId → event for ServerMap border coloring
+  const eventByJob = new Map<string, ActiveEvent>();
+  events.forEach((ev) => { if (ev.jobId) eventByJob.set(ev.jobId, ev); });
 
-  // Client-side countdown — reduce remaining by seconds elapsed since fetch
-  // Anchor countdown to startedAt (fixed Roblox server time) + duration.
-  // Immune to client/report clock drift — a new heartbeat with slightly
-  // different remaining won't bump the on-screen countdown forward or back.
-  const remaining = event && event.startedAt && event.duration
-    ? Math.max(0, event.duration - (Math.floor(Date.now() / 1000) - event.startedAt))
-    : 0;
-  const progress = event && event.duration
-    ? Math.min(100, Math.max(0, ((event.duration - remaining) / event.duration) * 100))
-    : 0;
-
-  const st = event ? styleFor(event.name) : null;
-
-  // Join links — same place, server-specific when we have jobId
-  const privateServerUrl = event?.jobId
-    ? `https://www.roblox.com/games/start?placeId=${AD_PLACE_ID}&gameInstanceId=${event.jobId}`
-    : null;
-  const publicJoinUrl = `https://www.roblox.com/games/${AD_PLACE_ID}`;
-  const robloxDeepLink = event?.jobId
-    ? `roblox://experiences/start?placeId=${AD_PLACE_ID}&gameInstanceId=${event.jobId}`
-    : `roblox://experiences/start?placeId=${AD_PLACE_ID}`;
-  const browserJoinJs = event?.jobId
-    ? `Roblox.GameLauncher.joinGameInstance(${AD_PLACE_ID}, "${event.jobId}")`
-    : `Roblox.GameLauncher.joinMultiplayerGame(${AD_PLACE_ID})`;
-  const execTeleport = event?.jobId
-    ? `game:GetService("TeleportService"):TeleportToPlaceInstance(${AD_PLACE_ID}, "${event.jobId}")`
-    : `game:GetService("TeleportService"):Teleport(${AD_PLACE_ID})`;
+  // (Per-event countdown + join URLs now computed inside <EventCard>)
 
   return (
     <>
@@ -177,12 +158,14 @@ export default function AnimeDiceEventPage() {
             onClick={() => setTab("event")}
           >
             Event Map
-            {event ? <span className="tab-badge live">LIVE</span> : <span className="tab-badge">{(data?.history || []).length}</span>}
+            {events.length > 0
+              ? <span className="tab-badge live">LIVE{events.length > 1 ? ` ×${events.length}` : ""}</span>
+              : <span className="tab-badge">{(data?.history || []).length}</span>}
           </button>
         </div>
 
         {tab === "event" ? (<>
-        {!event ? (
+        {events.length === 0 ? (
           <div className="idle">
             <div className="idle-emoji">&#x1F4A4;</div>
             <div className="idle-title">Belum ada event aktif</div>
@@ -191,81 +174,8 @@ export default function AnimeDiceEventPage() {
             </div>
           </div>
         ) : (
-          <div className="event-card" style={{ borderColor: st!.color, ["--accent" as any]: st!.color }}>
-            <div className="ev-head">
-              <div className="ev-emoji" style={{ background: st!.color + "22" }}>{st!.emoji}</div>
-              <div className="ev-info">
-                <div className="ev-name" style={{ color: st!.color }}>{event.name}</div>
-                <div className="ev-blurb">{st!.blurb}</div>
-              </div>
-              <div className="ev-timer">
-                <div className="ev-timer-lbl">SISA</div>
-                <div className="ev-timer-val" style={{ color: st!.color }}>{fmtDuration(remaining)}</div>
-              </div>
-            </div>
-
-            <div className="ev-progress">
-              <div className="ev-progress-bar" style={{ width: progress + "%", background: st!.color }} />
-            </div>
-
-            {event.buffs && Object.keys(event.buffs).length > 0 && (
-              <div className="ev-buffs">
-                {Object.entries(event.buffs).map(([k, v]) => (
-                  <div key={k} className="ev-buff">
-                    <span className="buff-k">{k}</span>
-                    <span className="buff-v" style={{ color: st!.color }}>×{v.amount}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="ev-meta">
-              {event.reportedBy && <span>Reported by <b>{event.reportedBy}</b></span>}
-              {event.jobId && <span>Server: <code>{event.jobId.slice(0, 8)}…</code></span>}
-              <span>Started {fmtAgo(event.startedAt || event.reportedAt || 0)}</span>
-            </div>
-
-            {event.jobId && (
-              <div className="ev-joins">
-                <div className="joins-title">JOIN SERVER INI</div>
-                <div className="joins-grid">
-                  {privateServerUrl && (
-                    <a className="join-btn web" href={privateServerUrl} target="_blank" rel="noopener">
-                      <span className="jb-ico">&#x1F310;</span>
-                      <div>
-                        <div className="jb-lbl">PC / Web Browser</div>
-                        <div className="jb-sub">buka Roblox app via browser</div>
-                      </div>
-                    </a>
-                  )}
-                  <a className="join-btn mobile" href={robloxDeepLink}>
-                    <span className="jb-ico">&#x1F4F1;</span>
-                    <div>
-                      <div className="jb-lbl">Mobile App (deep link)</div>
-                      <div className="jb-sub">tap buka Roblox app</div>
-                    </div>
-                  </a>
-                  <button className="join-btn copy" onClick={() => { navigator.clipboard?.writeText(execTeleport); }} title="Copy teleport script">
-                    <span className="jb-ico">&#x1F3AE;</span>
-                    <div>
-                      <div className="jb-lbl">Executor Teleport (copy)</div>
-                      <div className="jb-sub">paste di executor di game lain</div>
-                    </div>
-                  </button>
-                  <button className="join-btn copy" onClick={() => { navigator.clipboard?.writeText(browserJoinJs); }} title="Copy browser console join">
-                    <span className="jb-ico">&#x1F310;</span>
-                    <div>
-                      <div className="jb-lbl">Browser Console (copy)</div>
-                      <div className="jb-sub">paste di DevTools roblox.com</div>
-                    </div>
-                  </button>
-                </div>
-                <div className="joins-hint">
-                  PlaceId: <code>{AD_PLACE_ID}</code>
-                  {event.jobId && <> &middot; JobId: <code>{event.jobId}</code></>}
-                </div>
-              </div>
-            )}
+          <div className={events.length > 1 ? "event-grid" : "event-single"}>
+            {events.map((ev) => <EventCard key={ev.jobId || ev.name} event={ev} />)}
           </div>
         )}
 
@@ -291,14 +201,123 @@ export default function AnimeDiceEventPage() {
           )}
         </div>
         </>) : (
-          <ServerMap accounts={accounts} devices={devices} activeJobId={event?.jobId || null} />
+          <ServerMap accounts={accounts} devices={devices} eventByJob={eventByJob} />
         )}
       </div>
     </>
   );
 }
 
-function ServerMap({ accounts, devices, activeJobId }: { accounts: ADAccount[]; devices: TermuxDevice[]; activeJobId: string | null }) {
+// Single active-event card. Rendered one per live event in the Event Map tab.
+function EventCard({ event }: { event: ActiveEvent }) {
+  // Local 1s re-render for the countdown; shared poll already freshens data.
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => bump((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const st = styleFor(event.name);
+  const remaining = event.startedAt && event.duration
+    ? Math.max(0, event.duration - (Math.floor(Date.now() / 1000) - event.startedAt))
+    : 0;
+  const progress = event.duration
+    ? Math.min(100, Math.max(0, ((event.duration - remaining) / event.duration) * 100))
+    : 0;
+
+  const privateServerUrl = event.jobId
+    ? `https://www.roblox.com/games/start?placeId=${AD_PLACE_ID}&gameInstanceId=${event.jobId}`
+    : null;
+  const robloxDeepLink = event.jobId
+    ? `roblox://experiences/start?placeId=${AD_PLACE_ID}&gameInstanceId=${event.jobId}`
+    : `roblox://experiences/start?placeId=${AD_PLACE_ID}`;
+  const browserJoinJs = event.jobId
+    ? `Roblox.GameLauncher.joinGameInstance(${AD_PLACE_ID}, "${event.jobId}")`
+    : `Roblox.GameLauncher.joinMultiplayerGame(${AD_PLACE_ID})`;
+  const execTeleport = event.jobId
+    ? `game:GetService("TeleportService"):TeleportToPlaceInstance(${AD_PLACE_ID}, "${event.jobId}", game.Players.LocalPlayer)`
+    : `game:GetService("TeleportService"):Teleport(${AD_PLACE_ID})`;
+
+  return (
+    <div className="event-card" style={{ borderColor: st.color, ["--accent" as any]: st.color }}>
+      <div className="ev-head">
+        <div className="ev-emoji" style={{ background: st.color + "22" }}>{st.emoji}</div>
+        <div className="ev-info">
+          <div className="ev-name" style={{ color: st.color }}>{event.name}</div>
+          <div className="ev-blurb">{st.blurb}</div>
+        </div>
+        <div className="ev-timer">
+          <div className="ev-timer-lbl">SISA</div>
+          <div className="ev-timer-val" style={{ color: st.color }}>{fmtDuration(remaining)}</div>
+        </div>
+      </div>
+
+      <div className="ev-progress">
+        <div className="ev-progress-bar" style={{ width: progress + "%", background: st.color }} />
+      </div>
+
+      {event.buffs && Object.keys(event.buffs).length > 0 && (
+        <div className="ev-buffs">
+          {Object.entries(event.buffs).map(([k, v]) => (
+            <div key={k} className="ev-buff">
+              <span className="buff-k">{k}</span>
+              <span className="buff-v" style={{ color: st.color }}>×{v.amount}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="ev-meta">
+        {event.reportedBy && <span>Reported by <b>{event.reportedBy}</b></span>}
+        {event.jobId && <span>Server: <code>{event.jobId.slice(0, 8)}…</code></span>}
+        <span>Started {fmtAgo(event.startedAt || event.reportedAt || 0)}</span>
+      </div>
+
+      {event.jobId && (
+        <div className="ev-joins">
+          <div className="joins-title">JOIN SERVER INI</div>
+          <div className="joins-grid">
+            {privateServerUrl && (
+              <a className="join-btn web" href={privateServerUrl} target="_blank" rel="noopener">
+                <span className="jb-ico">&#x1F310;</span>
+                <div>
+                  <div className="jb-lbl">PC / Web Browser</div>
+                  <div className="jb-sub">buka Roblox app via browser</div>
+                </div>
+              </a>
+            )}
+            <a className="join-btn mobile" href={robloxDeepLink}>
+              <span className="jb-ico">&#x1F4F1;</span>
+              <div>
+                <div className="jb-lbl">Mobile App (deep link)</div>
+                <div className="jb-sub">tap buka Roblox app</div>
+              </div>
+            </a>
+            <button className="join-btn copy" onClick={() => { navigator.clipboard?.writeText(execTeleport); }} title="Copy teleport script">
+              <span className="jb-ico">&#x1F3AE;</span>
+              <div>
+                <div className="jb-lbl">Executor Teleport (copy)</div>
+                <div className="jb-sub">paste di executor di game lain</div>
+              </div>
+            </button>
+            <button className="join-btn copy" onClick={() => { navigator.clipboard?.writeText(browserJoinJs); }} title="Copy browser console join">
+              <span className="jb-ico">&#x1F310;</span>
+              <div>
+                <div className="jb-lbl">Browser Console (copy)</div>
+                <div className="jb-sub">paste di DevTools roblox.com</div>
+              </div>
+            </button>
+          </div>
+          <div className="joins-hint">
+            PlaceId: <code>{AD_PLACE_ID}</code>
+            {event.jobId && <> &middot; JobId: <code>{event.jobId}</code></>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ServerMap({ accounts, devices, eventByJob }: { accounts: ADAccount[]; devices: TermuxDevice[]; eventByJob: Map<string, ActiveEvent> }) {
   // Build username → device-name map
   const deviceByUser = new Map<string, string>();
   devices.forEach((d) => {
@@ -321,8 +340,10 @@ function ServerMap({ accounts, devices, activeJobId }: { accounts: ADAccount[]; 
 
   // Sort: active-event server first, then by headcount desc
   const entries = Array.from(groups.entries()).sort((a, b) => {
-    if (a[0] === activeJobId) return -1;
-    if (b[0] === activeJobId) return 1;
+    const aEvt = eventByJob.has(a[0]);
+    const bEvt = eventByJob.has(b[0]);
+    if (aEvt && !bEvt) return -1;
+    if (bEvt && !aEvt) return 1;
     return b[1].length - a[1].length;
   });
 
@@ -404,11 +425,18 @@ function ServerMap({ accounts, devices, activeJobId }: { accounts: ADAccount[]; 
       ) : (
         <div className="smap-list">
           {entries.map(([jobId, accs], idx) => {
-            const isActive = jobId === activeJobId;
+            const srvEvent = eventByJob.get(jobId) || null;
+            const isActive = !!srvEvent;
+            const eventStyle = srvEvent ? styleFor(srvEvent.name) : null;
             const visitedInServer = accs.filter((a) => visited.has(a.sourceAccount)).length;
             const allVisited = visitedInServer > 0 && visitedInServer === accs.length;
+            const borderColor = eventStyle ? eventStyle.color : undefined;
             return (
-              <div key={jobId} className={`smap-server ${isActive ? "active" : ""} ${allVisited ? "visited" : ""}`}>
+              <div
+                key={jobId}
+                className={`smap-server ${isActive ? "active" : ""} ${allVisited ? "visited" : ""}`}
+                style={isActive ? { borderColor, boxShadow: `0 0 16px ${borderColor}30`, background: `linear-gradient(135deg, ${borderColor}0a, #14141f)` } : undefined}
+              >
                 <div className="ss-head">
                   <div className="ss-title">
                     <span className="ss-idx">Server #{idx + 1}</span>
@@ -432,7 +460,11 @@ function ServerMap({ accounts, devices, activeJobId }: { accounts: ADAccount[]; 
                         </span>
                       );
                     })()}
-                    {isActive && <span className="ss-badge">EVENT HERE</span>}
+                    {isActive && srvEvent && eventStyle && (
+                      <span className="ss-badge" style={{ background: eventStyle.color, color: "#0b0b14" }}>
+                        {eventStyle.emoji} {srvEvent.name.replace(" Event", "").toUpperCase()}
+                      </span>
+                    )}
                   </div>
                   <button
                     className="ss-copy"
@@ -526,6 +558,14 @@ const styles = `
 .idle-sub code { background: #1c1c2b; padding: 2px 6px; border-radius: 4px; font-family: var(--font-numbers), monospace; color: #a78bfa; }
 
 /* Event card */
+.event-single { }
+.event-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.event-grid .event-card { margin-bottom: 0; }
 .event-card {
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, #15152a), #15152a);
   border: 2px solid;

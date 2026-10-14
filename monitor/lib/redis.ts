@@ -220,6 +220,15 @@ export const AD_CATALOG_TTL_S = 60 * 60 * 24; // 24 hours
 export function adEventKey(tenant?: string) {
   return tp(tenant, "ad:event:active");
 }
+// Per-server active event (keyed by jobId). Lets multiple servers each have
+// their own active event instead of one global slot that keeps overwriting
+// itself as different servers' heartbeats land.
+export function adEventKeyByJob(jobId: string, tenant?: string) {
+  return tp(tenant, `ad:event:active:${jobId}`);
+}
+export function adEventKeyPattern(tenant?: string) {
+  return tp(tenant, "ad:event:active:*");
+}
 export const AD_EVENT_TTL_S = 360; // 6 min (slightly longer than 5min event)
 
 export function adEventHistoryKey(tenant?: string): string {
