@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
       let useResize = applyResize;
 
       if (applyResize && screen && screen.width && screen.height) {
-        const pad = gridMode === "extreme" ? 0 : 8;
+        const pad = gridMode === "extreme" ? 2 : 8;
         const usableW = screen.width - pad * 2;
         const usableH = screen.height - pad * 2;
         const cellW = Math.floor(usableW / c);
@@ -182,7 +182,7 @@ export async function POST(req: NextRequest) {
         bounds = savedBounds[packageName];
         useResize = true;
       } else if (!applyResize && screen && screen.width && screen.height) {
-        const pad = gridMode === "extreme" ? 0 : 8;
+        const pad = gridMode === "extreme" ? 2 : 8;
         const usableW = screen.width - pad * 2;
         const usableH = screen.height - pad * 2;
         const cellW = Math.floor(usableW / c);

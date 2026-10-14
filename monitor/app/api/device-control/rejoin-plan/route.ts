@@ -226,7 +226,7 @@ export async function GET(req: NextRequest) {
     const rows = Math.ceil(totalClones / cols);
     const computeFallbackBounds = (idx: number): string => {
       if (!screen || !screen.width || !screen.height) return "";
-      const pad = gridMode === "extreme" ? 0 : 8;
+      const pad = gridMode === "extreme" ? 2 : 8;
       const usableW = screen.width - pad * 2;
       const usableH = screen.height - pad * 2;
       const cellW = Math.floor(usableW / cols);

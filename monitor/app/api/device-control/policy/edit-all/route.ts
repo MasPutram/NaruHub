@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
 
       if (cols && rows && cols > 0 && rows > 0 && packages.length > 0) {
         const gm = merged.gridMode || existing.gridMode || "normal";
-        const pad = gm === "extreme" ? 0 : 8;
+        const pad = gm === "extreme" ? 2 : 8;
         const usableW = screen.width - pad * 2;
         const usableH = screen.height - pad * 2;
         const cellW = Math.floor(usableW / cols);

@@ -514,7 +514,7 @@ export default function DeviceDetailPage() {
 
     const sw = device!.screen?.width || 1920;
     const sh = device!.screen?.height || 1080;
-    const pad = gridMode === "extreme" ? 0 : 8;
+    const pad = gridMode === "extreme" ? 2 : 8;
     const usableW = sw - pad * 2;
     const usableH = sh - pad * 2;
     const cellW = Math.floor(usableW / dims.cols);
@@ -552,7 +552,7 @@ export default function DeviceDetailPage() {
 
     const sw = device!.screen?.width || 1920;
     const sh = device!.screen?.height || 1080;
-    const pad = gridMode === "extreme" ? 0 : 8;
+    const pad = gridMode === "extreme" ? 2 : 8;
     const usableW = sw - pad * 2;
     const usableH = sh - pad * 2;
     const cellW = Math.floor(usableW / draftLayout.cols);
@@ -1450,7 +1450,7 @@ export default function DeviceDetailPage() {
             <div style={{ color: "var(--dim)", fontSize: 11, marginTop: 4 }}>
               {gridMode === "normal"
                 ? "Normal: 8px padding di pinggiran layar"
-                : "Extreme: 0 padding — full screen tanpa jarak"}
+                : "Extreme: 2px padding — hampir full screen"}
             </div>
             <div className="modalfoot">
               <button className="btn" onClick={() => setGridModalOpen(false)}>Close</button>
