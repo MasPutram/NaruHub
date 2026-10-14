@@ -513,16 +513,17 @@ export default function DeviceDetailPage() {
 
     const sw = device!.screen?.width || 1920;
     const sh = device!.screen?.height || 1080;
-    const gap = 16;
+    const gapX = 16;
+    const gapY = 50;
     const topPad = 50;
-    const cellW = Math.floor((sw - gap * (dims.cols + 1)) / dims.cols);
-    const cellH = Math.floor((sh - topPad - gap * dims.rows) / dims.rows);
+    const cellW = Math.floor((sw - gapX * (dims.cols + 1)) / dims.cols);
+    const cellH = Math.floor((sh - topPad - gapY * (dims.rows - 1)) / dims.rows);
     const newBounds: Record<string, string> = { ...packageBounds };
     for (let i = 0; i < selectedPkgs.length; i++) {
       const col = i % dims.cols;
       const row = Math.floor(i / dims.cols);
-      const left = gap + col * (cellW + gap);
-      const top = topPad + row * (cellH + gap);
+      const left = gapX + col * (cellW + gapX);
+      const top = topPad + row * (cellH + gapY);
       newBounds[selectedPkgs[i].pkg] = `${left},${top},${left + cellW},${top + cellH}`;
     }
     setPackageBounds(newBounds);
@@ -550,16 +551,17 @@ export default function DeviceDetailPage() {
 
     const sw = device!.screen?.width || 1920;
     const sh = device!.screen?.height || 1080;
-    const gap = 16;
+    const gapX = 16;
+    const gapY = 50;
     const topPad = 50;
-    const cellW = Math.floor((sw - gap * (draftLayout.cols + 1)) / draftLayout.cols);
-    const cellH = Math.floor((sh - topPad - gap * draftLayout.rows) / draftLayout.rows);
+    const cellW = Math.floor((sw - gapX * (draftLayout.cols + 1)) / draftLayout.cols);
+    const cellH = Math.floor((sh - topPad - gapY * (draftLayout.rows - 1)) / draftLayout.rows);
     const newBounds: Record<string, string> = { ...packageBounds };
     for (let i = 0; i < selectedPkgs.length; i++) {
       const col = i % draftLayout.cols;
       const row = Math.floor(i / draftLayout.cols);
-      const left = gap + col * (cellW + gap);
-      const top = topPad + row * (cellH + gap);
+      const left = gapX + col * (cellW + gapX);
+      const top = topPad + row * (cellH + gapY);
       newBounds[selectedPkgs[i].pkg] = `${left},${top},${left + cellW},${top + cellH}`;
     }
     setPackageBounds(newBounds);

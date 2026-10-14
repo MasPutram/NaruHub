@@ -57,17 +57,18 @@ export async function POST(req: NextRequest) {
       }
 
       if (cols && rows && cols > 0 && rows > 0 && packages.length > 0) {
-        const gap = 16;
+        const gapX = 16;
+        const gapY = 50;
         const topPad = 50;
-        const cellW = Math.floor((screen.width - gap * (cols + 1)) / cols);
-        const cellH = Math.floor((screen.height - topPad - gap * rows) / rows);
+        const cellW = Math.floor((screen.width - gapX * (cols + 1)) / cols);
+        const cellH = Math.floor((screen.height - topPad - gapY * (rows - 1)) / rows);
         const bounds: Record<string, string> = {};
         for (let i = 0; i < packages.length; i++) {
           const col = i % cols;
           const row = Math.floor(i / cols);
           if (row >= rows) break;
-          const left = gap + col * (cellW + gap);
-          const top = topPad + row * (cellH + gap);
+          const left = gapX + col * (cellW + gapX);
+          const top = topPad + row * (cellH + gapY);
           bounds[packages[i]] = `${left},${top},${left + cellW},${top + cellH}`;
         }
         merged.packageBounds = bounds;
