@@ -178,6 +178,11 @@ export default function DeviceDetailPage() {
   const [uninstOpen, setUninstOpen] = useState(false);
   const [uninstPicked, setUninstPicked] = useState<Record<string, boolean>>({});
 
+  // Teleport Command state.
+  const [tpInput, setTpInput] = useState("");
+  const [tpSelected, setTpSelected] = useState<Record<string, boolean>>({});
+  const [tpSending, setTpSending] = useState(false);
+
   // Auto-Execute Manager state.
   interface LibScript { slug: string; filename: string; content: string; updatedAt: number; }
   const [aeOpen, setAeOpen] = useState(false);
@@ -643,6 +648,42 @@ export default function DeviceDetailPage() {
     const deep = `roblox://placeId=${sfPlaceId}&gameInstanceId=${jobId}`;
     setLinkDraft(deep);
     setSfOpen(false);
+  }
+
+  function parseTeleportInput(input: string): { placeId: string; jobId: string } | null {
+    const s = (input || "").trim();
+    if (!s) return null;
+    // TeleportToPlaceInstance(placeId, "jobId", ...)
+    const tpMatch = s.match(/TeleportToPlaceInstance\s*\(\s*(\d+)\s*,\s*["']([^"']+)["']/i);
+    if (tpMatch) return { placeId: tpMatch[1], jobId: tpMatch[2] };
+    // roblox://placeId=123&gameInstanceId=abc or URL with same params
+    const pidMatch = s.match(/placeId=(\d+)/i);
+    const gidMatch = s.match(/gameInstanceId=([a-f0-9-]+)/i);
+    if (pidMatch && gidMatch) return { placeId: pidMatch[1], jobId: gidMatch[2] };
+    return null;
+  }
+
+  async function sendTeleportCommands() {
+    const parsed = parseTeleportInput(tpInput);
+    if (!parsed) { setToast("Format tidak valid. Paste TeleportToPlaceInstance(...) atau URL dengan placeId + gameInstanceId"); return; }
+    const inGameAccounts = presence.filter((r) => r.inGame && tpSelected[r.account]);
+    if (inGameAccounts.length === 0) { setToast("Pilih dulu akun yang IN GAME"); return; }
+    setTpSending(true);
+    let ok = 0;
+    for (const r of inGameAccounts) {
+      try {
+        const res = await fetch("/api/termux/teleport-command", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deviceId, account: r.account, placeId: parsed.placeId, jobId: parsed.jobId }),
+        });
+        const data = await res.json();
+        if (data.ok) ok++;
+      } catch {}
+    }
+    setTpSending(false);
+    setToast(`Teleport command dikirim ke ${ok}/${inGameAccounts.length} akun. Menunggu heartbeat pickup (~20s).`);
+    setTpSelected({});
   }
 
   async function confirmLink() {
@@ -1245,6 +1286,61 @@ export default function DeviceDetailPage() {
                 ))}
               </tbody>
             </table>
+          )}
+
+          {/* Teleport Command UI */}
+          {presence.filter((r) => r.inGame).length > 0 && (
+            <div style={{ marginTop: 16, padding: "14px 16px", background: "#0e0e16", borderRadius: 10, border: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: "var(--cyan)" }}>Teleport to Server</div>
+              <input
+                type="text"
+                value={tpInput}
+                onChange={(e) => setTpInput(e.target.value)}
+                placeholder='Paste TeleportToPlaceInstance(...) atau URL dengan placeId & gameInstanceId'
+                style={{ width: "100%", background: "#181823", color: "var(--ink)", border: "1px solid var(--border)", borderRadius: 7, padding: "8px 10px", fontSize: 12, marginBottom: 10, boxSizing: "border-box" }}
+              />
+              {parseTeleportInput(tpInput) && (
+                <div style={{ fontSize: 10, color: "var(--green)", marginBottom: 8 }}>
+                  Place: {parseTeleportInput(tpInput)!.placeId} &middot; JobId: {parseTeleportInput(tpInput)!.jobId.slice(0, 12)}...
+                </div>
+              )}
+              {tpInput && !parseTeleportInput(tpInput) && (
+                <div style={{ fontSize: 10, color: "var(--red)", marginBottom: 8 }}>
+                  Format tidak dikenali. Contoh: TeleportToPlaceInstance(123, &quot;abc-def&quot;, ...) atau URL placeId=...&amp;gameInstanceId=...
+                </div>
+              )}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                {presence.filter((r) => r.inGame).map((r) => (
+                  <label key={r.account} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 8px", background: tpSelected[r.account] ? "rgba(167,139,250,.15)" : "#181823", border: `1px solid ${tpSelected[r.account] ? "var(--accent)" : "var(--border)"}`, borderRadius: 6, cursor: "pointer", fontSize: 11 }}>
+                    <input type="checkbox" checked={!!tpSelected[r.account]} onChange={(e) => setTpSelected((prev) => ({ ...prev, [r.account]: e.target.checked }))} style={{ width: 13, height: 13, accentColor: "var(--accent)" }} />
+                    {r.account}
+                  </label>
+                ))}
+                {presence.filter((r) => r.inGame).length > 1 && (
+                  <button
+                    className="btn"
+                    style={{ padding: "4px 8px", fontSize: 10 }}
+                    onClick={() => {
+                      const inGame = presence.filter((r) => r.inGame);
+                      const allSelected = inGame.every((r) => tpSelected[r.account]);
+                      const next: Record<string, boolean> = {};
+                      if (!allSelected) for (const r of inGame) next[r.account] = true;
+                      setTpSelected(next);
+                    }}
+                  >
+                    {presence.filter((r) => r.inGame).every((r) => tpSelected[r.account]) ? "Deselect All" : "Select All"}
+                  </button>
+                )}
+              </div>
+              <button
+                className="btn primary"
+                disabled={tpSending || !parseTeleportInput(tpInput) || !presence.some((r) => r.inGame && tpSelected[r.account])}
+                onClick={sendTeleportCommands}
+                style={{ fontSize: 12 }}
+              >
+                {tpSending ? "Sending..." : `Teleport ${Object.values(tpSelected).filter(Boolean).length} Akun`}
+              </button>
+            </div>
           )}
         </section>
       </div>
