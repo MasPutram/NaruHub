@@ -66,17 +66,17 @@ export async function POST(req: NextRequest) {
     const device = typeof deviceRaw === "string" ? JSON.parse(deviceRaw) : deviceRaw;
     const screen = device.screen;
 
-    // Read saved bounds from policy (set by Auto Grid).
+    // Read saved bounds + gridMode from policy (set by Auto Grid).
     let savedBounds: Record<string, string> = {};
-    if (!applyResize) {
-      try {
-        const policyRaw = await redis.get<string>(termuxDevicePolicyKey(deviceId, t));
-        if (policyRaw) {
-          const pol = typeof policyRaw === "string" ? JSON.parse(policyRaw) : policyRaw;
-          if (pol.packageBounds && typeof pol.packageBounds === "object") savedBounds = pol.packageBounds;
-        }
-      } catch {}
-    }
+    let gridMode: "normal" | "extreme" = (body.gridMode === "extreme") ? "extreme" : "normal";
+    try {
+      const policyRaw = await redis.get<string>(termuxDevicePolicyKey(deviceId, t));
+      if (policyRaw) {
+        const pol = typeof policyRaw === "string" ? JSON.parse(policyRaw) : policyRaw;
+        if (!applyResize && pol.packageBounds && typeof pol.packageBounds === "object") savedBounds = pol.packageBounds;
+        if (!body.gridMode && pol.gridMode === "extreme") gridMode = "extreme";
+      }
+    } catch {}
 
     // Spread: assign each launching clone a DIFFERENT Roblox server so they
     // don't all pile into one (they'd steal from each other -> less income).
@@ -168,7 +168,7 @@ export async function POST(req: NextRequest) {
       let useResize = applyResize;
 
       if (applyResize && screen && screen.width && screen.height) {
-        const pad = 8;
+        const pad = gridMode === "extreme" ? 0 : 8;
         const usableW = screen.width - pad * 2;
         const usableH = screen.height - pad * 2;
         const cellW = Math.floor(usableW / c);
@@ -182,7 +182,7 @@ export async function POST(req: NextRequest) {
         bounds = savedBounds[packageName];
         useResize = true;
       } else if (!applyResize && screen && screen.width && screen.height) {
-        const pad = 8;
+        const pad = gridMode === "extreme" ? 0 : 8;
         const usableW = screen.width - pad * 2;
         const usableH = screen.height - pad * 2;
         const cellW = Math.floor(usableW / c);

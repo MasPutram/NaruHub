@@ -164,6 +164,7 @@ export async function GET(req: NextRequest) {
     }
     const targets: Record<string, string> = policy.packageTargets || {};
     const bounds: Record<string, string> = policy.packageBounds || {};
+    const gridMode: "normal" | "extreme" = policy.gridMode === "extreme" ? "extreme" : "normal";
     const optIn: string[] = Array.isArray(policy.autoRejoinPackages) ? policy.autoRejoinPackages : [];
     // If autoRejoinPackages was explicitly set (field exists on policy),
     // an empty array means NO packages opted in, not all.
@@ -225,7 +226,7 @@ export async function GET(req: NextRequest) {
     const rows = Math.ceil(totalClones / cols);
     const computeFallbackBounds = (idx: number): string => {
       if (!screen || !screen.width || !screen.height) return "";
-      const pad = 8;
+      const pad = gridMode === "extreme" ? 0 : 8;
       const usableW = screen.width - pad * 2;
       const usableH = screen.height - pad * 2;
       const cellW = Math.floor(usableW / cols);

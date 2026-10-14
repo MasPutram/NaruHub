@@ -155,6 +155,7 @@ export default function DeviceDetailPage() {
   const [autoRejoinPkgs, setAutoRejoinPkgs] = useState<Record<string, boolean>>({});
   const [packageTargets, setPackageTargets] = useState<Record<string, string>>({});
   const [packageBounds, setPackageBounds] = useState<Record<string, string>>({});
+  const [gridMode, setGridMode] = useState<"normal" | "extreme">("normal");
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [policyLoaded, setPolicyLoaded] = useState(false);
 
@@ -367,6 +368,7 @@ export default function DeviceDetailPage() {
           setAutoRejoinPkgs(map);
           setPackageTargets(data.policy.packageTargets || {});
           setPackageBounds(data.policy.packageBounds || {});
+          setGridMode(data.policy.gridMode === "extreme" ? "extreme" : "normal");
         }
       } catch {}
       setPolicyLoaded(true);
@@ -394,6 +396,7 @@ export default function DeviceDetailPage() {
           launchDelay,
           packageTargets,
           packageBounds,
+          gridMode,
         }),
       });
       const data = await res.json();
@@ -511,7 +514,7 @@ export default function DeviceDetailPage() {
 
     const sw = device!.screen?.width || 1920;
     const sh = device!.screen?.height || 1080;
-    const pad = 8;
+    const pad = gridMode === "extreme" ? 0 : 8;
     const usableW = sw - pad * 2;
     const usableH = sh - pad * 2;
     const cellW = Math.floor(usableW / dims.cols);
@@ -532,7 +535,7 @@ export default function DeviceDetailPage() {
       await fetch("/api/device-control/policy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId, autoRejoinEnabled, rejoinDelay, retryLimit, autoRejoinPackages, launchDelay, packageTargets, packageBounds: newBounds }),
+        body: JSON.stringify({ deviceId, autoRejoinEnabled, rejoinDelay, retryLimit, autoRejoinPackages, launchDelay, packageTargets, packageBounds: newBounds, gridMode }),
       });
     } catch {}
     setSavingPolicy(false);
@@ -549,7 +552,7 @@ export default function DeviceDetailPage() {
 
     const sw = device!.screen?.width || 1920;
     const sh = device!.screen?.height || 1080;
-    const pad = 8;
+    const pad = gridMode === "extreme" ? 0 : 8;
     const usableW = sw - pad * 2;
     const usableH = sh - pad * 2;
     const cellW = Math.floor(usableW / draftLayout.cols);
@@ -570,11 +573,11 @@ export default function DeviceDetailPage() {
       await fetch("/api/device-control/policy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId, autoRejoinEnabled, rejoinDelay, retryLimit, autoRejoinPackages, launchDelay, packageTargets, packageBounds: newBounds }),
+        body: JSON.stringify({ deviceId, autoRejoinEnabled, rejoinDelay, retryLimit, autoRejoinPackages, launchDelay, packageTargets, packageBounds: newBounds, gridMode }),
       });
     } catch {}
     setSavingPolicy(false);
-    setToast(`Grid ${draftLayout.cols}x${draftLayout.rows} saved — use Launch selected to apply`);
+    setToast(`Grid ${draftLayout.cols}x${draftLayout.rows} (${gridMode}) saved — use Launch selected to apply`);
   }
 
   async function uninstallPackages(list: TermuxPackage[]) {
@@ -725,6 +728,7 @@ export default function DeviceDetailPage() {
           launchDelay,
           packageTargets: next,
           packageBounds,
+          gridMode,
         }),
       });
       const data = await res.json();
@@ -1416,6 +1420,37 @@ export default function DeviceDetailPage() {
               <span style={{ color: "var(--dim)", fontSize: 11 }}>
                 Launch delay: <b style={{ color: "var(--ink)" }}>{launchDelay}s</b> (set in Quick Controls)
               </span>
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <button
+                className="btn"
+                style={{
+                  flex: 1,
+                  background: gridMode === "normal" ? "#3b82f633" : undefined,
+                  borderColor: gridMode === "normal" ? "#3b82f6" : undefined,
+                  color: gridMode === "normal" ? "#60a5fa" : undefined,
+                }}
+                onClick={() => setGridMode("normal")}
+              >
+                Normal
+              </button>
+              <button
+                className="btn"
+                style={{
+                  flex: 1,
+                  background: gridMode === "extreme" ? "#ef444433" : undefined,
+                  borderColor: gridMode === "extreme" ? "#ef4444" : undefined,
+                  color: gridMode === "extreme" ? "#f87171" : undefined,
+                }}
+                onClick={() => setGridMode("extreme")}
+              >
+                Extreme
+              </button>
+            </div>
+            <div style={{ color: "var(--dim)", fontSize: 11, marginTop: 4 }}>
+              {gridMode === "normal"
+                ? "Normal: 8px padding di pinggiran layar"
+                : "Extreme: 0 padding — full screen tanpa jarak"}
             </div>
             <div className="modalfoot">
               <button className="btn" onClick={() => setGridModalOpen(false)}>Close</button>

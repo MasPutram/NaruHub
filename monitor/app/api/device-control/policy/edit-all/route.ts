@@ -10,12 +10,13 @@ export async function POST(req: NextRequest) {
     const t = tenant || undefined;
 
     const body = await req.json();
-    const { psLink, cols, rows, rejoinDelay, launchDelay } = body as {
+    const { psLink, cols, rows, rejoinDelay, launchDelay, gridMode } = body as {
       psLink?: string;
       cols?: number;
       rows?: number;
       rejoinDelay?: number;
       launchDelay?: number;
+      gridMode?: "normal" | "extreme";
     };
 
     const deviceKeys: string[] = [];
@@ -56,8 +57,11 @@ export async function POST(req: NextRequest) {
         merged.packageTargets = targets;
       }
 
+      if (typeof gridMode === "string") merged.gridMode = gridMode === "extreme" ? "extreme" : "normal";
+
       if (cols && rows && cols > 0 && rows > 0 && packages.length > 0) {
-        const pad = 8;
+        const gm = merged.gridMode || existing.gridMode || "normal";
+        const pad = gm === "extreme" ? 0 : 8;
         const usableW = screen.width - pad * 2;
         const usableH = screen.height - pad * 2;
         const cellW = Math.floor(usableW / cols);

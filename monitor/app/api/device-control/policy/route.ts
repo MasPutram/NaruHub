@@ -82,6 +82,8 @@ interface DevicePolicy {
   packageTargets: Record<string, string>;
   // Per-package saved window bounds from Auto Grid: package -> "left,top,right,bottom"
   packageBounds: Record<string, string>;
+  // Grid mode: "normal" = 8px edge padding, "extreme" = 0 padding full screen
+  gridMode: "normal" | "extreme";
   updatedAt: number;
 }
 
@@ -93,6 +95,7 @@ const DEFAULT_POLICY: DevicePolicy = {
   launchDelay: 10,
   packageTargets: {},
   packageBounds: {},
+  gridMode: "normal",
   updatedAt: 0,
 };
 
@@ -118,6 +121,7 @@ function normalize(raw: any): DevicePolicy {
     launchDelay: Math.max(0, Math.min(300, Number(p.launchDelay) || DEFAULT_POLICY.launchDelay)),
     packageTargets,
     packageBounds,
+    gridMode: p.gridMode === "extreme" ? "extreme" : "normal",
     updatedAt: Number(p.updatedAt) || 0,
   };
 }
