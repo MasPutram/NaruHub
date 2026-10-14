@@ -168,31 +168,33 @@ export async function POST(req: NextRequest) {
       let useResize = applyResize;
 
       if (applyResize && screen && screen.width && screen.height) {
-        const pad = gridMode === "extreme" ? 2 : 8;
+        const padX = gridMode === "extreme" ? 2 : 8;
+        const padY = gridMode === "extreme" ? 8 : 8;
         const gap = gridMode === "extreme" ? 0 : 4;
-        const usableW = screen.width - pad * 2 - gap * (c - 1);
-        const usableH = screen.height - pad * 2 - gap * (r - 1);
+        const usableW = screen.width - padX * 2 - gap * (c - 1);
+        const usableH = screen.height - padY * 2 - gap * (r - 1);
         const cellW = Math.floor(usableW / c);
         const cellH = Math.floor(usableH / r);
         const col = i % c;
         const row = Math.floor(i / c);
-        const left = pad + col * (cellW + gap);
-        const top = pad + row * (cellH + gap);
+        const left = padX + col * (cellW + gap);
+        const top = padY + row * (cellH + gap);
         bounds = `${left},${top},${left + cellW},${top + cellH}`;
       } else if (!applyResize && savedBounds[packageName]) {
         bounds = savedBounds[packageName];
         useResize = true;
       } else if (!applyResize && screen && screen.width && screen.height) {
-        const pad = gridMode === "extreme" ? 2 : 8;
+        const padX = gridMode === "extreme" ? 2 : 8;
+        const padY = gridMode === "extreme" ? 8 : 8;
         const gap = gridMode === "extreme" ? 0 : 4;
-        const usableW = screen.width - pad * 2 - gap * (c - 1);
-        const usableH = screen.height - pad * 2 - gap * (r - 1);
+        const usableW = screen.width - padX * 2 - gap * (c - 1);
+        const usableH = screen.height - padY * 2 - gap * (r - 1);
         const cellW = Math.floor(usableW / c);
         const cellH = Math.floor(usableH / r);
         const col = i % c;
         const row = Math.floor(i / c);
-        const left = pad + col * (cellW + gap);
-        const top = pad + row * (cellH + gap);
+        const left = padX + col * (cellW + gap);
+        const top = padY + row * (cellH + gap);
         bounds = `${left},${top},${left + cellW},${top + cellH}`;
         useResize = true;
       }
