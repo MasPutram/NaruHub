@@ -406,10 +406,34 @@ function ServerMap({ accounts, devices, eventByJob }: { accounts: ADAccount[]; d
     0
   );
 
+  // Filters: by device + by visited status.
+  const [deviceFilter, setDeviceFilter] = useState("");
+  const [visitedFilter, setVisitedFilter] = useState<"all" | "unvisited" | "visited">("all");
+
+  // Build device dropdown options from accounts in the live server map.
+  // Exclude Steal An Egg devices (names starting with 'SAE' — operator's
+  // other-game fleet that isn't playing Anime Dice).
+  const deviceOptions = Array.from(
+    new Set(
+      Array.from(groups.values())
+        .flat()
+        .map((a) => deviceByUser.get(a.sourceAccount) || "?")
+    )
+  )
+    .filter((d) => d !== "?" && !/^sae/i.test(d))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+
+  const filteredEntries = entries.filter(([, accs]) => {
+    if (deviceFilter && !accs.some((a) => (deviceByUser.get(a.sourceAccount) || "?") === deviceFilter)) return false;
+    if (visitedFilter === "unvisited" && !accs.some((a) => !visited.has(a.sourceAccount))) return false;
+    if (visitedFilter === "visited" && !accs.some((a) => visited.has(a.sourceAccount))) return false;
+    return true;
+  });
+
   return (
     <div className="smap">
       <div className="smap-title">
-        SERVER MAP <span>{entries.length} server &middot; {totalAccs} akun</span>
+        SERVER MAP <span>{filteredEntries.length}/{entries.length} server &middot; {totalAccs} akun</span>
         <div style={{ flex: 1 }} />
         {visitedCount > 0 && (
           <>
@@ -420,11 +444,46 @@ function ServerMap({ accounts, devices, eventByJob }: { accounts: ADAccount[]; d
           </>
         )}
       </div>
+
+      {/* Filter row */}
+      <div className="smap-filters">
+        <select
+          className="smap-filter-select"
+          value={deviceFilter}
+          onChange={(e) => setDeviceFilter(e.target.value)}
+          title="Filter by device name"
+        >
+          <option value="">All devices ({deviceOptions.length})</option>
+          {deviceOptions.map((d) => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <div className="smap-filter-pills">
+          {([
+            ["all", "Semua"],
+            ["unvisited", "Belum Visited"],
+            ["visited", "Sudah Visited"],
+          ] as const).map(([val, lbl]) => (
+            <button
+              key={val}
+              className={`smap-filter-pill ${visitedFilter === val ? "active" : ""}`}
+              onClick={() => setVisitedFilter(val)}
+            >{lbl}</button>
+          ))}
+        </div>
+        {(deviceFilter || visitedFilter !== "all") && (
+          <button
+            className="smap-filter-reset"
+            onClick={() => { setDeviceFilter(""); setVisitedFilter("all"); }}
+          >&#x2715; Reset</button>
+        )}
+      </div>
+
       {entries.length === 0 ? (
         <div className="smap-empty">Belum ada akun online dengan jobId tercatat.</div>
+      ) : filteredEntries.length === 0 ? (
+        <div className="smap-empty">Tidak ada server cocok dengan filter.</div>
       ) : (
         <div className="smap-list">
-          {entries.map(([jobId, accs], idx) => {
+          {filteredEntries.map(([jobId, accs], idx) => {
             const srvEvent = eventByJob.get(jobId) || null;
             const isActive = !!srvEvent;
             const eventStyle = srvEvent ? styleFor(srvEvent.name) : null;
@@ -640,6 +699,28 @@ const styles = `
 .smap-title { font-size: 11px; font-weight: 800; color: #71717a; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
 .smap-title span { background: #1c1c2b; color: #cbd5e1; padding: 2px 10px; border-radius: 10px; font-size: 10px; font-weight: 700; letter-spacing: .3px; text-transform: none; }
 .smap-empty { color: #71717a; font-size: 12px; text-align: center; padding: 24px; background: #14141f; border: 1px dashed #262636; border-radius: 10px; }
+.smap-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.smap-filter-select {
+  background: #14141f; color: #e8e8f0; border: 1px solid #262636;
+  padding: 7px 10px; border-radius: 8px; font-size: 12px; font-weight: 700;
+  font-family: inherit; cursor: pointer; min-width: 160px;
+}
+.smap-filter-select:focus { outline: none; border-color: #a78bfa; }
+.smap-filter-pills { display: flex; gap: 4px; }
+.smap-filter-pill {
+  background: #14141f; color: #71717a; border: 1px solid #262636;
+  padding: 6px 12px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  cursor: pointer; font-family: inherit; transition: all .12s;
+}
+.smap-filter-pill:hover { color: #e8e8f0; border-color: #3f3f46; }
+.smap-filter-pill.active { background: #0b0b14; color: #a78bfa; border-color: #a78bfa; }
+.smap-filter-reset {
+  background: rgba(239,68,68,.1); color: #ef4444; border: 1px solid rgba(239,68,68,.25);
+  padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: 700;
+  cursor: pointer; font-family: inherit; margin-left: auto;
+}
+.smap-filter-reset:hover { background: rgba(239,68,68,.2); }
+
 .smap-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
 @media (max-width: 700px) { .smap-list { grid-template-columns: 1fr; } }
 .smap-server {
