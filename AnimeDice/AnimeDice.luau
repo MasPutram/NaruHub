@@ -1418,6 +1418,108 @@ local monitorPara = section:AddParagraph({ Title = "Monitor", Content = "Startin
 local function setUserContent(text) userPara:SetContent(text) end
 local function setMonitorContent(text) monitorPara:SetContent(text) end
 
+-- Server Hop (di Status tab)
+do
+	local hopSection = StatusTab:AddSection("Server Hop", { NoCollapse = true })
+
+	local PLACE_ID = game.PlaceId
+
+	local hopStatusPara = hopSection:AddParagraph({
+		Title = "Status",
+		Content = "Ready",
+	})
+
+	local jobIdInput = hopSection:AddInput("HopJobId", {
+		Title = "Job ID / Link",
+		Placeholder = "JobId atau TeleportToPlaceInstance(...)",
+		Default = "",
+	})
+
+	local function parseJobId(raw)
+		if not raw or raw == "" then return nil end
+		local fromLink = raw:match('TeleportToPlaceInstance%s*%(%s*%d+%s*,%s*"([^"]+)"')
+		if fromLink then return fromLink end
+		local stripped = raw:match("^%s*(.-)%s*$")
+		if stripped and stripped ~= "" then return stripped end
+		return nil
+	end
+
+	hopSection:AddButton({
+		Title = "Hop ke Job ID",
+		Callback = function()
+			local jobId = parseJobId(jobIdInput.Value)
+			if not jobId then
+				hopStatusPara:SetContent("Masukkan Job ID atau link dulu!")
+				return
+			end
+			hopStatusPara:SetContent("Teleporting ke " .. jobId:sub(1, 12) .. "...")
+			pcall(function()
+				TeleportService:TeleportToPlaceInstance(PLACE_ID, jobId, LocalPlayer)
+			end)
+		end,
+	})
+
+	hopSection:AddButton({
+		Title = "Hop ke Server Sepi",
+		Callback = function()
+			hopStatusPara:SetContent("Mencari server sepi...")
+			task.spawn(function()
+				local ok, result = pcall(function()
+					local cursor = ""
+					local bestJobId = nil
+					local bestPlayers = math.huge
+					local myJobId = game.JobId
+
+					for _ = 1, 5 do
+						local url = "https://games.roblox.com/v1/games/" .. PLACE_ID .. "/servers/Public?sortOrder=Asc&limit=100"
+						if cursor and cursor ~= "" then
+							url = url .. "&cursor=" .. cursor
+						end
+
+						local res = request({ Url = url, Method = "GET" })
+						if not res or not res.Body then break end
+
+						local data = HttpService:JSONDecode(res.Body)
+						if not data or not data.data then break end
+
+						for _, server in ipairs(data.data) do
+							if server.playing and server.playing < bestPlayers and server.id ~= myJobId then
+								bestPlayers = server.playing
+								bestJobId = server.id
+							end
+						end
+
+						cursor = data.nextPageCursor
+						if not cursor or cursor == "" then break end
+						task.wait(0.5)
+					end
+
+					return bestJobId, bestPlayers
+				end)
+
+				if ok and result then
+					hopStatusPara:SetContent("Found: " .. result .. " players. Teleporting...")
+					pcall(function()
+						TeleportService:TeleportToPlaceInstance(PLACE_ID, result, LocalPlayer)
+					end)
+				else
+					hopStatusPara:SetContent("Gagal cari server: " .. tostring(result))
+				end
+			end)
+		end,
+	})
+
+	hopSection:AddButton({
+		Title = "Hop Random Server",
+		Callback = function()
+			hopStatusPara:SetContent("Teleporting ke random server...")
+			pcall(function()
+				TeleportService:Teleport(PLACE_ID, LocalPlayer)
+			end)
+		end,
+	})
+end
+
 ------------------------------------------------------------
 -- DataController (require sebelum Network taint)
 ------------------------------------------------------------
@@ -1527,102 +1629,6 @@ do
 	end)
 
 	task.defer(updateStatus)
-end
-
-------------------------------------------------------------
--- Server Hop Tab
-------------------------------------------------------------
-do
-	local HopTab = Window:AddTab({ Title = "Hop" })
-	local hopSection = HopTab:AddSection("Server Hop", { NoCollapse = true })
-
-	local PLACE_ID = game.PlaceId
-
-	local hopStatusPara = hopSection:AddParagraph({
-		Title = "Status",
-		Content = "Ready",
-	})
-
-	local jobIdInput = hopSection:AddInput("HopJobId", {
-		Title = "Job ID",
-		Placeholder = "Paste JobId...",
-		Default = "",
-	})
-
-	hopSection:AddButton({
-		Title = "Hop ke Job ID",
-		Callback = function()
-			local jobId = jobIdInput.Value
-			if not jobId or jobId == "" then
-				hopStatusPara:SetContent("Masukkan Job ID dulu!")
-				return
-			end
-			hopStatusPara:SetContent("Teleporting...")
-			pcall(function()
-				TeleportService:TeleportToPlaceInstance(PLACE_ID, jobId, LocalPlayer)
-			end)
-		end,
-	})
-
-	hopSection:AddButton({
-		Title = "Hop ke Server Sepi",
-		Callback = function()
-			hopStatusPara:SetContent("Mencari server sepi...")
-			task.spawn(function()
-				local ok, result = pcall(function()
-					local cursor = ""
-					local bestJobId = nil
-					local bestPlayers = math.huge
-					local myJobId = game.JobId
-
-					for _ = 1, 5 do
-						local url = "https://games.roblox.com/v1/games/" .. PLACE_ID .. "/servers/Public?sortOrder=Asc&limit=100"
-						if cursor and cursor ~= "" then
-							url = url .. "&cursor=" .. cursor
-						end
-
-						local res = request({ Url = url, Method = "GET" })
-						if not res or not res.Body then break end
-
-						local data = HttpService:JSONDecode(res.Body)
-						if not data or not data.data then break end
-
-						for _, server in ipairs(data.data) do
-							if server.playing and server.playing < bestPlayers and server.id ~= myJobId then
-								bestPlayers = server.playing
-								bestJobId = server.id
-							end
-						end
-
-						cursor = data.nextPageCursor
-						if not cursor or cursor == "" then break end
-						task.wait(0.5)
-					end
-
-					return bestJobId, bestPlayers
-				end)
-
-				if ok and result then
-					hopStatusPara:SetContent("Found: " .. result .. " players. Teleporting...")
-					pcall(function()
-						TeleportService:TeleportToPlaceInstance(PLACE_ID, result, LocalPlayer)
-					end)
-				else
-					hopStatusPara:SetContent("Gagal cari server: " .. tostring(result))
-				end
-			end)
-		end,
-	})
-
-	hopSection:AddButton({
-		Title = "Hop Random Server",
-		Callback = function()
-			hopStatusPara:SetContent("Teleporting ke random server...")
-			pcall(function()
-				TeleportService:Teleport(PLACE_ID, LocalPlayer)
-			end)
-		end,
-	})
 end
 
 ------------------------------------------------------------
