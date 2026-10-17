@@ -180,6 +180,8 @@ local LocalPlayer = Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TeleportService = game:GetService("TeleportService")
 
 ------------------------------------------------------------
 -- NaruUI (inline)
@@ -1417,6 +1419,213 @@ local function setUserContent(text) userPara:SetContent(text) end
 local function setMonitorContent(text) monitorPara:SetContent(text) end
 
 ------------------------------------------------------------
+-- DataController (require sebelum Network taint)
+------------------------------------------------------------
+local DataController = require(ReplicatedStorage.Framework.Features.Data.DataController)
+
+------------------------------------------------------------
+-- Rebirth Stats Tab
+------------------------------------------------------------
+do
+	local RebirthTab = Window:AddTab({ Title = "Rebirth" })
+	local rebirthSection = RebirthTab:AddSection("Auto Rebirth Stats", { NoCollapse = true })
+
+	local AddStatRE = ReplicatedStorage.Network.RebirthService.RE.AddStat
+
+	local statNames = { "Luck", "Money", "Damage", "Health", "Trait Luck", "Grade Luck" }
+	local selectedStat = "Trait Luck"
+
+	local statusPara = rebirthSection:AddParagraph({
+		Title = "Status",
+		Content = "Idle",
+	})
+
+	local function getRebirthRemaining()
+		local totalPoints = DataController.Rebirth() or 0
+		local stats = DataController.RebirthStats() or {}
+		local spent = 0
+		for _, v in pairs(stats) do spent = spent + v end
+		return totalPoints - spent
+	end
+
+	local function getStatLevel(statName)
+		local stats = DataController.RebirthStats() or {}
+		return stats[statName] or 0
+	end
+
+	local function updateStatus()
+		local remaining = getRebirthRemaining()
+		local lv = getStatLevel(selectedStat)
+		statusPara:SetContent(selectedStat .. " Lv." .. lv .. " | Sisa: " .. remaining .. " point")
+	end
+
+	local statDropdown = rebirthSection:AddDropdown("RebirthStat", {
+		Title = "Target Stat",
+		Values = statNames,
+		Default = "Trait Luck",
+	})
+	statDropdown:OnChanged(function(val)
+		if val then
+			selectedStat = val
+			updateStatus()
+		end
+	end)
+
+	rebirthSection:AddButton({
+		Title = "Spend 1 Point",
+		Callback = function()
+			local remaining = getRebirthRemaining()
+			if remaining < 1 then
+				statusPara:SetContent("Tidak ada point tersisa!")
+				return
+			end
+			pcall(function() AddStatRE:FireServer(selectedStat) end)
+			task.wait(0.5)
+			updateStatus()
+		end,
+	})
+
+	rebirthSection:AddButton({
+		Title = "Spend All Points",
+		Callback = function()
+			local remaining = getRebirthRemaining()
+			if remaining < 1 then
+				statusPara:SetContent("Tidak ada point tersisa!")
+				return
+			end
+			statusPara:SetContent("Spending " .. remaining .. " points ke " .. selectedStat .. "...")
+			for _ = 1, remaining do
+				pcall(function() AddStatRE:FireServer(selectedStat) end)
+				task.wait(0.15)
+			end
+			updateStatus()
+		end,
+	})
+
+	local autoRebirthEnabled = false
+
+	rebirthSection:AddToggle("AutoRebirthStats", {
+		Title = "Auto Spend",
+		Default = false,
+		Callback = function(v)
+			autoRebirthEnabled = v
+		end,
+	})
+
+	task.spawn(function()
+		while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+			if autoRebirthEnabled then
+				local remaining = getRebirthRemaining()
+				if remaining > 0 then
+					pcall(function() AddStatRE:FireServer(selectedStat) end)
+					task.wait(0.3)
+					updateStatus()
+				end
+			end
+			task.wait(5)
+		end
+	end)
+
+	task.defer(updateStatus)
+end
+
+------------------------------------------------------------
+-- Server Hop Tab
+------------------------------------------------------------
+do
+	local HopTab = Window:AddTab({ Title = "Hop" })
+	local hopSection = HopTab:AddSection("Server Hop", { NoCollapse = true })
+
+	local PLACE_ID = game.PlaceId
+
+	local hopStatusPara = hopSection:AddParagraph({
+		Title = "Status",
+		Content = "Ready",
+	})
+
+	local jobIdInput = hopSection:AddInput("HopJobId", {
+		Title = "Job ID",
+		Placeholder = "Paste JobId...",
+		Default = "",
+	})
+
+	hopSection:AddButton({
+		Title = "Hop ke Job ID",
+		Callback = function()
+			local jobId = jobIdInput.Value
+			if not jobId or jobId == "" then
+				hopStatusPara:SetContent("Masukkan Job ID dulu!")
+				return
+			end
+			hopStatusPara:SetContent("Teleporting...")
+			pcall(function()
+				TeleportService:TeleportToPlaceInstance(PLACE_ID, jobId, LocalPlayer)
+			end)
+		end,
+	})
+
+	hopSection:AddButton({
+		Title = "Hop ke Server Sepi",
+		Callback = function()
+			hopStatusPara:SetContent("Mencari server sepi...")
+			task.spawn(function()
+				local ok, result = pcall(function()
+					local cursor = ""
+					local bestJobId = nil
+					local bestPlayers = math.huge
+					local myJobId = game.JobId
+
+					for _ = 1, 5 do
+						local url = "https://games.roblox.com/v1/games/" .. PLACE_ID .. "/servers/Public?sortOrder=Asc&limit=100"
+						if cursor and cursor ~= "" then
+							url = url .. "&cursor=" .. cursor
+						end
+
+						local res = request({ Url = url, Method = "GET" })
+						if not res or not res.Body then break end
+
+						local data = HttpService:JSONDecode(res.Body)
+						if not data or not data.data then break end
+
+						for _, server in ipairs(data.data) do
+							if server.playing and server.playing < bestPlayers and server.id ~= myJobId then
+								bestPlayers = server.playing
+								bestJobId = server.id
+							end
+						end
+
+						cursor = data.nextPageCursor
+						if not cursor or cursor == "" then break end
+						task.wait(0.5)
+					end
+
+					return bestJobId, bestPlayers
+				end)
+
+				if ok and result then
+					hopStatusPara:SetContent("Found: " .. result .. " players. Teleporting...")
+					pcall(function()
+						TeleportService:TeleportToPlaceInstance(PLACE_ID, result, LocalPlayer)
+					end)
+				else
+					hopStatusPara:SetContent("Gagal cari server: " .. tostring(result))
+				end
+			end)
+		end,
+	})
+
+	hopSection:AddButton({
+		Title = "Hop Random Server",
+		Callback = function()
+			hopStatusPara:SetContent("Teleporting ke random server...")
+			pcall(function()
+				TeleportService:Teleport(PLACE_ID, LocalPlayer)
+			end)
+		end,
+	})
+end
+
+------------------------------------------------------------
 -- My accounts in this server (same JobId from dashboard API)
 ------------------------------------------------------------
 do
@@ -1485,11 +1694,8 @@ do
 end
 
 ------------------------------------------------------------
--- Game data access
+-- Game data access (ReplicatedStorage + DataController sudah di atas)
 ------------------------------------------------------------
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local DataController = require(ReplicatedStorage.Framework.Features.Data.DataController)
 local EntryRegistry = require(ReplicatedStorage.Framework.Features.Inventory.EntryRegistry)
 local MutationsConfig = require(ReplicatedStorage.Framework.Features.Inventory.Kinds.Unit.Mutations)
 local TraitsConfig = require(ReplicatedStorage.Framework.Features.Traits.Traits)
@@ -1938,108 +2144,3 @@ task.spawn(function()
 	end
 end)
 
-------------------------------------------------------------
--- Rebirth Stats Tab (task.spawn to avoid Network thread taint)
-------------------------------------------------------------
-task.spawn(function()
-	local RebirthTab = Window:AddTab({ Title = "Rebirth" })
-	local rebirthSection = RebirthTab:AddSection("Auto Rebirth Stats", { NoCollapse = true })
-
-	local AddStatRE = ReplicatedStorage.Network.RebirthService.RE.AddStat
-
-	local statNames = { "Luck", "Money", "Damage", "Health", "Trait Luck", "Grade Luck" }
-	local selectedStat = "Trait Luck"
-
-	local statusPara = rebirthSection:AddParagraph({
-		Title = "Status",
-		Content = "Idle",
-	})
-
-	local function getRebirthRemaining()
-		local totalPoints = DataController.Rebirth() or 0
-		local stats = DataController.RebirthStats() or {}
-		local spent = 0
-		for _, v in pairs(stats) do spent = spent + v end
-		return totalPoints - spent
-	end
-
-	local function getStatLevel(statName)
-		local stats = DataController.RebirthStats() or {}
-		return stats[statName] or 0
-	end
-
-	local function updateStatus()
-		local remaining = getRebirthRemaining()
-		local lv = getStatLevel(selectedStat)
-		statusPara:SetContent(selectedStat .. " Lv." .. lv .. " | Sisa: " .. remaining .. " point")
-	end
-
-	local statDropdown = rebirthSection:AddDropdown("RebirthStat", {
-		Title = "Target Stat",
-		Values = statNames,
-		Default = "Trait Luck",
-	})
-	statDropdown:OnChanged(function(val)
-		if val then
-			selectedStat = val
-			updateStatus()
-		end
-	end)
-
-	rebirthSection:AddButton({
-		Title = "Spend 1 Point",
-		Callback = function()
-			local remaining = getRebirthRemaining()
-			if remaining < 1 then
-				statusPara:SetContent("Tidak ada point tersisa!")
-				return
-			end
-			pcall(function() AddStatRE:FireServer(selectedStat) end)
-			task.wait(0.5)
-			updateStatus()
-		end,
-	})
-
-	rebirthSection:AddButton({
-		Title = "Spend All Points",
-		Callback = function()
-			local remaining = getRebirthRemaining()
-			if remaining < 1 then
-				statusPara:SetContent("Tidak ada point tersisa!")
-				return
-			end
-			statusPara:SetContent("Spending " .. remaining .. " points ke " .. selectedStat .. "...")
-			for _ = 1, remaining do
-				pcall(function() AddStatRE:FireServer(selectedStat) end)
-				task.wait(0.15)
-			end
-			updateStatus()
-		end,
-	})
-
-	local autoRebirthEnabled = false
-
-	rebirthSection:AddToggle("AutoRebirthStats", {
-		Title = "Auto Spend",
-		Default = false,
-		Callback = function(v)
-			autoRebirthEnabled = v
-		end,
-	})
-
-	task.spawn(function()
-		while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-			if autoRebirthEnabled then
-				local remaining = getRebirthRemaining()
-				if remaining > 0 then
-					pcall(function() AddStatRE:FireServer(selectedStat) end)
-					task.wait(0.3)
-					updateStatus()
-				end
-			end
-			task.wait(5)
-		end
-	end)
-
-	task.defer(updateStatus)
-end)
