@@ -1413,21 +1413,16 @@ local StatusTab = Window:AddTab({ Title = "Status" })
 local section = StatusTab:AddSection(LocalPlayer.Name, { NoCollapse = true })
 
 local userPara = section:AddParagraph({ Title = "Username", Content = LocalPlayer.Name })
-local monitorPara = section:AddParagraph({ Title = "Monitor", Content = "Starting..." })
+local statusPara = section:AddParagraph({ Title = "Status", Content = "Starting..." })
 
 local function setUserContent(text) userPara:SetContent(text) end
-local function setMonitorContent(text) monitorPara:SetContent(text) end
+local function setStatusContent(text) statusPara:SetContent(text) end
 
 -- Server Hop (di Status tab)
 do
 	local hopSection = StatusTab:AddSection("Server Hop", { NoCollapse = true })
 
 	local PLACE_ID = game.PlaceId
-
-	local hopStatusPara = hopSection:AddParagraph({
-		Title = "Status",
-		Content = "Ready",
-	})
 
 	local jobIdInput = hopSection:AddInput("HopJobId", {
 		Title = "Job ID / Link",
@@ -1449,10 +1444,10 @@ do
 		Callback = function()
 			local jobId = parseJobId(jobIdInput.Value)
 			if not jobId then
-				hopStatusPara:SetContent("Masukkan Job ID atau link dulu!")
+				setStatusContent("Masukkan Job ID atau link dulu!")
 				return
 			end
-			hopStatusPara:SetContent("Teleporting ke " .. jobId:sub(1, 12) .. "...")
+			setStatusContent("Teleporting ke " .. jobId:sub(1, 12) .. "...")
 			pcall(function()
 				TeleportService:TeleportToPlaceInstance(PLACE_ID, jobId, LocalPlayer)
 			end)
@@ -1462,7 +1457,7 @@ do
 	hopSection:AddButton({
 		Title = "Hop ke Server Sepi",
 		Callback = function()
-			hopStatusPara:SetContent("Mencari server sepi...")
+			setStatusContent("Mencari server sepi...")
 			task.spawn(function()
 				local ok, result = pcall(function()
 					local cursor = ""
@@ -1498,12 +1493,12 @@ do
 				end)
 
 				if ok and result then
-					hopStatusPara:SetContent("Found: " .. result .. " players. Teleporting...")
+					setStatusContent("Found: " .. result .. " players. Teleporting...")
 					pcall(function()
 						TeleportService:TeleportToPlaceInstance(PLACE_ID, result, LocalPlayer)
 					end)
 				else
-					hopStatusPara:SetContent("Gagal cari server: " .. tostring(result))
+					setStatusContent("Gagal cari server: " .. tostring(result))
 				end
 			end)
 		end,
@@ -1512,7 +1507,7 @@ do
 	hopSection:AddButton({
 		Title = "Hop Random Server",
 		Callback = function()
-			hopStatusPara:SetContent("Teleporting ke random server...")
+			setStatusContent("Teleporting ke random server...")
 			pcall(function()
 				TeleportService:Teleport(PLACE_ID, LocalPlayer)
 			end)
@@ -2142,9 +2137,9 @@ task.spawn(function()
 		end)
 		local pingStr = ping > 0 and (" " .. ping .. "ms") or ""
 		if ok then
-			setMonitorContent("OK" .. pingStr)
+			setStatusContent("OK" .. pingStr)
 		else
-			setMonitorContent("Gagal" .. pingStr)
+			setStatusContent("Gagal" .. pingStr)
 		end
 		task.wait(30)
 	end
