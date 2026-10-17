@@ -1939,9 +1939,9 @@ task.spawn(function()
 end)
 
 ------------------------------------------------------------
--- Rebirth Stats Tab
+-- Rebirth Stats Tab (task.spawn to avoid Network thread taint)
 ------------------------------------------------------------
-do
+task.spawn(function()
 	local RebirthTab = Window:AddTab({ Title = "Rebirth" })
 	local rebirthSection = RebirthTab:AddSection("Auto Rebirth Stats", { NoCollapse = true })
 
@@ -2042,4 +2042,4 @@ do
 	end)
 
 	task.defer(updateStatus)
-end
+end)
