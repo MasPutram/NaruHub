@@ -119,9 +119,23 @@ export default function AnimeDiceEventPage() {
 
   if (!mounted) return null;
 
-  const events = data?.events && data.events.length > 0
+  const rawEvents = data?.events && data.events.length > 0
     ? data.events
     : (data?.event ? [data.event] : []);
+
+  // Event entries live 6min in Redis — but if all our accounts hopped out of
+  // that server (reconnect, kick, auto-rejoin landing elsewhere), nobody is
+  // actually there anymore even though the key hasn't expired. Keep events
+  // only if at least one FRESH account is still reporting that jobId.
+  const nowSecGlobal = Date.now() / 1000;
+  const freshJobIds = new Set<string>();
+  accounts.forEach((a) => {
+    if (!a.online || !a.jobId) return;
+    if (nowSecGlobal - (a.lastSeen || 0) > 35) return;
+    freshJobIds.add(a.jobId);
+  });
+  const events = rawEvents.filter((ev) => !ev.jobId || freshJobIds.has(ev.jobId));
+
   const event = events[0] || null; // single-event contexts (badge LIVE)
   const history = data?.history || [];
   // Map jobId → event for ServerMap border coloring
