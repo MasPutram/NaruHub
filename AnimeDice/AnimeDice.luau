@@ -1418,15 +1418,13 @@ local statusPara = section:AddParagraph({ Title = "Status", Content = "Starting.
 local function setUserContent(text) userPara:SetContent(text) end
 local function setStatusContent(text) statusPara:SetContent(text) end
 
--- Server Hop (di Status tab)
+-- Server Hop (sama section)
 do
-	local hopSection = StatusTab:AddSection("Server Hop", { NoCollapse = true })
-
 	local PLACE_ID = game.PlaceId
 
-	local jobIdInput = hopSection:AddInput("HopJobId", {
-		Title = "Job ID / Link",
-		Placeholder = "JobId atau TeleportToPlaceInstance(...)",
+	local jobIdInput = section:AddInput("HopJobId", {
+		Title = "Job ID",
+		Placeholder = "JobService",
 		Default = "",
 	})
 
@@ -1439,7 +1437,7 @@ do
 		return nil
 	end
 
-	hopSection:AddButton({
+	section:AddButton({
 		Title = "Hop ke Job ID",
 		Callback = function()
 			local jobId = parseJobId(jobIdInput.Value)
@@ -1454,7 +1452,7 @@ do
 		end,
 	})
 
-	hopSection:AddButton({
+	section:AddButton({
 		Title = "Hop ke Server Sepi",
 		Callback = function()
 			setStatusContent("Mencari server sepi...")
@@ -1504,7 +1502,7 @@ do
 		end,
 	})
 
-	hopSection:AddButton({
+	section:AddButton({
 		Title = "Hop Random Server",
 		Callback = function()
 			setStatusContent("Teleporting ke random server...")
