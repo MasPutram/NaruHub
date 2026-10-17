@@ -34,6 +34,7 @@ interface ADAccount {
   rebirth?: number | null;
   serverPlayerCount?: number | null;
   serverMaxPlayers?: number | null;
+  lastSeen?: number | null;
 }
 
 interface TermuxPackage {
@@ -327,12 +328,20 @@ function ServerMap({ accounts, devices, eventByJob }: { accounts: ADAccount[]; d
     });
   });
 
-  // Group accounts by jobId (only online, only with a jobId)
+  // "Fresh" cutoff — a heartbeat older than this means the account's reported
+  // jobId can't be trusted (they might've hopped away but not reported yet).
+  // One heartbeat cycle is 30s, so 35s = allow one miss but not two.
+  const FRESH_S = 35;
+  const nowSec = Date.now() / 1000;
+  const ageOf = (a: ADAccount) => nowSec - (a.lastSeen || 0);
+
+  // Group accounts by jobId (only online, only with a jobId, only fresh)
   const groups = new Map<string, ADAccount[]>();
   accounts.forEach((a) => {
     if (!a.online) return;
     const jid = a.jobId;
     if (!jid) return;
+    if (ageOf(a) > FRESH_S) return;
     const arr = groups.get(jid) || [];
     arr.push(a);
     groups.set(jid, arr);
@@ -503,19 +512,24 @@ function ServerMap({ accounts, devices, eventByJob }: { accounts: ADAccount[]; d
                       <span className="ss-visited-mini" title="Akun visited di server ini">{visitedInServer}/{accs.length}</span>
                     )}
                     {(() => {
-                      // Any of our accounts in this server reports the server-wide
-                      // player count; they're all in the same server so take the max
-                      // (freshest = most accurate against race conditions).
-                      const counts = accs.map((a) => a.serverPlayerCount || 0).filter((n) => n > 0);
-                      const maxCounts = accs.map((a) => a.serverMaxPlayers || 0).filter((n) => n > 0);
-                      const total = counts.length ? Math.max(...counts) : 0;
-                      const max = maxCounts.length ? Math.max(...maxCounts) : 0;
+                      // Freshest = account with smallest age reports the current
+                      // headcount for this server. Older reports may be from before
+                      // other clones hopped away.
+                      const fresh = [...accs].sort((a, b) => ageOf(a) - ageOf(b))[0];
+                      const total = fresh?.serverPlayerCount || 0;
+                      const max = fresh?.serverMaxPlayers || 0;
                       if (!total) return null;
                       const ours = accs.length;
                       const nearFull = max > 0 && total / max >= 0.8;
+                      const ghost = ours > total; // more "ours" claimed than real players — stale jobIds
                       return (
-                        <span className={`ss-players ${nearFull ? "full" : ""}`} title={`${ours} akun kita + ${total - ours} player lain`}>
-                          &#x1F465; {total}{max ? `/${max}` : ""}
+                        <span
+                          className={`ss-players ${nearFull ? "full" : ""} ${ghost ? "ghost" : ""}`}
+                          title={ghost
+                            ? `Mismatch: ${ours} akun claim server ini tapi real cuman ${total} player. Beberapa akun kemungkinan sudah hop tapi belum report.`
+                            : `${ours} akun kita + ${total - ours} player lain`}
+                        >
+                          &#x1F465; {total}{max ? `/${max}` : ""}{ghost ? ` ⚠ ${ours}` : ""}
                         </span>
                       );
                     })()}
@@ -537,8 +551,10 @@ function ServerMap({ accounts, devices, eventByJob }: { accounts: ADAccount[]; d
                 <div className="ss-accs">
                   {accs.map((a) => {
                     const accVisited = visited.has(a.sourceAccount);
+                    const age = Math.round(ageOf(a));
+                    const stale = age > 20;
                     return (
-                    <label key={a.sourceAccount} className={`ss-acc ${accVisited ? "visited" : ""}`}>
+                    <label key={a.sourceAccount} className={`ss-acc ${accVisited ? "visited" : ""} ${stale ? "stale" : ""}`}>
                       <input
                         type="checkbox"
                         className="ss-acc-check"
@@ -548,6 +564,7 @@ function ServerMap({ accounts, devices, eventByJob }: { accounts: ADAccount[]; d
                       <span className="ss-acc-name">{a.sourceAccount}</span>
                       <span className="ss-arrow">&rarr;</span>
                       <span className="ss-acc-dev">{deviceByUser.get(a.sourceAccount) || "?"}</span>
+                      {stale && <span className="ss-acc-age" title={`Heartbeat terakhir ${age}s lalu — mungkin sudah hop`}>{age}s</span>}
                     </label>
                     );
                   })}
@@ -741,6 +758,7 @@ const styles = `
   border: 1px solid rgba(34,211,238,.3); font-family: var(--font-numbers), monospace;
 }
 .ss-players.full { background: rgba(239,68,68,.12); color: #ef4444; border-color: rgba(239,68,68,.4); }
+.ss-players.ghost { background: rgba(245,158,11,.15); color: #fbbf24; border-color: rgba(245,158,11,.45); cursor: help; }
 .ss-copy {
   background: #262636; color: #e8e8f0; border: 1px solid #3f3f46;
   font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 6px; cursor: pointer;
@@ -779,6 +797,9 @@ const styles = `
 .ss-acc:hover .ss-acc-name { color: #ffffff; }
 .ss-acc.visited { opacity: .5; }
 .ss-acc.visited .ss-acc-name { text-decoration: line-through; }
+.ss-acc.stale { opacity: .7; }
+.ss-acc.stale .ss-acc-name { color: #fbbf24; }
+.ss-acc-age { margin-left: auto; font-size: 10px; font-weight: 700; color: #fbbf24; background: rgba(245,158,11,.12); border: 1px solid rgba(245,158,11,.3); padding: 1px 6px; border-radius: 4px; font-family: var(--font-numbers), monospace; }
 .ss-acc-check { width: 15px; height: 15px; accent-color: #34d399; cursor: pointer; margin: 0; flex-shrink: 0; }
 .ss-acc-name { font-weight: 800; color: #e8e8f0; min-width: 120px; }
 .ss-visited-mini { background: rgba(52,211,153,.1); color: #34d399; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 999px; border: 1px solid rgba(52,211,153,.3); font-family: var(--font-numbers), monospace; }

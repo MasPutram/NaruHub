@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Anime Dice v2.5.0
+-- NaruHub | Anime Dice v2.5.1
 -- Monitoring. Self-contained GUI (inline NaruUI).
 
 ------------------------------------------------------------
@@ -23,6 +23,36 @@ end)
 
 local GRANTED_VIA_GLOBAL = true
 local ACCESS_KEY_USED = ""
+
+-- Fire a tiny monitor POST with jobId=nil right before leaving a server, so
+-- the dashboard immediately drops this account from the current-jobId group
+-- instead of waiting up to 30s for the next heartbeat. Non-blocking.
+local function sendLeavingPing()
+	task.spawn(function()
+		pcall(function()
+			local Players = game:GetService("Players")
+			local HttpService = game:GetService("HttpService")
+			local me = Players.LocalPlayer and Players.LocalPlayer.Name or "?"
+			local body = HttpService:JSONEncode({
+				game = "AnimeDice",
+				sourceAccount = me,
+				jobId = nil,
+				placeId = game.PlaceId,
+				leaving = true,
+			})
+			request({
+				Url = SERVER_BASE_URL .. "/api/anime-dice/monitor",
+				Method = "POST",
+				Headers = {
+					["Content-Type"] = "application/json",
+					["X-Device-Id"] = DEVICE_ID,
+					["X-Access-Key"] = ACCESS_KEY_USED,
+				},
+				Body = body,
+			})
+		end)
+	end)
+end
 
 do
 	local HttpService = game:GetService("HttpService")
@@ -1401,7 +1431,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v2.5.0",
+	Title = "NaruHub | Anime Dice v2.5.1",
 	Badge = "MONITOR",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(440, 340),
@@ -1446,6 +1476,7 @@ do
 				return
 			end
 			setStatusContent("Teleporting ke " .. jobId:sub(1, 12) .. "...")
+			sendLeavingPing()
 			pcall(function()
 				TeleportService:TeleportToPlaceInstance(PLACE_ID, jobId, LocalPlayer)
 			end)
@@ -1492,6 +1523,7 @@ do
 
 				if ok and result then
 					setStatusContent("Found: " .. result .. " players. Teleporting...")
+					sendLeavingPing()
 					pcall(function()
 						TeleportService:TeleportToPlaceInstance(PLACE_ID, result, LocalPlayer)
 					end)
@@ -1506,6 +1538,7 @@ do
 		Title = "Hop Random Server",
 		Callback = function()
 			setStatusContent("Teleporting ke random server...")
+			sendLeavingPing()
 			pcall(function()
 				TeleportService:Teleport(PLACE_ID, LocalPlayer)
 			end)

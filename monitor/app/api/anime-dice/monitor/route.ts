@@ -31,6 +31,25 @@ export async function POST(req: NextRequest) {
     const data = await req.json();
     const name = data.sourceAccount || "?";
 
+    // "Leaving" ping: fired right before TeleportService:Teleport so the
+    // dashboard immediately drops this account from its old jobId group
+    // instead of waiting ~30s for the next full heartbeat. We only touch
+    // jobId/placeId + bump lastSeen, everything else stays as the last
+    // real snapshot (money, units, etc).
+    if (data.leaving === true) {
+      try {
+        const prevRaw = await redis.get<string>(adAccountKey(name, tenant));
+        if (prevRaw) {
+          const prev = typeof prevRaw === "string" ? JSON.parse(prevRaw) : prevRaw;
+          prev.jobId = null;
+          prev.placeId = data.placeId || prev.placeId || null;
+          prev.lastSeen = Date.now() / 1000;
+          await redis.set(adAccountKey(name, tenant), JSON.stringify(prev), { ex: ACCOUNT_TTL_S });
+        }
+      } catch {}
+      return NextResponse.json({ ok: true, leaving: true });
+    }
+
     const [fsExists, kickExists] = await Promise.all([
       redis.get<string>(adForSaleKey(name, tenant)),
       redis.get<string>(adForSaleKickKey(name, tenant)),
