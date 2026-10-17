@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Anime Dice v2.4.0
+-- NaruHub | Anime Dice v2.5.0
 -- Monitoring. Self-contained GUI (inline NaruUI).
 
 ------------------------------------------------------------
@@ -1399,7 +1399,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v2.4.0",
+	Title = "NaruHub | Anime Dice v2.5.0",
 	Badge = "MONITOR",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(440, 340),
@@ -1937,3 +1937,109 @@ task.spawn(function()
 		task.wait(30)
 	end
 end)
+
+------------------------------------------------------------
+-- Rebirth Stats Tab
+------------------------------------------------------------
+do
+	local RebirthTab = Window:AddTab({ Title = "Rebirth" })
+	local rebirthSection = RebirthTab:AddSection("Auto Rebirth Stats", { NoCollapse = true })
+
+	local AddStatRE = ReplicatedStorage.Network.RebirthService.RE.AddStat
+
+	local statNames = { "Luck", "Money", "Damage", "Health", "Trait Luck", "Grade Luck" }
+	local selectedStat = "Trait Luck"
+
+	local statusPara = rebirthSection:AddParagraph({
+		Title = "Status",
+		Content = "Idle",
+	})
+
+	local function getRebirthRemaining()
+		local totalPoints = DataController.Rebirth() or 0
+		local stats = DataController.RebirthStats() or {}
+		local spent = 0
+		for _, v in pairs(stats) do spent = spent + v end
+		return totalPoints - spent
+	end
+
+	local function getStatLevel(statName)
+		local stats = DataController.RebirthStats() or {}
+		return stats[statName] or 0
+	end
+
+	local function updateStatus()
+		local remaining = getRebirthRemaining()
+		local lv = getStatLevel(selectedStat)
+		statusPara:SetContent(selectedStat .. " Lv." .. lv .. " | Sisa: " .. remaining .. " point")
+	end
+
+	local statDropdown = rebirthSection:AddDropdown("RebirthStat", {
+		Title = "Target Stat",
+		Values = statNames,
+		Default = "Trait Luck",
+	})
+	statDropdown:OnChanged(function(val)
+		if val then
+			selectedStat = val
+			updateStatus()
+		end
+	end)
+
+	rebirthSection:AddButton({
+		Title = "Spend 1 Point",
+		Callback = function()
+			local remaining = getRebirthRemaining()
+			if remaining < 1 then
+				statusPara:SetContent("Tidak ada point tersisa!")
+				return
+			end
+			pcall(function() AddStatRE:FireServer(selectedStat) end)
+			task.wait(0.5)
+			updateStatus()
+		end,
+	})
+
+	rebirthSection:AddButton({
+		Title = "Spend All Points",
+		Callback = function()
+			local remaining = getRebirthRemaining()
+			if remaining < 1 then
+				statusPara:SetContent("Tidak ada point tersisa!")
+				return
+			end
+			statusPara:SetContent("Spending " .. remaining .. " points ke " .. selectedStat .. "...")
+			for _ = 1, remaining do
+				pcall(function() AddStatRE:FireServer(selectedStat) end)
+				task.wait(0.15)
+			end
+			updateStatus()
+		end,
+	})
+
+	local autoRebirthEnabled = false
+
+	rebirthSection:AddToggle("AutoRebirthStats", {
+		Title = "Auto Spend",
+		Default = false,
+		Callback = function(v)
+			autoRebirthEnabled = v
+		end,
+	})
+
+	task.spawn(function()
+		while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+			if autoRebirthEnabled then
+				local remaining = getRebirthRemaining()
+				if remaining > 0 then
+					pcall(function() AddStatRE:FireServer(selectedStat) end)
+					task.wait(0.3)
+					updateStatus()
+				end
+			end
+			task.wait(5)
+		end
+	end)
+
+	task.defer(updateStatus)
+end
