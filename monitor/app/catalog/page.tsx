@@ -603,17 +603,16 @@ export default function CatalogPage() {
         `<div class="tk-item"><span class="tk-label">${t.label}</span><span class="tk-val" style="color:${t.color}">${t.val > 0 ? t.val : "—"}</span></div>`
       ).join("");
       const mutBadge = tp.mut
-        ? `<span class="card-mut" data-m="${escHtml(tp.mut)}">${escHtml(tp.mut)}</span>`
+        ? ` <span class="card-mut" data-m="${escHtml(tp.mut)}">${escHtml(tp.mut)}</span>`
         : "";
       const petLine = tp.text === "—"
         ? `<span style="color:#94a3b8">—</span>`
-        : `<span class="pet-name">${escHtml(tp.text)}</span> <span class="pet-rate">${tp.rate}</span>`;
+        : `<span class="pet-name">${escHtml(tp.text)}</span>${mutBadge} <span class="pet-rate">${tp.rate}</span>`;
       return `
         <div class="rk-card">
           <div class="card-top">
             <span class="card-code">${accCode(a.sourceAccount)}</span>
-            <span class="card-speed">${fmtCompact(a.speed)}</span>
-            ${mutBadge}
+            <span class="card-speed">&#x1F45F; ${fmtCompact(a.speed)}</span>
           </div>
           <div class="card-row"><span class="card-lbl">Income Aktif</span><span class="card-val cv-aktif">${incAktif}</span></div>
           <div class="card-row"><span class="card-lbl">Income Potensi</span><span class="card-val cv-potensi">${incPotensi}</span></div>
