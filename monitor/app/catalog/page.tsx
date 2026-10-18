@@ -558,28 +558,6 @@ export default function CatalogPage() {
       return caps + digits;
     }
 
-    // 16:9 landscape canvas (1920 x 1080). Header/summary/footer fixed; table
-    // gets what remains and each row sizes to fit all accounts. Wider canvas
-    // gives Top Pet + Harga real room; shorter canvas caps comfortable capacity
-    // around 30 accounts (still fits ~50 with tight rows).
-    const CANVAS_W = 1920;
-    const CANVAS_H = 1080;
-    const HEADER_H = 160;
-    const THEAD_H = 46;
-    const FOOTER_H = 56;
-    const ROWS_AREA_H = CANVAS_H - HEADER_H - FOOTER_H - THEAD_H;
-    const idealRowH = Math.floor(ROWS_AREA_H / rows.length);
-    const rowH = Math.max(22, Math.min(60, idealRowH));
-    const bodyFontSize = Math.max(14, Math.min(24, Math.round(rowH * 0.55)));
-    const pillFontSize = Math.max(10, bodyFontSize - 2);
-    if (rows.length > 50) {
-      const proceed = confirm(`${rows.length} akun cukup banyak buat satu poster 16:9. Tetap generate? Tulisan bakal kecil.`);
-      if (!proceed) { setSummaryBusy(false); return; }
-    }
-
-    // Pick the pet with the highest rate across every pool the account has
-    // (topPets fallback, then full detail). Returns a short label + rate so it
-    // fits in one line inside the fixed-height row.
     function topPetLabel(a: Account): { text: string; rate: string; mut: string } {
       const pools: Pet[] = [];
       if (a.topPets) pools.push(...a.topPets);
@@ -599,117 +577,131 @@ export default function CatalogPage() {
       return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
-    const tableRows = rows.map((a, i) => {
+    const COLS = 4;
+    const CANVAS_W = 1080;
+    const HEADER_H = 140;
+    const FOOTER_H = 50;
+    const CARD_GAP = 16;
+    const SIDE_PAD = 40;
+    const CARD_W = Math.floor((CANVAS_W - SIDE_PAD * 2 - CARD_GAP * (COLS - 1)) / COLS);
+    const CARD_H = 340;
+    const gridRows = Math.ceil(rows.length / COLS);
+    const GRID_H = gridRows * CARD_H + (gridRows - 1) * CARD_GAP;
+    const CANVAS_H = HEADER_H + 24 + GRID_H + 24 + FOOTER_H;
+
+    const cards = rows.map((a) => {
       const tp = topPetLabel(a);
-      const mutCell = tp.mut ? `<span class="tp-mut" data-m="${escHtml(tp.mut)}">${escHtml(tp.mut)}</span>` : "—";
-      const petCell = tp.text === "—"
-        ? "—"
-        : `<div class="tp-row"><span class="tp-name">${escHtml(tp.text)}</span><span class="tp-rate">${tp.rate}</span></div>`;
       const incAktif = a.incomeAktif != null ? fmtRate(a.incomeAktif) : "—";
+      const incPotensi = fmtRate(potensiEquip(a));
+      const tokenItems = [
+        { label: "Boss", val: a.mutationToken || 0, color: "#a78bfa" },
+        { label: "Scramble", val: a.scrambleToken || 0, color: "#34d399" },
+        { label: "Nitro", val: a.nitroToken || 0, color: "#d97706" },
+        { label: "Spectral", val: a.spectralToken || 0, color: "#6366f1" },
+      ];
+      const tokenHtml = tokenItems.map(t =>
+        `<div class="tk-item"><span class="tk-label">${t.label}</span><span class="tk-val" style="color:${t.color}">${t.val > 0 ? t.val : "—"}</span></div>`
+      ).join("");
+      const mutBadge = tp.mut
+        ? `<span class="card-mut" data-m="${escHtml(tp.mut)}">${escHtml(tp.mut)}</span>`
+        : "";
+      const petLine = tp.text === "—"
+        ? `<span style="color:#94a3b8">—</span>`
+        : `<span class="pet-name">${escHtml(tp.text)}</span> <span class="pet-rate">${tp.rate}</span>`;
       return `
-      <tr class="${i % 2 === 1 ? "alt" : ""}">
-        <td class="c-code">${accCode(a.sourceAccount)}</td>
-        <td class="c-spd">${fmtCompact(a.speed)}</td>
-        <td class="c-inc">${fmtRate(potensiEquip(a))}</td>
-        <td class="c-aktif">${incAktif}</td>
-        <td class="c-mut">${mutCell}</td>
-        <td class="c-toppet">${petCell}</td>
-        <td class="c-num">${eggTotal(a)}</td>
-        <td class="c-num" style="color:#6d28d9;font-weight:900">${divineCount(a) || "—"}</td>
-        <td class="c-mut">${(a.mutationToken || 0) > 0 ? `<span class="mut-pill">${a.mutationToken}</span>` : "—"}</td>
-        <td class="c-mut">${(a.scrambleToken || 0) > 0 ? `<span class="mut-pill" style="background:#34d399">${a.scrambleToken}</span>` : "—"}</td>
-        <td class="c-mut">${(a.nitroToken || 0) > 0 ? `<span class="mut-pill" style="background:#d97706">${a.nitroToken}</span>` : "—"}</td>
-        <td class="c-mut">${(a.spectralToken || 0) > 0 ? `<span class="mut-pill" style="background:#6366f1">${a.spectralToken}</span>` : "—"}</td>
-        <td class="c-price">${a.catalogPrice ? fmtRupiah(a.catalogPrice) : "—"}</td>
-      </tr>
-    `;
+        <div class="rk-card">
+          <div class="card-top">
+            <span class="card-code">${accCode(a.sourceAccount)}</span>
+            <span class="card-speed">${fmtCompact(a.speed)}</span>
+            ${mutBadge}
+          </div>
+          <div class="card-row"><span class="card-lbl">Income Aktif</span><span class="card-val cv-aktif">${incAktif}</span></div>
+          <div class="card-row"><span class="card-lbl">Income Potensi</span><span class="card-val cv-potensi">${incPotensi}</span></div>
+          <div class="card-row"><span class="card-lbl">Top Pet</span><span class="card-val cv-pet">${petLine}</span></div>
+          <div class="card-row"><span class="card-lbl">Divine</span><span class="card-val cv-divine">${divineCount(a) || "—"}</span></div>
+          <div class="card-row"><span class="card-lbl">Telur</span><span class="card-val">${eggTotal(a)}</span></div>
+          <div class="card-tokens">${tokenHtml}</div>
+          <div class="card-price">${a.catalogPrice ? fmtRupiah(a.catalogPrice) : "—"}</div>
+        </div>
+      `;
     }).join("");
 
-    // Police-line diagonal stripes overlay: repeated yellow-black tape reading
-    // "MAS NARU • JUAL AKUN NARUHUB • DO NOT COPY". Rendered as a background
-    // pattern so html2canvas captures it cleanly.
     const container = document.createElement("div");
     container.style.cssText = `position:fixed;left:-9999px;top:0;width:${CANVAS_W}px;height:${CANVAS_H}px;background:#f8fafc;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;color:#0f172a;`;
     container.innerHTML = `
       <style>
-        .rk-wrap { position: relative; width: ${CANVAS_W}px; height: ${CANVAS_H}px; overflow: hidden; display: flex; flex-direction: column; }
+        .rk-wrap { position: relative; width: ${CANVAS_W}px; min-height: ${CANVAS_H}px; overflow: hidden; display: flex; flex-direction: column; background: #f1f5f9; }
         .rk-wm {
-          position: absolute;
-          top: -300px; left: -300px; right: -300px; bottom: -300px;
-          pointer-events: none;
-          /* z-index above everything so watermark covers the whole layout
-             uniformly (header + summary + table + footer). Faint enough that
-             table text stays readable. */
-          z-index: 20;
-          display: flex;
-          flex-direction: column;
-          gap: 40px;
-          padding: 30px 0;
+          position: absolute; top: -300px; left: -300px; right: -300px; bottom: -300px;
+          pointer-events: none; z-index: 20;
+          display: flex; flex-direction: column; gap: 40px; padding: 30px 0;
           transform: rotate(-22deg);
         }
-        .rk-wm-row {
-          display: flex;
-          gap: 70px;
-          white-space: nowrap;
-          justify-content: flex-start;
-          padding-left: 0;
-        }
-        /* Every other row shifts by half a tile so the pattern reads as a
-           brick / staggered layout instead of a strict aligned grid. */
+        .rk-wm-row { display: flex; gap: 70px; white-space: nowrap; }
         .rk-wm-row.stagger { padding-left: 140px; }
-        .rk-wm span {
-          /* Mid-tone slate at low alpha shows up as light gray on the dark
-             header/footer AND as a soft gray on the white table -- so the tile
-             actually covers the whole layout without a second colored copy. */
-          color: rgba(120, 130, 155, 0.16);
-          font-weight: 900; font-size: 34px; letter-spacing: 4px;
-          flex-shrink: 0;
-        }
+        .rk-wm span { color: rgba(120,130,155,0.13); font-weight: 900; font-size: 30px; letter-spacing: 4px; flex-shrink: 0; }
+
         .rk-header {
           background: linear-gradient(135deg,#0f172a,#1e293b);
-          color: #fff; height: ${HEADER_H}px; padding: 22px 80px; display: flex; align-items: center; gap: 22px;
+          color: #fff; height: ${HEADER_H}px; padding: 18px ${SIDE_PAD}px; display: flex; align-items: center; gap: 18px;
           border-bottom: 4px solid #facc15; flex-shrink: 0; box-sizing: border-box;
         }
-        .rk-header h1 { margin: 0; font-size: 34px; font-weight: 900; letter-spacing: 0.5px; }
-        .rk-header .sub { color: #cbd5e1; font-size: 14px; margin-top: 8px; letter-spacing: 0.5px; }
-        .rk-header .qr { margin-left: auto; background: #fff; padding: 6px; border-radius: 8px; flex-shrink: 0; }
-        .rk-header .qr img { display: block; width: 104px; height: 104px; }
-        .rk-header .qr-info { color: #f8fafc; font-size: 13px; text-align: right; flex-shrink: 0; }
-        .rk-header .qr-info .u { font-weight: 900; font-size: 17px; color: #facc15; }
+        .rk-header h1 { margin: 0; font-size: 28px; font-weight: 900; letter-spacing: 0.5px; }
+        .rk-header .sub { color: #cbd5e1; font-size: 13px; margin-top: 6px; }
+        .rk-header .qr { margin-left: auto; background: #fff; padding: 5px; border-radius: 8px; flex-shrink: 0; }
+        .rk-header .qr img { display: block; width: 80px; height: 80px; }
+        .rk-header .qr-info { color: #f8fafc; font-size: 12px; text-align: right; flex-shrink: 0; }
+        .rk-header .qr-info .u { font-weight: 900; font-size: 15px; color: #facc15; }
 
-        .rk-tblwrap { flex: 1; position: relative; z-index: 3; background: rgba(255,255,255,0.85); overflow: hidden; padding: 0 60px; box-sizing: border-box; }
-        table.rk-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
-        table.rk-tbl th {
-          background: #0f172a; color: #f8fafc; font-size: 13px; letter-spacing: 1.5px;
-          font-weight: 900; text-transform: uppercase; border-bottom: 3px solid #facc15;
-          padding: 0 12px; height: ${THEAD_H}px; text-align: left; box-sizing: border-box;
+        .rk-grid {
+          display: grid; grid-template-columns: repeat(${COLS}, ${CARD_W}px);
+          gap: ${CARD_GAP}px; padding: 24px ${SIDE_PAD}px;
+          position: relative; z-index: 3; flex: 1;
         }
-        table.rk-tbl td {
-          padding: 0 12px; height: ${rowH}px; border-bottom: 1px solid #e2e8f0;
-          font-size: ${bodyFontSize}px; text-align: left; box-sizing: border-box;
-          overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+        .rk-card {
+          background: #fff; border-radius: 12px; padding: 16px;
+          border: 2px solid #e2e8f0; display: flex; flex-direction: column; gap: 6px;
+          box-sizing: border-box; overflow: hidden;
         }
-        table.rk-tbl tr.alt td { background: rgba(241, 245, 249, 0.6); }
-        table.rk-tbl .c-code { font-weight: 900; color: #1e40af; }
-        table.rk-tbl .c-spd { font-weight: 800; color: #5b8dde; }
-        table.rk-tbl .c-inc { font-weight: 800; color: #d45f5f; }
-        table.rk-tbl .c-aktif { font-weight: 900; color: #0f172a; }
-        table.rk-tbl .c-num { text-align: center; font-weight: 700; }
-        table.rk-tbl .c-mut { text-align: center; }
-        table.rk-tbl .c-price { font-weight: 900; color: #16a34a; text-align: center; padding-left: 24px; padding-right: 24px; }
-        .tp-row { display: flex; align-items: center; gap: 6px; overflow: hidden; }
-        .tp-name { font-weight: 800; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-        .tp-rate { font-size: ${Math.max(10, bodyFontSize - 3)}px; color: #16a34a; font-weight: 800; margin-left: auto; flex-shrink: 0; }
-        .tp-mut { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: ${Math.max(8, bodyFontSize - 5)}px; font-weight: 900; letter-spacing: .5px; background: #e0e7ff; color: #3730a3; flex-shrink: 0; }
-        .tp-mut[data-m*="RAINBOW"] { background: linear-gradient(90deg,#fecaca,#fed7aa,#fef08a,#bbf7d0,#bae6fd,#c7d2fe,#e9d5ff); color: #4c1d95; }
-        .tp-mut[data-m*="GOLDEN"] { background: #fef3c7; color: #92400e; }
-        .tp-mut[data-m*="DIAMOND"] { background: #dbeafe; color: #1e40af; }
-        .tp-mut[data-m*="TITANIUM"] { background: #e2e8f0; color: #334155; }
-        .mut-pill { display: inline-block; background: #a78bfa; color: #fff; padding: 1px 8px; border-radius: 999px; font-size: ${pillFontSize}px; font-weight: 900; }
+        .card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+        .card-code { font-size: 22px; font-weight: 900; color: #1e40af; }
+        .card-speed { font-size: 14px; font-weight: 800; color: #5b8dde; margin-left: auto; }
+        .card-mut {
+          display: inline-block; padding: 2px 8px; border-radius: 4px;
+          font-size: 10px; font-weight: 900; letter-spacing: .5px;
+          background: #e0e7ff; color: #3730a3; flex-shrink: 0;
+        }
+        .card-mut[data-m*="RAINBOW"] { background: linear-gradient(90deg,#fecaca,#fed7aa,#fef08a,#bbf7d0,#bae6fd,#c7d2fe,#e9d5ff); color: #4c1d95; }
+        .card-mut[data-m*="GOLDEN"] { background: #fef3c7; color: #92400e; }
+        .card-mut[data-m*="DIAMOND"] { background: #dbeafe; color: #1e40af; }
+        .card-mut[data-m*="TITANIUM"] { background: #e2e8f0; color: #334155; }
+
+        .card-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 3px 0; border-bottom: 1px solid #f1f5f9; }
+        .card-lbl { color: #64748b; font-weight: 600; }
+        .card-val { font-weight: 800; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+        .cv-aktif { color: #0f172a; }
+        .cv-potensi { color: #d45f5f; }
+        .cv-pet { color: #0f172a; font-size: 12px; }
+        .cv-divine { color: #6d28d9; }
+        .pet-name { font-weight: 800; }
+        .pet-rate { color: #16a34a; font-weight: 800; font-size: 11px; }
+
+        .card-tokens {
+          display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
+          margin-top: 4px; padding: 8px; background: #f8fafc; border-radius: 8px;
+        }
+        .tk-item { display: flex; justify-content: space-between; font-size: 11px; padding: 2px 4px; }
+        .tk-label { color: #94a3b8; font-weight: 600; }
+        .tk-val { font-weight: 900; }
+
+        .card-price {
+          margin-top: auto; padding-top: 8px; border-top: 2px solid #e2e8f0;
+          font-size: 18px; font-weight: 900; color: #16a34a; text-align: center;
+        }
 
         .rk-foot {
-          height: ${FOOTER_H}px; padding: 12px 80px; display: flex; align-items: center; justify-content: center;
-          text-align: center; background: #0f172a; color: #cbd5e1; font-size: 14px;
+          height: ${FOOTER_H}px; padding: 12px ${SIDE_PAD}px; display: flex; align-items: center; justify-content: center;
+          text-align: center; background: #0f172a; color: #cbd5e1; font-size: 13px;
           position: relative; z-index: 3; border-top: 2px solid #facc15;
           flex-shrink: 0; box-sizing: border-box;
         }
@@ -729,49 +721,14 @@ export default function CatalogPage() {
           </div>
         </div>
 
-        <div class="rk-tblwrap">
-          <table class="rk-tbl">
-            <colgroup>
-              <col style="width:7%">
-              <col style="width:8%">
-              <col style="width:10%">
-              <col style="width:10%">
-              <col style="width:9%">
-              <col style="width:16%">
-              <col style="width:5%">
-              <col style="width:5%">
-              <col style="width:6%">
-              <col style="width:7%">
-              <col style="width:7%">
-              <col style="width:10%">
-            </colgroup>
-            <thead>
-              <tr>
-                <th>Code</th>
-                <th>Speed</th>
-                <th>Income Potensi</th>
-                <th>Income Aktif</th>
-                <th style="text-align:center">Mutasi</th>
-                <th>Top Pet</th>
-                <th style="text-align:center">Telur</th>
-                <th style="text-align:center">Divine</th>
-                <th style="text-align:center">Boss</th>
-                <th style="text-align:center">Scramble</th>
-                <th style="text-align:center">Nitro</th>
-                <th style="text-align:center">Spectral</th>
-                <th style="text-align:center">Harga</th>
-              </tr>
-            </thead>
-            <tbody>${tableRows}</tbody>
-          </table>
-        </div>
+        <div class="rk-grid">${cards}</div>
 
         <div class="rk-foot">
           Poster resmi dari <strong>Mas Naru</strong> — Kalau tidak ada QR / watermark, itu POSTER PALSU.
         </div>
 
         <div class="rk-wm">
-          ${Array.from({ length: 22 }).map((_, r) => `
+          ${Array.from({ length: Math.ceil(CANVAS_H / 50) }).map((_, r) => `
             <div class="rk-wm-row ${r % 2 === 1 ? "stagger" : ""}">
               ${Array.from({ length: 12 }).map(() => "<span>MAS NARU</span>").join("")}
             </div>
@@ -802,8 +759,6 @@ export default function CatalogPage() {
       );
       await new Promise((r) => setTimeout(r, 100));
 
-      // Canvas is fixed 1080x1920 (9:16) so scale=2 gives 2160x3840 -- well
-      // within mobile canvas limits. Drop to 1.5 on mobile UAs just in case.
       const isMobile = /Mobi|Android/i.test(navigator.userAgent || "");
       const scale = isMobile ? 1.5 : 2;
 
