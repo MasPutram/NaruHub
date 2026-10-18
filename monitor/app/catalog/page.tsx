@@ -42,6 +42,7 @@ interface Account {
   mutationToken?: number | null;
   scrambleToken?: number | null;
   nitroToken?: number | null;
+  spectralToken?: number | null;
   trail?: string | null;
   growingEggCount?: number;
   backpackEggCount?: number;
@@ -618,6 +619,7 @@ export default function CatalogPage() {
         <td class="c-mut">${(a.mutationToken || 0) > 0 ? `<span class="mut-pill">${a.mutationToken}</span>` : "—"}</td>
         <td class="c-mut">${(a.scrambleToken || 0) > 0 ? `<span class="mut-pill" style="background:#34d399">${a.scrambleToken}</span>` : "—"}</td>
         <td class="c-mut">${(a.nitroToken || 0) > 0 ? `<span class="mut-pill" style="background:#d97706">${a.nitroToken}</span>` : "—"}</td>
+        <td class="c-mut">${(a.spectralToken || 0) > 0 ? `<span class="mut-pill" style="background:#6366f1">${a.spectralToken}</span>` : "—"}</td>
         <td class="c-price">${a.catalogPrice ? fmtRupiah(a.catalogPrice) : "—"}</td>
       </tr>
     `;
@@ -756,6 +758,7 @@ export default function CatalogPage() {
                 <th style="text-align:center">Boss</th>
                 <th style="text-align:center">Scramble</th>
                 <th style="text-align:center">Nitro</th>
+                <th style="text-align:center">Spectral</th>
                 <th style="text-align:center">Harga</th>
               </tr>
             </thead>
@@ -1225,6 +1228,9 @@ export default function CatalogPage() {
         .cc-stat.cc-nitro { background: linear-gradient(135deg, #d97706, #fbbf24); border-radius: 8px; padding: 5px 8px; }
         .cc-stat.cc-nitro .cslabel { color: #fff; }
         .cc-stat.cc-nitro .csval { color: #fff; font-weight: 800; }
+        .cc-stat.cc-spectral { background: linear-gradient(135deg, #6366f1, #a5b4fc); border-radius: 8px; padding: 5px 8px; }
+        .cc-stat.cc-spectral .cslabel { color: #fff; }
+        .cc-stat.cc-spectral .csval { color: #fff; font-weight: 800; }
 
         .btn-download-all {
           background: #8b5cf6; color: #fff; border: none; border-radius: 10px;
@@ -1798,6 +1804,10 @@ export default function CatalogPage() {
                   <div className="cslabel">&#x1F3CE;&#xFE0F; TOKEN NITRO</div>
                   <div className="csval">{a.nitroToken != null ? a.nitroToken : "—"}</div>
                 </div>
+                <div className="cc-stat cc-spectral">
+                  <div className="cslabel">&#x1F47B; TOKEN SPECTRAL</div>
+                  <div className="csval">{a.spectralToken != null ? a.spectralToken : "—"}</div>
+                </div>
               </div>
 
               {(a.topPets || []).length > 0 && (
@@ -2204,6 +2214,7 @@ export default function CatalogPage() {
                       <th style={{ textAlign: "center", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>FRACTURE</th>
                       <th style={{ textAlign: "center", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SCRAMBLE</th>
                       <th style={{ textAlign: "center", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>NITRO</th>
+                      <th style={{ textAlign: "center", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SPECTRAL</th>
                       <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SEBELUM</th>
                       <th style={{ textAlign: "right", padding: "8px 10px", color: "var(--dim)", fontSize: 10, letterSpacing: 1, borderBottom: "1px solid var(--card-border)" }}>SESUDAH</th>
                     </tr>
@@ -2220,6 +2231,7 @@ export default function CatalogPage() {
                           <td style={{ padding: "6px 10px", textAlign: "center", color: (acc.mutationToken || 0) > 0 ? "var(--accent)" : "var(--dim)", fontWeight: 800 }}>{acc.mutationToken || 0}</td>
                           <td style={{ padding: "6px 10px", textAlign: "center", color: (acc.scrambleToken || 0) > 0 ? "var(--green)" : "var(--dim)", fontWeight: 800 }}>{acc.scrambleToken || 0}</td>
                           <td style={{ padding: "6px 10px", textAlign: "center", color: (acc.nitroToken || 0) > 0 ? "#d97706" : "var(--dim)", fontWeight: 800 }}>{acc.nitroToken || 0}</td>
+                          <td style={{ padding: "6px 10px", textAlign: "center", color: (acc.spectralToken || 0) > 0 ? "#6366f1" : "var(--dim)", fontWeight: 800 }}>{acc.spectralToken || 0}</td>
                           <td style={{ padding: "6px 10px", textAlign: "right", color: "var(--dim)" }}>{acc.catalogPrice ? fmtRupiah(acc.catalogPrice) : "—"}</td>
                           <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: 900, color: price > 0 ? (changed ? "#4ade80" : "var(--ink)") : "var(--dim)" }}>
                             {price > 0 ? fmtRupiah(price) : "—"}
@@ -2535,6 +2547,7 @@ export default function CatalogPage() {
                     <div className="dms"><div className="dms-label">TOKEN MUTASI</div><div className="dms-val" style={{ color: "#a78bfa" }}>{acc.mutationToken ?? 0}</div></div>
                     <div className="dms"><div className="dms-label">TOKEN SCRAMBLE</div><div className="dms-val" style={{ color: "var(--green)" }}>{acc.scrambleToken != null ? acc.scrambleToken : "—"}</div></div>
                     <div className="dms"><div className="dms-label">TOKEN NITRO</div><div className="dms-val" style={{ color: "#d97706" }}>{acc.nitroToken != null ? acc.nitroToken : "—"}</div></div>
+                    <div className="dms"><div className="dms-label">TOKEN SPECTRAL</div><div className="dms-val" style={{ color: "#6366f1" }}>{acc.spectralToken != null ? acc.spectralToken : "—"}</div></div>
                     {acc.trail && <div className="dms"><div className="dms-label">TRAIL</div><div className="dms-val" style={{ color: "var(--accent2)" }}>{acc.trail}</div></div>}
                   </div>
                   <div className="dm-tabs">

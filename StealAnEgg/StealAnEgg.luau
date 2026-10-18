@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.3.1"
+local VERSION = "v3.4.0"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -1050,6 +1050,7 @@ local function reportToMonitor()
 		local mutationToken = 0
 		local scrambleToken = 0
 		local nitroToken = 0
+		local spectralToken = 0
 		local equippedTrail = ""
 		pcall(function()
 			local s = SaveModule.Peek()
@@ -1071,6 +1072,8 @@ local function reportToMonitor()
 								scrambleToken = scrambleToken + uses
 							elseif mutId == "Nitro" then
 								nitroToken = nitroToken + uses
+							elseif mutId == "Spectral" then
+								spectralToken = spectralToken + uses
 							end
 						end
 					end
@@ -1098,6 +1101,7 @@ local function reportToMonitor()
 			trail = equippedTrail,
 			scrambleToken = scrambleToken,
 			nitroToken = nitroToken,
+			spectralToken = spectralToken,
 			ownerFacebook = "Putra Ramadhan",
 			sourceAccount = LocalPlayer.Name,
 		}
@@ -1120,6 +1124,7 @@ local function reportToMonitor()
 			mutationToken = mutationToken,
 			scrambleToken = scrambleToken,
 			nitroToken = nitroToken,
+			spectralToken = spectralToken,
 			topPets = topPets,
 			trail = equippedTrail,
 			fullData = fullData,
