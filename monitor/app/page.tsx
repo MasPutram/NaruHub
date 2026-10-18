@@ -145,6 +145,7 @@ interface Account {
   mutationToken?: number | null;
   scrambleToken?: number | null;
   nitroToken?: number | null;
+  spectralToken?: number | null;
   trail?: string | null;
   growingEggCount?: number;
   backpackEggCount?: number;
@@ -548,6 +549,9 @@ export default function DashboardPage() {
         .st.nitro { background: linear-gradient(135deg, #d97706, #fbbf24); border-radius: 8px; padding: 5px 10px; }
         .st.nitro .sl { color: #fff; }
         .st.nitro .sv { color: #fff; font-size: 18px; }
+        .st.spectral { background: linear-gradient(135deg, #4f46e5, #818cf8); border-radius: 8px; padding: 5px 10px; }
+        .st.spectral .sl { color: #fff; }
+        .st.spectral .sv { color: #fff; font-size: 18px; }
         .time-tag { font-size: 10px; font-weight: 700; flex-shrink: 0; }
         .time-tag.on { color: var(--dim); }
         .time-tag.off { color: var(--red); }
@@ -924,6 +928,7 @@ function AccountCard({ account: a, onOpen, onSell, onModerated, onDelete, delete
         <div className="st boss"><div className="sl">&#x1F9EC; TOKEN MUTASI</div><div className="sv">{fmtNum(a.mutationToken ?? 0)}</div></div>
         <div className="st scramble"><div className="sl">&#x1F500; TOKEN SCRAMBLE</div><div className="sv">{a.scrambleToken != null ? fmtNum(a.scrambleToken) : "—"}</div></div>
         <div className="st nitro"><div className="sl">&#x1F3CE;&#xFE0F; TOKEN NITRO</div><div className="sv">{a.nitroToken != null ? fmtNum(a.nitroToken) : "—"}</div></div>
+        <div className="st spectral"><div className="sl">&#x1F47B; TOKEN SPECTRAL</div><div className="sv">{a.spectralToken != null ? fmtNum(a.spectralToken) : "—"}</div></div>
       </div>
       {eggCount > 0 && (
         <div className="egg-bar">
@@ -1200,6 +1205,14 @@ function DetailModal({ detail, detailTab, setDetailTab, onClose, maxKandang, max
               <div className="ms-card">
                 <div className="mslabel">TOKEN SCRAMBLE</div>
                 <div className="msval" style={{ color: "var(--green)" }}>{acc.scrambleToken != null ? fmtNum(acc.scrambleToken) : "—"}</div>
+              </div>
+              <div className="ms-card">
+                <div className="mslabel">TOKEN NITRO</div>
+                <div className="msval" style={{ color: "#d97706" }}>{acc.nitroToken != null ? fmtNum(acc.nitroToken) : "—"}</div>
+              </div>
+              <div className="ms-card">
+                <div className="mslabel">TOKEN SPECTRAL</div>
+                <div className="msval" style={{ color: "#6366f1" }}>{acc.spectralToken != null ? fmtNum(acc.spectralToken) : "—"}</div>
               </div>
             </div>
           )}
