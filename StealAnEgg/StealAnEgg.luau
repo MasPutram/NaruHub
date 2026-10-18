@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.2.1"
+local VERSION = "v3.3.0"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -674,15 +674,6 @@ section:AddToggle("AutoPlaceToggle", {
 	end,
 })
 
-local autoBuyNitroEnabled = false
-section:AddToggle("AutoBuyNitroToggle", {
-	Title = "Buy RaceRally Auto (Token > Treadmill)",
-	Default = false,
-	Callback = function(val)
-		autoBuyNitroEnabled = val
-	end,
-})
-
 local autoMutationEggEnabled = false
 section:AddToggle("AutoMutationEggToggle", {
 	Title = "Mutate Egg Auto (Plot, highest b/s first)",
@@ -1058,7 +1049,6 @@ local function reportToMonitor()
 		local bossToken = 0
 		local mutationToken = 0
 		local scrambleToken = 0
-		local nitroToken = 0
 		local equippedTrail = ""
 		pcall(function()
 			local s = SaveModule.Peek()
@@ -1078,8 +1068,6 @@ local function reportToMonitor()
 								mutationToken = mutationToken + uses
 							elseif mutId == "Scrambled" then
 								scrambleToken = scrambleToken + uses
-							elseif mutId == "Nitro" then
-								nitroToken = nitroToken + uses
 							end
 						end
 					end
@@ -1106,7 +1094,6 @@ local function reportToMonitor()
 			treadmillLevel = treadmillLevel,
 			trail = equippedTrail,
 			scrambleToken = scrambleToken,
-			nitroToken = nitroToken,
 			ownerFacebook = "Putra Ramadhan",
 			sourceAccount = LocalPlayer.Name,
 		}
@@ -1128,7 +1115,6 @@ local function reportToMonitor()
 			bossToken = bossToken,
 			mutationToken = mutationToken,
 			scrambleToken = scrambleToken,
-			nitroToken = nitroToken,
 			topPets = topPets,
 			trail = equippedTrail,
 			fullData = fullData,
@@ -1241,60 +1227,6 @@ task.spawn(function()
 	end
 end)
 
-
-------------------------------------------------------------
--- Auto Buy RaceRally Shop
--- Loop setiap 60 detik, buy MutationToken sampai habis.
--- TreadmillBoost cuma dibeli kalau token < 475.
-------------------------------------------------------------
-task.spawn(function()
-	local Remotes = require(ReplicatedStorage.Shared.Remotes)
-	local SaveModule = require(ReplicatedStorage.Shared.Save)
-
-	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
-		if autoBuyNitroEnabled then
-			pcall(function()
-				local tokens = 0
-				pcall(function()
-					tokens = SaveModule.Peek(LocalPlayer).RaceRally.Tokens or 0
-				end)
-
-				if tokens < 475 then
-					pcall(function()
-						Remotes.RaceRally.AskBuy:InvokeServer("TreadmillBoost")
-					end)
-					task.wait(60)
-					return
-				end
-
-				local fails = 0
-				while fails < 2 and autoBuyNitroEnabled do
-					local ok, result = pcall(function()
-						return Remotes.RaceRally.AskBuy:InvokeServer("MutationToken")
-					end)
-					if ok and result == true then
-						fails = 0
-						task.wait(1 + math.random())
-					else
-						fails = fails + 1
-						if fails < 2 then task.wait(3) end
-					end
-				end
-
-				pcall(function()
-					tokens = SaveModule.Peek(LocalPlayer).RaceRally.Tokens or 0
-				end)
-				if tokens < 475 then
-					task.wait(1 + math.random())
-					pcall(function()
-						Remotes.RaceRally.AskBuy:InvokeServer("TreadmillBoost")
-					end)
-				end
-			end)
-		end
-		task.wait(60)
-	end
-end)
 
 ------------------------------------------------------------
 -- Auto Mutation Egg
