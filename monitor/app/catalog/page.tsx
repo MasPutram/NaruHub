@@ -607,7 +607,7 @@ export default function CatalogPage() {
         : "";
       const petLine = tp.text === "—"
         ? `<span style="color:#94a3b8">—</span>`
-        : `<span class="pet-name">${escHtml(tp.text)}</span>${mutBadge} <span class="pet-rate">${tp.rate}</span>`;
+        : `<span class="pet-name">${escHtml(tp.text)}</span> <span class="pet-rate">${tp.rate}</span>${mutBadge}`;
       return `
         <div class="rk-card">
           <div class="card-top">
@@ -616,7 +616,7 @@ export default function CatalogPage() {
           </div>
           <div class="card-row"><span class="card-lbl">Income Aktif</span><span class="card-val cv-aktif">${incAktif}</span></div>
           <div class="card-row"><span class="card-lbl">Income Potensi</span><span class="card-val cv-potensi">${incPotensi}</span></div>
-          <div class="card-row"><span class="card-lbl">Top Pet</span><span class="card-val cv-pet">${petLine}</span></div>
+          <div class="card-row card-row-stack"><span class="card-lbl">Top Pet</span><div class="card-val cv-pet">${petLine}</div></div>
           <div class="card-row"><span class="card-lbl">Divine</span><span class="card-val cv-divine">${divineCount(a) || "—"}</span></div>
           <div class="card-row"><span class="card-lbl">Telur</span><span class="card-val">${eggTotal(a)}</span></div>
           <div class="card-tokens">${tokenHtml}</div>
@@ -676,6 +676,7 @@ export default function CatalogPage() {
         .card-mut[data-m*="TITANIUM"] { background: #e2e8f0; color: #334155; }
 
         .card-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 3px 0; border-bottom: 1px solid #f1f5f9; }
+        .card-row-stack { flex-direction: column; align-items: flex-start; gap: 2px; }
         .card-lbl { color: #64748b; font-weight: 600; }
         .card-val { font-weight: 800; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
         .cv-aktif { color: #0f172a; }
