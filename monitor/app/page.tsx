@@ -81,7 +81,18 @@ function mutationClass(name: string): string {
   if (/^scare/.test(k)) return "pg-mutation mut-scared";
   if (/^alpha/.test(k)) return "pg-mutation mut-alpha";
   if (k === "2x" || /^double/.test(k)) return "pg-mutation mut-2x";
+  if (/^spectral/.test(k)) return "pg-mutation mut-spectral";
+  if (/^enchant/.test(k)) return "pg-mutation mut-enchanted";
+  if (/^scrambl/.test(k)) return "pg-mutation mut-scrambled";
+  if (/^greatbloom/.test(k) || k === "spirit bloom") return "pg-mutation mut-spiritbloom";
+  if (/^monstrous/.test(k) || k === "parasite") return "pg-mutation mut-parasite";
   return "pg-mutation mut-default";
+}
+function mutationLabel(name: string): string {
+  const k = String(name || "").trim().toLowerCase();
+  if (/^greatbloom/.test(k)) return "Spirit Bloom";
+  if (/^monstrous/.test(k)) return "Parasite";
+  return name;
 }
 
 function rarityColor(rarity: string | null): string {
@@ -665,6 +676,11 @@ export default function DashboardPage() {
         .pg-mutation.mut-scared { color: #e5e7eb; background: linear-gradient(135deg, #1f2937, #4b5563); border-color: rgba(107,114,128,.4); }
         .pg-mutation.mut-alpha { color: #fff; background: linear-gradient(135deg, #4c1d95, #7c3aed); border-color: rgba(139,92,246,.5); text-shadow: 0 1px 2px rgba(0,0,0,.4); }
         .pg-mutation.mut-2x { color: #fff; background: linear-gradient(135deg, #b45309, #f97316); border-color: rgba(249,115,22,.5); text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+        .pg-mutation.mut-spectral { color: #fff; background: linear-gradient(135deg, #0e7490, #06b6d4); border-color: rgba(6,182,212,.5); text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+        .pg-mutation.mut-enchanted { color: #fff; background: linear-gradient(135deg, #065f46, #10b981); border-color: rgba(16,185,129,.5); text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+        .pg-mutation.mut-scrambled { color: #fff; background: linear-gradient(135deg, #0f766e, #14b8a6); border-color: rgba(20,184,166,.5); text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+        .pg-mutation.mut-spiritbloom { color: #fff; background: linear-gradient(135deg, #5b21b6, #8b5cf6); border-color: rgba(139,92,246,.5); text-shadow: 0 1px 2px rgba(0,0,0,.3); }
+        .pg-mutation.mut-parasite { color: #fff; background: linear-gradient(135deg, #7f1d1d, #991b1b); border-color: rgba(153,27,27,.5); text-shadow: 0 1px 2px rgba(0,0,0,.3); }
         .pg-mutation.mut-default { color: #c4b5fd; background: rgba(167,139,250,.1); border-color: rgba(167,139,250,.25); }
         .pg-weight { font-size: 9px; color: var(--dim); }
         .pg-weight-inline { font-size: 10px; color: var(--dim); background: rgba(148,163,184,.08); border: 1px solid rgba(148,163,184,.18); border-radius: 4px; padding: 1px 5px; }
@@ -1530,7 +1546,7 @@ function AllAccountsDetailModal({ allDetail, tab, setTab, onClose, onOpenAccount
                               <div className="egg-sub">
                                 <span className="egg-rate">{fmtRate(p.rate)}</span>
                                 {rar && <span className="pg-rarity" style={{ background: rc + "18", color: rc, border: `1px solid ${rc}33` }}>{rar}</span>}
-                                {(Array.isArray(p.mutations) ? p.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{m}</span>)}
+                                {(Array.isArray(p.mutations) ? p.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{mutationLabel(m)}</span>)}
                               </div>
                               <div style={{ marginTop: 3, display: "flex", gap: 6, alignItems: "center" }}>
                                 {p._equipped && <span className="pg-badge-role equipped">EQUIPPED</span>}
@@ -1565,7 +1581,7 @@ function AllAccountsDetailModal({ allDetail, tab, setTab, onClose, onOpenAccount
                               <div className="egg-sub">
                                 <span className="egg-rate">{fmtRate(egg.rate)}</span>
                                 {rar && <span className="pg-rarity" style={{ background: rc + "18", color: rc, border: `1px solid ${rc}33` }}>{rar}</span>}
-                                {(Array.isArray(egg.mutations) ? egg.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{m}</span>)}
+                                {(Array.isArray(egg.mutations) ? egg.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{mutationLabel(m)}</span>)}
                               </div>
                               <div style={{ marginTop: 3, display: "flex", gap: 6, alignItems: "center" }}>
                                 <span className="pg-badge-role bag">DI TAS</span>
@@ -1612,7 +1628,7 @@ function PetGrid({ pets, idx, showBadges = false }: { pets: Pet[]; idx: Record<s
                 <span className="pg-rate">{fmtRate(p.rate)}</span>
                 {!showBadges && rar && <span className="pg-rarity" style={{ background: rc + "18", color: rc, border: `1px solid ${rc}33` }}>{rar}</span>}
                 {p.weight != null && <span className="pg-weight-inline">{Number(p.weight).toLocaleString()} Kg</span>}
-                {(Array.isArray(p.mutations) ? p.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{m}</span>)}
+                {(Array.isArray(p.mutations) ? p.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{mutationLabel(m)}</span>)}
               </div>
               {showBadges && p.uid && <div className="pg-uid">UID: {String(p.uid).slice(0, 8)}</div>}
               {p._from && <div className="pg-from">{p._from}</div>}
@@ -1659,7 +1675,7 @@ function GrowingEggGrid({ eggs, idx }: { eggs: Pet[]; idx: Record<string, string
               <div className="egg-sub">
                 <span className="egg-rate">{fmtRate(egg.rate)}</span>
                 {rar && <span className="pg-rarity" style={{ background: rc + "18", color: rc, border: `1px solid ${rc}33` }}>{rar}</span>}
-                {(Array.isArray(egg.mutations) ? egg.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{m}</span>)}
+                {(Array.isArray(egg.mutations) ? egg.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{mutationLabel(m)}</span>)}
               </div>
               <div style={{ marginTop: 3, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                 {isReady ? (

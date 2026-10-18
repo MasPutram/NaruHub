@@ -179,7 +179,19 @@ function mutationClass(name: string): string {
   if (/^scare/.test(k)) return "pg-mutation mut-scared";
   if (/^alpha/.test(k)) return "pg-mutation mut-alpha";
   if (k === "2x" || /^double/.test(k)) return "pg-mutation mut-2x";
+  if (/^nitro/.test(k)) return "pg-mutation mut-nitro";
+  if (/^spectral/.test(k)) return "pg-mutation mut-spectral";
+  if (/^enchant/.test(k)) return "pg-mutation mut-enchanted";
+  if (/^scrambl/.test(k)) return "pg-mutation mut-scrambled";
+  if (/^greatbloom/.test(k) || k === "spirit bloom") return "pg-mutation mut-spiritbloom";
+  if (/^monstrous/.test(k) || k === "parasite") return "pg-mutation mut-parasite";
   return "pg-mutation mut-default";
+}
+function mutationLabel(name: string): string {
+  const k = String(name || "").trim().toLowerCase();
+  if (/^greatbloom/.test(k)) return "Spirit Bloom";
+  if (/^monstrous/.test(k)) return "Parasite";
+  return name;
 }
 function fmtCompactNum(v: number | null | undefined): string {
   if (v == null) return "-";
@@ -241,7 +253,7 @@ function PetGrid({ pets, idx, showBadges = false }: { pets: Pet[]; idx: Record<s
                 <span className="pg-rate">{fmtRate(p.rate)}</span>
                 {!showBadges && rar && <span className="pg-rarity" style={{ background: rc + "18", color: rc, border: `1px solid ${rc}33` }}>{rar}</span>}
                 {p.weight != null && <span className="pg-weight-inline">{Number(p.weight).toLocaleString()} Kg</span>}
-                {(Array.isArray(p.mutations) ? p.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{m}</span>)}
+                {(Array.isArray(p.mutations) ? p.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{mutationLabel(m)}</span>)}
               </div>
               {showBadges && p.uid && <div className="pg-uid">UID: {String(p.uid).slice(0, 8)}</div>}
               {p._from && <div className="pg-from">{p._from}</div>}
@@ -284,7 +296,7 @@ function GrowingEggGrid({ eggs, idx }: { eggs: Pet[]; idx: Record<string, string
               <div className="egg-sub">
                 <span className="egg-rate">{fmtRate(egg.rate)}</span>
                 {rar && <span className="pg-rarity" style={{ background: rc + "18", color: rc, border: `1px solid ${rc}33` }}>{rar}</span>}
-                {(Array.isArray(egg.mutations) ? egg.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{m}</span>)}
+                {(Array.isArray(egg.mutations) ? egg.mutations : []).map((m, j) => <span key={j} className={mutationClass(m)}>{mutationLabel(m)}</span>)}
               </div>
               <div style={{ marginTop: 3, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                 {isReady ? (
@@ -1370,6 +1382,12 @@ export default function CatalogPage() {
         .mut-scared { background: rgba(134,239,172,.15); color: #4ade80; }
         .mut-alpha { background: rgba(99,102,241,.15); color: #6366f1; }
         .mut-2x { background: rgba(251,191,36,.15); color: #f59e0b; }
+        .mut-nitro { background: rgba(217,119,6,.15); color: #d97706; }
+        .mut-spectral { background: rgba(6,182,212,.15); color: #06b6d4; }
+        .mut-enchanted { background: rgba(16,185,129,.15); color: #10b981; }
+        .mut-scrambled { background: rgba(20,184,166,.15); color: #14b8a6; }
+        .mut-spiritbloom { background: rgba(139,92,246,.15); color: #8b5cf6; }
+        .mut-parasite { background: rgba(153,27,27,.15); color: #991b1b; }
 
         .egg-card {
           display: flex; align-items: center; gap: 10px; background: #1c1c2b;
