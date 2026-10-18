@@ -111,6 +111,8 @@ export default function AnimeDicePage() {
   const [search, setSearch] = useState("");
   const [detail, setDetail] = useState<{ name: string; data: ADDetail | null; loading: boolean; account: ADAccount | null } | null>(null);
   const [combined, setCombined] = useState<CombinedState>({ open: false, loading: false, details: [] });
+  const [hauntedFound, setHauntedFound] = useState<{ gear: string; account: string }[]>([]);
+  const [hauntedMissing, setHauntedMissing] = useState<string[]>([]);
 
   const fetchAccounts = useCallback(async () => {
     try {
@@ -120,12 +122,25 @@ export default function AnimeDicePage() {
     } catch {}
   }, []);
 
+  const fetchHaunted = useCallback(async () => {
+    try {
+      const res = await fetch("/api/anime-dice/haunted-check");
+      const data = await res.json();
+      if (data.ok) {
+        setHauntedFound(data.found || []);
+        setHauntedMissing(data.missing || []);
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     setMounted(true);
     fetchAccounts();
+    fetchHaunted();
     const id = setInterval(fetchAccounts, 5000);
-    return () => clearInterval(id);
-  }, [fetchAccounts]);
+    const id2 = setInterval(fetchHaunted, 10000);
+    return () => { clearInterval(id); clearInterval(id2); };
+  }, [fetchAccounts, fetchHaunted]);
 
   function sortAccounts(list: ADAccount[]): ADAccount[] {
     const sorted = [...list];
@@ -312,12 +327,46 @@ export default function AnimeDicePage() {
 
         .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 6px; }
         .section-header > span:first-child { font-size: 12px; font-weight: 800; color: var(--accent); letter-spacing: .5px; text-transform: uppercase; }
+
+        .haunted-banner { background: linear-gradient(135deg, rgba(249,115,22,.12), rgba(168,85,247,.12)); border: 1px solid rgba(249,115,22,.3); border-radius: 12px; padding: 14px 20px; margin-bottom: 16px; }
+        .haunted-title { font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: #f97316; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+        .haunted-found { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+        .haunted-chip { font-size: 12px; font-weight: 700; padding: 5px 14px; border-radius: 20px; }
+        .haunted-chip.got { background: rgba(52,211,153,.15); border: 1px solid rgba(52,211,153,.35); color: #34d399; }
+        .haunted-chip.miss { background: rgba(255,255,255,.04); border: 1px solid #222240; color: var(--dim); }
+        .haunted-who { font-size: 11px; color: var(--dim); margin-top: 4px; }
+        .haunted-who b { color: #f97316; font-weight: 700; }
       `}</style>
 
       <div className="ad">
         <div className="topbar">
           <h1>Anime Dice Dashboard</h1>
         </div>
+
+        {hauntedMissing.length > 0 && (
+          <div className="haunted-banner">
+            <div className="haunted-title">
+              <span>&#x1F383;</span> Haunted Gear Tracker
+            </div>
+            <div className="haunted-found">
+              {["Pumpkin Head", "Mummy Wraps", "Vampire Cape", "Ghost Wisps", "Candy Bucket"].map((g) => {
+                const f = hauntedFound.find((h) => h.gear === g);
+                return (
+                  <span key={g} className={`haunted-chip ${f ? "got" : "miss"}`}>
+                    {f ? "✓" : "✗"} {g}
+                  </span>
+                );
+              })}
+            </div>
+            {hauntedFound.length > 0 && (
+              <div className="haunted-who">
+                {hauntedFound.map((h, i) => (
+                  <span key={h.gear}>{i > 0 && " • "}<b>{h.account}</b> mendapatkan {h.gear}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="controls">
           <div className="pill-tabs">
