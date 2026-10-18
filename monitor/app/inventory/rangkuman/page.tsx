@@ -77,6 +77,26 @@ const RARITY_COLORS: Record<string, string> = {
 
 function rarityColor(r: string): string { return RARITY_COLORS[r] || "#71717a"; }
 
+const MUTATION_COLORS: Record<string, string> = {
+  golden: "#ca8a04", silver: "#94a3b8", rainbow: "#9333ea",
+  boss: "#7c3aed", fractured: "#7c3aed",
+  spectral: "#06b6d4", enchanted: "#10b981", nitro: "#d97706",
+  scrambled: "#14b8a6", greatbloom: "#8b5cf6", monstrous: "#991b1b",
+  sakura: "#f472b6", frozen: "#38bdf8", magma: "#dc2626",
+  candy: "#ec4899", shocked: "#eab308", scared: "#4ade80", alpha: "#6366f1",
+};
+function mutationColor(m: string): string {
+  const k = m.toLowerCase();
+  for (const [key, col] of Object.entries(MUTATION_COLORS)) if (k.includes(key)) return col;
+  return "#a78bfa";
+}
+function mutationLabel(m: string): string {
+  const k = m.toLowerCase();
+  if (k === "greatbloom") return "Spirit Bloom";
+  if (k === "monstrous") return "Parasite";
+  return m;
+}
+
 // Game renders internal rarities with upgraded display names when a top-tier
 // mutation (Rainbow etc.) is applied. Rule turned out to be compound: high
 // mutations promote Secret I → Heavenly as well. Prefer the explicit
@@ -473,7 +493,7 @@ export default function RangkumanPage() {
                           {/* Info kecil: level, mutation, grade, trait */}
                           <div className="gc-info-row">
                             <span>Lv.{u.level ?? "-"}</span>
-                            {u.mutation && <span className="gc-mut-tag">{u.mutation}</span>}
+                            {u.mutation && <span className="gc-mut-tag" style={{ color: mutationColor(u.mutation), background: `${mutationColor(u.mutation)}22` }}>{mutationLabel(u.mutation)}</span>}
                             {u.grade && <span className="gc-grade-tag">G:{u.grade}</span>}
                             {u.trait && <span className="gc-trait-tag">{u.trait}</span>}
                           </div>

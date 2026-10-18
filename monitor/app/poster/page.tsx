@@ -304,6 +304,8 @@ function PetIcon({ pet, size = 48 }: { pet: Pet; size?: number }) {
 
 const MUTATION_DISPLAY_NAME: Record<string, string> = {
   boss: "FRACTURED",
+  greatbloom: "SPIRIT BLOOM",
+  monstrous: "PARASITE",
 };
 
 function mutDisplayName(mut: string): string {
@@ -316,6 +318,12 @@ function mutColor(mut: string): string {
   if (m.includes("golden")) return "#ca8a04";
   if (m.includes("silver")) return "#64748b";
   if (m === "boss" || m.includes("fractured")) return "#7c3aed";
+  if (m.includes("spectral")) return "#06b6d4";
+  if (m.includes("enchant")) return "#10b981";
+  if (m.includes("nitro")) return "#d97706";
+  if (m.includes("scrambl")) return "#14b8a6";
+  if (m.includes("greatbloom")) return "#8b5cf6";
+  if (m.includes("monstrous")) return "#991b1b";
   return "#2563eb";
 }
 
@@ -355,6 +363,12 @@ function mutBadgeStyle(mut: string): BadgeStyle {
       textShadow: "0 1px 2px rgba(0,0,0,0.5)",
     };
   }
+  if (m.includes("spectral")) return { background: "linear-gradient(135deg,#0e7490,#06b6d4)", color: "#fff", borderColor: "#06b6d4", textShadow: "0 1px 2px rgba(0,0,0,0.3)" };
+  if (m.includes("enchant")) return { background: "linear-gradient(135deg,#065f46,#10b981)", color: "#fff", borderColor: "#10b981", textShadow: "0 1px 2px rgba(0,0,0,0.3)" };
+  if (m.includes("nitro")) return { background: "linear-gradient(135deg,#92400e,#d97706)", color: "#fff", borderColor: "#d97706", textShadow: "0 1px 2px rgba(0,0,0,0.3)" };
+  if (m.includes("scrambl")) return { background: "linear-gradient(135deg,#0f766e,#14b8a6)", color: "#fff", borderColor: "#14b8a6", textShadow: "0 1px 2px rgba(0,0,0,0.3)" };
+  if (m.includes("greatbloom")) return { background: "linear-gradient(135deg,#5b21b6,#8b5cf6)", color: "#fff", borderColor: "#8b5cf6", textShadow: "0 1px 2px rgba(0,0,0,0.3)" };
+  if (m.includes("monstrous")) return { background: "linear-gradient(135deg,#7f1d1d,#991b1b)", color: "#fff", borderColor: "#991b1b", textShadow: "0 1px 2px rgba(0,0,0,0.3)" };
   return { background: "#dbeafe", color: "#1d4ed8", borderColor: "#2563eb" };
 }
 
@@ -380,6 +394,12 @@ function mutTextStyle(mut: string): BadgeStyle {
   }
   if (m.includes("golden")) return { color: "#b45309" };
   if (m.includes("silver")) return { color: "#475569" };
+  if (m.includes("spectral")) return { color: "#06b6d4" };
+  if (m.includes("enchant")) return { color: "#10b981" };
+  if (m.includes("nitro")) return { color: "#d97706" };
+  if (m.includes("scrambl")) return { color: "#14b8a6" };
+  if (m.includes("greatbloom")) return { color: "#8b5cf6" };
+  if (m.includes("monstrous")) return { color: "#991b1b" };
   return { color: "#2563eb" };
 }
 
