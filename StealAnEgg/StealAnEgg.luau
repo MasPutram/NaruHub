@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.3.0"
+local VERSION = "v3.3.1"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -1049,6 +1049,7 @@ local function reportToMonitor()
 		local bossToken = 0
 		local mutationToken = 0
 		local scrambleToken = 0
+		local nitroToken = 0
 		local equippedTrail = ""
 		pcall(function()
 			local s = SaveModule.Peek()
@@ -1068,6 +1069,8 @@ local function reportToMonitor()
 								mutationToken = mutationToken + uses
 							elseif mutId == "Scrambled" then
 								scrambleToken = scrambleToken + uses
+							elseif mutId == "Nitro" then
+								nitroToken = nitroToken + uses
 							end
 						end
 					end
@@ -1094,6 +1097,7 @@ local function reportToMonitor()
 			treadmillLevel = treadmillLevel,
 			trail = equippedTrail,
 			scrambleToken = scrambleToken,
+			nitroToken = nitroToken,
 			ownerFacebook = "Putra Ramadhan",
 			sourceAccount = LocalPlayer.Name,
 		}
@@ -1115,6 +1119,7 @@ local function reportToMonitor()
 			bossToken = bossToken,
 			mutationToken = mutationToken,
 			scrambleToken = scrambleToken,
+			nitroToken = nitroToken,
 			topPets = topPets,
 			trail = equippedTrail,
 			fullData = fullData,
