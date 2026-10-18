@@ -558,7 +558,7 @@ export default function CatalogPage() {
       return caps + digits;
     }
 
-    function topPetLabel(a: Account): { text: string; rate: string; mut: string } {
+    function topPetLabel(a: Account): { text: string; rate: string; muts: string[] } {
       const pools: Pet[] = [];
       if (a.topPets) pools.push(...a.topPets);
       if (a.detail) {
@@ -568,10 +568,10 @@ export default function CatalogPage() {
         if (a.detail.backpackEggs) pools.push(...a.detail.backpackEggs);
       }
       const best = pools.sort((x, y) => (y.rate || 0) - (x.rate || 0))[0];
-      if (!best) return { text: "—", rate: "", mut: "" };
+      if (!best) return { text: "—", rate: "", muts: [] };
       const name = best.name || best.category || "?";
-      const mut = (best.mutations || [])[0] || "";
-      return { text: name, rate: fmtRate(best.rate || 0), mut: mut.toUpperCase() };
+      const muts = (best.mutations || []).map((m: string) => m.toUpperCase());
+      return { text: name, rate: fmtRate(best.rate || 0), muts };
     }
     function escHtml(s: string): string {
       return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -602,12 +602,12 @@ export default function CatalogPage() {
       const tokenHtml = tokenItems.map(t =>
         `<div class="tk-item"><span class="tk-label">${t.label}</span><span class="tk-val" style="color:${t.color}">${t.val > 0 ? t.val : "—"}</span></div>`
       ).join("");
-      const mutBadge = tp.mut
-        ? ` <span class="card-mut" data-m="${escHtml(tp.mut)}">${escHtml(tp.mut)}</span>`
+      const mutBadges = tp.muts.length > 0
+        ? `<div class="card-mut-row">${tp.muts.map(m => `<span class="card-mut" data-m="${escHtml(m)}">${escHtml(m)}</span>`).join("")}</div>`
         : "";
-      const petLine = tp.text === "—"
+      const petVal = tp.text === "—"
         ? `<span style="color:#94a3b8">—</span>`
-        : `<span class="pet-name">${escHtml(tp.text)}</span> <span class="pet-rate">${tp.rate}</span>${mutBadge}`;
+        : `<span class="pet-name">${escHtml(tp.text)}</span> <span class="pet-rate">${tp.rate}</span>`;
       return `
         <div class="rk-card">
           <div class="card-top">
@@ -616,7 +616,7 @@ export default function CatalogPage() {
           </div>
           <div class="card-row"><span class="card-lbl">Income Aktif</span><span class="card-val cv-aktif">${incAktif}</span></div>
           <div class="card-row"><span class="card-lbl">Income Potensi</span><span class="card-val cv-potensi">${incPotensi}</span></div>
-          <div class="card-row card-row-stack"><span class="card-lbl">Top Pet</span><div class="card-val cv-pet">${petLine}</div></div>
+          <div class="card-row card-row-stack"><div class="card-row" style="border:none;padding:0;width:100%"><span class="card-lbl">Top Pet</span><span class="card-val cv-pet">${petVal}</span></div>${mutBadges}</div>
           <div class="card-row"><span class="card-lbl">Divine</span><span class="card-val cv-divine">${divineCount(a) || "—"}</span></div>
           <div class="card-row"><span class="card-lbl">Telur</span><span class="card-val">${eggTotal(a)}</span></div>
           <div class="card-tokens">${tokenHtml}</div>
@@ -677,6 +677,7 @@ export default function CatalogPage() {
 
         .card-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 3px 0; border-bottom: 1px solid #f1f5f9; }
         .card-row-stack { flex-direction: column; align-items: flex-start; gap: 2px; }
+        .card-mut-row { display: flex; gap: 4px; flex-wrap: wrap; }
         .card-lbl { color: #64748b; font-weight: 600; }
         .card-val { font-weight: 800; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
         .cv-aktif { color: #0f172a; }
