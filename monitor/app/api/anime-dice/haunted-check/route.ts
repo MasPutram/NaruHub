@@ -13,8 +13,9 @@ const HAUNTED_GEARS = [
 ];
 
 const RARE_UNITS = [
-  "Vampire Gujo",
+  "Witch Erzo",
   "Witch Namee",
+  "Vampire Gujo",
 ];
 
 export async function GET(req: NextRequest) {
