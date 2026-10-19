@@ -114,6 +114,7 @@ export default function AnimeDicePage() {
   const [hauntedFound, setHauntedFound] = useState<{ gear: string; account: string }[]>([]);
   const [hauntedMissing, setHauntedMissing] = useState<string[]>([]);
   const [hauntedUnits, setHauntedUnits] = useState<{ unit: string; account: string; count: number }[]>([]);
+  const [hauntedAccounts, setHauntedAccounts] = useState<{ account: string; gears: string[]; units: { name: string; count: number }[] }[]>([]);
   const [hauntedExpanded, setHauntedExpanded] = useState(false);
 
   const fetchAccounts = useCallback(async () => {
@@ -132,6 +133,7 @@ export default function AnimeDicePage() {
         setHauntedFound(data.found || []);
         setHauntedMissing(data.missing || []);
         setHauntedUnits(data.units || []);
+        setHauntedAccounts(data.accounts || []);
       }
     } catch {}
   }, []);
@@ -345,14 +347,14 @@ export default function AnimeDicePage() {
         .haunted-chip.miss { background: rgba(255,255,255,.04); border: 1px solid #222240; color: var(--dim); }
         .haunted-chip.unit { background: rgba(168,85,247,.15); border: 1px solid rgba(168,85,247,.35); color: #a855f7; }
         .haunted-detail { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.06); }
-        .haunted-section { margin-bottom: 10px; }
-        .haunted-section-title { font-size: 11px; font-weight: 800; color: var(--dim); letter-spacing: .5px; text-transform: uppercase; margin-bottom: 6px; }
-        .haunted-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
-        .haunted-detail-card { background: rgba(255,255,255,.03); border: 1px solid #1e1e38; border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; }
-        .hdc-name { font-size: 12px; font-weight: 700; color: var(--ink); }
-        .hdc-account { font-size: 11px; color: #f97316; font-weight: 600; }
-        .hdc-miss { font-size: 11px; color: var(--dim); font-style: italic; }
-        .hdc-count { font-size: 11px; color: var(--dim); font-weight: 600; }
+        .haunted-accs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+        .haunted-acc-card { background: rgba(255,255,255,.03); border: 1px solid #1e1e38; border-radius: 10px; padding: 10px 14px; }
+        .haunted-acc-name { font-size: 13px; font-weight: 800; color: #f97316; margin-bottom: 8px; }
+        .haunted-acc-items { display: flex; flex-wrap: wrap; gap: 5px; }
+        .haunted-acc-chip { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 14px; }
+        .haunted-acc-chip.gear { background: rgba(52,211,153,.12); border: 1px solid rgba(52,211,153,.25); color: #34d399; }
+        .haunted-acc-chip.unit { background: rgba(168,85,247,.12); border: 1px solid rgba(168,85,247,.25); color: #a855f7; }
+        .haunted-none { font-size: 12px; color: var(--dim); font-style: italic; padding: 4px 0; }
       `}</style>
 
       <div className="ad">
@@ -389,38 +391,25 @@ export default function AnimeDicePage() {
             </div>
             {hauntedExpanded && (
               <div className="haunted-detail" onClick={(e) => e.stopPropagation()}>
-                <div className="haunted-section">
-                  <div className="haunted-section-title">Haunted Gear</div>
-                  <div className="haunted-detail-grid">
-                    {["Pumpkin Head", "Mummy Wraps", "Vampire Cape", "Ghost Wisps", "Candy Bucket"].map((g) => {
-                      const f = hauntedFound.find((h) => h.gear === g);
-                      return (
-                        <div key={g} className="haunted-detail-card">
-                          <span className="hdc-name">{f ? "✓" : "✗"} {g}</span>
-                          {f ? <span className="hdc-account">{f.account}</span> : <span className="hdc-miss">Belum dapat</span>}
+                {hauntedAccounts.length === 0 ? (
+                  <div className="haunted-none">Belum ada akun yang mendapatkan Haunted gear atau unit langka</div>
+                ) : (
+                  <div className="haunted-accs">
+                    {hauntedAccounts.map((acc) => (
+                      <div key={acc.account} className="haunted-acc-card">
+                        <div className="haunted-acc-name">{acc.account}</div>
+                        <div className="haunted-acc-items">
+                          {acc.gears.map((g) => (
+                            <span key={g} className="haunted-acc-chip gear">{g}</span>
+                          ))}
+                          {acc.units.map((u) => (
+                            <span key={u.name} className="haunted-acc-chip unit">{u.name} x{u.count}</span>
+                          ))}
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
                   </div>
-                </div>
-                <div className="haunted-section">
-                  <div className="haunted-section-title">Unit Langka</div>
-                  {hauntedUnits.length === 0 ? (
-                    <div style={{ fontSize: 12, color: "var(--dim)", fontStyle: "italic" }}>Belum ada akun yang mendapatkan Vampire Gujo atau Witch Namee</div>
-                  ) : (
-                    <div className="haunted-detail-grid">
-                      {hauntedUnits.map((u) => (
-                        <div key={u.unit + u.account} className="haunted-detail-card">
-                          <span className="hdc-name" style={{ color: "#a855f7" }}>{u.unit}</span>
-                          <div style={{ textAlign: "right" }}>
-                            <span className="hdc-account">{u.account}</span>
-                            <span className="hdc-count"> &times;{u.count}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
             )}
           </div>
