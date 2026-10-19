@@ -12,6 +12,11 @@ const HAUNTED_GEARS = [
   "Vampire Cape",
 ];
 
+const RARE_UNITS = [
+  "Vampire Gujo",
+  "Witch Namee",
+];
+
 export async function GET(req: NextRequest) {
   try {
     const { tenant } = getTenantFromRequest(req);
@@ -25,31 +30,45 @@ export async function GET(req: NextRequest) {
     } while (cursor !== "0");
 
     if (keys.length === 0) {
-      return NextResponse.json({ ok: true, found: [], missing: HAUNTED_GEARS });
+      return NextResponse.json({ ok: true, found: [], missing: HAUNTED_GEARS, units: [] });
     }
 
     const values = await redis.mget(...keys);
     const found: { gear: string; account: string }[] = [];
     const foundSet = new Set<string>();
+    const units: { unit: string; account: string; count: number }[] = [];
 
     for (let i = 0; i < keys.length; i++) {
       const raw = values[i];
       if (!raw) continue;
       const data = typeof raw === "string" ? JSON.parse(raw) : raw;
-      const bp: any[] = Array.isArray(data.backpack) ? data.backpack : [];
       const account = stripTenantPrefix(keys[i], tenant).replace(/^ad:detail:/, "");
+
+      const bp: any[] = Array.isArray(data.backpack) ? data.backpack : [];
       for (const item of bp) {
         if (HAUNTED_GEARS.includes(item.name) && !foundSet.has(item.name)) {
           found.push({ gear: item.name, account });
           foundSet.add(item.name);
         }
       }
+
+      const allUnits: any[] = Array.isArray(data.allUnits) ? data.allUnits : [];
+      for (const u of allUnits) {
+        if (RARE_UNITS.includes(u.name)) {
+          const existing = units.find((x) => x.unit === u.name && x.account === account);
+          if (existing) {
+            existing.count++;
+          } else {
+            units.push({ unit: u.name, account, count: 1 });
+          }
+        }
+      }
     }
 
     const missing = HAUNTED_GEARS.filter((g) => !foundSet.has(g));
 
-    return NextResponse.json({ ok: true, found, missing });
+    return NextResponse.json({ ok: true, found, missing, units });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e.message, found: [], missing: HAUNTED_GEARS }, { status: 500 });
+    return NextResponse.json({ ok: false, error: e.message, found: [], missing: HAUNTED_GEARS, units: [] }, { status: 500 });
   }
 }

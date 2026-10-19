@@ -113,6 +113,8 @@ export default function AnimeDicePage() {
   const [combined, setCombined] = useState<CombinedState>({ open: false, loading: false, details: [] });
   const [hauntedFound, setHauntedFound] = useState<{ gear: string; account: string }[]>([]);
   const [hauntedMissing, setHauntedMissing] = useState<string[]>([]);
+  const [hauntedUnits, setHauntedUnits] = useState<{ unit: string; account: string; count: number }[]>([]);
+  const [hauntedExpanded, setHauntedExpanded] = useState(false);
 
   const fetchAccounts = useCallback(async () => {
     try {
@@ -129,6 +131,7 @@ export default function AnimeDicePage() {
       if (data.ok) {
         setHauntedFound(data.found || []);
         setHauntedMissing(data.missing || []);
+        setHauntedUnits(data.units || []);
       }
     } catch {}
   }, []);
@@ -328,14 +331,28 @@ export default function AnimeDicePage() {
         .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 6px; }
         .section-header > span:first-child { font-size: 12px; font-weight: 800; color: var(--accent); letter-spacing: .5px; text-transform: uppercase; }
 
-        .haunted-banner { background: linear-gradient(135deg, rgba(249,115,22,.12), rgba(168,85,247,.12)); border: 1px solid rgba(249,115,22,.3); border-radius: 12px; padding: 14px 20px; margin-bottom: 16px; }
-        .haunted-title { font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: #f97316; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
-        .haunted-found { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+        .haunted-banner { background: linear-gradient(135deg, rgba(249,115,22,.12), rgba(168,85,247,.12)); border: 1px solid rgba(249,115,22,.3); border-radius: 12px; padding: 14px 20px; margin-bottom: 16px; cursor: pointer; transition: border-color .15s; }
+        .haunted-banner:hover { border-color: rgba(249,115,22,.5); }
+        .haunted-header { display: flex; align-items: center; justify-content: space-between; }
+        .haunted-title { font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: #f97316; display: flex; align-items: center; gap: 8px; }
+        .haunted-counter { font-size: 11px; font-weight: 700; color: var(--dim); display: flex; align-items: center; gap: 4px; }
+        .haunted-counter .num { color: #34d399; }
+        .haunted-arrow { font-size: 10px; color: var(--dim); transition: transform .2s; }
+        .haunted-arrow.open { transform: rotate(180deg); }
+        .haunted-summary { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
         .haunted-chip { font-size: 12px; font-weight: 700; padding: 5px 14px; border-radius: 20px; }
         .haunted-chip.got { background: rgba(52,211,153,.15); border: 1px solid rgba(52,211,153,.35); color: #34d399; }
         .haunted-chip.miss { background: rgba(255,255,255,.04); border: 1px solid #222240; color: var(--dim); }
-        .haunted-who { font-size: 11px; color: var(--dim); margin-top: 4px; }
-        .haunted-who b { color: #f97316; font-weight: 700; }
+        .haunted-chip.unit { background: rgba(168,85,247,.15); border: 1px solid rgba(168,85,247,.35); color: #a855f7; }
+        .haunted-detail { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.06); }
+        .haunted-section { margin-bottom: 10px; }
+        .haunted-section-title { font-size: 11px; font-weight: 800; color: var(--dim); letter-spacing: .5px; text-transform: uppercase; margin-bottom: 6px; }
+        .haunted-detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+        .haunted-detail-card { background: rgba(255,255,255,.03); border: 1px solid #1e1e38; border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; }
+        .hdc-name { font-size: 12px; font-weight: 700; color: var(--ink); }
+        .hdc-account { font-size: 11px; color: #f97316; font-weight: 600; }
+        .hdc-miss { font-size: 11px; color: var(--dim); font-style: italic; }
+        .hdc-count { font-size: 11px; color: var(--dim); font-weight: 600; }
       `}</style>
 
       <div className="ad">
@@ -343,12 +360,19 @@ export default function AnimeDicePage() {
           <h1>Anime Dice Dashboard</h1>
         </div>
 
-        {hauntedMissing.length > 0 && (
-          <div className="haunted-banner">
-            <div className="haunted-title">
-              <span>&#x1F383;</span> Haunted Gear Tracker
+        {(hauntedMissing.length > 0 || hauntedUnits.length > 0) && (
+          <div className="haunted-banner" onClick={() => setHauntedExpanded(!hauntedExpanded)}>
+            <div className="haunted-header">
+              <div className="haunted-title">
+                <span>&#x1F383;</span> Halloween Tracker
+              </div>
+              <div className="haunted-counter">
+                <span>Gear <span className="num">{hauntedFound.length}/5</span></span>
+                {hauntedUnits.length > 0 && <span>&nbsp;&bull; Unit Langka <span className="num">{hauntedUnits.length}</span></span>}
+                <span className={`haunted-arrow ${hauntedExpanded ? "open" : ""}`}>&#x25BC;</span>
+              </div>
             </div>
-            <div className="haunted-found">
+            <div className="haunted-summary">
               {["Pumpkin Head", "Mummy Wraps", "Vampire Cape", "Ghost Wisps", "Candy Bucket"].map((g) => {
                 const f = hauntedFound.find((h) => h.gear === g);
                 return (
@@ -357,12 +381,46 @@ export default function AnimeDicePage() {
                   </span>
                 );
               })}
+              {hauntedUnits.map((u) => (
+                <span key={u.unit + u.account} className="haunted-chip unit">
+                  {u.unit} x{u.count}
+                </span>
+              ))}
             </div>
-            {hauntedFound.length > 0 && (
-              <div className="haunted-who">
-                {hauntedFound.map((h, i) => (
-                  <span key={h.gear}>{i > 0 && " • "}<b>{h.account}</b> mendapatkan {h.gear}</span>
-                ))}
+            {hauntedExpanded && (
+              <div className="haunted-detail" onClick={(e) => e.stopPropagation()}>
+                <div className="haunted-section">
+                  <div className="haunted-section-title">Haunted Gear</div>
+                  <div className="haunted-detail-grid">
+                    {["Pumpkin Head", "Mummy Wraps", "Vampire Cape", "Ghost Wisps", "Candy Bucket"].map((g) => {
+                      const f = hauntedFound.find((h) => h.gear === g);
+                      return (
+                        <div key={g} className="haunted-detail-card">
+                          <span className="hdc-name">{f ? "✓" : "✗"} {g}</span>
+                          {f ? <span className="hdc-account">{f.account}</span> : <span className="hdc-miss">Belum dapat</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="haunted-section">
+                  <div className="haunted-section-title">Unit Langka</div>
+                  {hauntedUnits.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "var(--dim)", fontStyle: "italic" }}>Belum ada akun yang mendapatkan Vampire Gujo atau Witch Namee</div>
+                  ) : (
+                    <div className="haunted-detail-grid">
+                      {hauntedUnits.map((u) => (
+                        <div key={u.unit + u.account} className="haunted-detail-card">
+                          <span className="hdc-name" style={{ color: "#a855f7" }}>{u.unit}</span>
+                          <div style={{ textAlign: "right" }}>
+                            <span className="hdc-account">{u.account}</span>
+                            <span className="hdc-count"> &times;{u.count}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
