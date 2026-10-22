@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.4.0"
+local VERSION = "v3.4.1"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -1409,9 +1409,12 @@ end)
 --   - a TextLabel whose text is exactly "Join Event"
 ------------------------------------------------------------
 task.spawn(function()
+	local TRIGGER_BUTTONS = { ["Notify Me"] = true, ["Notifikasikan Saya"] = true }
+	local TRIGGER_LABELS  = { ["Join Event"] = true, ["Bergabung ke Acara"] = true }
+
 	local function isTriggerText(obj)
-		if obj:IsA("TextButton") and tostring(obj.Text or "") == "Notify Me" then return true end
-		if obj:IsA("TextLabel") and tostring(obj.Text or "") == "Join Event" then return true end
+		if obj:IsA("TextButton") and TRIGGER_BUTTONS[tostring(obj.Text or "")] then return true end
+		if obj:IsA("TextLabel") and TRIGGER_LABELS[tostring(obj.Text or "")] then return true end
 		return false
 	end
 
