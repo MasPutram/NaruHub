@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Anime Dice v2.5.2
+-- NaruHub | Anime Dice v2.5.3
 -- Monitoring. Self-contained GUI (inline NaruUI).
 
 ------------------------------------------------------------
@@ -1431,7 +1431,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v2.5.2",
+	Title = "NaruHub | Anime Dice v2.5.3",
 	Badge = "MONITOR",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(440, 340),
@@ -2179,6 +2179,86 @@ task.spawn(function()
 			setStatusContent("Gagal" .. pingStr)
 		end
 		task.wait(30)
+	end
+end)
+
+------------------------------------------------------------
+-- Auto Close Event Popup
+-- Roblox Experience Events popup ("Join Event" with "Notify Me" button)
+-- blocks the game. Destroy it the instant it appears.
+------------------------------------------------------------
+task.spawn(function()
+	local function isTriggerText(obj)
+		if obj:IsA("TextButton") and tostring(obj.Text or "") == "Notify Me" then return true end
+		if obj:IsA("TextLabel") and tostring(obj.Text or "") == "Join Event" then return true end
+		return false
+	end
+
+	local function killPopupFor(node)
+		local top = node
+		while top and top.Parent do
+			local parent = top.Parent
+			if parent == game or parent.ClassName == "CoreGui" or parent.ClassName == "PlayerGui"
+				or parent.Name == "CoreGui" or parent.Name == "PlayerGui" then
+				break
+			end
+			top = parent
+		end
+		if not top or not top.Parent then return false end
+		local n = top.Name:lower()
+		if n:find("naru") or n:find("hiphub") then return false end
+		return (pcall(function() top:Destroy() end))
+	end
+
+	local function scanAndClose(root)
+		if not root then return end
+		local killed = {}
+		local ok, descs = pcall(function() return root:GetDescendants() end)
+		if not ok or type(descs) ~= "table" then return end
+		for _, d in ipairs(descs) do
+			if d.Parent and isTriggerText(d) then
+				local top = d
+				while top and top.Parent do
+					local parent = top.Parent
+					if parent == game or parent.ClassName == "CoreGui" or parent.ClassName == "PlayerGui"
+						or parent.Name == "CoreGui" or parent.Name == "PlayerGui" then
+						break
+					end
+					top = parent
+				end
+				if top and top.Parent and not killed[top] then
+					killed[top] = true
+					killPopupFor(d)
+				end
+			end
+		end
+	end
+
+	local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui")
+	local cg
+	pcall(function() cg = game:GetService("CoreGui") end)
+
+	local function attachWatcher(root)
+		if not root then return end
+		pcall(function()
+			root.DescendantAdded:Connect(function(d)
+				if isTriggerText(d) then
+					task.wait()
+					killPopupFor(d)
+				end
+			end)
+		end)
+	end
+	attachWatcher(pg)
+	attachWatcher(cg)
+
+	scanAndClose(pg)
+	scanAndClose(cg)
+
+	while not Fluent.Unloaded and Fluent.GUI and Fluent.GUI.Parent do
+		scanAndClose(pg)
+		scanAndClose(cg)
+		task.wait(2)
 	end
 end)
 
