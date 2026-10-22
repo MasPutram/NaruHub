@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | AnimeDice Sell Catalog v2.1.0
+-- NaruHub | AnimeDice Sell Catalog v2.1.1
 -- Sends enriched inventory data to dashboard catalog for marketplace listings.
 -- Self-contained GUI (no external NaruUI fetch).
 
@@ -1316,6 +1316,11 @@ deviceUserMap = buildDeviceMap()
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 
+if not game:IsLoaded() then game.Loaded:Wait() end
+ReplicatedStorage:WaitForChild("Framework"):WaitForChild("Features")
+ReplicatedStorage:WaitForChild("Packages")
+ReplicatedStorage:WaitForChild("Network")
+
 local DataController = require(ReplicatedStorage.Framework.Features.Data.DataController)
 local EntryRegistry = require(ReplicatedStorage.Framework.Features.Inventory.EntryRegistry)
 local MutationsConfig = require(ReplicatedStorage.Framework.Features.Inventory.Kinds.Unit.Mutations)
@@ -1615,7 +1620,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | AD Catalog v2.1.0",
+	Title = "NaruHub | AD Catalog v2.1.1",
 	Badge = "SELL",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(540, 460),

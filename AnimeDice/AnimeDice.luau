@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Anime Dice v2.5.1
+-- NaruHub | Anime Dice v2.5.2
 -- Monitoring. Self-contained GUI (inline NaruUI).
 
 ------------------------------------------------------------
@@ -1431,7 +1431,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v2.5.1",
+	Title = "NaruHub | Anime Dice v2.5.2",
 	Badge = "MONITOR",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(440, 340),
@@ -1548,7 +1548,13 @@ end
 
 ------------------------------------------------------------
 -- DataController (require sebelum Network taint)
+-- Wait sampai Framework ready biar nggak gagal load
 ------------------------------------------------------------
+if not game:IsLoaded() then game.Loaded:Wait() end
+ReplicatedStorage:WaitForChild("Framework"):WaitForChild("Features")
+ReplicatedStorage:WaitForChild("Packages")
+ReplicatedStorage:WaitForChild("Network")
+
 local DataController = require(ReplicatedStorage.Framework.Features.Data.DataController)
 
 ------------------------------------------------------------
