@@ -2185,9 +2185,10 @@ end)
 ------------------------------------------------------------
 -- Halloween Tab — Auto Trick-or-Treat
 ------------------------------------------------------------
-task.wait()
 do
+	print("[Halloween] Starting tab init...")
 	local HalloweenTab = Window:AddTab({ Title = "Halloween" })
+	print("[Halloween] Tab created")
 	local totSection = HalloweenTab:AddSection("Auto Trick-or-Treat", { NoCollapse = true })
 
 	local totEnabled = false
@@ -2461,6 +2462,7 @@ do
 			end)
 		end,
 	})
+	print("[Halloween] Tab init complete")
 end
 
 ------------------------------------------------------------
