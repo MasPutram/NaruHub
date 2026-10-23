@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | AnimeDice Sell Catalog v2.1.1
+-- NaruHub | AnimeDice Sell Catalog v2.2.0
 -- Sends enriched inventory data to dashboard catalog for marketplace listings.
 -- Self-contained GUI (no external NaruUI fetch).
 
@@ -1620,7 +1620,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | AD Catalog v2.1.1",
+	Title = "NaruHub | AD Catalog v2.2.0",
 	Badge = "SELL",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(540, 460),
@@ -2221,4 +2221,284 @@ do
 			task.wait(10)
 		end
 	end)
+end
+
+------------------------------------------------------------
+-- Halloween Tab — Auto Trick-or-Treat
+------------------------------------------------------------
+do
+	local HalloweenTab = Window:AddTab({ Title = "Halloween" })
+	local totSection = HalloweenTab:AddSection("Auto Trick-or-Treat", { NoCollapse = true })
+
+	local totEnabled = false
+	local totStatus = totSection:AddParagraph({ Title = "Status", Content = "Off" })
+	local totCyclePara = totSection:AddParagraph({ Title = "Cycle", Content = "-" })
+
+	local PORTAL1 = {
+		Vector3.new(240.7, 5.2, 107.4), Vector3.new(223.1, 5.6, 87.6),
+		Vector3.new(212.1, 5.6, 59.8), Vector3.new(209.7, 5.4, 36.8),
+		Vector3.new(214.6, 5.4, 12.6), Vector3.new(229.3, 5.7, -5.4),
+		Vector3.new(246.9, 5.7, -16.9), Vector3.new(266.3, 6.2, -25),
+		Vector3.new(282.1, 4.4, -43.8), Vector3.new(284.4, 4.4, -65.9),
+		Vector3.new(283.6, 4.4, -86.6),
+	}
+	local PORTAL2 = {
+		Vector3.new(314.3, 4.4, 121.7), Vector3.new(343, 5.0, 98.4),
+		Vector3.new(360.2, 4.9, 70.5), Vector3.new(363.1, 5.2, 36),
+		Vector3.new(354.9, 4.8, 2.6), Vector3.new(338.2, 4.9, -17.7),
+		Vector3.new(316.4, 5.5, -25.3), Vector3.new(292.2, 4.8, -36.9),
+		Vector3.new(286.8, 4.4, -65), Vector3.new(286.7, 4.4, -90.6),
+	}
+	local PORTAL_ROUTES = {PORTAL1, PORTAL2}
+
+	local DR1 = {
+		{t="w", p=Vector3.new(-1926.9, -20, 11287.3)},
+		{t="w", p=Vector3.new(-1898.7, -20, 11326.5)},
+		{t="d", p=Vector3.new(-1875, -19.2, 11356.2), n="Door 5"},
+		{t="d", p=Vector3.new(-1874.3, -18.5, 11323.8), n="Door 2"},
+		{t="w", p=Vector3.new(-1856, -19.5, 11336.5)},
+		{t="w", p=Vector3.new(-1810.2, -19.7, 11330)},
+		{t="d", p=Vector3.new(-1807.6, -19.2, 11325.9), n="Door 3"},
+		{t="d", p=Vector3.new(-1800.5, -19.3, 11357.2), n="Door 4"},
+		{t="w", p=Vector3.new(-1844.3, -19.5, 11346.9)},
+		{t="w", p=Vector3.new(-1888.4, -19.5, 11343.6)},
+		{t="w", p=Vector3.new(-1936.4, -19.2, 11347.5)},
+		{t="w", p=Vector3.new(-1984.7, -20, 11350.9)},
+		{t="d", p=Vector3.new(-1994.1, -19.3, 11357.2), n="Door 6"},
+		{t="w", p=Vector3.new(-2012.7, -19.9, 11356.3)},
+		{t="w", p=Vector3.new(-2061.1, -19.5, 11353.5)},
+		{t="d", p=Vector3.new(-2074.7, -19.4, 11352.5), n="Door 7"},
+	}
+	local DR2 = {
+		{t="d", p=Vector3.new(-1913.2, -18.1, 11266.9), n="Door 1"},
+		{t="w", p=Vector3.new(-1928.5, -19.6, 11273.7)},
+		{t="w", p=Vector3.new(-1905.8, -20, 11315.3)},
+		{t="w", p=Vector3.new(-1876.3, -19.6, 11353.5)},
+		{t="d", p=Vector3.new(-1873.3, -18.1, 11367.3), n="Door 5"},
+		{t="w", p=Vector3.new(-1872.2, -19.5, 11339.3)},
+		{t="d", p=Vector3.new(-1873, -18.1, 11314.4), n="Door 2"},
+		{t="w", p=Vector3.new(-1871.3, -19.5, 11334.6)},
+		{t="w", p=Vector3.new(-1846.3, -19.5, 11333.5)},
+		{t="w", p=Vector3.new(-1806.5, -19.5, 11330.8)},
+		{t="d", p=Vector3.new(-1807.9, -18.3, 11320.2), n="Door 3"},
+		{t="w", p=Vector3.new(-1801.1, -19.6, 11355.4)},
+		{t="d", p=Vector3.new(-1799.5, -18.3, 11363.1), n="Door 4"},
+		{t="w", p=Vector3.new(-1800.9, -19.6, 11355.2)},
+		{t="w", p=Vector3.new(-1828, -19.5, 11344.8)},
+		{t="w", p=Vector3.new(-1876, -19.5, 11346.5)},
+		{t="w", p=Vector3.new(-1924.4, -19.2, 11347.7)},
+		{t="w", p=Vector3.new(-1972.3, -20, 11350)},
+		{t="w", p=Vector3.new(-2020.5, -20, 11353.9)},
+		{t="d", p=Vector3.new(-2073.6, -19.6, 11352.8), n="Door 7"},
+		{t="w", p=Vector3.new(-2036, -20, 11348.7)},
+		{t="w", p=Vector3.new(-1997.6, -20, 11320.1)},
+		{t="w", p=Vector3.new(-1958.8, -20, 11291.1)},
+		{t="w", p=Vector3.new(-1937, -19.6, 11273.6)},
+	}
+	local DR3 = {
+		{t="w", p=Vector3.new(-1959.6, -20, 11310.3)},
+		{t="w", p=Vector3.new(-1987.7, -20, 11349.5)},
+		{t="d", p=Vector3.new(-1993.2, -18.6, 11358.6), n="Door 6"},
+		{t="w", p=Vector3.new(-1974, -19.6, 11331)},
+		{t="w", p=Vector3.new(-1949.1, -19.6, 11298.8)},
+		{t="w", p=Vector3.new(-1921.8, -18.7, 11271.4)},
+		{t="d", p=Vector3.new(-1913, -18.1, 11267.7), n="Door 1"},
+		{t="w", p=Vector3.new(-1934.1, -19.6, 11274.1)},
+		{t="w", p=Vector3.new(-1956.1, -20, 11293)},
+		{t="w", p=Vector3.new(-1995, -20, 11313.5)},
+		{t="w", p=Vector3.new(-2034.6, -20, 11332.7)},
+		{t="w", p=Vector3.new(-2070.7, -19.7, 11349.6)},
+		{t="d", p=Vector3.new(-2076.7, -18.5, 11353), n="Door 7"},
+		{t="w", p=Vector3.new(-2058.9, -19.5, 11350.6)},
+		{t="w", p=Vector3.new(-2015.6, -20, 11345.7)},
+		{t="w", p=Vector3.new(-1967.6, -19.5, 11344.3)},
+		{t="w", p=Vector3.new(-1926.7, -19.2, 11341.9)},
+		{t="w", p=Vector3.new(-1878.7, -19.5, 11338.2)},
+		{t="d", p=Vector3.new(-1873.2, -18, 11314.1), n="Door 2"},
+		{t="w", p=Vector3.new(-1872.8, -19.6, 11330.9)},
+		{t="d", p=Vector3.new(-1872.9, -17.9, 11367.6), n="Door 5"},
+		{t="w", p=Vector3.new(-1874.3, -19.5, 11346.5)},
+		{t="w", p=Vector3.new(-1844.7, -19.5, 11340.4)},
+		{t="w", p=Vector3.new(-1809.9, -19.5, 11328)},
+		{t="d", p=Vector3.new(-1807.4, -18.3, 11320), n="Door 3"},
+		{t="w", p=Vector3.new(-1801.8, -19.5, 11349.1)},
+		{t="d", p=Vector3.new(-1801.1, -19, 11357.7), n="Door 4"},
+		{t="w", p=Vector3.new(-1817.5, -19.5, 11342.6)},
+		{t="w", p=Vector3.new(-1862.8, -19.5, 11340.7)},
+		{t="w", p=Vector3.new(-1904.5, -19.5, 11341)},
+		{t="w", p=Vector3.new(-1932.2, -19.2, 11334.8)},
+	}
+	local DR4 = {
+		{t="w", p=Vector3.new(-2032.1, -20, 11332.3)},
+		{t="d", p=Vector3.new(-2074.6, -19.4, 11351.7), n="Door 7"},
+		{t="w", p=Vector3.new(-2064, -20, 11350.1)},
+		{t="w", p=Vector3.new(-2019.9, -20, 11346.7)},
+		{t="d", p=Vector3.new(-1995.4, -18.3, 11362.7), n="Door 6"},
+		{t="w", p=Vector3.new(-1995.9, -19.5, 11343.7)},
+		{t="w", p=Vector3.new(-1962.1, -19.2, 11335.6)},
+		{t="w", p=Vector3.new(-1925.7, -19.2, 11333.2)},
+		{t="w", p=Vector3.new(-1889.9, -19.5, 11335.2)},
+		{t="d", p=Vector3.new(-1873.9, -18, 11314.1), n="Door 2"},
+		{t="w", p=Vector3.new(-1873.4, -19.5, 11337.6)},
+		{t="d", p=Vector3.new(-1873.1, -18.1, 11367.2), n="Door 5"},
+		{t="w", p=Vector3.new(-1863.9, -19.5, 11344)},
+		{t="w", p=Vector3.new(-1820.3, -19.5, 11333.5)},
+		{t="d", p=Vector3.new(-1807.8, -19.5, 11326.1), n="Door 3"},
+		{t="w", p=Vector3.new(-1806, -19.5, 11338.8)},
+		{t="d", p=Vector3.new(-1799.3, -18.3, 11362.8), n="Door 4"},
+		{t="w", p=Vector3.new(-1813.7, -19.5, 11341.2)},
+		{t="w", p=Vector3.new(-1858.1, -19.5, 11340.8)},
+		{t="w", p=Vector3.new(-1900.4, -19.5, 11340.4)},
+		{t="w", p=Vector3.new(-1912.6, -19.9, 11329.3)},
+		{t="w", p=Vector3.new(-1922.1, -20, 11300.8)},
+		{t="w", p=Vector3.new(-1930.2, -19.6, 11274.4)},
+		{t="d", p=Vector3.new(-1912.5, -17.9, 11268.5), n="Door 1"},
+	}
+	local DOOR_ROUTES = {DR1, DR2, DR3, DR4}
+	local TOT_COOLDOWN = 30
+	local doorTimers = {}
+
+	local function totWalkTo(hum, root, target, radius)
+		radius = radius or 8
+		if not totEnabled then return end
+		local startTime = os.clock()
+		hum:MoveTo(target)
+		while (root.Position - target).Magnitude > radius do
+			if not totEnabled then return end
+			if os.clock() - startTime > 15 then break end
+			hum:MoveTo(target)
+			task.wait(0.3)
+		end
+	end
+
+	local function isInHalloween(root)
+		return root.Position.Z > 10000
+	end
+
+	totSection:AddToggle("AutoTrickOrTreat", {
+		Title = "Auto Trick-or-Treat",
+		Default = false,
+		Callback = function(v)
+			totEnabled = v
+			if not v then
+				totStatus:SetContent("Off")
+				totCyclePara:SetContent("-")
+				return
+			end
+			totStatus:SetContent("Starting...")
+
+			task.spawn(function()
+				local player = LocalPlayer
+				local char = player.Character or player.CharacterAdded:Wait()
+				local humanoid = char:WaitForChild("Humanoid")
+				local hrp = char:WaitForChild("HumanoidRootPart")
+
+				local function refresh()
+					char = player.Character or player.CharacterAdded:Wait()
+					humanoid = char:WaitForChild("Humanoid")
+					hrp = char:WaitForChild("HumanoidRootPart")
+				end
+
+				-- Jump thread
+				task.spawn(function()
+					task.wait(1)
+					while totEnabled do
+						pcall(function()
+							local c = player.Character
+							if c then
+								local h = c:FindFirstChildOfClass("Humanoid")
+								if h and h.Health > 0 then
+									h:ChangeState(Enum.HumanoidStateType.Jumping)
+								end
+							end
+						end)
+						task.wait(math.random(3, 12))
+					end
+				end)
+
+				-- Lobby → Portal (sekali)
+				if not isInHalloween(hrp) then
+					totStatus:SetContent("Hub → Portal...")
+					local pg = player:WaitForChild("PlayerGui")
+					local hubBtn = pg:FindFirstChild("Root") and pg.Root:FindFirstChild("HUD") and pg.Root.HUD:FindFirstChild("Top") and pg.Root.HUD.Top:FindFirstChild("Hub")
+					if hubBtn then
+						pcall(function() firesignal(hubBtn.Activated) end)
+						pcall(function() hubBtn.MouseButton1Click:Fire() end)
+						task.wait(2)
+						refresh()
+					end
+
+					local pr = PORTAL_ROUTES[math.random(1, 2)]
+					totStatus:SetContent("Walking to portal...")
+					for _, wp in ipairs(pr) do
+						if not totEnabled then return end
+						totWalkTo(humanoid, hrp, wp, 10)
+					end
+
+					totStatus:SetContent("Entering portal...")
+					local fusePos = Vector3.new(286, 21, -50)
+					local attempt = 0
+					while not isInHalloween(hrp) do
+						if not totEnabled then return end
+						attempt = attempt + 1
+						humanoid:MoveTo(Vector3.new(286, 21, -140))
+						local t = os.clock()
+						while os.clock() - t < 4 and not isInHalloween(hrp) do
+							humanoid:MoveTo(Vector3.new(286, 21, -140))
+							task.wait(0.2)
+						end
+						if isInHalloween(hrp) then break end
+						totWalkTo(humanoid, hrp, fusePos, 5)
+						task.wait(1)
+					end
+					humanoid:MoveTo(hrp.Position)
+					task.wait(3)
+					refresh()
+				end
+
+				totStatus:SetContent("Farming...")
+				local cycle = 0
+
+				while totEnabled do
+					cycle = cycle + 1
+					local rn = math.random(1, #DOOR_ROUTES)
+					local route = DOOR_ROUTES[rn]
+					totCyclePara:SetContent("Cycle " .. cycle .. " (R" .. rn .. ")")
+
+					for _, pt in ipairs(route) do
+						if not totEnabled then break end
+						if not humanoid or humanoid.Health <= 0 then
+							char = player.CharacterAdded:Wait()
+							task.wait(2)
+							refresh()
+							if not isInHalloween(hrp) then
+								totStatus:SetContent("Respawned di lobby — stopped")
+								totEnabled = false
+								return
+							end
+						end
+						if pt.t == "d" then
+							local last = doorTimers[pt.n]
+							local now = os.clock()
+							if last and (now - last) < TOT_COOLDOWN then
+								totStatus:SetContent(pt.n .. " refilling (" .. math.floor(TOT_COOLDOWN - (now - last)) .. "s)")
+							else
+								totStatus:SetContent(pt.n .. " ready")
+							end
+							totWalkTo(humanoid, hrp, pt.p, 14)
+							if not last or (os.clock() - last) >= TOT_COOLDOWN then
+								doorTimers[pt.n] = os.clock()
+							end
+							task.wait(1)
+						else
+							totWalkTo(humanoid, hrp, pt.p, 10)
+						end
+					end
+				end
+
+				totStatus:SetContent("Off")
+				totCyclePara:SetContent("-")
+			end)
+		end,
+	})
 end
