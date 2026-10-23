@@ -433,10 +433,11 @@ export default function DashboardPage() {
   async function markModerated(account: string) {
     setGenMsg(account, "Memindahkan ke moderated...", "var(--dim)");
     try {
+      const accData = accounts.find((a) => a.sourceAccount === account);
       const res = await fetch("/api/mark-moderated", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ account }),
+        body: JSON.stringify({ account, snapshot: accData || undefined }),
       });
       const body = await res.json();
       if (!res.ok || !body.ok) { setGenMsg(account, "Gagal: " + (body.error || "unknown"), "#f87171"); return; }

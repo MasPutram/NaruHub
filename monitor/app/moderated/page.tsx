@@ -21,8 +21,11 @@ interface Account {
   treadmillLevel: number | null;
   petsCount: number;
   stolenCount: number;
+  bossToken?: number | null;
   mutationToken?: number | null;
   scrambleToken?: number | null;
+  nitroToken?: number | null;
+  spectralToken?: number | null;
   growingEggCount?: number;
   backpackEggCount?: number;
   topPets: Pet[];
@@ -352,6 +355,12 @@ function ModeratedPageInner() {
         .st.scramble { background: linear-gradient(135deg, #059669, #34d399); border-radius: 8px; padding: 5px 10px; }
         .st.scramble .sl { color: #fff; }
         .st.scramble .sv { color: #fff; font-size: 18px; }
+        .st.nitro { background: linear-gradient(135deg, #d97706, #fbbf24); border-radius: 8px; padding: 5px 10px; }
+        .st.nitro .sl { color: #fff; }
+        .st.nitro .sv { color: #fff; font-size: 18px; }
+        .st.spectral { background: linear-gradient(135deg, #4f46e5, #818cf8); border-radius: 8px; padding: 5px 10px; }
+        .st.spectral .sl { color: #fff; }
+        .st.spectral .sv { color: #fff; font-size: 18px; }
         .max-tag { font-size: 9px; font-weight: 900; color: #1a1030; background: linear-gradient(135deg, var(--gold), #f59e0b); padding: 1px 6px; border-radius: 4px; letter-spacing: .5px; vertical-align: middle; margin-left: 4px; display: inline-block; line-height: 1.4; }
 
         .egg-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 6px 10px; background: rgba(52,211,153,.06); border: 1px solid rgba(52,211,153,.15); border-radius: 8px; }
@@ -484,6 +493,8 @@ function ModeratedPageInner() {
                   <div className="st"><div className="sl">TOTAL EGG</div><div className="sv">{fmtNum((a.growingEggCount || 0) + (a.backpackEggCount || 0))}</div></div>
                   <div className="st boss"><div className="sl">&#x1F9EC; TOKEN MUTASI</div><div className="sv">{fmtNum(a.mutationToken ?? 0)}</div></div>
                   <div className="st scramble"><div className="sl">&#x1F500; TOKEN SCRAMBLE</div><div className="sv">{a.scrambleToken != null ? fmtNum(a.scrambleToken) : "—"}</div></div>
+                  <div className="st nitro"><div className="sl">&#x1F3CE;&#xFE0F; TOKEN NITRO</div><div className="sv">{a.nitroToken != null ? fmtNum(a.nitroToken) : "—"}</div></div>
+                  <div className="st spectral"><div className="sl">&#x1F47B; TOKEN SPECTRAL</div><div className="sv">{a.spectralToken != null ? fmtNum(a.spectralToken) : "—"}</div></div>
                 </div>
 
                 {eggCount > 0 && (
@@ -530,6 +541,8 @@ function ModeratedPageInner() {
               <div className="detail-stat"><div className="dsl">TOTAL EGG</div><div className="dsv">{fmtNum((detailAccount.growingEggCount || 0) + (detailAccount.backpackEggCount || 0))}</div></div>
               <div className="detail-stat"><div className="dsl">TOKEN MUTASI</div><div className="dsv" style={{ color: "var(--accent)" }}>{fmtNum(detailAccount.mutationToken ?? 0)}</div></div>
               <div className="detail-stat"><div className="dsl">TOKEN SCRAMBLE</div><div className="dsv" style={{ color: "var(--green)" }}>{detailAccount.scrambleToken != null ? fmtNum(detailAccount.scrambleToken) : "—"}</div></div>
+              <div className="detail-stat"><div className="dsl">TOKEN NITRO</div><div className="dsv" style={{ color: "#d97706" }}>{detailAccount.nitroToken != null ? fmtNum(detailAccount.nitroToken) : "—"}</div></div>
+              <div className="detail-stat"><div className="dsl">TOKEN SPECTRAL</div><div className="dsv" style={{ color: "#6366f1" }}>{detailAccount.spectralToken != null ? fmtNum(detailAccount.spectralToken) : "—"}</div></div>
               <div className="detail-stat"><div className="dsl">STOLEN</div><div className="dsv">{fmtNum(detailAccount.stolenCount)}</div></div>
             </div>
 
