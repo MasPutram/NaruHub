@@ -2185,6 +2185,7 @@ end)
 ------------------------------------------------------------
 -- Halloween Tab — Auto Trick-or-Treat
 ------------------------------------------------------------
+task.wait()
 do
 	local HalloweenTab = Window:AddTab({ Title = "Halloween" })
 	local totSection = HalloweenTab:AddSection("Auto Trick-or-Treat", { NoCollapse = true })
