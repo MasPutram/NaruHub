@@ -2185,7 +2185,7 @@ end)
 ------------------------------------------------------------
 -- Halloween Tab — Auto Trick-or-Treat
 ------------------------------------------------------------
-do
+do local _hOk, _hErr = pcall(function()
 	local HalloweenTab = Window:AddTab({ Title = "Halloween" })
 	local totSection = HalloweenTab:AddSection("Auto Trick-or-Treat", { NoCollapse = true })
 
@@ -2460,7 +2460,7 @@ do
 			end)
 		end,
 	})
-end
+end) if not _hOk then warn("[NaruHub] Halloween tab error: " .. tostring(_hErr)) end end
 
 ------------------------------------------------------------
 -- Auto Close Event Popup
