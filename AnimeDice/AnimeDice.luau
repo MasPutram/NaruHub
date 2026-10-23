@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Anime Dice v2.6.0
+-- NaruHub | Anime Dice v2.6.1
 -- Monitoring. Self-contained GUI (inline NaruUI).
 
 ------------------------------------------------------------
@@ -1431,7 +1431,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v2.6.0",
+	Title = "NaruHub | Anime Dice v2.6.1",
 	Badge = "MONITOR",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(440, 340),
