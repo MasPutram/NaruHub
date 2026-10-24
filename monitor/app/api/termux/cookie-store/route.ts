@@ -38,7 +38,8 @@ export async function POST(req: NextRequest) {
     const now = Date.now();
     for (const c of cookies) {
       if (!c.cookie) continue;
-      store[c.pkg] = {
+      const key = `${deviceId}:${c.pkg}`;
+      store[key] = {
         pkg: c.pkg,
         username: c.username || "",
         cookie: c.cookie,

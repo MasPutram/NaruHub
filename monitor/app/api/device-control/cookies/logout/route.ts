@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   try {
     const { tenant } = getTenantFromRequest(req);
     const t = tenant || undefined;
-    const { pkg } = (await req.json()) as { pkg: string };
+    const { pkg, deviceId } = (await req.json()) as { pkg: string; deviceId?: string };
     if (!pkg) {
       return NextResponse.json({ ok: false, error: "missing pkg" }, { status: 400 });
     }
@@ -70,9 +70,10 @@ export async function POST(req: NextRequest) {
       ? typeof raw === "string" ? JSON.parse(raw) : raw
       : {};
 
-    const entry = store[pkg];
+    const storeKey = deviceId ? `${deviceId}:${pkg}` : pkg;
+    const entry = store[storeKey];
     if (!entry?.cookie) {
-      return NextResponse.json({ ok: false, error: "cookie not found for " + pkg }, { status: 404 });
+      return NextResponse.json({ ok: false, error: "cookie not found for " + storeKey }, { status: 404 });
     }
 
     const cookie = entry.cookie;
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (result.status === 200) {
-      store[pkg] = { ...entry, loggedOut: true, loggedOutAt: Date.now() };
+      store[storeKey] = { ...entry, loggedOut: true, loggedOutAt: Date.now() };
       await redis.set(termuxCookiesKey(t), JSON.stringify(store));
     }
 

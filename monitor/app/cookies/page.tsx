@@ -46,13 +46,15 @@ export default function CookiesPage() {
     return () => clearInterval(iv);
   }, [fetchCookies]);
 
-  const toggle = (pkg: string) =>
-    setExpanded((prev) => (prev === pkg ? null : pkg));
+  const entryKey = (c: CookieEntry) => c.deviceId ? `${c.deviceId}:${c.pkg}` : c.pkg;
 
-  const copyToClip = async (text: string, pkg: string) => {
+  const toggle = (key: string) =>
+    setExpanded((prev) => (prev === key ? null : key));
+
+  const copyToClip = async (text: string, key: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(pkg);
+      setCopied(key);
       setTimeout(() => setCopied(null), 2000);
     } catch {}
   };
@@ -72,25 +74,26 @@ export default function CookiesPage() {
     }, 8000);
   };
 
-  const handleLogout = async (pkg: string) => {
-    if (!confirm(`Logout session untuk ${pkg}?`)) return;
-    setLoggingOut(pkg);
-    setLogoutResult((prev) => ({ ...prev, [pkg]: { ok: false, msg: "..." } }));
+  const handleLogout = async (c: CookieEntry) => {
+    const key = entryKey(c);
+    if (!confirm(`Logout session untuk ${c.username || c.pkg}?`)) return;
+    setLoggingOut(key);
+    setLogoutResult((prev) => ({ ...prev, [key]: { ok: false, msg: "..." } }));
     try {
       const res = await fetch("/api/device-control/cookies/logout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pkg }),
+        body: JSON.stringify({ pkg: c.pkg, deviceId: c.deviceId }),
       });
       const data = await res.json();
       if (data.ok) {
-        setLogoutResult((prev) => ({ ...prev, [pkg]: { ok: true, msg: `Logged out! (${data.endpoint || "ok"})` } }));
+        setLogoutResult((prev) => ({ ...prev, [key]: { ok: true, msg: `Logged out! (${data.endpoint || "ok"})` } }));
         fetchCookies();
       } else {
-        setLogoutResult((prev) => ({ ...prev, [pkg]: { ok: false, msg: data.error || `HTTP ${data.httpStatus} - ${data.endpoint || "?"}` } }));
+        setLogoutResult((prev) => ({ ...prev, [key]: { ok: false, msg: data.error || `HTTP ${data.httpStatus} - ${data.endpoint || "?"}` } }));
       }
     } catch (e: any) {
-      setLogoutResult((prev) => ({ ...prev, [pkg]: { ok: false, msg: e.message } }));
+      setLogoutResult((prev) => ({ ...prev, [key]: { ok: false, msg: e.message } }));
     }
     setLoggingOut(null);
   };
@@ -193,13 +196,14 @@ export default function CookiesPage() {
         ) : (
           <div className="ck-grid">
             {cookies.map((c) => {
-              const isOpen = expanded === c.pkg;
-              const result = logoutResult[c.pkg];
+              const ck = entryKey(c);
+              const isOpen = expanded === ck;
+              const result = logoutResult[ck];
               return (
                 <div
                   className={`ck-card ${isOpen ? "active" : ""} ${c.loggedOut ? "logged-out" : ""}`}
-                  key={c.pkg}
-                  onClick={() => !isOpen && toggle(c.pkg)}
+                  key={ck}
+                  onClick={() => !isOpen && toggle(ck)}
                 >
                   <div className="ck-header">
                     <div className="ck-header-top">
@@ -222,18 +226,18 @@ export default function CookiesPage() {
                       <div className="ck-cookie-box">{c.cookie}</div>
                       <div className="ck-actions">
                         <button
-                          className={`ck-copy-btn ${copied === c.pkg ? "copied" : ""}`}
-                          onClick={(e) => { e.stopPropagation(); copyToClip(c.cookie, c.pkg); }}
+                          className={`ck-copy-btn ${copied === ck ? "copied" : ""}`}
+                          onClick={(e) => { e.stopPropagation(); copyToClip(c.cookie, ck); }}
                         >
-                          {copied === c.pkg ? "Copied!" : "Copy Cookie"}
+                          {copied === ck ? "Copied!" : "Copy Cookie"}
                         </button>
                         {!c.loggedOut && (
                           <button
                             className="ck-logout-btn"
-                            disabled={loggingOut === c.pkg}
-                            onClick={(e) => { e.stopPropagation(); handleLogout(c.pkg); }}
+                            disabled={loggingOut === ck}
+                            onClick={(e) => { e.stopPropagation(); handleLogout(c); }}
                           >
-                            {loggingOut === c.pkg ? "Logging out..." : "Logout Session"}
+                            {loggingOut === ck ? "Logging out..." : "Logout Session"}
                           </button>
                         )}
                         <button
