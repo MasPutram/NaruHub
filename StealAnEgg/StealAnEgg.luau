@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.4.1"
+local VERSION = "v3.5.0"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -1314,7 +1314,8 @@ task.spawn(function()
 				local haveScrambled = findMutationTool("Scrambled") ~= nil
 				local haveBoss = findMutationTool("Boss") ~= nil
 				local haveNitro = findMutationTool("Nitro") ~= nil
-				if not haveScrambled and not haveBoss and not haveNitro then return end
+				local haveSpectral = findMutationTool("Spectral") ~= nil
+				if not haveScrambled and not haveBoss and not haveNitro and not haveSpectral then return end
 
 				local candidates = {}
 				for uid, rec in pairs(stats.EggInventory or {}) do
@@ -1322,10 +1323,12 @@ task.spawn(function()
 						local hasScrambled = hasMutation(rec, "Scrambled")
 						local hasBoss = hasMutation(rec, "Boss")
 						local hasNitro = hasMutation(rec, "Nitro")
+						local hasSpectral = hasMutation(rec, "Spectral")
 						local canApplyScrambled = not hasScrambled and haveScrambled
 						local canApplyBoss = not hasBoss and haveBoss
 						local canApplyNitro = not hasNitro and haveNitro
-						if canApplyScrambled or canApplyBoss or canApplyNitro then
+						local canApplySpectral = not hasSpectral and haveSpectral
+						if canApplyScrambled or canApplyBoss or canApplyNitro or canApplySpectral then
 							local rate = 0
 							pcall(function()
 								rate = AssetEarnings.RatePerSecond({
@@ -1359,6 +1362,9 @@ task.spawn(function()
 					end
 					if not hasMutation(pet.rec, "Nitro") then
 						table.insert(mutationsToApply, "Nitro")
+					end
+					if not hasMutation(pet.rec, "Spectral") then
+						table.insert(mutationsToApply, "Spectral")
 					end
 
 					for _, targetMut in ipairs(mutationsToApply) do
