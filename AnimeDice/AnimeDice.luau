@@ -1452,101 +1452,93 @@ local function setStatusContent(text) statusPara:SetContent(text) end
 do
 	local PLACE_ID = game.PlaceId
 
-	local jobIdInput = section:AddInput("HopJobId", {
-		Title = "Job ID",
-		Placeholder = "JobService",
+	local hopInput = section:AddInput("HopTarget", {
+		Title = "Job ID / Username",
+		Placeholder = "Paste Job ID atau ketik username",
 		Default = "",
 	})
 
+	local function isJobId(raw)
+		local s = raw:match("^%s*(.-)%s*$")
+		if s:match('TeleportToPlaceInstance%s*%(%s*%d+%s*,%s*"([^"]+)"') then return true end
+		if s:match("^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") then return true end
+		return false
+	end
+
 	local function parseJobId(raw)
-		if not raw or raw == "" then return nil end
 		local fromLink = raw:match('TeleportToPlaceInstance%s*%(%s*%d+%s*,%s*"([^"]+)"')
 		if fromLink then return fromLink end
-		local stripped = raw:match("^%s*(.-)%s*$")
-		if stripped and stripped ~= "" then return stripped end
-		return nil
+		return raw:match("^%s*(.-)%s*$")
 	end
 
 	section:AddButton({
-		Title = "Hop ke Job ID",
+		Title = "Join / Hop",
 		Callback = function()
-			local jobId = parseJobId(jobIdInput.Value)
-			if not jobId then
-				setStatusContent("Masukkan Job ID atau link dulu!")
+			local raw = hopInput.Value
+			if not raw or raw:match("^%s*$") then
+				setStatusContent("Masukkan Job ID atau username!")
 				return
 			end
-			setStatusContent("Teleporting ke " .. jobId:sub(1, 12) .. "...")
-			sendLeavingPing()
-			pcall(function()
-				TeleportService:TeleportToPlaceInstance(PLACE_ID, jobId, LocalPlayer)
-			end)
-		end,
-	})
 
-	local usernameInput = section:AddInput("JoinUsername", {
-		Title = "Username",
-		Placeholder = "Ketik username...",
-		Default = "",
-	})
-
-	section:AddButton({
-		Title = "Join by Username",
-		Callback = function()
-			local name = usernameInput.Value
-			if not name or name:match("^%s*$") then
-				setStatusContent("Masukkan username dulu!")
-				return
-			end
-			name = name:match("^%s*(.-)%s*$")
-			setStatusContent("Mencari " .. name .. "...")
-			task.spawn(function()
-				local ok, err = pcall(function()
-					local res1 = request({
-						Url = "https://users.roblox.com/v1/usernames/users",
-						Method = "POST",
-						Headers = { ["Content-Type"] = "application/json" },
-						Body = HttpService:JSONEncode({ usernames = {name}, excludeBannedUsers = false }),
-					})
-					local data1 = HttpService:JSONDecode(res1.Body)
-					if not data1.data or #data1.data == 0 then
-						setStatusContent("User '" .. name .. "' tidak ditemukan!")
-						return
-					end
-					local userId = data1.data[1].id
-					local displayName = data1.data[1].displayName
-
-					local res2 = request({
-						Url = "https://presence.roblox.com/v1/presence/users",
-						Method = "POST",
-						Headers = { ["Content-Type"] = "application/json" },
-						Body = HttpService:JSONEncode({ userIds = {userId} }),
-					})
-					local data2 = HttpService:JSONDecode(res2.Body)
-					if not data2.userPresences or #data2.userPresences == 0 then
-						setStatusContent("Gagal cek presence " .. displayName)
-						return
-					end
-					local p = data2.userPresences[1]
-					if p.userPresenceType ~= 2 then
-						setStatusContent(displayName .. " sedang offline/tidak in-game")
-						return
-					end
-					if not p.gameId or p.gameId == "" then
-						setStatusContent(displayName .. " di private server")
-						return
-					end
-					if p.placeId ~= PLACE_ID then
-						setStatusContent(displayName .. " bukan di Anime Dice")
-						return
-					end
-					setStatusContent("Joining " .. displayName .. "...")
-					sendLeavingPing()
-					TeleportService:TeleportToPlaceInstance(PLACE_ID, p.gameId, LocalPlayer)
+			if isJobId(raw) then
+				local jobId = parseJobId(raw)
+				setStatusContent("Teleporting ke " .. jobId:sub(1, 12) .. "...")
+				sendLeavingPing()
+				pcall(function()
+					TeleportService:TeleportToPlaceInstance(PLACE_ID, jobId, LocalPlayer)
 				end)
-				if not ok then
-					setStatusContent("Error: " .. tostring(err))
-				end
-			end)
+			else
+				local name = raw:match("^%s*(.-)%s*$")
+				setStatusContent("Mencari " .. name .. "...")
+				task.spawn(function()
+					local ok, err = pcall(function()
+						local res1 = request({
+							Url = "https://users.roblox.com/v1/usernames/users",
+							Method = "POST",
+							Headers = { ["Content-Type"] = "application/json" },
+							Body = HttpService:JSONEncode({ usernames = {name}, excludeBannedUsers = false }),
+						})
+						local data1 = HttpService:JSONDecode(res1.Body)
+						if not data1.data or #data1.data == 0 then
+							setStatusContent("User '" .. name .. "' tidak ditemukan!")
+							return
+						end
+						local userId = data1.data[1].id
+						local displayName = data1.data[1].displayName
+
+						local res2 = request({
+							Url = "https://presence.roblox.com/v1/presence/users",
+							Method = "POST",
+							Headers = { ["Content-Type"] = "application/json" },
+							Body = HttpService:JSONEncode({ userIds = {userId} }),
+						})
+						local data2 = HttpService:JSONDecode(res2.Body)
+						if not data2.userPresences or #data2.userPresences == 0 then
+							setStatusContent("Gagal cek presence " .. displayName)
+							return
+						end
+						local p = data2.userPresences[1]
+						if p.userPresenceType ~= 2 then
+							setStatusContent(displayName .. " sedang offline/tidak in-game")
+							return
+						end
+						if not p.gameId or p.gameId == "" then
+							setStatusContent(displayName .. " di private server")
+							return
+						end
+						if p.placeId ~= PLACE_ID then
+							setStatusContent(displayName .. " bukan di Anime Dice")
+							return
+						end
+						setStatusContent("Joining " .. displayName .. "...")
+						sendLeavingPing()
+						TeleportService:TeleportToPlaceInstance(PLACE_ID, p.gameId, LocalPlayer)
+					end)
+					if not ok then
+						setStatusContent("Error: " .. tostring(err))
+					end
+				end)
+			end
 		end,
 	})
 
