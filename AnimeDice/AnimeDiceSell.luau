@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | AnimeDice Sell Catalog v2.2.0
+-- NaruHub | AnimeDice Sell Catalog v2.3.0
 -- Sends enriched inventory data to dashboard catalog for marketplace listings.
 -- Self-contained GUI (no external NaruUI fetch).
 
@@ -54,6 +54,7 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 
 ------------------------------------------------------------
@@ -1620,7 +1621,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | AD Catalog v2.2.0",
+	Title = "NaruHub | AD Catalog v2.3.0",
 	Badge = "SELL",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(540, 460),
@@ -2101,11 +2102,61 @@ do
 end
 
 ------------------------------------------------------------
--- Equip Tab
+-- Plot Tab (Equip + Plot Detection)
 ------------------------------------------------------------
 do
-	local EquipTab = Window:AddTab({ Title = "Equip" })
-	local equipSection = EquipTab:AddSection("Auto Equip Quirk", { NoCollapse = true })
+	local PlotTab = Window:AddTab({ Title = "Plot" })
+
+	-- Plot Detection
+	local plotSection = PlotTab:AddSection("Plot Detection", { NoCollapse = true })
+	local plotPara = plotSection:AddParagraph({ Title = "Slots", Content = "Klik Refresh untuk scan" })
+
+	plotSection:AddButton({
+		Title = "Refresh Plot",
+		Callback = function()
+			local X = DataController.___X
+			local inv = X.Inventory or {}
+			local slots = X.Slots or {}
+			local allEntries = EntryRegistry:allEntries()
+
+			local lines = {}
+			local sortedSlots = {}
+			for slotId, slotData in pairs(slots) do
+				if type(slotData) == "table" and slotData.unitId then
+					table.insert(sortedSlots, { slot = tonumber(slotId) or 0, data = slotData })
+				end
+			end
+			table.sort(sortedSlots, function(a, b) return a.slot < b.slot end)
+
+			for _, s in ipairs(sortedSlots) do
+				local entry = inv[s.data.unitId]
+				if entry and type(entry) == "table" then
+					local cfg = allEntries[entry.name]
+					local attrs = entry.attributes or {}
+					local grade = attrs.grade or "-"
+					local trait = attrs.trait or "-"
+					local quirk = attrs.quirk or "-"
+					local bal = s.data.balance or 0
+					table.insert(lines, string.format(
+						"[%d] %s | G:%s | T:%s | Q:%s | $%s",
+						s.slot, entry.name, tostring(grade), tostring(trait), tostring(quirk),
+						tostring(math.floor(bal))
+					))
+				else
+					table.insert(lines, string.format("[%d] (empty)", s.slot))
+				end
+			end
+
+			if #lines == 0 then
+				plotPara:SetContent("Tidak ada unit di plot")
+			else
+				plotPara:SetContent(table.concat(lines, "\n"))
+			end
+		end,
+	})
+
+	-- Auto Equip Quirk
+	local equipSection = PlotTab:AddSection("Auto Equip Quirk", { NoCollapse = true })
 
 	local equipStatusPara = equipSection:AddParagraph({
 		Title = "Status",
@@ -2221,6 +2272,165 @@ do
 			task.wait(10)
 		end
 	end)
+end
+
+------------------------------------------------------------
+-- Server Tab
+------------------------------------------------------------
+do
+	local ServerTab = Window:AddTab({ Title = "Server" })
+	local serverSection = ServerTab:AddSection("Server Hop", { NoCollapse = true })
+	local PLACE_ID = game.PlaceId
+
+	local serverStatusPara = serverSection:AddParagraph({ Title = "Status", Content = "Idle" })
+
+	local hopInput = serverSection:AddInput("HopTarget", {
+		Title = "Job ID / Username",
+		Placeholder = "Paste Job ID atau ketik username",
+		Default = "",
+	})
+
+	local function isJobId(raw)
+		local s = raw:match("^%s*(.-)%s*$")
+		if s:match('TeleportToPlaceInstance%s*%(%s*%d+%s*,%s*"([^"]+)"') then return true end
+		if s:match("^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") then return true end
+		return false
+	end
+
+	local function parseJobId(raw)
+		local fromLink = raw:match('TeleportToPlaceInstance%s*%(%s*%d+%s*,%s*"([^"]+)"')
+		if fromLink then return fromLink end
+		return raw:match("^%s*(.-)%s*$")
+	end
+
+	serverSection:AddButton({
+		Title = "Join / Hop",
+		Callback = function()
+			local raw = hopInput.Value
+			if not raw or raw:match("^%s*$") then
+				serverStatusPara:SetContent("Masukkan Job ID atau username!")
+				return
+			end
+
+			if isJobId(raw) then
+				local jobId = parseJobId(raw)
+				serverStatusPara:SetContent("Teleporting ke " .. jobId:sub(1, 12) .. "...")
+				pcall(function()
+					TeleportService:TeleportToPlaceInstance(PLACE_ID, jobId, LocalPlayer)
+				end)
+			else
+				local name = raw:match("^%s*(.-)%s*$")
+				serverStatusPara:SetContent("Mencari " .. name .. "...")
+				task.spawn(function()
+					local ok, err = pcall(function()
+						local res1 = request({
+							Url = "https://users.roblox.com/v1/usernames/users",
+							Method = "POST",
+							Headers = { ["Content-Type"] = "application/json" },
+							Body = HttpService:JSONEncode({ usernames = {name}, excludeBannedUsers = false }),
+						})
+						local data1 = HttpService:JSONDecode(res1.Body)
+						if not data1.data or #data1.data == 0 then
+							serverStatusPara:SetContent("User '" .. name .. "' tidak ditemukan!")
+							return
+						end
+						local userId = data1.data[1].id
+						local displayName = data1.data[1].displayName
+
+						local res2 = request({
+							Url = "https://presence.roblox.com/v1/presence/users",
+							Method = "POST",
+							Headers = { ["Content-Type"] = "application/json" },
+							Body = HttpService:JSONEncode({ userIds = {userId} }),
+						})
+						local data2 = HttpService:JSONDecode(res2.Body)
+						if not data2.userPresences or #data2.userPresences == 0 then
+							serverStatusPara:SetContent("Gagal cek presence " .. displayName)
+							return
+						end
+						local p = data2.userPresences[1]
+						if p.userPresenceType ~= 2 then
+							serverStatusPara:SetContent(displayName .. " sedang offline/tidak in-game")
+							return
+						end
+						if not p.gameId or p.gameId == "" then
+							serverStatusPara:SetContent(displayName .. " di private server")
+							return
+						end
+						if p.placeId ~= PLACE_ID then
+							serverStatusPara:SetContent(displayName .. " bukan di Anime Dice")
+							return
+						end
+						serverStatusPara:SetContent("Joining " .. displayName .. "...")
+						TeleportService:TeleportToPlaceInstance(PLACE_ID, p.gameId, LocalPlayer)
+					end)
+					if not ok then
+						serverStatusPara:SetContent("Error: " .. tostring(err))
+					end
+				end)
+			end
+		end,
+	})
+
+	serverSection:AddButton({
+		Title = "Hop ke Server Sepi",
+		Callback = function()
+			serverStatusPara:SetContent("Mencari server sepi...")
+			task.spawn(function()
+				local ok, result = pcall(function()
+					local cursor = ""
+					local bestJobId = nil
+					local bestPlayers = math.huge
+					local myJobId = game.JobId
+
+					for _ = 1, 5 do
+						local url = "https://games.roblox.com/v1/games/" .. PLACE_ID .. "/servers/Public?sortOrder=Asc&limit=100"
+						if cursor and cursor ~= "" then
+							url = url .. "&cursor=" .. cursor
+						end
+
+						local res = request({ Url = url, Method = "GET" })
+						if not res or not res.Body then break end
+
+						local data = HttpService:JSONDecode(res.Body)
+						if not data or not data.data then break end
+
+						for _, server in ipairs(data.data) do
+							if server.playing and server.playing < bestPlayers and server.id ~= myJobId then
+								bestPlayers = server.playing
+								bestJobId = server.id
+							end
+						end
+
+						cursor = data.nextPageCursor
+						if not cursor or cursor == "" then break end
+						task.wait(0.5)
+					end
+
+					return bestJobId, bestPlayers
+				end)
+
+				if ok and result then
+					serverStatusPara:SetContent("Found: " .. result .. " players. Teleporting...")
+					pcall(function()
+						TeleportService:TeleportToPlaceInstance(PLACE_ID, result, LocalPlayer)
+					end)
+				else
+					serverStatusPara:SetContent("Gagal cari server: " .. tostring(result))
+				end
+			end)
+		end,
+	})
+
+	serverSection:AddButton({
+		Title = "Hop Random Server",
+		Callback = function()
+			serverStatusPara:SetContent("Teleporting ke random server...")
+			pcall(function()
+				TeleportService:Teleport(PLACE_ID, LocalPlayer)
+			end)
+		end,
+	})
 end
 
 ------------------------------------------------------------
