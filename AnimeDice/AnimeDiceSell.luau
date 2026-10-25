@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | AnimeDice Sell Catalog v2.3.0
+-- NaruHub | AnimeDice Sell Catalog v2.4.0
 -- Sends enriched inventory data to dashboard catalog for marketplace listings.
 -- Self-contained GUI (no external NaruUI fetch).
 
@@ -2699,6 +2699,87 @@ do
 
 				totStatus:SetContent("Off")
 				totCyclePara:SetContent("-")
+			end)
+		end,
+	})
+end
+
+------------------------------------------------------------
+-- Quirk Tab — Auto Walk to Quirk Area
+------------------------------------------------------------
+do
+	local QuirkTab = Window:AddTab({ Title = "Quirk" })
+	local qSection = QuirkTab:AddSection("Auto Quirk Walk", { NoCollapse = true })
+
+	local qEnabled = false
+	local qStatus = qSection:AddParagraph({ Title = "Status", Content = "Off" })
+
+	local QUIRK_ROUTE = {
+		Vector3.new(277.9, 4.2, 131.0),
+		Vector3.new(238.1, 5.1, 104.3),
+		Vector3.new(212.1, 5.2, 64.7),
+		Vector3.new(214.8, 5.5, 17.8),
+		Vector3.new(236.0, 4.3, -23.4),
+		Vector3.new(238.0, 4.0, -27.0),
+	}
+
+	local function qWalkTo(hum, root, target, radius)
+		radius = radius or 8
+		if not qEnabled then return end
+		local startTime = os.clock()
+		hum:MoveTo(target)
+		while (root.Position - target).Magnitude > radius do
+			if not qEnabled then return end
+			if os.clock() - startTime > 15 then break end
+			hum:MoveTo(target)
+			task.wait(0.3)
+		end
+	end
+
+	qSection:AddToggle("AutoQuirkWalk", {
+		Title = "Auto Walk to Quirk",
+		Default = false,
+		Callback = function(v)
+			qEnabled = v
+			if not v then
+				qStatus:SetContent("Off")
+				return
+			end
+			qStatus:SetContent("Starting...")
+
+			task.spawn(function()
+				local player = LocalPlayer
+				local char = player.Character or player.CharacterAdded:Wait()
+				local humanoid = char:WaitForChild("Humanoid")
+				local hrp = char:WaitForChild("HumanoidRootPart")
+
+				-- Hub button
+				qStatus:SetContent("Going to Hub...")
+				local pg = player:WaitForChild("PlayerGui")
+				local hubBtn = pg:FindFirstChild("Root") and pg.Root:FindFirstChild("HUD") and pg.Root.HUD:FindFirstChild("Top") and pg.Root.HUD.Top:FindFirstChild("Hub")
+				if hubBtn then
+					pcall(function() firesignal(hubBtn.Activated) end)
+					pcall(function() hubBtn.MouseButton1Click:Fire() end)
+					task.wait(2)
+					char = player.Character or player.CharacterAdded:Wait()
+					humanoid = char:WaitForChild("Humanoid")
+					hrp = char:WaitForChild("HumanoidRootPart")
+				end
+
+				-- Walk route
+				qStatus:SetContent("Walking to Quirk area...")
+				for i, wp in ipairs(QUIRK_ROUTE) do
+					if not qEnabled then break end
+					qStatus:SetContent("Waypoint " .. i .. "/" .. #QUIRK_ROUTE)
+					qWalkTo(humanoid, hrp, wp, 10)
+				end
+
+				if qEnabled then
+					qStatus:SetContent("Arrived!")
+				else
+					qStatus:SetContent("Off")
+				end
+				qEnabled = false
 			end)
 		end,
 	})
