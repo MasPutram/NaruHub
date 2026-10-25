@@ -2117,7 +2117,6 @@ do
 			local X = DataController.___X
 			local inv = X.Inventory or {}
 			local slots = X.Slots or {}
-			local allEntries = EntryRegistry:allEntries()
 
 			local lines = {}
 			local sortedSlots = {}
@@ -2131,17 +2130,9 @@ do
 			for _, s in ipairs(sortedSlots) do
 				local entry = inv[s.data.unitId]
 				if entry and type(entry) == "table" then
-					local cfg = allEntries[entry.name]
 					local attrs = entry.attributes or {}
-					local grade = attrs.grade or "-"
-					local trait = attrs.trait or "-"
 					local quirk = attrs.quirk or "-"
-					local bal = s.data.balance or 0
-					table.insert(lines, string.format(
-						"[%d] %s | G:%s | T:%s | Q:%s | $%s",
-						s.slot, entry.name, tostring(grade), tostring(trait), tostring(quirk),
-						tostring(math.floor(bal))
-					))
+					table.insert(lines, string.format("[%d] %s | %s", s.slot, entry.name, quirk))
 				else
 					table.insert(lines, string.format("[%d] (empty)", s.slot))
 				end
