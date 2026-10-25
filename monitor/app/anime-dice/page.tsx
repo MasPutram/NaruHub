@@ -116,6 +116,9 @@ export default function AnimeDicePage() {
   const [hauntedUnits, setHauntedUnits] = useState<{ unit: string; account: string; count: number }[]>([]);
   const [hauntedAccounts, setHauntedAccounts] = useState<{ account: string; gears: string[]; units: { name: string; count: number }[] }[]>([]);
   const [hauntedExpanded, setHauntedExpanded] = useState(false);
+  const [sovereignAccounts, setSovereignAccounts] = useState<{ account: string; units: { name: string; count: number }[]; total: number }[]>([]);
+  const [sovereignTotal, setSovereignTotal] = useState(0);
+  const [sovereignExpanded, setSovereignExpanded] = useState(false);
 
   const fetchAccounts = useCallback(async () => {
     try {
@@ -138,14 +141,27 @@ export default function AnimeDicePage() {
     } catch {}
   }, []);
 
+  const fetchSovereign = useCallback(async () => {
+    try {
+      const res = await fetch("/api/anime-dice/sovereign-check");
+      const data = await res.json();
+      if (data.ok) {
+        setSovereignAccounts(data.accounts || []);
+        setSovereignTotal(data.total || 0);
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     setMounted(true);
     fetchAccounts();
     fetchHaunted();
+    fetchSovereign();
     const id = setInterval(fetchAccounts, 5000);
     const id2 = setInterval(fetchHaunted, 10000);
-    return () => { clearInterval(id); clearInterval(id2); };
-  }, [fetchAccounts, fetchHaunted]);
+    const id3 = setInterval(fetchSovereign, 10000);
+    return () => { clearInterval(id); clearInterval(id2); clearInterval(id3); };
+  }, [fetchAccounts, fetchHaunted, fetchSovereign]);
 
   function sortAccounts(list: ADAccount[]): ADAccount[] {
     const sorted = [...list];
@@ -335,6 +351,8 @@ export default function AnimeDicePage() {
 
         .haunted-banner { background: linear-gradient(135deg, rgba(249,115,22,.12), rgba(168,85,247,.12)); border: 1px solid rgba(249,115,22,.3); border-radius: 12px; padding: 14px 20px; margin-bottom: 16px; cursor: pointer; transition: border-color .15s; }
         .haunted-banner:hover { border-color: rgba(249,115,22,.5); }
+        .sovereign-banner { background: linear-gradient(135deg, rgba(255,215,0,.12), rgba(255,165,0,.12)); border-color: rgba(255,215,0,.3); }
+        .sovereign-banner:hover { border-color: rgba(255,215,0,.5); }
         .haunted-header { display: flex; align-items: center; justify-content: space-between; }
         .haunted-title { font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: #f97316; display: flex; align-items: center; gap: 8px; }
         .haunted-counter { font-size: 11px; font-weight: 700; color: var(--dim); display: flex; align-items: center; gap: 4px; }
@@ -410,6 +428,44 @@ export default function AnimeDicePage() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {sovereignTotal > 0 && (
+          <div className="haunted-banner sovereign-banner" onClick={() => setSovereignExpanded(!sovereignExpanded)}>
+            <div className="haunted-header">
+              <div className="haunted-title">
+                <span>&#x1F451;</span> Sovereign Tracker
+              </div>
+              <div className="haunted-counter">
+                <span>Total <span className="num">{sovereignTotal}</span> unit</span>
+                <span> &bull; {sovereignAccounts.length} akun</span>
+                <span className={`haunted-arrow ${sovereignExpanded ? "open" : ""}`}>&#x25BC;</span>
+              </div>
+            </div>
+            <div className="haunted-summary">
+              {sovereignAccounts.map((acc) => (
+                <span key={acc.account} className="haunted-chip unit">
+                  {acc.account} = {acc.total}
+                </span>
+              ))}
+            </div>
+            {sovereignExpanded && (
+              <div className="haunted-detail" onClick={(e) => e.stopPropagation()}>
+                <div className="haunted-accs">
+                  {sovereignAccounts.map((acc) => (
+                    <div key={acc.account} className="haunted-acc-card">
+                      <div className="haunted-acc-name">{acc.account}</div>
+                      <div className="haunted-acc-items">
+                        {acc.units.map((u) => (
+                          <span key={u.name} className="haunted-acc-chip unit">{u.name} x{u.count}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

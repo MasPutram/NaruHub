@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Anime Dice v2.8.0
+-- NaruHub | Anime Dice v2.9.0
 -- Monitoring. Self-contained GUI (inline NaruUI).
 
 ------------------------------------------------------------
@@ -1431,7 +1431,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v2.8.0",
+	Title = "NaruHub | Anime Dice v2.9.0",
 	Badge = "MONITOR",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(440, 340),
@@ -1959,6 +1959,7 @@ local function collectInventory()
 					level = attrs.level,
 					trait = attrs.trait,
 					grade = attrs.grade,
+					quirk = attrs.quirk,
 					locked = attrs.locked or nil,
 					income = income,
 					damage = damage,
@@ -2136,6 +2137,7 @@ local function reportToMonitor()
 				level = u.level,
 				trait = u.trait,
 				grade = u.grade,
+				quirk = u.quirk,
 				locked = u.locked,
 				amount = u.amount,
 				income = u.income,
