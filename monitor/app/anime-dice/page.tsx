@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 
 interface ADAccount {
   sourceAccount: string;
@@ -119,12 +119,15 @@ export default function AnimeDicePage() {
   const [sovereignAccounts, setSovereignAccounts] = useState<{ account: string; units: { name: string; count: number }[]; total: number }[]>([]);
   const [sovereignTotal, setSovereignTotal] = useState(0);
   const [sovereignExpanded, setSovereignExpanded] = useState(false);
+  const [deviceMap, setDeviceMap] = useState<Record<string, string>>({});
+  const [deviceFilter, setDeviceFilter] = useState("");
 
   const fetchAccounts = useCallback(async () => {
     try {
       const res = await fetch("/api/anime-dice/accounts");
       const data = await res.json();
       setAccounts((data.accounts || []).filter((a: ADAccount) => !a.forSale));
+      if (data.deviceMap) setDeviceMap(data.deviceMap);
     } catch {}
   }, []);
 
@@ -187,9 +190,43 @@ export default function AnimeDicePage() {
   const filtered = filterAccounts(accounts);
   const allOnline = filtered.filter((a) => a.online);
   const allOffline = filtered.filter((a) => !a.online);
+
+  const deviceNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const a of accounts) {
+      const dn = deviceMap[a.sourceAccount];
+      if (dn) names.add(dn);
+    }
+    return Array.from(names).sort();
+  }, [accounts, deviceMap]);
+
+  function filterByDevice(list: ADAccount[]): ADAccount[] {
+    if (!deviceFilter) return list;
+    return list.filter((a) => deviceMap[a.sourceAccount] === deviceFilter);
+  }
+
   const displayed = sortAccounts(
-    tabMode === "online" ? allOnline : tabMode === "offline" ? allOffline : filtered
+    filterByDevice(tabMode === "online" ? allOnline : tabMode === "offline" ? allOffline : filtered)
   );
+
+  const deviceGroups = useMemo(() => {
+    const groups: { name: string; accounts: ADAccount[] }[] = [];
+    const byDevice = new Map<string, ADAccount[]>();
+    const noDevice: ADAccount[] = [];
+    for (const a of displayed) {
+      const dn = deviceMap[a.sourceAccount];
+      if (dn) {
+        if (!byDevice.has(dn)) byDevice.set(dn, []);
+        byDevice.get(dn)!.push(a);
+      } else {
+        noDevice.push(a);
+      }
+    }
+    const sortedNames = Array.from(byDevice.keys()).sort();
+    for (const name of sortedNames) groups.push({ name, accounts: byDevice.get(name)! });
+    if (noDevice.length > 0) groups.push({ name: "Unknown Device", accounts: noDevice });
+    return groups;
+  }, [displayed, deviceMap]);
 
   const totalRebirths = allOnline.reduce((s, a) => s + (Number(a.rebirth) || 0), 0);
   const totalRolls = allOnline.reduce((s, a) => s + (Number(a.rolls) || 0), 0);
@@ -294,6 +331,11 @@ export default function AnimeDicePage() {
         .acard-footer { display: flex; align-items: center; gap: 6px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.04); }
         .acard-footer-link { font-size: 11px; font-weight: 700; color: var(--cyan); display: flex; align-items: center; gap: 6px; flex: 1; }
         .acard-footer-arrow { margin-left: auto; color: var(--dim); font-size: 16px; }
+
+        .device-group-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #1e1e38; }
+        .device-group-name { font-size: 14px; font-weight: 800; color: var(--cyan); letter-spacing: .5px; }
+        .device-group-count { font-size: 11px; font-weight: 700; color: var(--dim); margin-left: auto; }
+        .dev-tag { font-size: 9px; font-weight: 800; padding: 2px 8px; border-radius: 4px; background: rgba(34,211,238,.1); color: var(--cyan); border: 1px solid rgba(34,211,238,.2); letter-spacing: .3px; }
 
         .empty { color: var(--dim); text-align: center; padding: 80px 0; font-size: 14px; }
 
@@ -487,23 +529,46 @@ export default function AnimeDicePage() {
           </div>
         </div>
 
+        {deviceNames.length > 0 && (
+          <div className="controls" style={{ marginBottom: 16 }}>
+            <div className="pill-tabs" style={{ flexWrap: "wrap", gap: 4 }}>
+              <button className={`ptab ${deviceFilter === "" ? "active" : ""}`} onClick={() => setDeviceFilter("")}>ALL DEVICES</button>
+              {deviceNames.map((dn) => (
+                <button key={dn} className={`ptab ${deviceFilter === dn ? "active" : ""}`} onClick={() => setDeviceFilter(dn)}>{dn}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {displayed.length === 0 && accounts.length === 0 ? (
           <div className="empty">Belum ada akun Anime Dice yang lapor. Pastikan script sudah jalan dan POST ke /api/anime-dice/monitor.</div>
         ) : displayed.length === 0 ? (
           <div className="empty">Tidak ada akun yang cocok dengan filter.</div>
         ) : (
-          <div className="grid">
-            <CombinedCard
-              totalRebirths={totalRebirths}
-              totalRolls={totalRolls}
-              onlineCount={allOnline.length}
-              totalCount={filtered.length}
-              onClick={openCombined}
-            />
-            {displayed.map((a) => (
-              <AccountCard key={a.sourceAccount} account={a} onOpen={openDetail} />
+          <>
+            <div className="grid" style={{ marginBottom: 24 }}>
+              <CombinedCard
+                totalRebirths={totalRebirths}
+                totalRolls={totalRolls}
+                onlineCount={allOnline.length}
+                totalCount={filtered.length}
+                onClick={openCombined}
+              />
+            </div>
+            {deviceGroups.map((group) => (
+              <div key={group.name} style={{ marginBottom: 24 }}>
+                <div className="device-group-header">
+                  <span className="device-group-name">{group.name}</span>
+                  <span className="device-group-count">{group.accounts.length} akun</span>
+                </div>
+                <div className="grid">
+                  {group.accounts.map((a) => (
+                    <AccountCard key={a.sourceAccount} account={a} onOpen={openDetail} deviceName={deviceMap[a.sourceAccount]} />
+                  ))}
+                </div>
+              </div>
             ))}
-          </div>
+          </>
         )}
 
         {detail && (
@@ -556,7 +621,7 @@ function CombinedCard({ totalRebirths, totalRolls, onlineCount, totalCount, onCl
   );
 }
 
-function AccountCard({ account: a, onOpen }: { account: ADAccount; onOpen: (name: string) => void }) {
+function AccountCard({ account: a, onOpen, deviceName }: { account: ADAccount; onOpen: (name: string) => void; deviceName?: string }) {
   const isOff = !a.online;
 
   return (
@@ -567,7 +632,10 @@ function AccountCard({ account: a, onOpen }: { account: ADAccount; onOpen: (name
           <span className={`acard-dot ${isOff ? "off" : "on"}`} />
         </div>
         <div className="acard-nameblock">
-          <div className="acard-name">{a.sourceAccount}</div>
+          <div className="acard-name">
+            {a.sourceAccount}
+            {deviceName && <span className="dev-tag" style={{ marginLeft: 6 }}>{deviceName}</span>}
+          </div>
           <div className="acard-meta">
             <span className={`acard-status ${isOff ? "off" : "on"}`}>{isOff ? "OFFLINE" : "ONLINE"}</span>
             <span className="acard-time">{fmtLastSeen(a.lastSeen)}</span>
