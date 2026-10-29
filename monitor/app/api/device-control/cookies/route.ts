@@ -27,6 +27,10 @@ export async function POST(req: NextRequest) {
     const store: Record<string, CookieEntry & { deviceId: string; updatedAt: number }> =
       (existing && typeof existing === "object") ? existing : {};
 
+    for (const k of Object.keys(store)) {
+      if (store[k].deviceId === deviceId) delete store[k];
+    }
+
     const now = Date.now();
     for (const c of cookies) {
       if (!c.cookie) continue;
