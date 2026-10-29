@@ -31,6 +31,9 @@ export default function CookiesPage() {
   const [extracting, setExtracting] = useState(false);
   const [loggingOut, setLoggingOut] = useState<string | null>(null);
   const [logoutResult, setLogoutResult] = useState<Record<string, { ok: boolean; msg: string }>>({});
+  const [search, setSearch] = useState("");
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const fetchCookies = useCallback(async () => {
     try {
@@ -53,8 +56,15 @@ export default function CookiesPage() {
   const entryKey = (c: CookieEntry) => c.deviceId ? `${c.deviceId}:${c.pkg}` : c.pkg;
 
   const grouped = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const filtered = cookies.filter((c) => {
+      const ck = c.deviceId ? `${c.deviceId}:${c.pkg}` : c.pkg;
+      if (hidden.has(ck)) return false;
+      if (q && !(c.username || "").toLowerCase().includes(q) && !(c.pkg || "").toLowerCase().includes(q)) return false;
+      return true;
+    });
     const map: Record<string, CookieEntry[]> = {};
-    for (const c of cookies) {
+    for (const c of filtered) {
       const did = c.deviceId || "unknown";
       if (!map[did]) map[did] = [];
       map[did].push(c);
@@ -64,7 +74,7 @@ export default function CookiesPage() {
       const nameB = devices[b[0]] || b[0];
       return nameA.localeCompare(nameB);
     });
-  }, [cookies, devices]);
+  }, [cookies, devices, search, hidden]);
 
   const toggle = (key: string) =>
     setExpanded((prev) => (prev === key ? null : key));
@@ -90,6 +100,27 @@ export default function CookiesPage() {
       setExtracting(false);
       fetchCookies();
     }, 8000);
+  };
+
+  const handleHide = (c: CookieEntry) => {
+    const ck = entryKey(c);
+    setHidden((prev) => new Set(prev).add(ck));
+  };
+
+  const handleDelete = async (c: CookieEntry) => {
+    const ck = entryKey(c);
+    if (!confirm(`Hapus cookie ${c.username || c.pkg} dari daftar?`)) return;
+    setDeleting(ck);
+    try {
+      const res = await fetch("/api/device-control/cookies", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keys: [ck] }),
+      });
+      const data = await res.json();
+      if (data.ok) fetchCookies();
+    } catch {}
+    setDeleting(null);
   };
 
   const handleLogout = async (c: CookieEntry) => {
@@ -203,6 +234,35 @@ export default function CookiesPage() {
         .ck-result-fail { color: #f87171; }
         .ck-empty { text-align: center; color: #666; padding: 40px; font-size: 0.9rem; }
         .ck-count { color: #666; font-size: 0.8rem; }
+        .ck-search {
+          background: #1a1a2e; color: #e8e8f0; border: 1px solid #2a2a3e; border-radius: 8px;
+          padding: 8px 14px; font-size: 0.85rem; width: 260px; outline: none;
+        }
+        .ck-search:focus { border-color: #7c3aed; }
+        .ck-search::placeholder { color: #555; }
+        .ck-hide-btn {
+          background: none; color: #666; border: 1px solid #333; padding: 5px 12px;
+          border-radius: 6px; cursor: pointer; font-size: 0.7rem; font-weight: 600;
+          transition: all 0.15s;
+        }
+        .ck-hide-btn:hover { color: #fbbf24; border-color: #fbbf24; }
+        .ck-delete-btn {
+          background: none; color: #666; border: 1px solid #333; padding: 5px 12px;
+          border-radius: 6px; cursor: pointer; font-size: 0.7rem; font-weight: 600;
+          transition: all 0.15s;
+        }
+        .ck-delete-btn:hover { color: #f87171; border-color: #f87171; }
+        .ck-delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .ck-hidden-bar {
+          display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+          padding: 8px 14px; background: #1a1a2e; border: 1px solid #2a2a3e;
+          border-radius: 8px; font-size: 0.8rem; color: #888;
+        }
+        .ck-show-all-btn {
+          background: #333; color: #ccc; border: none; padding: 4px 12px;
+          border-radius: 6px; cursor: pointer; font-size: 0.75rem; font-weight: 600;
+        }
+        .ck-show-all-btn:hover { background: #444; color: #fff; }
       `}</style>
       <div className="ck-page">
         <h1>Cookies</h1>
@@ -213,14 +273,30 @@ export default function CookiesPage() {
               ? `${cookies.length} akun · ${grouped.length} device`
               : ""}
           </span>
-          <button
-            className="ck-extract-btn"
-            onClick={triggerExtract}
-            disabled={extracting}
-          >
-            {extracting ? "Extracting..." : "Extract Cookies"}
-          </button>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <input
+              className="ck-search"
+              type="text"
+              placeholder="Search username..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <button
+              className="ck-extract-btn"
+              onClick={triggerExtract}
+              disabled={extracting}
+            >
+              {extracting ? "Extracting..." : "Extract Cookies"}
+            </button>
+          </div>
         </div>
+
+        {hidden.size > 0 && (
+          <div className="ck-hidden-bar">
+            <span>{hidden.size} cookie disembunyikan</span>
+            <button className="ck-show-all-btn" onClick={() => setHidden(new Set())}>Tampilkan Semua</button>
+          </div>
+        )}
 
         {loading ? (
           <div className="ck-empty">Loading...</div>
@@ -252,9 +328,13 @@ export default function CookiesPage() {
                         <div className="ck-header">
                           <div className="ck-header-top">
                             <span className="ck-username">{c.username || c.pkg.replace("com.roblox.", "")}</span>
-                            <span className={`ck-badge ${c.loggedOut ? "ck-badge-out" : "ck-badge-active"}`}>
-                              {c.loggedOut ? "Logged Out" : "Active"}
-                            </span>
+                            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                              <button className="ck-hide-btn" title="Sembunyikan" onClick={(e) => { e.stopPropagation(); handleHide(c); }}>Hide</button>
+                              <button className="ck-delete-btn" title="Hapus dari daftar" disabled={deleting === ck} onClick={(e) => { e.stopPropagation(); handleDelete(c); }}>{deleting === ck ? "..." : "Hapus"}</button>
+                              <span className={`ck-badge ${c.loggedOut ? "ck-badge-out" : "ck-badge-active"}`}>
+                                {c.loggedOut ? "Logged Out" : "Active"}
+                              </span>
+                            </div>
                           </div>
                           <div className="ck-row2">
                             <span className="ck-pkg-label">{c.pkg.replace("com.roblox.", "")}</span>

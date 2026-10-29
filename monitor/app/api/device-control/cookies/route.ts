@@ -86,3 +86,28 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { tenant } = getTenantFromRequest(req);
+    const t = tenant || undefined;
+    const body = await req.json();
+    const { keys } = body as { keys: string[] };
+    if (!keys || !Array.isArray(keys) || keys.length === 0) {
+      return NextResponse.json({ ok: false, error: "keys required" }, { status: 400 });
+    }
+
+    const existing = await redis.get<Record<string, any>>(termuxCookiesKey(t));
+    const store: Record<string, any> = (existing && typeof existing === "object") ? existing : {};
+
+    let deleted = 0;
+    for (const k of keys) {
+      if (store[k]) { delete store[k]; deleted++; }
+    }
+
+    await redis.set(termuxCookiesKey(t), JSON.stringify(store));
+    return NextResponse.json({ ok: true, deleted });
+  } catch (e: any) {
+    return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
+  }
+}
