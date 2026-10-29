@@ -60,7 +60,14 @@ export async function GET(req: NextRequest) {
     const store = raw
       ? typeof raw === "string" ? JSON.parse(raw) : raw
       : {};
-    const entries = Object.values(store) as Array<CookieEntry & { deviceId: string; updatedAt: number }>;
+    const allEntries = Object.values(store) as Array<CookieEntry & { deviceId: string; updatedAt: number }>;
+    const dedup = new Map<string, CookieEntry & { deviceId: string; updatedAt: number }>();
+    for (const e of allEntries) {
+      const dk = `${e.deviceId}:${e.pkg}`;
+      const prev = dedup.get(dk);
+      if (!prev || (e.updatedAt || 0) > (prev.updatedAt || 0)) dedup.set(dk, e);
+    }
+    const entries = Array.from(dedup.values());
 
     const deviceIds = Array.from(new Set(entries.map((e: any) => e.deviceId).filter(Boolean)));
     const devices: Record<string, string> = {};
@@ -102,17 +109,16 @@ export async function DELETE(req: NextRequest) {
       ? typeof raw === "string" ? JSON.parse(raw) : raw
       : {};
 
+    const targetSet = new Set(keys);
     let deleted = 0;
-    const keySet = new Set(keys);
     for (const k of Object.keys(store)) {
-      if (keySet.has(k)) {
-        delete store[k]; deleted++;
-      } else {
-        const entry = store[k];
-        if (entry && entry.deviceId && entry.pkg) {
-          const altKey = `${entry.deviceId}:${entry.pkg}`;
-          if (keySet.has(altKey)) { delete store[k]; deleted++; }
-        }
+      if (targetSet.has(k)) {
+        delete store[k]; deleted++; continue;
+      }
+      const entry = store[k];
+      if (entry && entry.deviceId && entry.pkg) {
+        const combo = `${entry.deviceId}:${entry.pkg}`;
+        if (targetSet.has(combo)) { delete store[k]; deleted++; }
       }
     }
 
