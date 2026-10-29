@@ -97,12 +97,23 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "keys required" }, { status: 400 });
     }
 
-    const existing = await redis.get<Record<string, any>>(termuxCookiesKey(t));
-    const store: Record<string, any> = (existing && typeof existing === "object") ? existing : {};
+    const raw = await redis.get<string>(termuxCookiesKey(t));
+    const store: Record<string, any> = raw
+      ? typeof raw === "string" ? JSON.parse(raw) : raw
+      : {};
 
     let deleted = 0;
-    for (const k of keys) {
-      if (store[k]) { delete store[k]; deleted++; }
+    const keySet = new Set(keys);
+    for (const k of Object.keys(store)) {
+      if (keySet.has(k)) {
+        delete store[k]; deleted++;
+      } else {
+        const entry = store[k];
+        if (entry && entry.deviceId && entry.pkg) {
+          const altKey = `${entry.deviceId}:${entry.pkg}`;
+          if (keySet.has(altKey)) { delete store[k]; deleted++; }
+        }
+      }
     }
 
     await redis.set(termuxCookiesKey(t), JSON.stringify(store));
