@@ -110,7 +110,7 @@ export default function FleetOverviewPage() {
         .empty { color:var(--dim); text-align:center; padding:40px 0; }
       `}</style>
 
-      <button className="back" onClick={() => router.push("/monitor")}>← Back to devices</button>
+      <button className="back" onClick={() => router.push("/dashboard/termux")}>← Back to devices</button>
       <h1>Fleet Overview</h1>
       <div className="sub">Klik device buat expand. Badge merah = ada clone yang numpuk seserver, hijau = aman.</div>
 

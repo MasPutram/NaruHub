@@ -420,7 +420,7 @@ export default function MonitorListPage() {
           <div className="sub">Termux root devices &bull; polling every 10 seconds</div>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button className="gen-btn" onClick={() => router.push("/monitor/overview")}>Fleet Overview</button>
+          <button className="gen-btn" onClick={() => router.push("/dashboard/termux/overview")}>Fleet Overview</button>
           <button className="gen-btn" onClick={openCommandModal}>+ Generate Command</button>
           <button className="edit-all-btn" onClick={() => setEditAllOpen(true)}>Edit All Policies</button>
           <button className="agent-cfg-btn" onClick={openAgentConfig}>Agent Config</button>
@@ -488,7 +488,7 @@ export default function MonitorListPage() {
             const isRenaming = renamingId === d.deviceId;
 
             return (
-              <div key={d.deviceId} className="device" onClick={() => !isRenaming && router.push(`/monitor/${d.deviceId}`)}>
+              <div key={d.deviceId} className="device" onClick={() => !isRenaming && router.push(`/dashboard/termux/${d.deviceId}`)}>
                 <div className="devicehead">
                   <div>
                     {isRenaming ? (
@@ -541,7 +541,7 @@ export default function MonitorListPage() {
                   <span>Updated {ago(d.lastSeen)}</span>
                 </div>
                 <div className="device-actions">
-                  <button className="openbtn" onClick={(e) => { e.stopPropagation(); router.push(`/monitor/${d.deviceId}`); }}>
+                  <button className="openbtn" onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/termux/${d.deviceId}`); }}>
                     Open device →
                   </button>
                   <button className="delbtn" onClick={(e) => deleteDevice(e, d.deviceId, displayName(d))}>

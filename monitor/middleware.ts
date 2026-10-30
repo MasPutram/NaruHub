@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_PATHS = [
   "/login",
+  "/register",
   "/api/auth",
+  "/api/auth/register",
   "/api/monitor",
   "/api/anime-dice/monitor",
   "/api/anime-dice/catalog",
@@ -10,12 +12,9 @@ const PUBLIC_PATHS = [
   "/api/termux",
   "/api/pet-icon",
   "/api/save-temp-image",
+  "/api/store",
 ];
 
-// Agent-facing device-control endpoints: the Termux agent calls these with its
-// access key (X-Access-Key), NOT a session cookie, so they must bypass the
-// session-auth redirect below. Each verifies the access key itself. Everything
-// else under /api/device-control/ stays session-protected (dashboard only).
 const AGENT_DEVICE_CONTROL_PATHS = [
   "/api/device-control/rejoin-plan",
   "/api/device-control/rejoin-ack",
@@ -23,12 +22,20 @@ const AGENT_DEVICE_CONTROL_PATHS = [
 ];
 
 function isPublic(pathname: string): boolean {
+  if (pathname === "/") return true;
   if (pathname === "/poster") return true;
   if (AGENT_DEVICE_CONTROL_PATHS.includes(pathname)) return true;
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 
-async function verifyTokenEdge(token: string, secret: string): Promise<{ valid: boolean; tenant?: string }> {
+interface EdgeTokenResult {
+  valid: boolean;
+  tenant?: string;
+  role?: string;
+  userId?: string;
+}
+
+async function verifyTokenEdge(token: string, secret: string): Promise<EdgeTokenResult> {
   const [b64, sig] = token.split(".");
   if (!b64 || !sig) return { valid: false };
 
@@ -48,7 +55,12 @@ async function verifyTokenEdge(token: string, secret: string): Promise<{ valid: 
   try {
     const payload = JSON.parse(atob(b64.replace(/-/g, "+").replace(/_/g, "/")));
     if (payload.exp <= Date.now()) return { valid: false };
-    return { valid: true, tenant: payload.t || null };
+    return {
+      valid: true,
+      tenant: payload.t || undefined,
+      role: payload.r || "admin",
+      userId: payload.uid,
+    };
   } catch {
     return { valid: false };
   }
@@ -79,10 +91,23 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Inject tenant id as request header so API routes can read it without
-  // re-parsing the cookie. "__default__" = owner/first key (no Redis prefix).
+  // Role-based access control
+  if (pathname.startsWith("/dashboard")) {
+    if (result.role !== "admin") {
+      const storeUrl = req.nextUrl.clone();
+      storeUrl.pathname = "/store";
+      return NextResponse.redirect(storeUrl);
+    }
+  }
+
+  if (pathname.startsWith("/store")) {
+    // Both admin and user can access store — no restriction
+  }
+
   const response = NextResponse.next();
   response.headers.set("x-tenant", result.tenant || "__default__");
+  response.headers.set("x-role", result.role || "admin");
+  if (result.userId) response.headers.set("x-user-id", result.userId);
   return response;
 }
 

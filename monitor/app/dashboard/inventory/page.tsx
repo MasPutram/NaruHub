@@ -591,7 +591,7 @@ export default function InventoryPage() {
             </button>
           </div>
           <div className="tb-actions">
-            <a className="tba-btn" href="/inventory/rangkuman" target="_blank" rel="noopener">&#x1F4C4; Rangkuman Poster</a>
+            <a className="tba-btn" href="/dashboard/inventory/rangkuman" target="_blank" rel="noopener">&#x1F4C4; Rangkuman Poster</a>
             <button className="tba-btn" onClick={downloadSummary}>&#x2B07; Download .txt</button>
             <button className="tba-btn primary" onClick={() => setRateModalOpen(true)}>&#x2699;&#xFE0F; Set Rate</button>
           </div>

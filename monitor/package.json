@@ -9,6 +9,7 @@
     "deploy": "bash deploy.sh"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.109.0",
     "@types/qrcode": "^1.5.6",
     "@upstash/redis": "^1",
     "html2canvas-pro": "^2.4.0",

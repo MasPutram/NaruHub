@@ -26,39 +26,39 @@ const NAV: NavEntry[] = [
     label: "Dashboard",
     icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1",
     items: [
-      { label: "Steal An Egg", href: "/", icon: "M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4z" },
-      { label: "Anime Dice", href: "/anime-dice", icon: "M19 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2zM8 16a1 1 0 110-2 1 1 0 010 2zm0-4a1 1 0 110-2 1 1 0 010 2zm4 2a1 1 0 110-2 1 1 0 010 2zm4 2a1 1 0 110-2 1 1 0 010 2zm0-4a1 1 0 110-2 1 1 0 010 2z" },
+      { label: "Steal An Egg", href: "/dashboard", icon: "M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4z" },
+      { label: "Anime Dice", href: "/dashboard/anime-dice", icon: "M19 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2zM8 16a1 1 0 110-2 1 1 0 010 2zm0-4a1 1 0 110-2 1 1 0 010 2zm4 2a1 1 0 110-2 1 1 0 010 2zm4 2a1 1 0 110-2 1 1 0 010 2zm0-4a1 1 0 110-2 1 1 0 010 2z" },
     ],
   },
   {
     label: "Katalog",
     icon: "M4 6h16M4 10h16M4 14h16M4 18h16",
     items: [
-      { label: "Akun", href: "/catalog", icon: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" },
-      { label: "Inventory", href: "/inventory", icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" },
+      { label: "Akun", href: "/dashboard/catalog", icon: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" },
+      { label: "Inventory", href: "/dashboard/inventory", icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" },
     ],
   },
   {
     label: "Event",
     icon: "M13 10V3L4 14h7v7l9-11h-7z",
     items: [
-      { label: "Anime Dice", href: "/event/anime-dice", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
+      { label: "Anime Dice", href: "/dashboard/events", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
     ],
   },
   {
     label: "Termux",
     icon: "M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
     items: [
-      { label: "Devices", href: "/monitor", icon: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
-      { label: "Cookies", href: "/cookies", icon: "M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" },
+      { label: "Devices", href: "/dashboard/termux", icon: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
+      { label: "Cookies", href: "/dashboard/cookies", icon: "M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" },
     ],
   },
   {
     label: "Captcha",
     icon: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z",
     items: [
-      { label: "Moderated", href: "/moderated", icon: "M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" },
-      { label: "Resolved", href: "/moderated?tab=resolved", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
+      { label: "Moderated", href: "/dashboard/moderated", icon: "M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" },
+      { label: "Resolved", href: "/dashboard/moderated?tab=resolved", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
     ],
   },
   { label: "Poster", href: "/poster", icon: "M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" },
@@ -87,7 +87,7 @@ export default function Sidebar() {
 
   function isActive(href: string) {
     const [hrefPath] = href.split("?");
-    if (hrefPath === "/") return pathname === "/";
+    if (hrefPath === "/dashboard") return pathname === "/dashboard";
     return pathname === hrefPath || pathname.startsWith(hrefPath + "/");
   }
 
@@ -131,7 +131,7 @@ export default function Sidebar() {
         }
         .sb-logo {
           width: 36px; height: 36px; border-radius: 10px;
-          background: #facc15;
+          background: #ef4444;
           display: flex; align-items: center; justify-content: center;
           font-weight: 900; font-size: 14px; color: #09090b;
           flex-shrink: 0;
@@ -158,7 +158,7 @@ export default function Sidebar() {
           border: none; background: none; width: 100%; text-align: left;
         }
         .sb-item:hover { color: #fafafa; background: #18181b; }
-        .sb-item.active { color: #facc15; background: #18181b; }
+        .sb-item.active { color: #ef4444; background: #18181b; }
         .sb-item .sb-icon { flex-shrink: 0; width: 20px; display: flex; align-items: center; justify-content: center; }
         .sb-item .sb-text { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
         .sb-chevron { margin-left: auto; transition: transform .2s; flex-shrink: 0; }
@@ -172,12 +172,12 @@ export default function Sidebar() {
           transition: all .12s; margin-bottom: 1px;
         }
         .sb-subitem:hover { color: #fafafa; background: #18181b; }
-        .sb-subitem.active { color: #facc15; background: #18181b; }
+        .sb-subitem.active { color: #ef4444; background: #18181b; }
         .sb-subitem .sb-dot {
           width: 6px; height: 6px; border-radius: 50%; background: #3f3f46;
           flex-shrink: 0;
         }
-        .sb-subitem.active .sb-dot { background: #facc15; box-shadow: 0 0 6px #facc1580; }
+        .sb-subitem.active .sb-dot { background: #ef4444; box-shadow: 0 0 6px #ef444480; }
 
         .sb-footer {
           padding: 16px ${collapsed ? "12px" : "20px"};
@@ -187,10 +187,10 @@ export default function Sidebar() {
         .sb-avatar {
           width: 32px; height: 32px; border-radius: 8px;
           background: #27272a; display: flex; align-items: center; justify-content: center;
-          font-weight: 800; font-size: 12px; color: #facc15; flex-shrink: 0;
+          font-weight: 800; font-size: 12px; color: #ef4444; flex-shrink: 0;
         }
         .sb-uname { font-size: 12px; font-weight: 700; color: #fafafa; }
-        .sb-urole { font-size: 10px; color: #facc15; font-weight: 600; }
+        .sb-urole { font-size: 10px; color: #ef4444; font-weight: 600; }
 
         .sb-main {
           margin-left: ${collapsed ? "64px" : "240px"};
@@ -211,11 +211,11 @@ export default function Sidebar() {
 
       <nav className="sidebar">
         <div className="sb-header">
-          <div className="sb-logo">NH</div>
+          <div className="sb-logo">NR</div>
           {!collapsed && (
             <div className="sb-brand">
-              <div className="sb-title">NARUHUB</div>
-              <div className="sb-sub">CONTROL DASHBOARD</div>
+              <div className="sb-title">NARUA</div>
+              <div className="sb-sub">ADMIN DASHBOARD</div>
             </div>
           )}
           <button className="sb-toggle" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Expand" : "Collapse"}>
@@ -285,7 +285,7 @@ export default function Sidebar() {
             <div className="sb-avatar">NR</div>
             {!collapsed && (
               <div>
-                <div className="sb-uname">NaruHub</div>
+                <div className="sb-uname">Narua</div>
                 <div className="sb-urole">ADMIN</div>
               </div>
             )}

@@ -846,7 +846,7 @@ export default function DeviceDetailPage() {
     return (
       <>
         {styles}
-        <button className="back" onClick={() => router.push("/monitor")}>← Back to devices</button>
+        <button className="back" onClick={() => router.push("/dashboard/termux")}>← Back to devices</button>
         <div className="empty">Memuat device...</div>
       </>
     );
@@ -856,7 +856,7 @@ export default function DeviceDetailPage() {
     return (
       <>
         {styles}
-        <button className="back" onClick={() => router.push("/monitor")}>← Back to devices</button>
+        <button className="back" onClick={() => router.push("/dashboard/termux")}>← Back to devices</button>
         <div className="not-found">Device tidak ditemukan atau sudah offline lama.</div>
       </>
     );
@@ -868,7 +868,7 @@ export default function DeviceDetailPage() {
   return (
     <>
       {styles}
-      <button className="back" onClick={() => router.push("/monitor")}>← Back to devices</button>
+      <button className="back" onClick={() => router.push("/dashboard/termux")}>← Back to devices</button>
 
       <div className="top">
         <div>
