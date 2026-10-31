@@ -1,21 +1,14 @@
 import type { Metadata } from "next";
-import { Poppins, Bebas_Neue, Space_Grotesk } from "next/font/google";
+import { Manrope, JetBrains_Mono } from "next/font/google";
 
-const poppins = Poppins({
+const manrope = Manrope({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800", "900"],
+  weight: ["300", "400", "500", "600", "700", "800"],
   variable: "--font-poppins",
   display: "swap",
 });
 
-const bebas = Bebas_Neue({
-  subsets: ["latin"],
-  weight: ["400"],
-  variable: "--font-bebas",
-  display: "swap",
-});
-
-const spaceGrotesk = Space_Grotesk({
+const mono = JetBrains_Mono({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-numbers",
@@ -29,7 +22,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="id" className={`${poppins.variable} ${bebas.variable} ${spaceGrotesk.variable}`} suppressHydrationWarning>
+    <html lang="id" className={`${manrope.variable} ${mono.variable}`} suppressHydrationWarning>
       <body style={{ fontFamily: "var(--font-poppins), system-ui, -apple-system, sans-serif", margin: 0 }} suppressHydrationWarning>
         {children}
       </body>

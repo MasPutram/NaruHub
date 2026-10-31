@@ -19,7 +19,7 @@ export default function StoreLayout({ children }: { children: React.ReactNode })
         .store-nav { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; border-bottom: 1px solid #1c1c1e; position: sticky; top: 0; background: #09090bee; backdrop-filter: blur(12px); z-index: 50; }
         .store-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #fafafa; }
         .store-logo-icon { width: 32px; height: 32px; border-radius: 8px; overflow: hidden; }
-        .store-logo-text { font-family: var(--font-bebas), system-ui; font-size: 22px; letter-spacing: 1px; }
+        .store-logo-text { font-weight: 800; font-size: 17px; letter-spacing: 1px; }
         .store-nav-actions { display: flex; align-items: center; gap: 8px; }
         .store-nav-btn { padding: 7px 16px; border-radius: 8px; font-size: 12px; font-weight: 700; text-decoration: none; border: none; cursor: pointer; transition: all .15s; }
         .store-nav-btn.ghost { background: transparent; color: #a1a1aa; }
