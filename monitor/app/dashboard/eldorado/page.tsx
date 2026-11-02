@@ -89,11 +89,13 @@ const styles = `
 .edo-stat.wallet { border-color: rgba(251,191,36,.2); background: linear-gradient(135deg, rgba(251,191,36,.04), transparent), var(--card); }
 .edo-stat.estimasi { border-color: rgba(52,211,153,.25); background: linear-gradient(135deg, rgba(52,211,153,.04), transparent), var(--card); }
 .edo-stat.withdrawn { border-color: rgba(129,140,248,.2); background: linear-gradient(135deg, rgba(129,140,248,.04), transparent), var(--card); }
+.edo-stat.income { border-color: rgba(34,211,238,.2); background: linear-gradient(135deg, rgba(34,211,238,.04), transparent), var(--card); }
 .edo-stat-label { font-size: 10px; font-weight: 800; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
 .edo-stat-value { font-size: 20px; font-weight: 900; color: var(--ink); }
 .edo-stat.wallet .edo-stat-value { color: var(--gold); }
 .edo-stat.estimasi .edo-stat-value { color: var(--green); }
 .edo-stat.withdrawn .edo-stat-value { color: var(--accent); }
+.edo-stat.income .edo-stat-value { color: var(--cyan); }
 
 .edo-tabs { display: flex; gap: 6px; margin-bottom: 20px; }
 .edo-tab {
@@ -237,8 +239,10 @@ export default function EldoradoPage() {
   const SALES_FEE = 0.15;
   const WD_FEE_PCT = 0.04;
   const WD_FEE_FLAT = 2;
-  const estimasi = totalSold * (1 - SALES_FEE);
-  const withdrawal = Math.max(estimasi * (1 - WD_FEE_PCT) - WD_FEE_FLAT, 0);
+  const BANK_FEE_PCT = 0.02;
+  const afterSalesFee = totalSold * (1 - SALES_FEE);
+  const afterWdFee = Math.max(afterSalesFee * (1 - WD_FEE_PCT) - WD_FEE_FLAT, 0);
+  const income = afterWdFee * (1 - BANK_FEE_PCT);
 
   async function handleAction(offerId: string, action: string) {
     try {
@@ -310,13 +314,17 @@ export default function EldoradoPage() {
               <div className="edo-stat-label">WALLET</div>
               <div className="edo-stat-value">{fmtUsd(totalSold)}</div>
             </div>
-            <div className="edo-stat estimasi">
-              <div className="edo-stat-label">ESTIMASI</div>
-              <div className="edo-stat-value">{fmtUsd(estimasi)}</div>
-            </div>
             <div className="edo-stat withdrawn">
               <div className="edo-stat-label">WITHDRAWAL</div>
-              <div className="edo-stat-value">{fmtUsd(withdrawal)}</div>
+              <div className="edo-stat-value">{fmtUsd(afterSalesFee)}</div>
+            </div>
+            <div className="edo-stat estimasi">
+              <div className="edo-stat-label">ESTIMASI</div>
+              <div className="edo-stat-value">{fmtUsd(afterWdFee)}</div>
+            </div>
+            <div className="edo-stat income">
+              <div className="edo-stat-label">INCOME</div>
+              <div className="edo-stat-value">{fmtUsd(income)}</div>
             </div>
           </div>
         </div>
