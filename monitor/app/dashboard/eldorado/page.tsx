@@ -16,6 +16,20 @@ interface Offer {
   mainOfferImage?: { smallImage?: string; largeImage?: string };
 }
 
+interface SoldOrder {
+  id: string;
+  buyerUsername?: string;
+  purchaseQuantity?: number;
+  totalPrice?: { amount?: number; currency?: string };
+  state?: { state?: string; createdDate?: string };
+  orderOfferDetails?: {
+    offerTitle?: string;
+    category?: string;
+    mainOfferImage?: { smallImage?: string; largeImage?: string };
+    guaranteedDeliveryTime?: string;
+  };
+}
+
 interface NewItem {
   title: string;
   description: string;
@@ -119,8 +133,10 @@ const styles = `
 .edo-img { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; background: var(--surface); border: 1px solid #222240; }
 
 .edo-state { font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 6px; letter-spacing: .5px; }
-.edo-state.active { background: rgba(52,211,153,.12); color: var(--green); border: 1px solid rgba(52,211,153,.3); }
+.edo-state.active, .edo-state.delivered { background: rgba(52,211,153,.12); color: var(--green); border: 1px solid rgba(52,211,153,.3); }
 .edo-state.paused { background: rgba(251,191,36,.12); color: var(--gold); border: 1px solid rgba(251,191,36,.3); }
+.edo-state.received { background: rgba(34,211,238,.12); color: var(--cyan); border: 1px solid rgba(34,211,238,.3); }
+.edo-state.cancelled { background: rgba(239,68,68,.12); color: var(--red); border: 1px solid rgba(239,68,68,.3); }
 
 .edo-actions { display: flex; gap: 4px; }
 
@@ -161,9 +177,12 @@ const styles = `
 
 export default function EldoradoPage() {
   const [offers, setOffers] = useState<Offer[]>([]);
+  const [orders, setOrders] = useState<SoldOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ordersLoading, setOrdersLoading] = useState(true);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<"list" | "create">("list");
+  const [ordersError, setOrdersError] = useState("");
+  const [tab, setTab] = useState<"list" | "create" | "orders">("list");
 
   const [newItems, setNewItems] = useState<NewItem[]>([emptyItem()]);
   const [uploading, setUploading] = useState(false);
@@ -188,10 +207,35 @@ export default function EldoradoPage() {
     }
   }, []);
 
-  useEffect(() => { fetchOffers(); }, [fetchOffers]);
+  const fetchOrders = useCallback(async () => {
+    setOrdersLoading(true);
+    setOrdersError("");
+    try {
+      const res = await fetch("/api/eldorado/orders");
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const items = data.results || data || [];
+      setOrders(Array.isArray(items) ? items : []);
+    } catch (e: any) {
+      setOrdersError(e.message);
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchOffers(); fetchOrders(); }, [fetchOffers, fetchOrders]);
 
   const activeOffers = offers.filter((o) => (o.offerState || "").toLowerCase() === "active");
   const totalValue = offers.reduce((sum, o) => sum + (o.pricePerUnit?.amount || 0) * (o.quantity || 0), 0);
+
+  const completedOrders = orders.filter((o) => {
+    const s = (o.state?.state || "").toLowerCase();
+    return s === "received" || s === "delivered";
+  });
+  const totalSold = completedOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0);
 
   async function handleAction(offerId: string, action: string) {
     try {
@@ -264,12 +308,12 @@ export default function EldoradoPage() {
               <div className="edo-stat-value">{fmtUsd(totalValue)}</div>
             </div>
             <div className="edo-stat estimasi">
-              <div className="edo-stat-label">ESTIMASI WITHDRAWAL</div>
-              <div className="edo-stat-value">{fmtUsd(totalValue * 0.9)}</div>
+              <div className="edo-stat-label">TOTAL SOLD</div>
+              <div className="edo-stat-value">{fmtUsd(totalSold)}</div>
             </div>
             <div className="edo-stat withdrawn">
-              <div className="edo-stat-label">SUDAH WD</div>
-              <div className="edo-stat-value">$0.00</div>
+              <div className="edo-stat-label">ESTIMASI WD</div>
+              <div className="edo-stat-value">{fmtUsd(totalSold * 0.9)}</div>
             </div>
           </div>
         </div>
@@ -278,6 +322,9 @@ export default function EldoradoPage() {
         <div className="edo-tabs">
           <button className={`edo-tab ${tab === "list" ? "active" : ""}`} onClick={() => setTab("list")}>
             LISTING ({offers.length})
+          </button>
+          <button className={`edo-tab ${tab === "orders" ? "active" : ""}`} onClick={() => setTab("orders")}>
+            SOLD ORDERS ({orders.length})
           </button>
           <button className={`edo-tab ${tab === "create" ? "active" : ""}`} onClick={() => setTab("create")}>
             UPLOAD
@@ -355,6 +402,76 @@ export default function EldoradoPage() {
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              )}
+            </>
+          )}
+
+          {tab === "orders" && (
+            <>
+              <div className="edo-toolbar">
+                <button className="edo-btn" onClick={fetchOrders} disabled={ordersLoading}>
+                  {ordersLoading ? "Loading..." : "↻ Refresh"}
+                </button>
+                <div className="edo-toolbar-right">
+                  <span className="edo-count">{completedOrders.length} completed / {orders.length} total</span>
+                </div>
+              </div>
+
+              {ordersError && <div className="edo-result error">{ordersError}</div>}
+
+              {!ordersLoading && !ordersError && orders.length === 0 && (
+                <div className="edo-empty">
+                  <div className="edo-empty-icon">&#x1F4B0;</div>
+                  <div className="edo-empty-text">Belum ada sold orders</div>
+                  <div className="edo-empty-sub">Sold orders akan muncul di sini setelah ada pembeli</div>
+                </div>
+              )}
+
+              {orders.length > 0 && (
+                <table className="edo-table">
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>Order</th>
+                      <th>Buyer</th>
+                      <th>Qty</th>
+                      <th>Price</th>
+                      <th>Status</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.map((o) => {
+                      const st = (o.state?.state || "").toLowerCase();
+                      const stClass = st === "received" ? "received" : st === "delivered" ? "delivered" : st === "cancelled" ? "cancelled" : "paused";
+                      const img = o.orderOfferDetails?.mainOfferImage?.smallImage;
+                      const date = o.state?.createdDate ? new Date(o.state.createdDate).toLocaleString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "-";
+                      return (
+                        <tr key={o.id}>
+                          <td>
+                            {img ? (
+                              <img className="edo-img" src={offerImgUrl(img)} alt="" />
+                            ) : (
+                              <div className="edo-img" />
+                            )}
+                          </td>
+                          <td style={{ fontWeight: 700, maxWidth: 300 }}>{o.orderOfferDetails?.offerTitle || "-"}</td>
+                          <td style={{ fontSize: 12, color: "var(--dim)" }}>{o.buyerUsername || "-"}</td>
+                          <td>{o.purchaseQuantity ?? "-"}</td>
+                          <td style={{ fontWeight: 800, color: "var(--gold)" }}>
+                            {fmtUsd(o.totalPrice?.amount)}
+                          </td>
+                          <td>
+                            <span className={`edo-state ${stClass}`}>
+                              {o.state?.state || "?"}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: 11, color: "var(--dim)", whiteSpace: "nowrap" }}>{date}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
