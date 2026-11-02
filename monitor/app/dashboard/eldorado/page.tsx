@@ -74,6 +74,11 @@ function fmtUsd(amount?: number) {
   return `$${amount.toFixed(2)}`;
 }
 
+function fmtIdr(amount?: number) {
+  if (amount == null) return "Rp 0";
+  return `Rp ${Math.round(amount).toLocaleString("id-ID")}`;
+}
+
 const styles = `
 :root {
   --bg: #0b0b14; --surface: #111120; --card: #15152a; --card-hover: #1a1a35;
@@ -189,6 +194,7 @@ export default function EldoradoPage() {
   const [newItems, setNewItems] = useState<NewItem[]>([emptyItem()]);
   const [uploading, setUploading] = useState(false);
   const [uploadResults, setUploadResults] = useState<any[] | null>(null);
+  const [usdIdr, setUsdIdr] = useState(0);
 
   const fetchOffers = useCallback(async () => {
     setLoading(true);
@@ -229,6 +235,13 @@ export default function EldoradoPage() {
   }, []);
 
   useEffect(() => { fetchOffers(); fetchOrders(); }, [fetchOffers, fetchOrders]);
+
+  useEffect(() => {
+    fetch("https://open.er-api.com/v6/latest/USD")
+      .then((r) => r.json())
+      .then((d) => setUsdIdr(d.rates?.IDR || 0))
+      .catch(() => {});
+  }, []);
 
   const activeOffers = offers.filter((o) => (o.offerState || "").toLowerCase() === "active");
   const completedOrders = orders.filter((o) => {
@@ -374,7 +387,10 @@ export default function EldoradoPage() {
                       <th>Title</th>
                       <th>Qty</th>
                       <th>Min</th>
-                      <th>Price</th>
+                      <th>Price USD</th>
+                      <th>Price IDR</th>
+                      <th>Estimasi</th>
+                      <th>Income</th>
                       <th>Delivery</th>
                       <th>Status</th>
                       <th>Actions</th>
@@ -395,6 +411,17 @@ export default function EldoradoPage() {
                         <td>{o.minQuantity ?? "-"}</td>
                         <td style={{ fontWeight: 800, color: "var(--gold)" }}>
                           {fmtUsd(o.pricePerUnit?.amount)}
+                        </td>
+                        <td style={{ fontWeight: 700, color: "var(--ink)", fontSize: 12 }}>
+                          {usdIdr ? fmtIdr((o.pricePerUnit?.amount || 0) * usdIdr) : "-"}
+                        </td>
+                        <td style={{ fontWeight: 700, color: "var(--green)", fontSize: 12 }}>
+                          {fmtUsd((o.pricePerUnit?.amount || 0) * (o.quantity || 0) * (1 - SALES_FEE))}
+                        </td>
+                        <td style={{ fontWeight: 700, color: "var(--cyan)", fontSize: 12 }}>
+                          {(o.offerState || "").toLowerCase() === "closed"
+                            ? fmtUsd((o.pricePerUnit?.amount || 0) * (o.quantity || 0) * (1 - SALES_FEE))
+                            : "-"}
                         </td>
                         <td style={{ fontSize: 11, color: "var(--dim)" }}>{o.guaranteedDeliveryTime || "-"}</td>
                         <td>
