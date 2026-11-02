@@ -893,6 +893,7 @@ local AUTOEXEC_PATHS = {
   "/storage/emulated/0/Delta/Autoexecute",
   "/storage/emulated/0/Hydrogen/AutoExec",
   "/storage/emulated/0/Arceus X/Autoexec",
+  "/storage/emulated/0/Arceus X v5/Autoexec",
   "/storage/emulated/0/Fluxus/AutoExec",
   "/storage/emulated/0/Vegax/AutoExec",
 }
