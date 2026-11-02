@@ -8,9 +8,8 @@ interface Offer {
   description?: string;
   quantity?: number;
   minQuantity?: number;
-  price?: number;
-  currency?: string;
-  state?: string;
+  pricePerUnit?: { amount?: number; currency?: string };
+  offerState?: string;
   guaranteedDeliveryTime?: string;
   createdAt?: string;
   mainOfferImage?: { smallImage?: string; largeImage?: string };
@@ -23,6 +22,14 @@ interface NewItem {
   quantity: number;
   minQuantity: number;
   deliveryTime: string;
+}
+
+const ELDORADO_CDN = "https://assetsdelivery.eldorado.gg/v7/_offers_/";
+
+function offerImgUrl(filename?: string) {
+  if (!filename) return "";
+  if (filename.startsWith("http")) return filename;
+  return `${ELDORADO_CDN}${filename}`;
 }
 
 const DELIVERY_OPTIONS = [
@@ -282,7 +289,7 @@ export default function EldoradoPage() {
                     <tr key={o.id}>
                       <td>
                         {o.mainOfferImage?.smallImage ? (
-                          <img className="edo-img" src={o.mainOfferImage.smallImage} alt="" />
+                          <img className="edo-img" src={offerImgUrl(o.mainOfferImage.smallImage)} alt="" />
                         ) : (
                           <div className="edo-img" />
                         )}
@@ -291,17 +298,17 @@ export default function EldoradoPage() {
                       <td>{o.quantity ?? "-"}</td>
                       <td>{o.minQuantity ?? "-"}</td>
                       <td style={{ fontWeight: 700, color: "#f59e0b" }}>
-                        ${o.price ?? "?"}{o.currency && o.currency !== "USD" ? ` ${o.currency}` : ""}
+                        ${o.pricePerUnit?.amount ?? "?"}{o.pricePerUnit?.currency && o.pricePerUnit.currency !== "USD" ? ` ${o.pricePerUnit.currency}` : ""}
                       </td>
                       <td style={{ fontSize: 11, color: "#71717a" }}>{o.guaranteedDeliveryTime || "-"}</td>
                       <td>
-                        <span className={`edo-state ${(o.state || "").toLowerCase() === "active" ? "active" : "paused"}`}>
-                          {o.state || "?"}
+                        <span className={`edo-state ${(o.offerState || "").toLowerCase() === "active" ? "active" : "paused"}`}>
+                          {o.offerState || "?"}
                         </span>
                       </td>
                       <td>
                         <div className="edo-actions">
-                          {(o.state || "").toLowerCase() === "active" ? (
+                          {(o.offerState || "").toLowerCase() === "active" ? (
                             <button className="edo-btn sm ghost" onClick={() => handleAction(o.id, "pause")}>⏸</button>
                           ) : (
                             <button className="edo-btn sm ghost" onClick={() => handleAction(o.id, "resume")}>▶</button>
