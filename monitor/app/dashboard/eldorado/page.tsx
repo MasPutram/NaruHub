@@ -388,8 +388,8 @@ export default function EldoradoPage() {
                       <th>Qty</th>
                       <th>Min</th>
                       <th>Price USD</th>
-                      <th>Price IDR</th>
-                      <th>Estimasi</th>
+                      <th>Estimasi USD</th>
+                      <th>Estimasi IDR</th>
                       <th>Delivery</th>
                       <th>Status</th>
                       <th>Actions</th>
@@ -411,11 +411,11 @@ export default function EldoradoPage() {
                         <td style={{ fontWeight: 800, color: "var(--gold)" }}>
                           {fmtUsd(o.pricePerUnit?.amount)}
                         </td>
-                        <td style={{ fontWeight: 700, color: "var(--ink)", fontSize: 12 }}>
-                          {usdIdr ? fmtIdr((o.pricePerUnit?.amount || 0) * usdIdr) : "-"}
-                        </td>
                         <td style={{ fontWeight: 700, color: "var(--green)", fontSize: 12 }}>
                           {fmtUsd((o.pricePerUnit?.amount || 0) * (o.quantity || 0) * (1 - SALES_FEE))}
+                        </td>
+                        <td style={{ fontWeight: 700, color: "var(--green)", fontSize: 12 }}>
+                          {usdIdr ? fmtIdr((o.pricePerUnit?.amount || 0) * (o.quantity || 0) * (1 - SALES_FEE) * usdIdr) : "-"}
                         </td>
                         <td style={{ fontSize: 11, color: "var(--dim)" }}>{o.guaranteedDeliveryTime || "-"}</td>
                         <td>
@@ -471,6 +471,8 @@ export default function EldoradoPage() {
                       <th>Buyer</th>
                       <th>Qty</th>
                       <th>Price</th>
+                      <th>Estimasi USD</th>
+                      <th>Estimasi IDR</th>
                       <th>Status</th>
                       <th>Date</th>
                     </tr>
@@ -495,6 +497,12 @@ export default function EldoradoPage() {
                           <td>{o.purchaseQuantity ?? "-"}</td>
                           <td style={{ fontWeight: 800, color: "var(--gold)" }}>
                             {fmtUsd(o.totalPrice?.amount)}
+                          </td>
+                          <td style={{ fontWeight: 700, color: "var(--green)", fontSize: 12 }}>
+                            {fmtUsd((o.totalPrice?.amount || 0) * (1 - SALES_FEE))}
+                          </td>
+                          <td style={{ fontWeight: 700, color: "var(--green)", fontSize: 12 }}>
+                            {usdIdr ? fmtIdr((o.totalPrice?.amount || 0) * (1 - SALES_FEE) * usdIdr) : "-"}
                           </td>
                           <td>
                             <span className={`edo-state ${stClass}`}>
