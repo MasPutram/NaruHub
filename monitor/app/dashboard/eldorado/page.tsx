@@ -134,7 +134,7 @@ const styles = `
 .edo-table tr:hover td { background: var(--card-hover); }
 .edo-img { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; background: var(--surface); border: 1px solid #222240; }
 
-.edo-state { font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 6px; letter-spacing: .5px; }
+.edo-state { font-size: 12px; font-weight: 800; padding: 5px 12px; border-radius: 6px; letter-spacing: .5px; }
 .edo-state.active, .edo-state.delivered { background: rgba(52,211,153,.12); color: var(--green); border: 1px solid rgba(52,211,153,.3); }
 .edo-state.paused { background: rgba(251,191,36,.12); color: var(--gold); border: 1px solid rgba(251,191,36,.3); }
 .edo-state.received { background: rgba(34,211,238,.12); color: var(--cyan); border: 1px solid rgba(34,211,238,.3); }
@@ -469,7 +469,7 @@ export default function EldoradoPage() {
                             )}
                           </td>
                           <td style={{ fontWeight: 700, maxWidth: 300 }}>{o.orderOfferDetails?.offerTitle || "-"}</td>
-                          <td style={{ fontSize: 12, color: "var(--dim)" }}>{o.buyerUsername || "-"}</td>
+                          <td style={{ fontSize: 13, color: "var(--ink)" }}>{o.buyerUsername || "-"}</td>
                           <td>{o.purchaseQuantity ?? "-"}</td>
                           <td style={{ fontWeight: 800, color: "var(--gold)" }}>
                             {fmtUsd(o.totalPrice?.amount)}
@@ -479,7 +479,7 @@ export default function EldoradoPage() {
                               {o.state?.state || "?"}
                             </span>
                           </td>
-                          <td style={{ fontSize: 11, color: "var(--dim)", whiteSpace: "nowrap" }}>{date}</td>
+                          <td style={{ fontSize: 13, color: "var(--ink)", whiteSpace: "nowrap" }}>{date}</td>
                         </tr>
                       );
                     })}
