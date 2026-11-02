@@ -240,9 +240,10 @@ export default function EldoradoPage() {
   const WD_FEE_PCT = 0.04;
   const WD_FEE_FLAT = 2;
   const BANK_FEE_PCT = 0.02;
+  const BANK_FEE_FLAT = 1.5;
   const afterSalesFee = totalSold * (1 - SALES_FEE);
   const afterWdFee = Math.max(afterSalesFee * (1 - WD_FEE_PCT) - WD_FEE_FLAT, 0);
-  const income = afterWdFee * (1 - BANK_FEE_PCT);
+  const income = Math.max(afterWdFee * (1 - BANK_FEE_PCT) - BANK_FEE_FLAT, 0);
 
   async function handleAction(offerId: string, action: string) {
     try {
