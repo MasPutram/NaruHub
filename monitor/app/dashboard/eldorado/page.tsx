@@ -390,7 +390,6 @@ export default function EldoradoPage() {
                       <th>Price USD</th>
                       <th>Price IDR</th>
                       <th>Estimasi</th>
-                      <th>Income</th>
                       <th>Delivery</th>
                       <th>Status</th>
                       <th>Actions</th>
@@ -417,11 +416,6 @@ export default function EldoradoPage() {
                         </td>
                         <td style={{ fontWeight: 700, color: "var(--green)", fontSize: 12 }}>
                           {fmtUsd((o.pricePerUnit?.amount || 0) * (o.quantity || 0) * (1 - SALES_FEE))}
-                        </td>
-                        <td style={{ fontWeight: 700, color: "var(--cyan)", fontSize: 12 }}>
-                          {(o.offerState || "").toLowerCase() === "closed"
-                            ? fmtUsd((o.pricePerUnit?.amount || 0) * (o.quantity || 0) * (1 - SALES_FEE))
-                            : "-"}
                         </td>
                         <td style={{ fontSize: 11, color: "var(--dim)" }}>{o.guaranteedDeliveryTime || "-"}</td>
                         <td>
