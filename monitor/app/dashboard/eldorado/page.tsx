@@ -229,13 +229,16 @@ export default function EldoradoPage() {
   useEffect(() => { fetchOffers(); fetchOrders(); }, [fetchOffers, fetchOrders]);
 
   const activeOffers = offers.filter((o) => (o.offerState || "").toLowerCase() === "active");
-  const totalValue = offers.reduce((sum, o) => sum + (o.pricePerUnit?.amount || 0) * (o.quantity || 0), 0);
-
   const completedOrders = orders.filter((o) => {
     const s = (o.state?.state || "").toLowerCase();
     return s === "received" || s === "delivered";
   });
   const totalSold = completedOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0);
+  const SALES_FEE = 0.15;
+  const WD_FEE_PCT = 0.04;
+  const WD_FEE_FLAT = 2;
+  const estimasi = totalSold * (1 - SALES_FEE);
+  const withdrawal = Math.max(estimasi * (1 - WD_FEE_PCT) - WD_FEE_FLAT, 0);
 
   async function handleAction(offerId: string, action: string) {
     try {
@@ -305,15 +308,15 @@ export default function EldoradoPage() {
           <div className="edo-stats">
             <div className="edo-stat wallet">
               <div className="edo-stat-label">WALLET</div>
-              <div className="edo-stat-value">{fmtUsd(totalValue)}</div>
-            </div>
-            <div className="edo-stat estimasi">
-              <div className="edo-stat-label">TOTAL SOLD</div>
               <div className="edo-stat-value">{fmtUsd(totalSold)}</div>
             </div>
+            <div className="edo-stat estimasi">
+              <div className="edo-stat-label">ESTIMASI</div>
+              <div className="edo-stat-value">{fmtUsd(estimasi)}</div>
+            </div>
             <div className="edo-stat withdrawn">
-              <div className="edo-stat-label">ESTIMASI WD</div>
-              <div className="edo-stat-value">{fmtUsd(totalSold * 0.9)}</div>
+              <div className="edo-stat-label">WITHDRAWAL</div>
+              <div className="edo-stat-value">{fmtUsd(withdrawal)}</div>
             </div>
           </div>
         </div>
