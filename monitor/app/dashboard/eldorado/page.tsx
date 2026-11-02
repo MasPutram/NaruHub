@@ -9,6 +9,7 @@ interface Offer {
   quantity?: number;
   minQuantity?: number;
   pricePerUnit?: { amount?: number; currency?: string };
+  pricePerUnitInUSD?: { amount?: number; currency?: string };
   offerState?: string;
   guaranteedDeliveryTime?: string;
   createdAt?: string;
@@ -24,7 +25,7 @@ interface NewItem {
   deliveryTime: string;
 }
 
-const ELDORADO_CDN = "https://assetsdelivery.eldorado.gg/v7/_offers_/";
+const ELDORADO_CDN = "https://assetsdelivery.eldorado.gg/v7/_offers-v2_/";
 
 function offerImgUrl(filename?: string) {
   if (!filename) return "";
@@ -54,13 +55,116 @@ const emptyItem = (): NewItem => ({
   deliveryTime: "Minute20",
 });
 
+function fmtUsd(amount?: number) {
+  if (amount == null) return "$0.00";
+  return `$${amount.toFixed(2)}`;
+}
+
+const styles = `
+:root {
+  --bg: #0b0b14; --surface: #111120; --card: #15152a; --card-hover: #1a1a35;
+  --ink: #e8e8f0; --dim: #555570; --accent: #818cf8; --accent2: #a855f7;
+  --green: #34d399; --gold: #fbbf24; --red: #ef4444; --cyan: #22d3ee; --purple: #c084fc;
+}
+
+.edo-wrap { max-width: 1600px; margin: 0 auto; padding: 20px 24px 40px; font-family: 'Inter', system-ui, sans-serif; }
+
+.edo-topbar { display: flex; justify-content: space-between; align-items: stretch; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.edo-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; flex: 1; min-width: 0; }
+.edo-stat { background: var(--card); border: 1px solid #1e1e38; border-radius: 12px; padding: 14px 18px; text-align: left; }
+.edo-stat.wallet { border-color: rgba(251,191,36,.2); background: linear-gradient(135deg, rgba(251,191,36,.04), transparent), var(--card); }
+.edo-stat.estimasi { border-color: rgba(52,211,153,.25); background: linear-gradient(135deg, rgba(52,211,153,.04), transparent), var(--card); }
+.edo-stat.withdrawn { border-color: rgba(129,140,248,.2); background: linear-gradient(135deg, rgba(129,140,248,.04), transparent), var(--card); }
+.edo-stat-label { font-size: 10px; font-weight: 800; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.edo-stat-value { font-size: 20px; font-weight: 900; color: var(--ink); }
+.edo-stat.wallet .edo-stat-value { color: var(--gold); }
+.edo-stat.estimasi .edo-stat-value { color: var(--green); }
+.edo-stat.withdrawn .edo-stat-value { color: var(--accent); }
+
+.edo-tabs { display: flex; gap: 6px; margin-bottom: 20px; }
+.edo-tab {
+  padding: 10px 22px; font-size: 12px; font-weight: 800; cursor: pointer;
+  color: var(--dim); background: var(--card); border: 1px solid #1e1e38;
+  border-radius: 10px; transition: all .15s; letter-spacing: .5px;
+}
+.edo-tab:hover { color: var(--ink); border-color: var(--accent); }
+.edo-tab.active { background: var(--accent); color: #0b0b14; border-color: var(--accent); }
+
+.edo-content { background: var(--card); border: 1px solid #1e1e38; border-radius: 14px; padding: 18px; min-height: 400px; }
+
+.edo-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.edo-toolbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+.edo-btn {
+  background: var(--surface); border: 1px solid #222240; color: var(--ink);
+  font-size: 12px; font-weight: 700; padding: 8px 14px; border-radius: 8px;
+  cursor: pointer; transition: all .15s; white-space: nowrap;
+}
+.edo-btn:hover { border-color: var(--accent); }
+.edo-btn.primary { background: var(--accent); color: #0b0b14; border-color: var(--accent); }
+.edo-btn.primary:hover { background: #6366f1; }
+.edo-btn.danger { background: rgba(239,68,68,.12); color: var(--red); border: 1px solid rgba(239,68,68,.3); }
+.edo-btn.danger:hover { background: rgba(239,68,68,.2); }
+.edo-btn.sm { padding: 5px 10px; font-size: 11px; }
+.edo-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.edo-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.edo-table th {
+  text-align: left; padding: 10px 12px; font-size: 10px; font-weight: 800;
+  color: var(--dim); text-transform: uppercase; letter-spacing: .5px;
+  border-bottom: 1px solid #1e1e38;
+}
+.edo-table td { padding: 10px 12px; font-size: 13px; color: var(--ink); border-bottom: 1px solid rgba(30,30,56,.5); }
+.edo-table tr:hover td { background: var(--card-hover); }
+.edo-img { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; background: var(--surface); border: 1px solid #222240; }
+
+.edo-state { font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 6px; letter-spacing: .5px; }
+.edo-state.active { background: rgba(52,211,153,.12); color: var(--green); border: 1px solid rgba(52,211,153,.3); }
+.edo-state.paused { background: rgba(251,191,36,.12); color: var(--gold); border: 1px solid rgba(251,191,36,.3); }
+
+.edo-actions { display: flex; gap: 4px; }
+
+.edo-form-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.edo-form-table th {
+  text-align: left; padding: 8px 8px; font-size: 10px; font-weight: 800;
+  color: var(--dim); text-transform: uppercase; letter-spacing: .5px;
+  border-bottom: 1px solid #1e1e38; position: sticky; top: 0; background: var(--card); z-index: 1;
+}
+.edo-form-table td { padding: 4px 4px; vertical-align: top; }
+.edo-input {
+  width: 100%; padding: 8px 10px; border-radius: 7px; border: 1px solid #222240;
+  background: var(--surface); color: var(--ink); font-size: 12px; font-weight: 600; font-family: inherit;
+  outline: none; transition: border .15s;
+}
+.edo-input:focus { border-color: var(--accent); }
+.edo-input.sm { width: 80px; }
+.edo-select {
+  padding: 8px 10px; border-radius: 7px; border: 1px solid #222240;
+  background: var(--surface); color: var(--ink); font-size: 12px; font-weight: 600; font-family: inherit;
+  outline: none; cursor: pointer;
+}
+.edo-select:focus { border-color: var(--accent); }
+
+.edo-result { margin-top: 12px; padding: 12px 16px; border-radius: 10px; font-size: 12px; font-weight: 600; border: 1px solid; }
+.edo-result.success { background: rgba(52,211,153,.08); color: var(--green); border-color: rgba(52,211,153,.3); }
+.edo-result.error { background: rgba(239,68,68,.08); color: var(--red); border-color: rgba(239,68,68,.3); }
+.edo-result.mixed { background: rgba(251,191,36,.08); color: var(--gold); border-color: rgba(251,191,36,.3); }
+
+.edo-empty { text-align: center; padding: 60px 20px; color: var(--dim); }
+.edo-empty-icon { font-size: 48px; margin-bottom: 12px; opacity: .5; }
+.edo-empty-text { font-size: 14px; font-weight: 700; color: var(--ink); }
+.edo-empty-sub { font-size: 12px; color: var(--dim); margin-top: 4px; }
+
+.edo-row-num { font-size: 11px; color: var(--dim); font-weight: 700; text-align: center; width: 32px; }
+.edo-count { font-size: 12px; color: var(--dim); font-weight: 700; }
+`;
+
 export default function EldoradoPage() {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"list" | "create">("list");
 
-  // Bulk create state
   const [newItems, setNewItems] = useState<NewItem[]>([emptyItem()]);
   const [uploading, setUploading] = useState(false);
   const [uploadResults, setUploadResults] = useState<any[] | null>(null);
@@ -85,6 +189,9 @@ export default function EldoradoPage() {
   }, []);
 
   useEffect(() => { fetchOffers(); }, [fetchOffers]);
+
+  const activeOffers = offers.filter((o) => (o.offerState || "").toLowerCase() === "active");
+  const totalValue = offers.reduce((sum, o) => sum + (o.pricePerUnit?.amount || 0) * (o.quantity || 0), 0);
 
   async function handleAction(offerId: string, action: string) {
     try {
@@ -111,14 +218,8 @@ export default function EldoradoPage() {
     setNewItems((prev) => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
   }
 
-  function addRow() {
-    setNewItems((prev) => [...prev, emptyItem()]);
-  }
-
-  function removeRow(idx: number) {
-    setNewItems((prev) => prev.filter((_, i) => i !== idx));
-  }
-
+  function addRow() { setNewItems((prev) => [...prev, emptyItem()]); }
+  function removeRow(idx: number) { setNewItems((prev) => prev.filter((_, i) => i !== idx)); }
   function duplicateRow(idx: number) {
     setNewItems((prev) => {
       const copy = { ...prev[idx] };
@@ -129,7 +230,6 @@ export default function EldoradoPage() {
   async function handleBulkUpload() {
     const valid = newItems.filter((i) => i.title.trim() && i.price > 0);
     if (valid.length === 0) { alert("Isi minimal 1 item dengan title dan price"); return; }
-
     setUploading(true);
     setUploadResults(null);
     try {
@@ -153,292 +253,232 @@ export default function EldoradoPage() {
 
   return (
     <>
-      <style>{`
-        .edo-page { padding: 24px 32px; max-width: 1400px; }
-        .edo-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
-        .edo-title { font-size: 22px; font-weight: 800; color: #fafafa; }
-        .edo-badge { background: #f59e0b; color: #000; font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 6px; }
-        .edo-tabs { display: flex; gap: 4px; margin-bottom: 20px; }
-        .edo-tab {
-          padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 700;
-          cursor: pointer; border: none; transition: all .15s;
-          background: #18181b; color: #71717a;
-        }
-        .edo-tab:hover { color: #fafafa; }
-        .edo-tab.active { background: #f59e0b; color: #000; }
+      <style>{styles}</style>
 
-        .edo-table { width: 100%; border-collapse: separate; border-spacing: 0; }
-        .edo-table th {
-          text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 700;
-          color: #71717a; text-transform: uppercase; letter-spacing: .5px;
-          border-bottom: 1px solid #27272a;
-        }
-        .edo-table td { padding: 10px 12px; font-size: 13px; color: #d4d4d8; border-bottom: 1px solid #1c1c1e; }
-        .edo-table tr:hover td { background: #18181b; }
-        .edo-img { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; background: #27272a; }
-
-        .edo-state { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
-        .edo-state.active { background: #065f4620; color: #34d399; }
-        .edo-state.paused { background: #78350f20; color: #fbbf24; }
-
-        .edo-btn {
-          padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 700;
-          cursor: pointer; border: none; transition: all .15s;
-        }
-        .edo-btn.sm { padding: 4px 8px; font-size: 10px; }
-        .edo-btn.primary { background: #f59e0b; color: #000; }
-        .edo-btn.primary:hover { background: #d97706; }
-        .edo-btn.danger { background: #dc262620; color: #ef4444; }
-        .edo-btn.danger:hover { background: #dc262640; }
-        .edo-btn.ghost { background: #27272a; color: #a1a1aa; }
-        .edo-btn.ghost:hover { background: #3f3f46; color: #fafafa; }
-        .edo-btn:disabled { opacity: .5; cursor: not-allowed; }
-
-        .edo-actions { display: flex; gap: 4px; }
-
-        .edo-form-table { width: 100%; border-collapse: separate; border-spacing: 0; }
-        .edo-form-table th {
-          text-align: left; padding: 8px 8px; font-size: 11px; font-weight: 700;
-          color: #71717a; text-transform: uppercase; letter-spacing: .5px;
-          border-bottom: 1px solid #27272a; position: sticky; top: 0; background: #09090b; z-index: 1;
-        }
-        .edo-form-table td { padding: 4px 4px; vertical-align: top; }
-        .edo-input {
-          width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid #27272a;
-          background: #18181b; color: #fafafa; font-size: 12px; font-family: inherit;
-          outline: none; transition: border .15s;
-        }
-        .edo-input:focus { border-color: #f59e0b; }
-        .edo-input.sm { width: 80px; }
-        .edo-select {
-          padding: 8px 10px; border-radius: 6px; border: 1px solid #27272a;
-          background: #18181b; color: #fafafa; font-size: 12px; font-family: inherit;
-          outline: none; cursor: pointer;
-        }
-        .edo-select:focus { border-color: #f59e0b; }
-
-        .edo-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-        .edo-count { font-size: 12px; color: #71717a; margin-left: auto; }
-
-        .edo-result { margin-top: 12px; padding: 12px; border-radius: 8px; font-size: 12px; }
-        .edo-result.success { background: #065f4620; color: #34d399; }
-        .edo-result.error { background: #dc262620; color: #ef4444; }
-        .edo-result.mixed { background: #78350f20; color: #fbbf24; }
-
-        .edo-empty { text-align: center; padding: 60px 20px; color: #52525b; }
-        .edo-empty-icon { font-size: 48px; margin-bottom: 12px; }
-        .edo-empty-text { font-size: 14px; font-weight: 600; }
-        .edo-empty-sub { font-size: 12px; color: #3f3f46; margin-top: 4px; }
-
-        .edo-row-num { font-size: 11px; color: #52525b; font-weight: 700; text-align: center; width: 32px; }
-      `}</style>
-
-      <div className="edo-page">
-        <div className="edo-header">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
-            <line x1="7" y1="7" x2="7.01" y2="7" />
-          </svg>
-          <span className="edo-title">Eldorado</span>
-          <span className="edo-badge">ANIME DICE</span>
+      <div className="edo-wrap">
+        {/* Top stats */}
+        <div className="edo-topbar">
+          <div className="edo-stats">
+            <div className="edo-stat wallet">
+              <div className="edo-stat-label">WALLET</div>
+              <div className="edo-stat-value">{fmtUsd(totalValue)}</div>
+            </div>
+            <div className="edo-stat estimasi">
+              <div className="edo-stat-label">ESTIMASI WITHDRAWAL</div>
+              <div className="edo-stat-value">{fmtUsd(totalValue * 0.9)}</div>
+            </div>
+            <div className="edo-stat withdrawn">
+              <div className="edo-stat-label">SUDAH WD</div>
+              <div className="edo-stat-value">$0.00</div>
+            </div>
+          </div>
         </div>
 
+        {/* Tabs */}
         <div className="edo-tabs">
           <button className={`edo-tab ${tab === "list" ? "active" : ""}`} onClick={() => setTab("list")}>
-            Listings ({offers.length})
+            LISTING ({offers.length})
           </button>
           <button className={`edo-tab ${tab === "create" ? "active" : ""}`} onClick={() => setTab("create")}>
-            Upload Baru
+            UPLOAD
           </button>
         </div>
 
-        {tab === "list" && (
-          <>
-            <div className="edo-toolbar">
-              <button className="edo-btn ghost" onClick={fetchOffers} disabled={loading}>
-                {loading ? "Loading..." : "↻ Refresh"}
-              </button>
-            </div>
-
-            {error && <div className="edo-result error">{error}</div>}
-
-            {!loading && !error && offers.length === 0 && (
-              <div className="edo-empty">
-                <div className="edo-empty-icon">📦</div>
-                <div className="edo-empty-text">Belum ada listing</div>
-                <div className="edo-empty-sub">Buka tab "Upload Baru" untuk mulai jual item</div>
+        {/* Content box */}
+        <div className="edo-content">
+          {tab === "list" && (
+            <>
+              <div className="edo-toolbar">
+                <button className="edo-btn" onClick={fetchOffers} disabled={loading}>
+                  {loading ? "Loading..." : "↻ Refresh List"}
+                </button>
+                <div className="edo-toolbar-right">
+                  <span className="edo-count">{activeOffers.length} active / {offers.length} total</span>
+                </div>
               </div>
-            )}
 
-            {offers.length > 0 && (
-              <table className="edo-table">
-                <thead>
-                  <tr>
-                    <th></th>
-                    <th>Title</th>
-                    <th>Qty</th>
-                    <th>Min</th>
-                    <th>Price</th>
-                    <th>Delivery</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {offers.map((o) => (
-                    <tr key={o.id}>
-                      <td>
-                        {o.mainOfferImage?.smallImage ? (
-                          <img className="edo-img" src={offerImgUrl(o.mainOfferImage.smallImage)} alt="" />
-                        ) : (
-                          <div className="edo-img" />
-                        )}
-                      </td>
-                      <td style={{ fontWeight: 600, color: "#fafafa", maxWidth: 300 }}>{o.offerTitle || "-"}</td>
-                      <td>{o.quantity ?? "-"}</td>
-                      <td>{o.minQuantity ?? "-"}</td>
-                      <td style={{ fontWeight: 700, color: "#f59e0b" }}>
-                        ${o.pricePerUnit?.amount ?? "?"}{o.pricePerUnit?.currency && o.pricePerUnit.currency !== "USD" ? ` ${o.pricePerUnit.currency}` : ""}
-                      </td>
-                      <td style={{ fontSize: 11, color: "#71717a" }}>{o.guaranteedDeliveryTime || "-"}</td>
-                      <td>
-                        <span className={`edo-state ${(o.offerState || "").toLowerCase() === "active" ? "active" : "paused"}`}>
-                          {o.offerState || "?"}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="edo-actions">
-                          {(o.offerState || "").toLowerCase() === "active" ? (
-                            <button className="edo-btn sm ghost" onClick={() => handleAction(o.id, "pause")}>⏸</button>
+              {error && <div className="edo-result error">{error}</div>}
+
+              {!loading && !error && offers.length === 0 && (
+                <div className="edo-empty">
+                  <div className="edo-empty-icon">&#x1F4E6;</div>
+                  <div className="edo-empty-text">Belum ada listing</div>
+                  <div className="edo-empty-sub">Buka tab UPLOAD untuk mulai jual item</div>
+                </div>
+              )}
+
+              {offers.length > 0 && (
+                <table className="edo-table">
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>Title</th>
+                      <th>Qty</th>
+                      <th>Min</th>
+                      <th>Price</th>
+                      <th>Delivery</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {offers.map((o) => (
+                      <tr key={o.id}>
+                        <td>
+                          {o.mainOfferImage?.smallImage ? (
+                            <img className="edo-img" src={offerImgUrl(o.mainOfferImage.smallImage)} alt="" />
                           ) : (
-                            <button className="edo-btn sm ghost" onClick={() => handleAction(o.id, "resume")}>▶</button>
+                            <div className="edo-img" />
                           )}
-                          <button className="edo-btn sm danger" onClick={() => handleDelete(o.id)}>🗑</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </>
-        )}
+                        </td>
+                        <td style={{ fontWeight: 700, maxWidth: 300 }}>{o.offerTitle || "-"}</td>
+                        <td>{o.quantity ?? "-"}</td>
+                        <td>{o.minQuantity ?? "-"}</td>
+                        <td style={{ fontWeight: 800, color: "var(--gold)" }}>
+                          {fmtUsd(o.pricePerUnit?.amount)}
+                        </td>
+                        <td style={{ fontSize: 11, color: "var(--dim)" }}>{o.guaranteedDeliveryTime || "-"}</td>
+                        <td>
+                          <span className={`edo-state ${(o.offerState || "").toLowerCase() === "active" ? "active" : "paused"}`}>
+                            {o.offerState || "?"}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="edo-actions">
+                            {(o.offerState || "").toLowerCase() === "active" ? (
+                              <button className="edo-btn sm" onClick={() => handleAction(o.id, "pause")} title="Pause">&#x23F8;</button>
+                            ) : (
+                              <button className="edo-btn sm" onClick={() => handleAction(o.id, "resume")} title="Resume">&#x25B6;</button>
+                            )}
+                            <button className="edo-btn sm danger" onClick={() => handleDelete(o.id)} title="Hapus">&#x2715;</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </>
+          )}
 
-        {tab === "create" && (
-          <>
-            <div className="edo-toolbar">
-              <button className="edo-btn ghost" onClick={addRow}>+ Tambah Row</button>
-              <button
-                className="edo-btn primary"
-                onClick={handleBulkUpload}
-                disabled={uploading || newItems.every((i) => !i.title.trim())}
-              >
-                {uploading ? "Uploading..." : `Upload ${newItems.filter((i) => i.title.trim() && i.price > 0).length} Item`}
-              </button>
-              <span className="edo-count">{newItems.length} row</span>
-            </div>
-
-            <div style={{ overflowX: "auto" }}>
-              <table className="edo-form-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th style={{ minWidth: 250 }}>Title</th>
-                    <th style={{ minWidth: 200 }}>Description</th>
-                    <th style={{ width: 80 }}>Price ($)</th>
-                    <th style={{ width: 60 }}>Qty</th>
-                    <th style={{ width: 60 }}>Min Qty</th>
-                    <th style={{ width: 100 }}>Delivery</th>
-                    <th style={{ width: 80 }}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {newItems.map((item, idx) => (
-                    <tr key={idx}>
-                      <td className="edo-row-num">{idx + 1}</td>
-                      <td>
-                        <input
-                          className="edo-input"
-                          placeholder="Nama item..."
-                          value={item.title}
-                          onChange={(e) => updateItem(idx, "title", e.target.value)}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="edo-input"
-                          placeholder="Deskripsi (opsional)"
-                          value={item.description}
-                          onChange={(e) => updateItem(idx, "description", e.target.value)}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="edo-input sm"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={item.price || ""}
-                          onChange={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="edo-input sm"
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) => updateItem(idx, "quantity", parseInt(e.target.value) || 1)}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          className="edo-input sm"
-                          type="number"
-                          min="1"
-                          value={item.minQuantity}
-                          onChange={(e) => updateItem(idx, "minQuantity", parseInt(e.target.value) || 1)}
-                        />
-                      </td>
-                      <td>
-                        <select
-                          className="edo-select"
-                          value={item.deliveryTime}
-                          onChange={(e) => updateItem(idx, "deliveryTime", e.target.value)}
-                        >
-                          {DELIVERY_OPTIONS.map((o) => (
-                            <option key={o.value} value={o.value}>{o.label}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
-                        <div className="edo-actions">
-                          <button className="edo-btn sm ghost" onClick={() => duplicateRow(idx)} title="Duplicate">⧉</button>
-                          {newItems.length > 1 && (
-                            <button className="edo-btn sm danger" onClick={() => removeRow(idx)} title="Hapus">✕</button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {uploadResults && (
-              <div className={`edo-result ${uploadResults.every((r) => r.ok) ? "success" : uploadResults.some((r) => r.ok) ? "mixed" : "error"}`}>
-                <strong>Hasil Upload:</strong>
-                <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>
-                  {uploadResults.map((r, i) => (
-                    <li key={i}>
-                      {r.ok ? "✓" : "✗"} {r.title} — {r.ok ? "Berhasil" : `Gagal (${r.status})`}
-                    </li>
-                  ))}
-                </ul>
+          {tab === "create" && (
+            <>
+              <div className="edo-toolbar">
+                <button className="edo-btn" onClick={addRow}>+ Tambah Row</button>
+                <button
+                  className="edo-btn primary"
+                  onClick={handleBulkUpload}
+                  disabled={uploading || newItems.every((i) => !i.title.trim())}
+                >
+                  {uploading ? "Uploading..." : `Upload ${newItems.filter((i) => i.title.trim() && i.price > 0).length} Item`}
+                </button>
+                <div className="edo-toolbar-right">
+                  <span className="edo-count">{newItems.length} row</span>
+                </div>
               </div>
-            )}
-          </>
-        )}
+
+              <div style={{ overflowX: "auto" }}>
+                <table className="edo-form-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th style={{ minWidth: 250 }}>Title</th>
+                      <th style={{ minWidth: 200 }}>Description</th>
+                      <th style={{ width: 80 }}>Price ($)</th>
+                      <th style={{ width: 60 }}>Qty</th>
+                      <th style={{ width: 60 }}>Min Qty</th>
+                      <th style={{ width: 100 }}>Delivery</th>
+                      <th style={{ width: 80 }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {newItems.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="edo-row-num">{idx + 1}</td>
+                        <td>
+                          <input
+                            className="edo-input"
+                            placeholder="Nama item..."
+                            value={item.title}
+                            onChange={(e) => updateItem(idx, "title", e.target.value)}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            className="edo-input"
+                            placeholder="Deskripsi (opsional)"
+                            value={item.description}
+                            onChange={(e) => updateItem(idx, "description", e.target.value)}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            className="edo-input sm"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.price || ""}
+                            onChange={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            className="edo-input sm"
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => updateItem(idx, "quantity", parseInt(e.target.value) || 1)}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            className="edo-input sm"
+                            type="number"
+                            min="1"
+                            value={item.minQuantity}
+                            onChange={(e) => updateItem(idx, "minQuantity", parseInt(e.target.value) || 1)}
+                          />
+                        </td>
+                        <td>
+                          <select
+                            className="edo-select"
+                            value={item.deliveryTime}
+                            onChange={(e) => updateItem(idx, "deliveryTime", e.target.value)}
+                          >
+                            {DELIVERY_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td>
+                          <div className="edo-actions">
+                            <button className="edo-btn sm" onClick={() => duplicateRow(idx)} title="Duplicate">&#x29C9;</button>
+                            {newItems.length > 1 && (
+                              <button className="edo-btn sm danger" onClick={() => removeRow(idx)} title="Hapus">&#x2715;</button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {uploadResults && (
+                <div className={`edo-result ${uploadResults.every((r) => r.ok) ? "success" : uploadResults.some((r) => r.ok) ? "mixed" : "error"}`}>
+                  <strong>Hasil Upload:</strong>
+                  <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>
+                    {uploadResults.map((r, i) => (
+                      <li key={i}>
+                        {r.ok ? "✓" : "✗"} {r.title} — {r.ok ? "Berhasil" : `Gagal (${r.status})`}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </>
   );
