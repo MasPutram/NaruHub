@@ -1,0 +1,85 @@
+import { NextRequest, NextResponse } from "next/server";
+import { eldoradoFetch, ANIME_DICE_GAME_ID } from "@/lib/eldorado";
+import { getTenantFromRequest } from "@/lib/auth";
+
+export const dynamic = "force-dynamic";
+
+export async function GET(req: NextRequest) {
+  try {
+    getTenantFromRequest(req);
+    const { searchParams } = new URL(req.url);
+    const page = searchParams.get("page") || "1";
+    const size = searchParams.get("size") || "50";
+
+    const res = await eldoradoFetch(
+      `/api/v1/item-management/me/offers/me/search?pageIndex=${page}&pageSize=${size}`
+    );
+
+    if (!res.ok) {
+      const text = await res.text();
+      return NextResponse.json({ error: text }, { status: res.status });
+    }
+
+    const data = await res.json();
+    return NextResponse.json(data);
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    getTenantFromRequest(req);
+    const body = await req.json();
+
+    const items: any[] = Array.isArray(body) ? body : [body];
+    const results: any[] = [];
+
+    for (const item of items) {
+      const payload = {
+        details: {
+          offerTitle: item.title,
+          description: item.description || "",
+          guaranteedDeliveryTime: item.deliveryTime || "Minute20",
+          pricing: {
+            quantity: item.quantity ?? 1,
+            minQuantity: item.minQuantity ?? 1,
+            pricePerUnit: {
+              amount: item.price,
+              currency: item.currency || "USD",
+            },
+            volumeDiscounts: [],
+          },
+        },
+        augmentedGame: {
+          gameId: item.gameId || ANIME_DICE_GAME_ID,
+          category: "CustomItem",
+          tradeEnvironmentId: item.tradeEnvironmentId || null,
+          offerAttributes: item.offerAttributes || [],
+        },
+        robloxAccountLinkIds: item.robloxAccountLinkIds || null,
+      };
+
+      const res = await eldoradoFetch("/api/v1/item-management/me/offers/item", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = text; }
+
+      results.push({
+        title: item.title,
+        status: res.status,
+        ok: res.ok,
+        data,
+      });
+    }
+
+    const allOk = results.every((r) => r.ok);
+    return NextResponse.json({ results }, { status: allOk ? 201 : 207 });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 });
+  }
+}
