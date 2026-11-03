@@ -22,9 +22,9 @@ export async function GET(req: NextRequest) {
       includeDeliveryMedians: "true",
     });
 
-    if (search) qs.set("searchText", search);
-    if (sort === "price_asc") qs.set("sortBy", "PriceAscending");
-    if (sort === "price_desc") qs.set("sortBy", "PriceDescending");
+    if (search) qs.set("searchQuery", search);
+    if (sort === "price_asc") { qs.set("offerSortingCriterion", "Price"); qs.set("isAscending", "true"); }
+    if (sort === "price_desc") { qs.set("offerSortingCriterion", "Price"); qs.set("isAscending", "false"); }
 
     const res = await fetch(`${BASE}/api/v1/item-management/offers?${qs}`);
 
