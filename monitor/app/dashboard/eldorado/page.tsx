@@ -189,12 +189,21 @@ export default function EldoradoPage() {
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [error, setError] = useState("");
   const [ordersError, setOrdersError] = useState("");
-  const [tab, setTab] = useState<"list" | "create" | "orders">("list");
+  const [tab, setTab] = useState<"market" | "list" | "create" | "orders">("market");
 
   const [newItems, setNewItems] = useState<NewItem[]>([emptyItem()]);
   const [uploading, setUploading] = useState(false);
   const [uploadResults, setUploadResults] = useState<any[] | null>(null);
   const [usdIdr, setUsdIdr] = useState(0);
+
+  const [market, setMarket] = useState<any[]>([]);
+  const [marketLoading, setMarketLoading] = useState(false);
+  const [marketError, setMarketError] = useState("");
+  const [marketSearch, setMarketSearch] = useState("");
+  const [marketSort, setMarketSort] = useState("");
+  const [marketPage, setMarketPage] = useState(1);
+  const [marketTotal, setMarketTotal] = useState(0);
+  const [marketTotalPages, setMarketTotalPages] = useState(0);
 
   const fetchOffers = useCallback(async () => {
     setLoading(true);
@@ -234,7 +243,31 @@ export default function EldoradoPage() {
     }
   }, []);
 
-  useEffect(() => { fetchOffers(); fetchOrders(); }, [fetchOffers, fetchOrders]);
+  const fetchMarket = useCallback(async (page = 1, search = "", sort = "") => {
+    setMarketLoading(true);
+    setMarketError("");
+    try {
+      const qs = new URLSearchParams({ page: String(page), size: "24" });
+      if (search) qs.set("search", search);
+      if (sort) qs.set("sort", sort);
+      const res = await fetch(`/api/eldorado/market?${qs}`);
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setMarket(data.results || []);
+      setMarketTotal(data.recordCount || 0);
+      setMarketTotalPages(data.totalPages || 0);
+      setMarketPage(page);
+    } catch (e: any) {
+      setMarketError(e.message);
+    } finally {
+      setMarketLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchOffers(); fetchOrders(); fetchMarket(); }, [fetchOffers, fetchOrders, fetchMarket]);
 
   useEffect(() => {
     const id = setInterval(() => { fetchOffers(); fetchOrders(); }, 30_000);
@@ -350,6 +383,9 @@ export default function EldoradoPage() {
 
         {/* Tabs */}
         <div className="edo-tabs">
+          <button className={`edo-tab ${tab === "market" ? "active" : ""}`} onClick={() => setTab("market")}>
+            PRICE GLOBAL ({marketTotal})
+          </button>
           <button className={`edo-tab ${tab === "list" ? "active" : ""}`} onClick={() => setTab("list")}>
             LISTING ({offers.length})
           </button>
@@ -363,6 +399,114 @@ export default function EldoradoPage() {
 
         {/* Content box */}
         <div className="edo-content">
+          {tab === "market" && (
+            <>
+              <div className="edo-toolbar" style={{ gap: 8, flexWrap: "wrap" }}>
+                <input
+                  className="edo-input"
+                  placeholder="Cari item..."
+                  value={marketSearch}
+                  style={{ flex: 1, minWidth: 200 }}
+                  onChange={(e) => setMarketSearch(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") fetchMarket(1, marketSearch, marketSort); }}
+                />
+                <select
+                  className="edo-select"
+                  value={marketSort}
+                  onChange={(e) => { setMarketSort(e.target.value); fetchMarket(1, marketSearch, e.target.value); }}
+                >
+                  <option value="">Default</option>
+                  <option value="price_asc">Harga Terendah</option>
+                  <option value="price_desc">Harga Tertinggi</option>
+                </select>
+                <button className="edo-btn" onClick={() => fetchMarket(1, marketSearch, marketSort)} disabled={marketLoading}>
+                  {marketLoading ? "Loading..." : "🔍 Search"}
+                </button>
+                <div className="edo-toolbar-right">
+                  <span className="edo-count">Hal {marketPage}/{marketTotalPages} — {marketTotal} listing</span>
+                </div>
+              </div>
+
+              {marketError && <div className="edo-result error">{marketError}</div>}
+
+              {!marketLoading && !marketError && market.length === 0 && (
+                <div className="edo-empty">
+                  <div className="edo-empty-icon">🌐</div>
+                  <div className="edo-empty-text">Tidak ada listing ditemukan</div>
+                  <div className="edo-empty-sub">Coba search dengan kata kunci lain</div>
+                </div>
+              )}
+
+              {market.length > 0 && (
+                <>
+                  <table className="edo-table">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <th>Title</th>
+                        <th>Seller</th>
+                        <th>Qty</th>
+                        <th>Min</th>
+                        <th>Price USD</th>
+                        <th>Price IDR</th>
+                        <th>Delivery</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {market.map((m: any) => {
+                        const o = m.offer || {};
+                        const u = m.user || {};
+                        const dt = m.deliveryTime || {};
+                        const priceUsd = o.pricePerUnitInUSD?.amount || o.pricePerUnit?.amount || 0;
+                        const img = o.mainOfferImage?.smallImage;
+                        const median = dt.deliveryTimeMedian;
+                        const medianMin = median ? Math.round(parseFloat(median.split(":")[1]) + parseFloat(median.split(":")[0]) * 60) : null;
+                        return (
+                          <tr key={o.id}>
+                            <td>
+                              {img ? (
+                                <img className="edo-img" src={offerImgUrl(img)} alt="" />
+                              ) : (
+                                <div className="edo-img" />
+                              )}
+                            </td>
+                            <td style={{ fontWeight: 700, maxWidth: 300 }}>{o.offerTitle || "-"}</td>
+                            <td style={{ fontSize: 12 }}>
+                              <span style={{ color: u.isVerifiedSeller ? "var(--green)" : "var(--ink)" }}>
+                                {u.isVerifiedSeller ? "✓ " : ""}{u.username || "-"}
+                              </span>
+                            </td>
+                            <td>{o.quantity ?? "-"}</td>
+                            <td>{o.minQuantity ?? "-"}</td>
+                            <td style={{ fontWeight: 800, color: "var(--gold)" }}>{fmtUsd(priceUsd)}</td>
+                            <td style={{ fontWeight: 700, color: "var(--ink)", fontSize: 12 }}>
+                              {usdIdr ? fmtIdr(priceUsd * usdIdr) : "-"}
+                            </td>
+                            <td style={{ fontSize: 11, color: "var(--dim)", whiteSpace: "nowrap" }}>
+                              {medianMin != null ? `~${medianMin}m` : o.guaranteedDeliveryTime || "-"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 12 }}>
+                    <button className="edo-btn sm" disabled={marketPage <= 1} onClick={() => fetchMarket(marketPage - 1, marketSearch, marketSort)}>
+                      ◀ Prev
+                    </button>
+                    <span style={{ color: "var(--dim)", fontSize: 12, lineHeight: "32px" }}>
+                      {marketPage} / {marketTotalPages}
+                    </span>
+                    <button className="edo-btn sm" disabled={marketPage >= marketTotalPages} onClick={() => fetchMarket(marketPage + 1, marketSearch, marketSort)}>
+                      Next ▶
+                    </button>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
           {tab === "list" && (
             <>
               <div className="edo-toolbar">
