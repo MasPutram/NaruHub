@@ -105,7 +105,13 @@ const styles = `
 .edo-stat.withdrawn .edo-stat-value { color: var(--accent); }
 .edo-stat.income .edo-stat-value { color: var(--cyan); }
 
-.edo-tabs { display: flex; gap: 6px; margin-bottom: 20px; }
+.edo-tabs-row { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.edo-tabs { display: flex; gap: 6px; }
+.edo-converter { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 11px; color: var(--dim); }
+.edo-converter input { width: 100px; padding: 6px 8px; font-size: 12px; background: var(--card); border: 1px solid #1e1e38; border-radius: 6px; color: var(--ink); font-family: var(--font-numbers, monospace); }
+.edo-converter input:focus { border-color: var(--accent); outline: none; }
+.edo-converter .edo-conv-label { font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+.edo-converter .edo-conv-rate { font-size: 10px; color: var(--dim); opacity: .7; }
 .edo-tab {
   padding: 10px 22px; font-size: 12px; font-weight: 800; cursor: pointer;
   color: var(--dim); background: var(--card); border: 1px solid #1e1e38;
@@ -232,6 +238,8 @@ export default function EldoradoPage() {
   const [usdIdr, setUsdIdr] = useState(0);
   const [editId, setEditId] = useState<string | null>(null);
   const [editData, setEditData] = useState<any>(null);
+  const [convUsd, setConvUsd] = useState("");
+  const [convIdr, setConvIdr] = useState("");
   const [editSaving, setEditSaving] = useState(false);
 
   const [market, setMarket] = useState<any[]>([]);
@@ -493,19 +501,57 @@ export default function EldoradoPage() {
         </div>
 
         {/* Tabs */}
-        <div className="edo-tabs">
-          <button className={`edo-tab ${tab === "market" ? "active" : ""}`} onClick={() => setTab("market")}>
-            PRICE GLOBAL ({marketTotal})
-          </button>
-          <button className={`edo-tab ${tab === "list" ? "active" : ""}`} onClick={() => setTab("list")}>
-            LISTING ({offers.length})
-          </button>
-          <button className={`edo-tab ${tab === "orders" ? "active" : ""}`} onClick={() => setTab("orders")}>
-            SOLD ORDERS ({orders.length})
-          </button>
-          <button className={`edo-tab ${tab === "create" ? "active" : ""}`} onClick={() => setTab("create")}>
-            UPLOAD
-          </button>
+        <div className="edo-tabs-row">
+          <div className="edo-tabs">
+            <button className={`edo-tab ${tab === "market" ? "active" : ""}`} onClick={() => setTab("market")}>
+              PRICE GLOBAL ({marketTotal})
+            </button>
+            <button className={`edo-tab ${tab === "list" ? "active" : ""}`} onClick={() => setTab("list")}>
+              LISTING ({offers.length})
+            </button>
+            <button className={`edo-tab ${tab === "orders" ? "active" : ""}`} onClick={() => setTab("orders")}>
+              SOLD ORDERS ({orders.length})
+            </button>
+            <button className={`edo-tab ${tab === "create" ? "active" : ""}`} onClick={() => setTab("create")}>
+              UPLOAD
+            </button>
+          </div>
+          <div className="edo-converter">
+            <div>
+              <span className="edo-conv-label">USD</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={convUsd}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "" || /^\d*\.?\d*$/.test(v)) {
+                    setConvUsd(v);
+                    setConvIdr(v && usdIdr ? Math.round(Number(v) * usdIdr).toLocaleString("id-ID") : "");
+                  }
+                }}
+              />
+            </div>
+            <span style={{ fontSize: 14 }}>⇄</span>
+            <div>
+              <span className="edo-conv-label">IDR</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="0"
+                value={convIdr}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/\./g, "");
+                  if (raw === "" || /^\d+$/.test(raw)) {
+                    setConvIdr(raw ? Number(raw).toLocaleString("id-ID") : "");
+                    setConvUsd(raw && usdIdr ? (Number(raw) / usdIdr).toFixed(2) : "");
+                  }
+                }}
+              />
+            </div>
+            {usdIdr > 0 && <span className="edo-conv-rate">1 USD = {usdIdr.toLocaleString("id-ID")} IDR</span>}
+          </div>
         </div>
 
         {/* Content box */}
