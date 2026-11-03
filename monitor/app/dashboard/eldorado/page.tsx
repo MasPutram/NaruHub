@@ -77,6 +77,11 @@ function fmtUsd(amount?: number) {
   return `$${amount.toFixed(2)}`;
 }
 
+function roundPrice(price: number): number {
+  if (price >= 0.01) return Math.round(price * 100) / 100;
+  return Math.round(price * 100000) / 100000;
+}
+
 function fmtIdr(amount?: number) {
   if (amount == null) return "Rp 0";
   return `Rp ${Math.round(amount).toLocaleString("id-ID")}`;
@@ -392,7 +397,7 @@ export default function EldoradoPage() {
           guaranteedDeliveryTime: editData.deliveryTime || "Minute20",
           pricing: {
             quantity: editData.quantity ?? 1,
-            pricePerUnit: { amount: Number(editData.price), currency: "USD" },
+            pricePerUnit: { amount: roundPrice(Number(editData.price)), currency: "USD" },
             volumeDiscounts: [],
           },
           offerImages: [],
@@ -452,7 +457,7 @@ export default function EldoradoPage() {
               mainOfferImage = await imgRes.json();
             }
           }
-          return { ...item, price: Number(item.price), mainOfferImage };
+          return { ...item, price: roundPrice(Number(item.price)), mainOfferImage };
         })
       );
       const res = await fetch("/api/eldorado/offers", {
