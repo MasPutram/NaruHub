@@ -1007,8 +1007,9 @@ export default function EldoradoPage() {
                         </div>
                         <div className="edo-field">
                           <label className="edo-label">Description</label>
-                          <input
-                            className="edo-input"
+                          <textarea
+                            className="edo-input edo-textarea"
+                            rows={3}
                             placeholder="Deskripsi (opsional)"
                             value={item.description}
                             onChange={(e) => updateItem(idx, "description", e.target.value)}
