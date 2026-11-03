@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.6.0"
+local VERSION = "v3.7.0"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -1052,6 +1052,7 @@ local function reportToMonitor()
 		local nitroToken = 0
 		local spectralToken = 0
 		local alienToken = 0
+		local allMutationTokens = {}
 		local equippedTrail = ""
 		pcall(function()
 			local s = SaveModule.Peek()
@@ -1060,6 +1061,13 @@ local function reportToMonitor()
 			equippedTrail = tostring(s.EquippedTrail or s.TrailEquipped or "")
 		end)
 		pcall(function()
+			local TOKEN_MAP = {
+				Boss = "mutationToken",
+				Scrambled = "scrambleToken",
+				Nitro = "nitroToken",
+				Spectral = "spectralToken",
+				Alien = "alienToken",
+			}
 			local containers = { LocalPlayer:FindFirstChildOfClass("Backpack"), LocalPlayer.Character }
 			for _, container in ipairs(containers) do
 				if container then
@@ -1077,6 +1085,9 @@ local function reportToMonitor()
 								spectralToken = spectralToken + uses
 							elseif mutId == "Alien" then
 								alienToken = alienToken + uses
+							end
+							if mutId then
+								allMutationTokens[mutId] = (allMutationTokens[mutId] or 0) + uses
 							end
 						end
 					end
@@ -1106,6 +1117,7 @@ local function reportToMonitor()
 			nitroToken = nitroToken,
 			spectralToken = spectralToken,
 			alienToken = alienToken,
+			allMutationTokens = allMutationTokens,
 			ownerFacebook = "Putra Ramadhan",
 			sourceAccount = LocalPlayer.Name,
 		}
@@ -1130,6 +1142,7 @@ local function reportToMonitor()
 			nitroToken = nitroToken,
 			spectralToken = spectralToken,
 			alienToken = alienToken,
+			allMutationTokens = allMutationTokens,
 			topPets = topPets,
 			trail = equippedTrail,
 			fullData = fullData,
@@ -1313,30 +1326,49 @@ task.spawn(function()
 			pcall(function()
 				local stats = SaveModule.Peek()
 
-				-- Check which tokens we actually own. No point teleporting to
-				-- a pet just to skip its only remaining mutation phase because
-				-- we don't have that token type.
-				local haveScrambled = findMutationTool("Scrambled") ~= nil
-				local haveBoss = findMutationTool("Boss") ~= nil
-				local haveNitro = findMutationTool("Nitro") ~= nil
-				local haveSpectral = findMutationTool("Spectral") ~= nil
-				local haveAlien = findMutationTool("Alien") ~= nil
-				if not haveScrambled and not haveBoss and not haveNitro and not haveSpectral and not haveAlien then return end
+				-- Dynamically scan all MutationConsumable tools we own.
+				-- Known tokens in priority order; any new token type is
+				-- picked up automatically and appended after these.
+				local KNOWN_ORDER = { "Scrambled", "Boss", "Nitro", "Spectral", "Alien" }
+				local ownedTokens = {}
+				local ownedSet = {}
+				pcall(function()
+					local containers = { LocalPlayer:FindFirstChildOfClass("Backpack"), LocalPlayer.Character }
+					for _, container in ipairs(containers) do
+						if container then
+							for _, tool in ipairs(container:GetChildren()) do
+								if tool:IsA("Tool") and tool:GetAttribute("ItemType") == "MutationConsumable" then
+									local mutId = tool:GetAttribute("MutationId")
+									if mutId and not ownedSet[mutId] then
+										ownedSet[mutId] = true
+									end
+								end
+							end
+						end
+					end
+				end)
+				for _, id in ipairs(KNOWN_ORDER) do
+					if ownedSet[id] then
+						table.insert(ownedTokens, id)
+						ownedSet[id] = nil
+					end
+				end
+				for id in pairs(ownedSet) do
+					table.insert(ownedTokens, id)
+				end
+				if #ownedTokens == 0 then return end
 
 				local candidates = {}
 				for uid, rec in pairs(stats.EggInventory or {}) do
 					if type(rec) == "table" and rec.Placement ~= nil then
-						local hasScrambled = hasMutation(rec, "Scrambled")
-						local hasBoss = hasMutation(rec, "Boss")
-						local hasNitro = hasMutation(rec, "Nitro")
-						local hasSpectral = hasMutation(rec, "Spectral")
-						local hasAlien = hasMutation(rec, "Alien")
-						local canApplyScrambled = not hasScrambled and haveScrambled
-						local canApplyBoss = not hasBoss and haveBoss
-						local canApplyNitro = not hasNitro and haveNitro
-						local canApplySpectral = not hasSpectral and haveSpectral
-						local canApplyAlien = not hasAlien and haveAlien
-						if canApplyScrambled or canApplyBoss or canApplyNitro or canApplySpectral or canApplyAlien then
+						local canApplyAny = false
+						for _, tokenId in ipairs(ownedTokens) do
+							if not hasMutation(rec, tokenId) then
+								canApplyAny = true
+								break
+							end
+						end
+						if canApplyAny then
 							local rate = 0
 							pcall(function()
 								rate = AssetEarnings.RatePerSecond({
@@ -1362,20 +1394,10 @@ task.spawn(function()
 					end
 
 					local mutationsToApply = {}
-					if not hasMutation(pet.rec, "Scrambled") then
-						table.insert(mutationsToApply, "Scrambled")
-					end
-					if not hasMutation(pet.rec, "Boss") then
-						table.insert(mutationsToApply, "Boss")
-					end
-					if not hasMutation(pet.rec, "Nitro") then
-						table.insert(mutationsToApply, "Nitro")
-					end
-					if not hasMutation(pet.rec, "Spectral") then
-						table.insert(mutationsToApply, "Spectral")
-					end
-					if not hasMutation(pet.rec, "Alien") then
-						table.insert(mutationsToApply, "Alien")
+					for _, tokenId in ipairs(ownedTokens) do
+						if not hasMutation(pet.rec, tokenId) then
+							table.insert(mutationsToApply, tokenId)
+						end
 					end
 
 					for _, targetMut in ipairs(mutationsToApply) do
