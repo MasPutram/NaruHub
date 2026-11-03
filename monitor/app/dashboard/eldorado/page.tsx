@@ -243,13 +243,11 @@ export default function EldoradoPage() {
     }
   }, []);
 
-  const fetchMarket = useCallback(async (page = 1, search = "", sort = "") => {
+  const fetchMarket = useCallback(async (page = 1) => {
     setMarketLoading(true);
     setMarketError("");
     try {
       const qs = new URLSearchParams({ page: String(page), size: "24" });
-      if (search) qs.set("search", search);
-      if (sort) qs.set("sort", sort);
       const res = await fetch(`/api/eldorado/market?${qs}`);
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -408,18 +406,18 @@ export default function EldoradoPage() {
                   value={marketSearch}
                   style={{ flex: 1, minWidth: 200 }}
                   onChange={(e) => setMarketSearch(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") fetchMarket(1, marketSearch, marketSort); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") fetchMarket(1); }}
                 />
                 <select
                   className="edo-select"
                   value={marketSort}
-                  onChange={(e) => { setMarketSort(e.target.value); fetchMarket(1, marketSearch, e.target.value); }}
+                  onChange={(e) => setMarketSort(e.target.value)}
                 >
                   <option value="">Default</option>
                   <option value="price_asc">Harga Terendah</option>
                   <option value="price_desc">Harga Tertinggi</option>
                 </select>
-                <button className="edo-btn" onClick={() => fetchMarket(1, marketSearch, marketSort)} disabled={marketLoading}>
+                <button className="edo-btn" onClick={() => fetchMarket(1)} disabled={marketLoading}>
                   {marketLoading ? "Loading..." : "🔍 Search"}
                 </button>
                 <div className="edo-toolbar-right">
@@ -443,6 +441,8 @@ export default function EldoradoPage() {
                   const title = (m.offer?.offerTitle || "").toLowerCase();
                   return marketSearch.trim().toLowerCase().split(/\s+/).every((w: string) => title.includes(w));
                 });
+                if (marketSort === "price_asc") filtered.sort((a: any, b: any) => (a.offer?.pricePerUnitInUSD?.amount || 0) - (b.offer?.pricePerUnitInUSD?.amount || 0));
+                if (marketSort === "price_desc") filtered.sort((a: any, b: any) => (b.offer?.pricePerUnitInUSD?.amount || 0) - (a.offer?.pricePerUnitInUSD?.amount || 0));
                 return filtered.length === 0 ? (
                   <div className="edo-empty">
                     <div className="edo-empty-icon">🔍</div>
@@ -504,13 +504,13 @@ export default function EldoradoPage() {
                   </table>
 
                   <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 12 }}>
-                    <button className="edo-btn sm" disabled={marketPage <= 1} onClick={() => fetchMarket(marketPage - 1, marketSearch, marketSort)}>
+                    <button className="edo-btn sm" disabled={marketPage <= 1} onClick={() => fetchMarket(marketPage - 1)}>
                       ◀ Prev
                     </button>
                     <span style={{ color: "var(--dim)", fontSize: 12, lineHeight: "32px" }}>
                       {marketPage} / {marketTotalPages}
                     </span>
-                    <button className="edo-btn sm" disabled={marketPage >= marketTotalPages} onClick={() => fetchMarket(marketPage + 1, marketSearch, marketSort)}>
+                    <button className="edo-btn sm" disabled={marketPage >= marketTotalPages} onClick={() => fetchMarket(marketPage + 1)}>
                       Next ▶
                     </button>
                   </div>
