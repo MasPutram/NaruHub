@@ -740,6 +740,20 @@ export default function EldoradoPage() {
                                     </select>
                                   </div>
                                 </div>
+                                <div className="edo-field-row edo-estimates">
+                                  <div className="edo-est">
+                                    <span className="edo-est-label">Price IDR</span>
+                                    <span className="edo-est-val">{Number(editData.price) && usdIdr ? fmtIdr(Number(editData.price) * usdIdr) : "-"}</span>
+                                  </div>
+                                  <div className="edo-est">
+                                    <span className="edo-est-label">Est. USD</span>
+                                    <span className="edo-est-val green">{Number(editData.price) ? fmtUsd(Number(editData.price) * (editData.quantity || 1) * (1 - SALES_FEE)) : "-"}</span>
+                                  </div>
+                                  <div className="edo-est">
+                                    <span className="edo-est-label">Est. IDR</span>
+                                    <span className="edo-est-val green">{Number(editData.price) && usdIdr ? fmtIdr(Number(editData.price) * (editData.quantity || 1) * (1 - SALES_FEE) * usdIdr) : "-"}</span>
+                                  </div>
+                                </div>
                               </>
                             ) : (
                               <>
