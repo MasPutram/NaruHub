@@ -77,13 +77,9 @@ function fmtUsd(amount?: number) {
   return `$${amount.toFixed(2)}`;
 }
 
-function validatePrice(price: number): string | null {
-  if (price <= 0) return null;
-  const s = String(price);
-  const dec = s.includes(".") ? s.split(".")[1].length : 0;
-  if (price >= 0.01 && dec > 2) return `Max 2 desimal untuk harga >= $0.01 (sekarang ${dec})`;
-  if (price < 0.01 && dec > 5) return `Max 5 desimal untuk harga < $0.01 (sekarang ${dec})`;
-  return null;
+function truncatePrice(price: number): number {
+  if (price >= 0.01) return Math.floor(price * 100) / 100;
+  return Math.floor(price * 100000) / 100000;
 }
 
 function fmtIdr(amount?: number) {
@@ -401,7 +397,7 @@ export default function EldoradoPage() {
           guaranteedDeliveryTime: editData.deliveryTime || "Minute20",
           pricing: {
             quantity: editData.quantity ?? 1,
-            pricePerUnit: { amount: Number(editData.price), currency: "USD" },
+            pricePerUnit: { amount: truncatePrice(Number(editData.price)), currency: "USD" },
             volumeDiscounts: [],
           },
           offerImages: [],
@@ -461,7 +457,7 @@ export default function EldoradoPage() {
               mainOfferImage = await imgRes.json();
             }
           }
-          return { ...item, price: Number(item.price), mainOfferImage };
+          return { ...item, price: truncatePrice(Number(item.price)), mainOfferImage };
         })
       );
       const res = await fetch("/api/eldorado/offers", {
@@ -734,7 +730,7 @@ export default function EldoradoPage() {
                           <div className="edo-card-actions">
                             {isEditing ? (
                               <>
-                                <button className="edo-btn sm primary" onClick={saveEdit} disabled={editSaving || !!validatePrice(Number(editData?.price))}>
+                                <button className="edo-btn sm primary" onClick={saveEdit} disabled={editSaving}>
                                   {editSaving ? "..." : "Save"}
                                 </button>
                                 <button className="edo-btn sm" onClick={() => { setEditId(null); setEditData(null); }}>Cancel</button>
@@ -782,9 +778,6 @@ export default function EldoradoPage() {
                                       onChange={(e) => { const v = e.target.value; if (v === "" || /^\d*\.?\d*$/.test(v)) setEditData({ ...editData, price: v }); }}
                                       onBlur={(e) => setEditData({ ...editData, price: parseFloat(e.target.value) || 0 })}
                                     />
-                                    {validatePrice(Number(editData.price)) && (
-                                      <span style={{ color: "#ff4d4d", fontSize: 10, marginTop: 2 }}>{validatePrice(Number(editData.price))}</span>
-                                    )}
                                   </div>
                                   <div className="edo-field">
                                     <label className="edo-label">Qty</label>
@@ -1033,9 +1026,6 @@ export default function EldoradoPage() {
                               onChange={(e) => { const v = e.target.value; if (v === "" || /^\d*\.?\d*$/.test(v)) updateItem(idx, "price", v as any); }}
                               onBlur={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}
                             />
-                            {validatePrice(Number(item.price)) && (
-                              <span style={{ color: "#ff4d4d", fontSize: 10, marginTop: 2 }}>{validatePrice(Number(item.price))}</span>
-                            )}
                           </div>
                           <div className="edo-field">
                             <label className="edo-label">Qty</label>
