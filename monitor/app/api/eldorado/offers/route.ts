@@ -36,28 +36,32 @@ export async function POST(req: NextRequest) {
     const results: any[] = [];
 
     for (const item of items) {
-      const payload = {
-        details: {
-          offerTitle: item.title,
-          description: item.description || "",
-          guaranteedDeliveryTime: item.deliveryTime || "Minute20",
-          pricing: {
-            quantity: item.quantity ?? 1,
-            minQuantity: item.minQuantity ?? 1,
-            pricePerUnit: {
-              amount: item.price,
-              currency: item.currency || "USD",
-            },
-            volumeDiscounts: [],
+      const details: any = {
+        offerTitle: item.title,
+        description: item.description || "",
+        guaranteedDeliveryTime: item.deliveryTime || "Minute20",
+        pricing: {
+          quantity: item.quantity ?? 1,
+          pricePerUnit: {
+            amount: item.price,
+            currency: item.currency || "USD",
           },
+          volumeDiscounts: [],
         },
+        offerImages: [],
+      };
+      if (item.mainOfferImage) {
+        details.mainOfferImage = item.mainOfferImage;
+      }
+
+      const payload = {
+        details,
         augmentedGame: {
           gameId: item.gameId || ANIME_DICE_GAME_ID,
           category: "CustomItem",
           tradeEnvironmentId: item.tradeEnvironmentId || null,
           offerAttributes: item.offerAttributes || [],
         },
-        robloxAccountLinkIds: item.robloxAccountLinkIds || null,
       };
 
       const res = await eldoradoFetch("/api/v1/item-management/me/offers/item", {

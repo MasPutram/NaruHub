@@ -154,8 +154,9 @@ const styles = `
   width: 40px; height: 40px; border-radius: 8px; border: 1px dashed #444;
   background: var(--surface); cursor: pointer; overflow: hidden;
 }
-.edo-img-upload:hover { border-color: var(--accent); }
-.edo-img-upload .edo-img { width: 100%; height: 100%; }
+.edo-img-upload.lg { width: 100px; height: 100px; border-radius: 10px; }
+.edo-img-upload:hover, .edo-img-upload.drag-over { border-color: var(--accent); background: rgba(139,92,246,.08); }
+.edo-img-upload .edo-img { width: 100%; height: 100%; object-fit: cover; }
 
 .edo-state { font-size: 12px; font-weight: 800; padding: 5px 12px; border-radius: 6px; letter-spacing: .5px; }
 .edo-state.active, .edo-state.delivered { background: rgba(52,211,153,.12); color: var(--green); border: 1px solid rgba(52,211,153,.3); }
@@ -165,13 +166,25 @@ const styles = `
 
 .edo-actions { display: flex; gap: 4px; }
 
-.edo-form-table { width: 100%; border-collapse: separate; border-spacing: 0; }
-.edo-form-table th {
-  text-align: left; padding: 8px 8px; font-size: 10px; font-weight: 800;
-  color: var(--dim); text-transform: uppercase; letter-spacing: .5px;
-  border-bottom: 1px solid #1e1e38; position: sticky; top: 0; background: var(--card); z-index: 1;
+.edo-form-cards { display: flex; flex-direction: column; gap: 12px; }
+.edo-form-card {
+  background: var(--card); border: 1px solid #1e1e38; border-radius: 12px; padding: 14px 16px;
 }
-.edo-form-table td { padding: 4px 4px; vertical-align: top; }
+.edo-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.edo-card-num { font-size: 11px; font-weight: 800; color: var(--dim); }
+.edo-card-actions { display: flex; gap: 4px; }
+.edo-card-body { display: flex; gap: 16px; }
+.edo-card-left { flex-shrink: 0; }
+.edo-card-right { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.edo-field { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.edo-field-row { display: flex; gap: 8px; }
+.edo-label { font-size: 10px; font-weight: 800; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; }
+.edo-estimates { padding: 8px 12px; background: rgba(255,255,255,.03); border-radius: 8px; margin-top: 2px; }
+.edo-est { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.edo-est-label { font-size: 10px; font-weight: 700; color: var(--dim); }
+.edo-est-val { font-size: 13px; font-weight: 700; color: var(--ink); }
+.edo-est-val.green { color: var(--green); }
+
 .edo-input {
   width: 100%; padding: 8px 10px; border-radius: 7px; border: 1px solid #222240;
   background: var(--surface); color: var(--ink); font-size: 12px; font-weight: 600; font-family: inherit;
@@ -349,15 +362,29 @@ export default function EldoradoPage() {
   }
 
   async function handleBulkUpload() {
-    const valid = newItems.filter((i) => i.title.trim() && i.price > 0);
+    const valid = newItems.filter((i) => i.title.trim() && Number(i.price) > 0);
     if (valid.length === 0) { alert("Isi minimal 1 item dengan title dan price"); return; }
     setUploading(true);
     setUploadResults(null);
     try {
+      const itemsWithImages = await Promise.all(
+        valid.map(async (item) => {
+          let mainOfferImage = undefined;
+          if (item.image) {
+            const form = new FormData();
+            form.append("image", item.image);
+            const imgRes = await fetch("/api/eldorado/upload-image", { method: "POST", body: form });
+            if (imgRes.ok) {
+              mainOfferImage = await imgRes.json();
+            }
+          }
+          return { ...item, price: Number(item.price), mainOfferImage };
+        })
+      );
       const res = await fetch("/api/eldorado/offers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(valid),
+        body: JSON.stringify(itemsWithImages),
       });
       const data = await res.json();
       setUploadResults(data.results || []);
@@ -724,139 +751,150 @@ export default function EldoradoPage() {
           {tab === "create" && (
             <>
               <div className="edo-toolbar">
-                <button className="edo-btn" onClick={addRow}>+ Tambah Row</button>
+                <button className="edo-btn" onClick={addRow}>+ Tambah Item</button>
                 <button
                   className="edo-btn primary"
                   onClick={handleBulkUpload}
                   disabled={uploading || newItems.every((i) => !i.title.trim())}
                 >
-                  {uploading ? "Uploading..." : `Upload ${newItems.filter((i) => i.title.trim() && i.price > 0).length} Item`}
+                  {uploading ? "Uploading..." : `Upload ${newItems.filter((i) => i.title.trim() && Number(i.price) > 0).length} Item`}
                 </button>
-                <div className="edo-toolbar-right">
-                  <span className="edo-count">{newItems.length} row</span>
-                </div>
               </div>
 
-              <div style={{ overflowX: "auto" }}>
-                <table className="edo-form-table">
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th style={{ width: 60 }}>Image</th>
-                      <th style={{ minWidth: 250 }}>Title</th>
-                      <th style={{ minWidth: 200 }}>Description</th>
-                      <th style={{ width: 80 }}>Price ($)</th>
-                      <th style={{ width: 100 }}>Price IDR</th>
-                      <th style={{ width: 60 }}>Qty</th>
-                      <th style={{ width: 60 }}>Min Qty</th>
-                      <th style={{ width: 90 }}>Est. USD</th>
-                      <th style={{ width: 100 }}>Est. IDR</th>
-                      <th style={{ width: 100 }}>Delivery</th>
-                      <th style={{ width: 80 }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {newItems.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="edo-row-num">{idx + 1}</td>
-                        <td>
-                          <label className="edo-img-upload" title="Pilih gambar">
-                            {item.imagePreview ? (
-                              <img src={item.imagePreview} alt="" className="edo-img" />
-                            ) : (
-                              <span style={{ fontSize: 18, color: "var(--dim)" }}>+</span>
-                            )}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              style={{ display: "none" }}
-                              onChange={(e) => {
-                                const f = e.target.files?.[0];
-                                if (!f) return;
-                                const copy = [...newItems];
-                                copy[idx] = { ...copy[idx], image: f, imagePreview: URL.createObjectURL(f) };
-                                setNewItems(copy);
-                              }}
-                            />
-                          </label>
-                        </td>
-                        <td>
+              <div className="edo-form-cards">
+                {newItems.map((item, idx) => (
+                  <div key={idx} className="edo-form-card">
+                    <div className="edo-card-header">
+                      <span className="edo-card-num">#{idx + 1}</span>
+                      <div className="edo-card-actions">
+                        <button className="edo-btn sm" onClick={() => duplicateRow(idx)} title="Duplicate">&#x29C9;</button>
+                        {newItems.length > 1 && (
+                          <button className="edo-btn sm danger" onClick={() => removeRow(idx)} title="Hapus">&#x2715;</button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="edo-card-body">
+                      <div className="edo-card-left">
+                        <label
+                          className="edo-img-upload lg"
+                          title="Pilih atau drag gambar"
+                          onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("drag-over"); }}
+                          onDragLeave={(e) => { e.currentTarget.classList.remove("drag-over"); }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            e.currentTarget.classList.remove("drag-over");
+                            const f = e.dataTransfer.files?.[0];
+                            if (!f || !f.type.startsWith("image/")) return;
+                            const copy = [...newItems];
+                            copy[idx] = { ...copy[idx], image: f, imagePreview: URL.createObjectURL(f) };
+                            setNewItems(copy);
+                          }}
+                        >
+                          {item.imagePreview ? (
+                            <img src={item.imagePreview} alt="" className="edo-img" />
+                          ) : (
+                            <div style={{ textAlign: "center", color: "var(--dim)" }}>
+                              <div style={{ fontSize: 24 }}>+</div>
+                              <div style={{ fontSize: 10 }}>Drop / Klik</div>
+                            </div>
+                          )}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            style={{ display: "none" }}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (!f) return;
+                              const copy = [...newItems];
+                              copy[idx] = { ...copy[idx], image: f, imagePreview: URL.createObjectURL(f) };
+                              setNewItems(copy);
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <div className="edo-card-right">
+                        <div className="edo-field">
+                          <label className="edo-label">Title</label>
                           <input
                             className="edo-input"
                             placeholder="Nama item..."
                             value={item.title}
                             onChange={(e) => updateItem(idx, "title", e.target.value)}
                           />
-                        </td>
-                        <td>
+                        </div>
+                        <div className="edo-field">
+                          <label className="edo-label">Description</label>
                           <input
                             className="edo-input"
                             placeholder="Deskripsi (opsional)"
                             value={item.description}
                             onChange={(e) => updateItem(idx, "description", e.target.value)}
                           />
-                        </td>
-                        <td>
-                          <input
-                            className="edo-input sm"
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="0.00"
-                            value={item.price || ""}
-                            onChange={(e) => { const v = e.target.value; if (v === "" || /^\d*\.?\d*$/.test(v)) updateItem(idx, "price", v as any); }}
-                            onBlur={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}
-                          />
-                        </td>
-                        <td style={{ fontSize: 12, color: "var(--ink)", whiteSpace: "nowrap" }}>
-                          {Number(item.price) && usdIdr ? fmtIdr(Number(item.price) * usdIdr) : "-"}
-                        </td>
-                        <td>
-                          <input
-                            className="edo-input sm"
-                            type="number"
-                            min="1"
-                            value={item.quantity}
-                            onChange={(e) => updateItem(idx, "quantity", parseInt(e.target.value) || 1)}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="edo-input sm"
-                            type="number"
-                            min="1"
-                            value={item.minQuantity}
-                            onChange={(e) => updateItem(idx, "minQuantity", parseInt(e.target.value) || 1)}
-                          />
-                        </td>
-                        <td style={{ fontSize: 12, color: "var(--green)", fontWeight: 700, whiteSpace: "nowrap" }}>
-                          {Number(item.price) ? fmtUsd(Number(item.price) * item.minQuantity * (1 - SALES_FEE)) : "-"}
-                        </td>
-                        <td style={{ fontSize: 12, color: "var(--green)", fontWeight: 700, whiteSpace: "nowrap" }}>
-                          {Number(item.price) && usdIdr ? fmtIdr(Number(item.price) * item.minQuantity * (1 - SALES_FEE) * usdIdr) : "-"}
-                        </td>
-                        <td>
-                          <select
-                            className="edo-select"
-                            value={item.deliveryTime}
-                            onChange={(e) => updateItem(idx, "deliveryTime", e.target.value)}
-                          >
-                            {DELIVERY_OPTIONS.map((o) => (
-                              <option key={o.value} value={o.value}>{o.label}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td>
-                          <div className="edo-actions">
-                            <button className="edo-btn sm" onClick={() => duplicateRow(idx)} title="Duplicate">&#x29C9;</button>
-                            {newItems.length > 1 && (
-                              <button className="edo-btn sm danger" onClick={() => removeRow(idx)} title="Hapus">&#x2715;</button>
-                            )}
+                        </div>
+                        <div className="edo-field-row">
+                          <div className="edo-field">
+                            <label className="edo-label">Price (USD)</label>
+                            <input
+                              className="edo-input"
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="0.00"
+                              value={item.price || ""}
+                              onChange={(e) => { const v = e.target.value; if (v === "" || /^\d*\.?\d*$/.test(v)) updateItem(idx, "price", v as any); }}
+                              onBlur={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}
+                            />
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <div className="edo-field">
+                            <label className="edo-label">Qty</label>
+                            <input
+                              className="edo-input"
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => updateItem(idx, "quantity", parseInt(e.target.value) || 1)}
+                            />
+                          </div>
+                          <div className="edo-field">
+                            <label className="edo-label">Min Qty</label>
+                            <input
+                              className="edo-input"
+                              type="number"
+                              min="1"
+                              value={item.minQuantity}
+                              onChange={(e) => updateItem(idx, "minQuantity", parseInt(e.target.value) || 1)}
+                            />
+                          </div>
+                          <div className="edo-field">
+                            <label className="edo-label">Delivery</label>
+                            <select
+                              className="edo-select"
+                              value={item.deliveryTime}
+                              onChange={(e) => updateItem(idx, "deliveryTime", e.target.value)}
+                            >
+                              {DELIVERY_OPTIONS.map((o) => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="edo-field-row edo-estimates">
+                          <div className="edo-est">
+                            <span className="edo-est-label">Price IDR</span>
+                            <span className="edo-est-val">{Number(item.price) && usdIdr ? fmtIdr(Number(item.price) * usdIdr) : "-"}</span>
+                          </div>
+                          <div className="edo-est">
+                            <span className="edo-est-label">Est. USD</span>
+                            <span className="edo-est-val green">{Number(item.price) ? fmtUsd(Number(item.price) * item.minQuantity * (1 - SALES_FEE)) : "-"}</span>
+                          </div>
+                          <div className="edo-est">
+                            <span className="edo-est-label">Est. IDR</span>
+                            <span className="edo-est-val green">{Number(item.price) && usdIdr ? fmtIdr(Number(item.price) * item.minQuantity * (1 - SALES_FEE) * usdIdr) : "-"}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
 
               {uploadResults && (

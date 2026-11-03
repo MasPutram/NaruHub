@@ -37,7 +37,7 @@ export async function eldoradoFetch(path: string, opts: RequestInit = {}): Promi
     "swagger": "Swager request",
     ...(opts.headers as Record<string, string> || {}),
   };
-  if (opts.body && !headers["Content-Type"]) {
+  if (opts.body && !headers["Content-Type"] && !(opts.body instanceof FormData)) {
     headers["Content-Type"] = "application/json";
   }
   return fetch(`${BASE}${path}`, { ...opts, headers });
