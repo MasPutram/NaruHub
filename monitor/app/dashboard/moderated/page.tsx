@@ -50,6 +50,7 @@ interface Account {
   scrambleToken?: number | null;
   nitroToken?: number | null;
   spectralToken?: number | null;
+  alienToken?: number | null;
   growingEggCount?: number;
   backpackEggCount?: number;
   topPets: Pet[];
@@ -516,6 +517,9 @@ function ModeratedPageInner() {
         .st.spectral { background: linear-gradient(135deg, #4f46e5, #818cf8); border-radius: 8px; padding: 5px 10px; }
         .st.spectral .sl { color: #fff; }
         .st.spectral .sv { color: #fff; font-size: 18px; }
+        .st.alien { background: linear-gradient(135deg, #22c55e, #86efac); border-radius: 8px; padding: 5px 10px; }
+        .st.alien .sl { color: #fff; }
+        .st.alien .sv { color: #fff; font-size: 18px; }
         .max-tag { font-size: 9px; font-weight: 900; color: #1a1030; background: linear-gradient(135deg, var(--gold), #f59e0b); padding: 1px 6px; border-radius: 4px; letter-spacing: .5px; vertical-align: middle; margin-left: 4px; display: inline-block; line-height: 1.4; }
 
         .egg-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 6px 10px; background: rgba(52,211,153,.06); border: 1px solid rgba(52,211,153,.15); border-radius: 8px; }
@@ -705,10 +709,21 @@ function ModeratedPageInner() {
                   <div className="st income"><div className="sl">INCOME POTENSI</div><div className="sv">{fmtRate(a.incomePotensi)}</div></div>
                   <div className="st"><div className="sl">PEN &amp; TM</div><div className="sv">{fmtLevel(a.kandangLevel)} &amp; {fmtLevel(a.treadmillLevel)}</div></div>
                   <div className="st"><div className="sl">TOTAL EGG</div><div className="sv">{fmtNum((a.growingEggCount || 0) + (a.backpackEggCount || 0))}</div></div>
-                  <div className="st boss"><div className="sl">&#x1F9EC; TOKEN MUTASI</div><div className="sv">{fmtNum(a.mutationToken ?? 0)}</div></div>
-                  <div className="st scramble"><div className="sl">&#x1F500; TOKEN SCRAMBLE</div><div className="sv">{a.scrambleToken != null ? fmtNum(a.scrambleToken) : "—"}</div></div>
-                  <div className="st nitro"><div className="sl">&#x1F3CE;&#xFE0F; TOKEN NITRO</div><div className="sv">{a.nitroToken != null ? fmtNum(a.nitroToken) : "—"}</div></div>
-                  <div className="st spectral"><div className="sl">&#x1F47B; TOKEN SPECTRAL</div><div className="sv">{a.spectralToken != null ? fmtNum(a.spectralToken) : "—"}</div></div>
+                  {a.mutationToken != null && a.mutationToken > 0 && (
+                  <div className="st boss"><div className="sl">&#x1F9EC; TOKEN MUTASI</div><div className="sv">{fmtNum(a.mutationToken)}</div></div>
+                  )}
+                  {a.scrambleToken != null && a.scrambleToken > 0 && (
+                  <div className="st scramble"><div className="sl">&#x1F500; TOKEN SCRAMBLE</div><div className="sv">{fmtNum(a.scrambleToken)}</div></div>
+                  )}
+                  {a.nitroToken != null && a.nitroToken > 0 && (
+                  <div className="st nitro"><div className="sl">&#x1F3CE;&#xFE0F; TOKEN NITRO</div><div className="sv">{fmtNum(a.nitroToken)}</div></div>
+                  )}
+                  {a.spectralToken != null && a.spectralToken > 0 && (
+                  <div className="st spectral"><div className="sl">&#x1F47B; TOKEN SPECTRAL</div><div className="sv">{fmtNum(a.spectralToken)}</div></div>
+                  )}
+                  {a.alienToken != null && a.alienToken > 0 && (
+                  <div className="st alien"><div className="sl">&#x1F47D; TOKEN ALIEN</div><div className="sv">{fmtNum(a.alienToken)}</div></div>
+                  )}
                 </div>
 
                 {eggCount > 0 && (
@@ -814,6 +829,7 @@ function ModeratedPageInner() {
                 <div className="ms-card"><div className="mslabel">TOKEN SCRAMBLE</div><div className="msval" style={{ color: "var(--green)" }}>{detailAccount.scrambleToken != null ? fmtNum(detailAccount.scrambleToken) : "—"}</div></div>
                 <div className="ms-card"><div className="mslabel">TOKEN NITRO</div><div className="msval" style={{ color: "#d97706" }}>{detailAccount.nitroToken != null ? fmtNum(detailAccount.nitroToken) : "—"}</div></div>
                 <div className="ms-card"><div className="mslabel">TOKEN SPECTRAL</div><div className="msval" style={{ color: "#6366f1" }}>{detailAccount.spectralToken != null ? fmtNum(detailAccount.spectralToken) : "—"}</div></div>
+                <div className="ms-card"><div className="mslabel">TOKEN ALIEN</div><div className="msval" style={{ color: "#22c55e" }}>{detailAccount.alienToken != null ? fmtNum(detailAccount.alienToken) : "—"}</div></div>
               </div>
 
               {d ? (

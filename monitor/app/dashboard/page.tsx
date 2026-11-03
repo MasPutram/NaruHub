@@ -146,6 +146,7 @@ interface Account {
   scrambleToken?: number | null;
   nitroToken?: number | null;
   spectralToken?: number | null;
+  alienToken?: number | null;
   trail?: string | null;
   growingEggCount?: number;
   backpackEggCount?: number;
@@ -553,6 +554,9 @@ export default function DashboardPage() {
         .st.spectral { background: linear-gradient(135deg, #4f46e5, #818cf8); border-radius: 8px; padding: 5px 10px; }
         .st.spectral .sl { color: #fff; }
         .st.spectral .sv { color: #fff; font-size: 18px; }
+        .st.alien { background: linear-gradient(135deg, #22c55e, #86efac); border-radius: 8px; padding: 5px 10px; }
+        .st.alien .sl { color: #fff; }
+        .st.alien .sv { color: #fff; font-size: 18px; }
         .time-tag { font-size: 10px; font-weight: 700; flex-shrink: 0; }
         .time-tag.on { color: var(--dim); }
         .time-tag.off { color: var(--red); }
@@ -926,10 +930,21 @@ function AccountCard({ account: a, onOpen, onSell, onModerated, onDelete, delete
         <div className="st income"><div className="sl">INCOME POTENSI</div><div className="sv">{fmtRate(a.incomePotensi)}</div></div>
         <div className="st"><div className="sl">PEN &amp; TM</div><div className="sv">{(() => { const k = fmtLevelMax(a.kandangLevel, maxKandang); const t = fmtLevelMax(a.treadmillLevel, maxTreadmill); return <>{k.isMax ? <><span>{fmtLevel(a.kandangLevel)}</span> <span className="max-tag">MAX</span></> : fmtLevel(a.kandangLevel)} &amp; {t.isMax ? <><span>{fmtLevel(a.treadmillLevel)}</span> <span className="max-tag">MAX</span></> : fmtLevel(a.treadmillLevel)}</>; })()}</div></div>
         <div className="st"><div className="sl">TOTAL EGG</div><div className="sv">{fmtNum((a.growingEggCount || 0) + (a.backpackEggCount || 0))}</div></div>
-        <div className="st boss"><div className="sl">&#x1F9EC; TOKEN MUTASI</div><div className="sv">{fmtNum(a.mutationToken ?? 0)}</div></div>
-        <div className="st scramble"><div className="sl">&#x1F500; TOKEN SCRAMBLE</div><div className="sv">{a.scrambleToken != null ? fmtNum(a.scrambleToken) : "—"}</div></div>
-        <div className="st nitro"><div className="sl">&#x1F3CE;&#xFE0F; TOKEN NITRO</div><div className="sv">{a.nitroToken != null ? fmtNum(a.nitroToken) : "—"}</div></div>
-        <div className="st spectral"><div className="sl">&#x1F47B; TOKEN SPECTRAL</div><div className="sv">{a.spectralToken != null ? fmtNum(a.spectralToken) : "—"}</div></div>
+        {a.mutationToken != null && a.mutationToken > 0 && (
+        <div className="st boss"><div className="sl">&#x1F9EC; TOKEN MUTASI</div><div className="sv">{fmtNum(a.mutationToken)}</div></div>
+        )}
+        {a.scrambleToken != null && a.scrambleToken > 0 && (
+        <div className="st scramble"><div className="sl">&#x1F500; TOKEN SCRAMBLE</div><div className="sv">{fmtNum(a.scrambleToken)}</div></div>
+        )}
+        {a.nitroToken != null && a.nitroToken > 0 && (
+        <div className="st nitro"><div className="sl">&#x1F3CE;&#xFE0F; TOKEN NITRO</div><div className="sv">{fmtNum(a.nitroToken)}</div></div>
+        )}
+        {a.spectralToken != null && a.spectralToken > 0 && (
+        <div className="st spectral"><div className="sl">&#x1F47B; TOKEN SPECTRAL</div><div className="sv">{fmtNum(a.spectralToken)}</div></div>
+        )}
+        {a.alienToken != null && a.alienToken > 0 && (
+        <div className="st alien"><div className="sl">&#x1F47D; TOKEN ALIEN</div><div className="sv">{fmtNum(a.alienToken)}</div></div>
+        )}
       </div>
       {eggCount > 0 && (
         <div className="egg-bar">
@@ -1214,6 +1229,10 @@ function DetailModal({ detail, detailTab, setDetailTab, onClose, maxKandang, max
               <div className="ms-card">
                 <div className="mslabel">TOKEN SPECTRAL</div>
                 <div className="msval" style={{ color: "#6366f1" }}>{acc.spectralToken != null ? fmtNum(acc.spectralToken) : "—"}</div>
+              </div>
+              <div className="ms-card">
+                <div className="mslabel">TOKEN ALIEN</div>
+                <div className="msval" style={{ color: "#22c55e" }}>{acc.alienToken != null ? fmtNum(acc.alienToken) : "—"}</div>
               </div>
             </div>
           )}

@@ -38,6 +38,8 @@ interface AccountSummary {
   mutationToken?: number | null;
   scrambleToken?: number | null;
   nitroToken?: number | null;
+  spectralToken?: number | null;
+  alienToken?: number | null;
   trail?: string | null;
   topPets: Pet[];
   online: boolean;
@@ -916,6 +918,12 @@ function PosterPage() {
     ...(Number(summary.nitroToken) > 0
       ? [{ label: "TOKEN NITRO", value: "× " + Math.round(Number(summary.nitroToken)), accent: "nitro" as const }]
       : []),
+    ...(Number(summary.spectralToken) > 0
+      ? [{ label: "TOKEN SPECTRAL", value: "× " + Math.round(Number(summary.spectralToken)), accent: "spectral" as const }]
+      : []),
+    ...(Number(summary.alienToken) > 0
+      ? [{ label: "TOKEN ALIEN", value: "× " + Math.round(Number(summary.alienToken)), accent: "alien" as const }]
+      : []),
     { label: "TRAIL", value: summary.trail || "-", accent: "trail" },
   ];
 
@@ -989,6 +997,12 @@ function PosterPage() {
         .stat-cell.divine-cell-stat { background: #fefce8; border-color: #ca8a04; }
         .stat-cell.divine-cell-stat .slabel { color: #ca8a04; }
         .stat-cell.divine-cell-stat .sval { color: #a16207; }
+        .stat-cell.spectral-cell-stat { background: #eef2ff; border-color: #6366f1; }
+        .stat-cell.spectral-cell-stat .slabel { color: #4f46e5; }
+        .stat-cell.spectral-cell-stat .sval { color: #4338ca; }
+        .stat-cell.alien-cell-stat { background: #ecfdf5; border-color: #22c55e; }
+        .stat-cell.alien-cell-stat .slabel { color: #16a34a; }
+        .stat-cell.alien-cell-stat .sval { color: #15803d; }
         .stat-cell.trail-cell-stat { background: #eff6ff; border-color: #2563eb; }
         .stat-cell.trail-cell-stat .slabel { color: #2563eb; }
         .stat-cell.trail-cell-stat .sval { color: #1d4ed8; }
