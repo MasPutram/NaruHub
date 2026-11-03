@@ -556,8 +556,10 @@ export default function EldoradoPage() {
                       <th style={{ minWidth: 250 }}>Title</th>
                       <th style={{ minWidth: 200 }}>Description</th>
                       <th style={{ width: 80 }}>Price ($)</th>
+                      <th style={{ width: 100 }}>Price IDR</th>
                       <th style={{ width: 60 }}>Qty</th>
                       <th style={{ width: 60 }}>Min Qty</th>
+                      <th style={{ width: 90 }}>Estimasi</th>
                       <th style={{ width: 100 }}>Delivery</th>
                       <th style={{ width: 80 }}></th>
                     </tr>
@@ -592,6 +594,9 @@ export default function EldoradoPage() {
                             onChange={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}
                           />
                         </td>
+                        <td style={{ fontSize: 12, color: "var(--ink)", whiteSpace: "nowrap" }}>
+                          {item.price && usdIdr ? fmtIdr(item.price * usdIdr) : "-"}
+                        </td>
                         <td>
                           <input
                             className="edo-input sm"
@@ -609,6 +614,9 @@ export default function EldoradoPage() {
                             value={item.minQuantity}
                             onChange={(e) => updateItem(idx, "minQuantity", parseInt(e.target.value) || 1)}
                           />
+                        </td>
+                        <td style={{ fontSize: 12, color: "var(--green)", fontWeight: 700, whiteSpace: "nowrap" }}>
+                          {item.price ? fmtUsd(item.price * item.minQuantity * (1 - SALES_FEE)) : "-"}
                         </td>
                         <td>
                           <select
