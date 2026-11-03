@@ -226,6 +226,24 @@ const styles = `
 
 .edo-row-num { font-size: 11px; color: var(--dim); font-weight: 700; text-align: center; width: 32px; }
 .edo-count { font-size: 12px; color: var(--dim); font-weight: 700; }
+
+.edo-folders { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.edo-folder {
+  padding: 5px 12px; font-size: 11px; font-weight: 700; cursor: pointer;
+  color: var(--dim); background: rgba(255,255,255,.04); border: 1px solid #1e1e38;
+  border-radius: 8px; transition: all .15s; display: flex; align-items: center; gap: 4px;
+}
+.edo-folder:hover { border-color: var(--accent); color: var(--ink); }
+.edo-folder.active { background: var(--accent); color: #0b0b14; border-color: var(--accent); }
+.edo-folder .edo-folder-count { opacity: .6; font-size: 10px; }
+.edo-folder-actions { display: none; gap: 2px; margin-left: 4px; }
+.edo-folder:hover .edo-folder-actions { display: flex; }
+.edo-folder-actions button { background: none; border: none; cursor: pointer; font-size: 10px; padding: 0 2px; color: inherit; opacity: .6; }
+.edo-folder-actions button:hover { opacity: 1; }
+.edo-folder-add { padding: 5px 10px; font-size: 13px; cursor: pointer; color: var(--dim); background: rgba(255,255,255,.04); border: 1px dashed #1e1e38; border-radius: 8px; }
+.edo-folder-add:hover { border-color: var(--accent); color: var(--accent); }
+.edo-folder-assign { font-size: 11px; padding: 3px 6px; background: var(--card); border: 1px solid #1e1e38; border-radius: 6px; color: var(--ink); cursor: pointer; }
+.edo-folder-assign:focus { border-color: var(--accent); outline: none; }
 `;
 
 export default function EldoradoPage() {
@@ -246,6 +264,47 @@ export default function EldoradoPage() {
   const [convUsd, setConvUsd] = useState("");
   const [convIdr, setConvIdr] = useState("");
   const [editSaving, setEditSaving] = useState(false);
+
+  const [folders, setFolders] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("edo-folders") || "[]"); } catch { return []; }
+  });
+  const [folderMap, setFolderMap] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem("edo-folder-map") || "{}"); } catch { return {}; }
+  });
+  const [activeFolder, setActiveFolder] = useState<string | null>(null);
+
+  function saveFolders(f: string[]) { setFolders(f); try { localStorage.setItem("edo-folders", JSON.stringify(f)); } catch {} }
+  function saveFolderMap(m: Record<string, string>) { setFolderMap(m); try { localStorage.setItem("edo-folder-map", JSON.stringify(m)); } catch {} }
+
+  function addFolder() {
+    const name = prompt("Nama folder:");
+    if (!name?.trim()) return;
+    if (folders.includes(name.trim())) { alert("Folder sudah ada"); return; }
+    saveFolders([...folders, name.trim()]);
+  }
+  function renameFolder(old: string) {
+    const name = prompt("Rename folder:", old);
+    if (!name?.trim() || name.trim() === old) return;
+    const updated = folders.map((f) => f === old ? name.trim() : f);
+    saveFolders(updated);
+    const newMap = { ...folderMap };
+    for (const [k, v] of Object.entries(newMap)) { if (v === old) newMap[k] = name.trim(); }
+    saveFolderMap(newMap);
+    if (activeFolder === old) setActiveFolder(name.trim());
+  }
+  function deleteFolder(name: string) {
+    if (!confirm(`Hapus folder "${name}"?`)) return;
+    saveFolders(folders.filter((f) => f !== name));
+    const newMap = { ...folderMap };
+    for (const [k, v] of Object.entries(newMap)) { if (v === name) delete newMap[k]; }
+    saveFolderMap(newMap);
+    if (activeFolder === name) setActiveFolder(null);
+  }
+  function assignFolder(offerId: string, folder: string | null) {
+    const newMap = { ...folderMap };
+    if (folder) newMap[offerId] = folder; else delete newMap[offerId];
+    saveFolderMap(newMap);
+  }
 
   const [market, setMarket] = useState<any[]>([]);
   const [marketLoading, setMarketLoading] = useState(false);
@@ -709,6 +768,40 @@ export default function EldoradoPage() {
 
               {error && <div className="edo-result error">{error}</div>}
 
+              {folders.length > 0 && (
+                <div className="edo-folders">
+                  <button className={`edo-folder${activeFolder === null ? " active" : ""}`} onClick={() => setActiveFolder(null)}>
+                    Semua <span className="edo-folder-count">({offers.length})</span>
+                  </button>
+                  {folders.map((f) => {
+                    const count = offers.filter((o) => folderMap[o.id] === f).length;
+                    return (
+                      <button key={f} className={`edo-folder${activeFolder === f ? " active" : ""}`} onClick={() => setActiveFolder(activeFolder === f ? null : f)}>
+                        {f} <span className="edo-folder-count">({count})</span>
+                        <span className="edo-folder-actions">
+                          <button onClick={(e) => { e.stopPropagation(); renameFolder(f); }} title="Rename">&#x270E;</button>
+                          <button onClick={(e) => { e.stopPropagation(); deleteFolder(f); }} title="Hapus">&#x2715;</button>
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {(() => {
+                    const unassigned = offers.filter((o) => !folderMap[o.id]).length;
+                    return unassigned > 0 && folders.length > 0 ? (
+                      <button className={`edo-folder${activeFolder === "__none" ? " active" : ""}`} onClick={() => setActiveFolder(activeFolder === "__none" ? null : "__none")}>
+                        Tanpa Folder <span className="edo-folder-count">({unassigned})</span>
+                      </button>
+                    ) : null;
+                  })()}
+                  <button className="edo-folder-add" onClick={addFolder} title="Tambah Folder">+</button>
+                </div>
+              )}
+              {folders.length === 0 && offers.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <button className="edo-folder-add" onClick={addFolder} title="Tambah Folder">+ Tambah Folder</button>
+                </div>
+              )}
+
               {!loading && !error && offers.length === 0 && (
                 <div className="edo-empty">
                   <div className="edo-empty-icon">&#x1F4E6;</div>
@@ -719,7 +812,7 @@ export default function EldoradoPage() {
 
               {offers.length > 0 && (
                 <div className="edo-listing-cards">
-                  {offers.map((o) => {
+                  {(activeFolder ? offers.filter((o) => activeFolder === "__none" ? !folderMap[o.id] : folderMap[o.id] === activeFolder) : offers).map((o) => {
                     const isEditing = editId === o.id && editData;
                     return (
                       <div key={o.id} className={`edo-form-card${isEditing ? " editing" : ""}`}>
@@ -727,6 +820,16 @@ export default function EldoradoPage() {
                           <span className={`edo-state ${(o.offerState || "").toLowerCase() === "active" ? "active" : "paused"}`}>
                             {o.offerState || "?"}
                           </span>
+                          {folders.length > 0 && (
+                            <select
+                              className="edo-folder-assign"
+                              value={folderMap[o.id] || ""}
+                              onChange={(e) => assignFolder(o.id, e.target.value || null)}
+                            >
+                              <option value="">— Tanpa Folder —</option>
+                              {folders.map((f) => <option key={f} value={f}>{f}</option>)}
+                            </select>
+                          )}
                           <div className="edo-card-actions">
                             {isEditing ? (
                               <>
