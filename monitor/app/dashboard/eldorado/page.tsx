@@ -37,6 +37,8 @@ interface NewItem {
   quantity: number;
   minQuantity: number;
   deliveryTime: string;
+  image?: File | null;
+  imagePreview?: string;
 }
 
 const ELDORADO_CDN = "https://assetsdelivery.eldorado.gg/v7/_offers-v2_/";
@@ -147,6 +149,13 @@ const styles = `
 .edo-table td { padding: 10px 12px; font-size: 13px; color: var(--ink); border-bottom: 1px solid rgba(30,30,56,.5); }
 .edo-table tr:hover td { background: var(--card-hover); }
 .edo-img { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; background: var(--surface); border: 1px solid #222240; }
+.edo-img-upload {
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 8px; border: 1px dashed #444;
+  background: var(--surface); cursor: pointer; overflow: hidden;
+}
+.edo-img-upload:hover { border-color: var(--accent); }
+.edo-img-upload .edo-img { width: 100%; height: 100%; }
 
 .edo-state { font-size: 12px; font-weight: 800; padding: 5px 12px; border-radius: 6px; letter-spacing: .5px; }
 .edo-state.active, .edo-state.delivered { background: rgba(52,211,153,.12); color: var(--green); border: 1px solid rgba(52,211,153,.3); }
@@ -733,13 +742,15 @@ export default function EldoradoPage() {
                   <thead>
                     <tr>
                       <th>#</th>
+                      <th style={{ width: 60 }}>Image</th>
                       <th style={{ minWidth: 250 }}>Title</th>
                       <th style={{ minWidth: 200 }}>Description</th>
                       <th style={{ width: 80 }}>Price ($)</th>
                       <th style={{ width: 100 }}>Price IDR</th>
                       <th style={{ width: 60 }}>Qty</th>
                       <th style={{ width: 60 }}>Min Qty</th>
-                      <th style={{ width: 90 }}>Estimasi</th>
+                      <th style={{ width: 90 }}>Est. USD</th>
+                      <th style={{ width: 100 }}>Est. IDR</th>
                       <th style={{ width: 100 }}>Delivery</th>
                       <th style={{ width: 80 }}></th>
                     </tr>
@@ -748,6 +759,27 @@ export default function EldoradoPage() {
                     {newItems.map((item, idx) => (
                       <tr key={idx}>
                         <td className="edo-row-num">{idx + 1}</td>
+                        <td>
+                          <label className="edo-img-upload" title="Pilih gambar">
+                            {item.imagePreview ? (
+                              <img src={item.imagePreview} alt="" className="edo-img" />
+                            ) : (
+                              <span style={{ fontSize: 18, color: "var(--dim)" }}>+</span>
+                            )}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: "none" }}
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (!f) return;
+                                const copy = [...newItems];
+                                copy[idx] = { ...copy[idx], image: f, imagePreview: URL.createObjectURL(f) };
+                                setNewItems(copy);
+                              }}
+                            />
+                          </label>
+                        </td>
                         <td>
                           <input
                             className="edo-input"
@@ -767,15 +799,16 @@ export default function EldoradoPage() {
                         <td>
                           <input
                             className="edo-input sm"
-                            type="number"
-                            step="0.01"
-                            min="0"
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0.00"
                             value={item.price || ""}
-                            onChange={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}
+                            onChange={(e) => { const v = e.target.value; if (v === "" || /^\d*\.?\d*$/.test(v)) updateItem(idx, "price", v as any); }}
+                            onBlur={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}
                           />
                         </td>
                         <td style={{ fontSize: 12, color: "var(--ink)", whiteSpace: "nowrap" }}>
-                          {item.price && usdIdr ? fmtIdr(item.price * usdIdr) : "-"}
+                          {Number(item.price) && usdIdr ? fmtIdr(Number(item.price) * usdIdr) : "-"}
                         </td>
                         <td>
                           <input
@@ -796,7 +829,10 @@ export default function EldoradoPage() {
                           />
                         </td>
                         <td style={{ fontSize: 12, color: "var(--green)", fontWeight: 700, whiteSpace: "nowrap" }}>
-                          {item.price ? fmtUsd(item.price * item.minQuantity * (1 - SALES_FEE)) : "-"}
+                          {Number(item.price) ? fmtUsd(Number(item.price) * item.minQuantity * (1 - SALES_FEE)) : "-"}
+                        </td>
+                        <td style={{ fontSize: 12, color: "var(--green)", fontWeight: 700, whiteSpace: "nowrap" }}>
+                          {Number(item.price) && usdIdr ? fmtIdr(Number(item.price) * item.minQuantity * (1 - SALES_FEE) * usdIdr) : "-"}
                         </td>
                         <td>
                           <select
