@@ -71,6 +71,7 @@ const emptyItem = (): NewItem => ({
 
 function fmtUsd(amount?: number) {
   if (amount == null) return "$0.00";
+  if (amount > 0 && amount < 0.01) return `$${amount.toPrecision(2)}`;
   return `$${amount.toFixed(2)}`;
 }
 
@@ -257,7 +258,7 @@ export default function EldoradoPage() {
     try {
       const qs = new URLSearchParams({ page: String(page), size: "24" });
       if (search) qs.set("search", search);
-      if (sort) qs.set("sort", sort);
+      if (sort && !search) qs.set("sort", sort);
       const res = await fetch(`/api/eldorado/market?${qs}`);
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -457,7 +458,22 @@ export default function EldoradoPage() {
                 </div>
               )}
 
-              {market.length > 0 && (
+              {market.length > 0 && (() => {
+                let display = [...market];
+                if (marketSearch.trim()) {
+                  const q = marketSearch.trim().toLowerCase();
+                  display = display.filter((m: any) => (m.offer?.offerTitle || "").toLowerCase().includes(q));
+                  if (marketSort === "price_asc") display.sort((a: any, b: any) => (a.offer?.pricePerUnitInUSD?.amount || 0) - (b.offer?.pricePerUnitInUSD?.amount || 0));
+                  if (marketSort === "price_desc") display.sort((a: any, b: any) => (b.offer?.pricePerUnitInUSD?.amount || 0) - (a.offer?.pricePerUnitInUSD?.amount || 0));
+                }
+                if (display.length === 0) return (
+                  <div className="edo-empty">
+                    <div className="edo-empty-icon">🔍</div>
+                    <div className="edo-empty-text">Tidak ada item &quot;{marketSearch}&quot; di halaman ini</div>
+                    <div className="edo-empty-sub">Coba cari di halaman lain</div>
+                  </div>
+                );
+                return (
                 <>
                   <table className="edo-table">
                     <thead>
@@ -473,7 +489,7 @@ export default function EldoradoPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {market.map((m: any) => {
+                      {display.map((m: any) => {
                         const o = m.offer || {};
                         const u = m.user || {};
                         const dt = m.deliveryTime || {};
@@ -523,7 +539,7 @@ export default function EldoradoPage() {
                     </button>
                   </div>
                 </>
-              )}
+                ); })()}
             </>
           )}
 
