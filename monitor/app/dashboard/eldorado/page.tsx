@@ -437,7 +437,19 @@ export default function EldoradoPage() {
                 </div>
               )}
 
-              {market.length > 0 && (
+              {market.length > 0 && (() => {
+                const filtered = market.filter((m: any) => {
+                  if (!marketSearch.trim()) return true;
+                  const title = (m.offer?.offerTitle || "").toLowerCase();
+                  return marketSearch.trim().toLowerCase().split(/\s+/).every((w: string) => title.includes(w));
+                });
+                return filtered.length === 0 ? (
+                  <div className="edo-empty">
+                    <div className="edo-empty-icon">🔍</div>
+                    <div className="edo-empty-text">Tidak ada item cocok dengan &quot;{marketSearch}&quot;</div>
+                    <div className="edo-empty-sub">Filter diterapkan pada {market.length} listing di halaman ini</div>
+                  </div>
+                ) : (
                 <>
                   <table className="edo-table">
                     <thead>
@@ -453,7 +465,7 @@ export default function EldoradoPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {market.map((m: any) => {
+                      {filtered.map((m: any) => {
                         const o = m.offer || {};
                         const u = m.user || {};
                         const dt = m.deliveryTime || {};
@@ -503,7 +515,7 @@ export default function EldoradoPage() {
                     </button>
                   </div>
                 </>
-              )}
+                ); })()}
             </>
           )}
 
