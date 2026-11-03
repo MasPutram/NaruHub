@@ -747,7 +747,7 @@ export default function EldoradoPage() {
                                 {o.description && <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 2 }}>{o.description}</div>}
                                 <div className="edo-field-row" style={{ marginTop: 6 }}>
                                   <div className="edo-est">
-                                    <span className="edo-est-label">Price</span>
+                                    <span className="edo-est-label">Price USD</span>
                                     <span className="edo-est-val" style={{ color: "var(--gold)" }}>{fmtUsd(o.pricePerUnit?.amount)}</span>
                                   </div>
                                   <div className="edo-est">
