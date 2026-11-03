@@ -28,9 +28,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ offe
         body: JSON.stringify(body.quantity),
       });
     } else if (action === "details") {
+      const { action: _, ...detailsPayload } = body;
       res = await eldoradoFetch(`/api/v1/item-management/me/offers/item/${offerId}/details`, {
         method: "PUT",
-        body: JSON.stringify(body.details),
+        body: JSON.stringify(detailsPayload),
       });
     } else {
       return NextResponse.json({ error: "Unknown action" }, { status: 400 });

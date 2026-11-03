@@ -407,9 +407,10 @@ export default function EldoradoPage() {
         setEditData(null);
         fetchOffers();
       } else {
-        alert("Edit gagal");
+        const body = await res.json().catch(() => null);
+        alert(`Edit gagal (${res.status}): ${JSON.stringify(body?.data || body?.error || "unknown")}`);
       }
-    } catch { alert("Edit gagal"); }
+    } catch (err: any) { alert(`Edit gagal: ${err.message}`); }
     finally { setEditSaving(false); }
   }
 
