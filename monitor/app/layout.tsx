@@ -1,19 +1,4 @@
 import type { Metadata } from "next";
-import { Manrope, JetBrains_Mono } from "next/font/google";
-
-const manrope = Manrope({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800"],
-  variable: "--font-poppins",
-  display: "swap",
-});
-
-const mono = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-numbers",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "Narua — Game Store",
@@ -22,7 +7,21 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="id" className={`${manrope.variable} ${mono.variable}`} suppressHydrationWarning>
+    <html lang="id" suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+        <style dangerouslySetInnerHTML={{ __html: `
+          :root {
+            --font-poppins: 'Manrope', system-ui, -apple-system, sans-serif;
+            --font-numbers: 'JetBrains Mono', ui-monospace, monospace;
+          }
+        `}} />
+      </head>
       <body style={{ fontFamily: "var(--font-poppins), system-ui, -apple-system, sans-serif", margin: 0 }} suppressHydrationWarning>
         {children}
       </body>
