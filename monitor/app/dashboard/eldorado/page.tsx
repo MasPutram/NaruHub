@@ -166,6 +166,9 @@ const styles = `
 
 .edo-actions { display: flex; gap: 4px; }
 
+.edo-listing-cards { display: flex; flex-direction: column; gap: 10px; }
+.edo-form-card.editing { border-color: var(--accent); }
+.edo-img.lg { width: 80px; height: 80px; border-radius: 10px; }
 .edo-form-cards { display: flex; flex-direction: column; gap: 12px; }
 .edo-form-card {
   background: var(--card); border: 1px solid #1e1e38; border-radius: 12px; padding: 14px 16px;
@@ -226,6 +229,9 @@ export default function EldoradoPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadResults, setUploadResults] = useState<any[] | null>(null);
   const [usdIdr, setUsdIdr] = useState(0);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editData, setEditData] = useState<any>(null);
+  const [editSaving, setEditSaving] = useState(false);
 
   const [market, setMarket] = useState<any[]>([]);
   const [marketLoading, setMarketLoading] = useState(false);
@@ -346,6 +352,64 @@ export default function EldoradoPage() {
       if (res.ok) fetchOffers();
       else alert("Delete failed");
     } catch { alert("Delete failed"); }
+  }
+
+  function startEdit(offer: Offer) {
+    setEditId(offer.id);
+    setEditData({
+      title: offer.offerTitle || "",
+      description: offer.description || "",
+      price: offer.pricePerUnit?.amount || 0,
+      quantity: offer.quantity || 1,
+      minQuantity: offer.minQuantity || 1,
+      deliveryTime: offer.guaranteedDeliveryTime || "Minute20",
+      mainOfferImage: offer.mainOfferImage ? {
+        smallImage: offer.mainOfferImage.smallImage || "",
+        largeImage: offer.mainOfferImage.largeImage || "",
+        originalSizeImage: (offer as any).mainOfferImage?.originalSizeImage || "",
+      } : undefined,
+    });
+  }
+
+  async function saveEdit() {
+    if (!editId || !editData) return;
+    setEditSaving(true);
+    try {
+      const payload = {
+        action: "details",
+        details: {
+          offerTitle: editData.title,
+          description: editData.description || "",
+          guaranteedDeliveryTime: editData.deliveryTime || "Minute20",
+          pricing: {
+            quantity: editData.quantity ?? 1,
+            pricePerUnit: { amount: Number(editData.price), currency: "USD" },
+            volumeDiscounts: [],
+          },
+          offerImages: [],
+          ...(editData.mainOfferImage ? { mainOfferImage: editData.mainOfferImage } : {}),
+        },
+        augmentedGame: {
+          gameId: "476",
+          category: "CustomItem",
+          tradeEnvironmentId: null,
+          offerAttributes: [],
+        },
+      };
+      const res = await fetch(`/api/eldorado/offers/${editId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setEditId(null);
+        setEditData(null);
+        fetchOffers();
+      } else {
+        alert("Edit gagal");
+      }
+    } catch { alert("Edit gagal"); }
+    finally { setEditSaving(false); }
   }
 
   function updateItem(idx: number, field: keyof NewItem, value: any) {
@@ -601,67 +665,119 @@ export default function EldoradoPage() {
               )}
 
               {offers.length > 0 && (
-                <table className="edo-table">
-                  <thead>
-                    <tr>
-                      <th></th>
-                      <th>Title</th>
-                      <th>Qty</th>
-                      <th>Min</th>
-                      <th>Price USD</th>
-                      <th>Price IDR</th>
-                      <th>Estimasi USD</th>
-                      <th>Estimasi IDR</th>
-                      <th>Delivery</th>
-                      <th>Status</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {offers.map((o) => (
-                      <tr key={o.id}>
-                        <td>
-                          {o.mainOfferImage?.smallImage ? (
-                            <img className="edo-img" src={offerImgUrl(o.mainOfferImage.smallImage)} alt="" />
-                          ) : (
-                            <div className="edo-img" />
-                          )}
-                        </td>
-                        <td style={{ fontWeight: 700, maxWidth: 300 }}>{o.offerTitle || "-"}</td>
-                        <td>{o.quantity ?? "-"}</td>
-                        <td>{o.minQuantity ?? "-"}</td>
-                        <td style={{ fontWeight: 800, color: "var(--gold)" }}>
-                          {fmtUsd(o.pricePerUnit?.amount)}
-                        </td>
-                        <td style={{ fontWeight: 700, color: "var(--ink)", fontSize: 12 }}>
-                          {usdIdr ? fmtIdr((o.pricePerUnit?.amount || 0) * usdIdr) : "-"}
-                        </td>
-                        <td style={{ fontWeight: 700, color: "var(--green)", fontSize: 12 }}>
-                          {fmtUsd((o.pricePerUnit?.amount || 0) * (o.minQuantity || 1) * (1 - SALES_FEE))}
-                        </td>
-                        <td style={{ fontWeight: 700, color: "var(--green)", fontSize: 12 }}>
-                          {usdIdr ? fmtIdr((o.pricePerUnit?.amount || 0) * (o.minQuantity || 1) * (1 - SALES_FEE) * usdIdr) : "-"}
-                        </td>
-                        <td style={{ fontSize: 11, color: "var(--dim)" }}>{o.guaranteedDeliveryTime || "-"}</td>
-                        <td>
+                <div className="edo-listing-cards">
+                  {offers.map((o) => {
+                    const isEditing = editId === o.id && editData;
+                    return (
+                      <div key={o.id} className={`edo-form-card${isEditing ? " editing" : ""}`}>
+                        <div className="edo-card-header">
                           <span className={`edo-state ${(o.offerState || "").toLowerCase() === "active" ? "active" : "paused"}`}>
                             {o.offerState || "?"}
                           </span>
-                        </td>
-                        <td>
-                          <div className="edo-actions">
-                            {(o.offerState || "").toLowerCase() === "active" ? (
-                              <button className="edo-btn sm" onClick={() => handleAction(o.id, "pause")} title="Pause">&#x23F8;</button>
+                          <div className="edo-card-actions">
+                            {isEditing ? (
+                              <>
+                                <button className="edo-btn sm primary" onClick={saveEdit} disabled={editSaving}>
+                                  {editSaving ? "..." : "Save"}
+                                </button>
+                                <button className="edo-btn sm" onClick={() => { setEditId(null); setEditData(null); }}>Cancel</button>
+                              </>
                             ) : (
-                              <button className="edo-btn sm" onClick={() => handleAction(o.id, "resume")} title="Resume">&#x25B6;</button>
+                              <>
+                                <button className="edo-btn sm" onClick={() => startEdit(o)} title="Edit">&#x270E;</button>
+                                {(o.offerState || "").toLowerCase() === "active" ? (
+                                  <button className="edo-btn sm" onClick={() => handleAction(o.id, "pause")} title="Pause">&#x23F8;</button>
+                                ) : (
+                                  <button className="edo-btn sm" onClick={() => handleAction(o.id, "resume")} title="Resume">&#x25B6;</button>
+                                )}
+                                <button className="edo-btn sm danger" onClick={() => handleDelete(o.id)} title="Hapus">&#x2715;</button>
+                              </>
                             )}
-                            <button className="edo-btn sm danger" onClick={() => handleDelete(o.id)} title="Hapus">&#x2715;</button>
                           </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+                        <div className="edo-card-body">
+                          <div className="edo-card-left">
+                            {o.mainOfferImage?.smallImage ? (
+                              <img className="edo-img lg" src={offerImgUrl(o.mainOfferImage.smallImage)} alt="" />
+                            ) : (
+                              <div className="edo-img lg" />
+                            )}
+                          </div>
+                          <div className="edo-card-right">
+                            {isEditing ? (
+                              <>
+                                <div className="edo-field">
+                                  <label className="edo-label">Title</label>
+                                  <input className="edo-input" value={editData.title} onChange={(e) => setEditData({ ...editData, title: e.target.value })} />
+                                </div>
+                                <div className="edo-field">
+                                  <label className="edo-label">Description</label>
+                                  <input className="edo-input" value={editData.description} onChange={(e) => setEditData({ ...editData, description: e.target.value })} />
+                                </div>
+                                <div className="edo-field-row">
+                                  <div className="edo-field">
+                                    <label className="edo-label">Price (USD)</label>
+                                    <input
+                                      className="edo-input"
+                                      type="text"
+                                      inputMode="decimal"
+                                      value={editData.price || ""}
+                                      onChange={(e) => { const v = e.target.value; if (v === "" || /^\d*\.?\d*$/.test(v)) setEditData({ ...editData, price: v }); }}
+                                      onBlur={(e) => setEditData({ ...editData, price: parseFloat(e.target.value) || 0 })}
+                                    />
+                                  </div>
+                                  <div className="edo-field">
+                                    <label className="edo-label">Qty</label>
+                                    <input className="edo-input" type="number" min="1" value={editData.quantity} onChange={(e) => setEditData({ ...editData, quantity: parseInt(e.target.value) || 1 })} />
+                                  </div>
+                                  <div className="edo-field">
+                                    <label className="edo-label">Delivery</label>
+                                    <select className="edo-select" value={editData.deliveryTime} onChange={(e) => setEditData({ ...editData, deliveryTime: e.target.value })}>
+                                      {DELIVERY_OPTIONS.map((opt) => (
+                                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div style={{ fontWeight: 700, fontSize: 14 }}>{o.offerTitle || "-"}</div>
+                                {o.description && <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 2 }}>{o.description}</div>}
+                                <div className="edo-field-row" style={{ marginTop: 6 }}>
+                                  <div className="edo-est">
+                                    <span className="edo-est-label">Price</span>
+                                    <span className="edo-est-val" style={{ color: "var(--gold)" }}>{fmtUsd(o.pricePerUnit?.amount)}</span>
+                                  </div>
+                                  <div className="edo-est">
+                                    <span className="edo-est-label">Qty</span>
+                                    <span className="edo-est-val">{o.quantity ?? "-"}</span>
+                                  </div>
+                                  <div className="edo-est">
+                                    <span className="edo-est-label">Price IDR</span>
+                                    <span className="edo-est-val">{usdIdr ? fmtIdr((o.pricePerUnit?.amount || 0) * usdIdr) : "-"}</span>
+                                  </div>
+                                  <div className="edo-est">
+                                    <span className="edo-est-label">Est. USD</span>
+                                    <span className="edo-est-val green">{fmtUsd((o.pricePerUnit?.amount || 0) * (o.minQuantity || 1) * (1 - SALES_FEE))}</span>
+                                  </div>
+                                  <div className="edo-est">
+                                    <span className="edo-est-label">Est. IDR</span>
+                                    <span className="edo-est-val green">{usdIdr ? fmtIdr((o.pricePerUnit?.amount || 0) * (o.minQuantity || 1) * (1 - SALES_FEE) * usdIdr) : "-"}</span>
+                                  </div>
+                                  <div className="edo-est">
+                                    <span className="edo-est-label">Delivery</span>
+                                    <span className="edo-est-val">{DELIVERY_OPTIONS.find((d) => d.value === o.guaranteedDeliveryTime)?.label || o.guaranteedDeliveryTime || "-"}</span>
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </>
           )}
