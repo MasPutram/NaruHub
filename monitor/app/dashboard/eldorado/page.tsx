@@ -1087,7 +1087,7 @@ export default function EldoradoPage() {
                   <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>
                     {uploadResults.map((r, i) => (
                       <li key={i}>
-                        {r.ok ? "✓" : "✗"} {r.title} — {r.ok ? "Berhasil" : `Gagal (${r.status})`}
+                        {r.ok ? "✓" : "✗"} {r.title} — {r.ok ? "Berhasil" : `Gagal (${r.status}): ${typeof r.data === "string" ? r.data : JSON.stringify(r.data)}`}
                       </li>
                     ))}
                   </ul>
