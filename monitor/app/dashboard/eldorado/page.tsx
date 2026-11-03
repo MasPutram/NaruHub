@@ -799,11 +799,11 @@ export default function EldoradoPage() {
                                   </div>
                                   <div className="edo-est">
                                     <span className="edo-est-label">Est. USD</span>
-                                    <span className="edo-est-val green">{Number(editData.price) ? fmtUsd(Number(editData.price) * (editData.quantity || 1) * (1 - SALES_FEE)) : "-"}</span>
+                                    <span className="edo-est-val green">{Number(editData.price) ? fmtUsd(Number(editData.price) * (1 - SALES_FEE)) : "-"}</span>
                                   </div>
                                   <div className="edo-est">
                                     <span className="edo-est-label">Est. IDR</span>
-                                    <span className="edo-est-val green">{Number(editData.price) && usdIdr ? fmtIdr(Number(editData.price) * (editData.quantity || 1) * (1 - SALES_FEE) * usdIdr) : "-"}</span>
+                                    <span className="edo-est-val green">{Number(editData.price) && usdIdr ? fmtIdr(Number(editData.price) * usdIdr * (1 - SALES_FEE)) : "-"}</span>
                                   </div>
                                 </div>
                               </>
@@ -826,11 +826,11 @@ export default function EldoradoPage() {
                                   </div>
                                   <div className="edo-est">
                                     <span className="edo-est-label">Est. USD</span>
-                                    <span className="edo-est-val green">{fmtUsd((o.pricePerUnit?.amount || 0) * (o.minQuantity || 1) * (1 - SALES_FEE))}</span>
+                                    <span className="edo-est-val green">{fmtUsd((o.pricePerUnit?.amount || 0) * (1 - SALES_FEE))}</span>
                                   </div>
                                   <div className="edo-est">
                                     <span className="edo-est-label">Est. IDR</span>
-                                    <span className="edo-est-val green">{usdIdr ? fmtIdr((o.pricePerUnit?.amount || 0) * (o.minQuantity || 1) * (1 - SALES_FEE) * usdIdr) : "-"}</span>
+                                    <span className="edo-est-val green">{usdIdr ? fmtIdr((o.pricePerUnit?.amount || 0) * usdIdr * (1 - SALES_FEE)) : "-"}</span>
                                   </div>
                                   <div className="edo-est">
                                     <span className="edo-est-label">Delivery</span>
@@ -1068,11 +1068,11 @@ export default function EldoradoPage() {
                           </div>
                           <div className="edo-est">
                             <span className="edo-est-label">Est. USD</span>
-                            <span className="edo-est-val green">{Number(item.price) ? fmtUsd(Number(item.price) * item.minQuantity * (1 - SALES_FEE)) : "-"}</span>
+                            <span className="edo-est-val green">{Number(item.price) ? fmtUsd(Number(item.price) * (1 - SALES_FEE)) : "-"}</span>
                           </div>
                           <div className="edo-est">
                             <span className="edo-est-label">Est. IDR</span>
-                            <span className="edo-est-val green">{Number(item.price) && usdIdr ? fmtIdr(Number(item.price) * item.minQuantity * (1 - SALES_FEE) * usdIdr) : "-"}</span>
+                            <span className="edo-est-val green">{Number(item.price) && usdIdr ? fmtIdr(Number(item.price) * usdIdr * (1 - SALES_FEE)) : "-"}</span>
                           </div>
                         </div>
                       </div>
