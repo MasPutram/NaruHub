@@ -104,6 +104,7 @@ export async function POST(req: NextRequest) {
       scrambleToken: data.scrambleToken ?? null,
       nitroToken: data.nitroToken ?? null,
       spectralToken: data.spectralToken ?? null,
+      alienToken: data.alienToken ?? null,
       trail: data.trail ?? null,
       growingEggCount: data.fullData?.growingEggs?.length ?? 0,
       backpackEggCount: data.fullData?.backpackEggs?.length ?? 0,

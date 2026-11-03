@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.5.0"
+local VERSION = "v3.6.0"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -1051,6 +1051,7 @@ local function reportToMonitor()
 		local scrambleToken = 0
 		local nitroToken = 0
 		local spectralToken = 0
+		local alienToken = 0
 		local equippedTrail = ""
 		pcall(function()
 			local s = SaveModule.Peek()
@@ -1074,6 +1075,8 @@ local function reportToMonitor()
 								nitroToken = nitroToken + uses
 							elseif mutId == "Spectral" then
 								spectralToken = spectralToken + uses
+							elseif mutId == "Alien" then
+								alienToken = alienToken + uses
 							end
 						end
 					end
@@ -1102,6 +1105,7 @@ local function reportToMonitor()
 			scrambleToken = scrambleToken,
 			nitroToken = nitroToken,
 			spectralToken = spectralToken,
+			alienToken = alienToken,
 			ownerFacebook = "Putra Ramadhan",
 			sourceAccount = LocalPlayer.Name,
 		}
@@ -1125,6 +1129,7 @@ local function reportToMonitor()
 			scrambleToken = scrambleToken,
 			nitroToken = nitroToken,
 			spectralToken = spectralToken,
+			alienToken = alienToken,
 			topPets = topPets,
 			trail = equippedTrail,
 			fullData = fullData,
@@ -1315,7 +1320,8 @@ task.spawn(function()
 				local haveBoss = findMutationTool("Boss") ~= nil
 				local haveNitro = findMutationTool("Nitro") ~= nil
 				local haveSpectral = findMutationTool("Spectral") ~= nil
-				if not haveScrambled and not haveBoss and not haveNitro and not haveSpectral then return end
+				local haveAlien = findMutationTool("Alien") ~= nil
+				if not haveScrambled and not haveBoss and not haveNitro and not haveSpectral and not haveAlien then return end
 
 				local candidates = {}
 				for uid, rec in pairs(stats.EggInventory or {}) do
@@ -1324,11 +1330,13 @@ task.spawn(function()
 						local hasBoss = hasMutation(rec, "Boss")
 						local hasNitro = hasMutation(rec, "Nitro")
 						local hasSpectral = hasMutation(rec, "Spectral")
+						local hasAlien = hasMutation(rec, "Alien")
 						local canApplyScrambled = not hasScrambled and haveScrambled
 						local canApplyBoss = not hasBoss and haveBoss
 						local canApplyNitro = not hasNitro and haveNitro
 						local canApplySpectral = not hasSpectral and haveSpectral
-						if canApplyScrambled or canApplyBoss or canApplyNitro or canApplySpectral then
+						local canApplyAlien = not hasAlien and haveAlien
+						if canApplyScrambled or canApplyBoss or canApplyNitro or canApplySpectral or canApplyAlien then
 							local rate = 0
 							pcall(function()
 								rate = AssetEarnings.RatePerSecond({
@@ -1365,6 +1373,9 @@ task.spawn(function()
 					end
 					if not hasMutation(pet.rec, "Spectral") then
 						table.insert(mutationsToApply, "Spectral")
+					end
+					if not hasMutation(pet.rec, "Alien") then
+						table.insert(mutationsToApply, "Alien")
 					end
 
 					for _, targetMut in ipairs(mutationsToApply) do
