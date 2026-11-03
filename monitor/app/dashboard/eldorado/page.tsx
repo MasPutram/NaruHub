@@ -194,6 +194,7 @@ const styles = `
   outline: none; transition: border .15s;
 }
 .edo-input:focus { border-color: var(--accent); }
+.edo-textarea { resize: vertical; min-height: 60px; line-height: 1.5; }
 .edo-input.sm { width: 80px; }
 .edo-select {
   padding: 8px 10px; border-radius: 7px; border: 1px solid #222240;
@@ -712,7 +713,7 @@ export default function EldoradoPage() {
                                 </div>
                                 <div className="edo-field">
                                   <label className="edo-label">Description</label>
-                                  <input className="edo-input" value={editData.description} onChange={(e) => setEditData({ ...editData, description: e.target.value })} />
+                                  <textarea className="edo-input edo-textarea" rows={3} value={editData.description} onChange={(e) => setEditData({ ...editData, description: e.target.value })} />
                                 </div>
                                 <div className="edo-field-row">
                                   <div className="edo-field">
