@@ -31,16 +31,28 @@ export async function getToken(): Promise<string> {
 }
 
 export async function eldoradoFetch(path: string, opts: RequestInit = {}): Promise<Response> {
-  const token = await getToken();
-  const headers: Record<string, string> = {
-    "Authorization": `Bearer ${token}`,
-    "swagger": "Swager request",
-    ...(opts.headers as Record<string, string> || {}),
+  let token = await getToken();
+  const buildHeaders = (t: string) => {
+    const h: Record<string, string> = {
+      "Authorization": `Bearer ${t}`,
+      "swagger": "Swager request",
+      ...(opts.headers as Record<string, string> || {}),
+    };
+    if (opts.body && !h["Content-Type"] && !(opts.body instanceof FormData)) {
+      h["Content-Type"] = "application/json";
+    }
+    return h;
   };
-  if (opts.body && !headers["Content-Type"] && !(opts.body instanceof FormData)) {
-    headers["Content-Type"] = "application/json";
+
+  const res = await fetch(`${BASE}${path}`, { ...opts, headers: buildHeaders(token) });
+
+  if (res.status === 401) {
+    cachedToken = null;
+    token = await getToken();
+    return fetch(`${BASE}${path}`, { ...opts, headers: buildHeaders(token) });
   }
-  return fetch(`${BASE}${path}`, { ...opts, headers });
+
+  return res;
 }
 
 export const ANIME_DICE_GAME_ID = "476";
