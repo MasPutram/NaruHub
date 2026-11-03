@@ -237,6 +237,11 @@ export default function EldoradoPage() {
   useEffect(() => { fetchOffers(); fetchOrders(); }, [fetchOffers, fetchOrders]);
 
   useEffect(() => {
+    const id = setInterval(() => { fetchOffers(); fetchOrders(); }, 30_000);
+    return () => clearInterval(id);
+  }, [fetchOffers, fetchOrders]);
+
+  useEffect(() => {
     fetch("https://open.er-api.com/v6/latest/USD")
       .then((r) => r.json())
       .then((d) => setUsdIdr(d.rates?.IDR || 0))
