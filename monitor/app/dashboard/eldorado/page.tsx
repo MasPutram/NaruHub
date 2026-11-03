@@ -129,6 +129,14 @@ const styles = `
 .edo-btn.sm { padding: 5px 10px; font-size: 11px; }
 .edo-btn:disabled { opacity: .5; cursor: not-allowed; }
 
+.edo-chip {
+  padding: 4px 12px; font-size: 11px; font-weight: 700; border-radius: 16px;
+  background: rgba(255,255,255,.06); color: var(--ink); border: 1px solid rgba(255,255,255,.12);
+  cursor: pointer; transition: all .15s;
+}
+.edo-chip:hover { border-color: var(--accent); color: #fff; }
+.edo-chip.active { background: var(--accent); color: #0b0b14; border-color: var(--accent); }
+
 .edo-table { width: 100%; border-collapse: separate; border-spacing: 0; }
 .edo-table th {
   text-align: left; padding: 10px 12px; font-size: 10px; font-weight: 800;
@@ -423,6 +431,18 @@ export default function EldoradoPage() {
                 <div className="edo-toolbar-right">
                   <span className="edo-count">Hal {marketPage}/{marketTotalPages} — {marketTotal} listing</span>
                 </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {["Jackpot", "Gamepass", "Sp", "Sx", "Oc", "Qi", "Qd", "No", "Trait", "Gems", "Potion"].map((tag) => (
+                  <button
+                    key={tag}
+                    className={`edo-chip${marketSearch.toLowerCase() === tag.toLowerCase() ? " active" : ""}`}
+                    onClick={() => setMarketSearch(marketSearch.toLowerCase() === tag.toLowerCase() ? "" : tag)}
+                  >
+                    {tag}
+                  </button>
+                ))}
               </div>
 
               {marketError && <div className="edo-result error">{marketError}</div>}
