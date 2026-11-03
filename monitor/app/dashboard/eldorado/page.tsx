@@ -421,10 +421,10 @@ export default function EldoradoPage() {
                           {usdIdr ? fmtIdr((o.pricePerUnit?.amount || 0) * usdIdr) : "-"}
                         </td>
                         <td style={{ fontWeight: 700, color: "var(--green)", fontSize: 12 }}>
-                          {fmtUsd((o.pricePerUnit?.amount || 0) * (o.quantity || 0) * (1 - SALES_FEE))}
+                          {fmtUsd((o.pricePerUnit?.amount || 0) * (o.minQuantity || 1) * (1 - SALES_FEE))}
                         </td>
                         <td style={{ fontWeight: 700, color: "var(--green)", fontSize: 12 }}>
-                          {usdIdr ? fmtIdr((o.pricePerUnit?.amount || 0) * (o.quantity || 0) * (1 - SALES_FEE) * usdIdr) : "-"}
+                          {usdIdr ? fmtIdr((o.pricePerUnit?.amount || 0) * (o.minQuantity || 1) * (1 - SALES_FEE) * usdIdr) : "-"}
                         </td>
                         <td style={{ fontSize: 11, color: "var(--dim)" }}>{o.guaranteedDeliveryTime || "-"}</td>
                         <td>
