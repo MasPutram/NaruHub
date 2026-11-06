@@ -14,8 +14,10 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search") || "";
     const sort = searchParams.get("sort") || "";
 
+    const gameId = searchParams.get("gameId") || "476";
+
     const qs = new URLSearchParams({
-      gameId: "476",
+      gameId,
       category: "CustomItem",
       pageIndex: page,
       pageSize: size,

@@ -311,6 +311,7 @@ export default function EldoradoPage() {
   const [marketError, setMarketError] = useState("");
   const [marketSearch, setMarketSearch] = useState("");
   const [marketSort, setMarketSort] = useState("");
+  const [marketGame, setMarketGame] = useState<"476" | "452">("476");
   const [marketPage, setMarketPage] = useState(1);
   const [marketTotal, setMarketTotal] = useState(0);
   const [marketTotalPages, setMarketTotalPages] = useState(0);
@@ -353,11 +354,11 @@ export default function EldoradoPage() {
     }
   }, []);
 
-  const fetchMarket = useCallback(async (page = 1, search = "", sort = "") => {
+  const fetchMarket = useCallback(async (page = 1, search = "", sort = "", gameId = marketGame) => {
     setMarketLoading(true);
     setMarketError("");
     try {
-      const qs = new URLSearchParams({ page: String(page), size: "24" });
+      const qs = new URLSearchParams({ page: String(page), size: "24", gameId });
       if (search) qs.set("search", search);
       if (sort && !search) qs.set("sort", sort);
       const res = await fetch(`/api/eldorado/market?${qs}`);
@@ -375,7 +376,7 @@ export default function EldoradoPage() {
     } finally {
       setMarketLoading(false);
     }
-  }, []);
+  }, [marketGame]);
 
   useEffect(() => { fetchOffers(); fetchOrders(); fetchMarket(); }, [fetchOffers, fetchOrders, fetchMarket]);
 
@@ -622,6 +623,23 @@ export default function EldoradoPage() {
         <div className="edo-content">
           {tab === "market" && (
             <>
+              <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                <button
+                  className={`edo-tab${marketGame === "476" ? " active" : ""}`}
+                  style={{ padding: "6px 16px", fontSize: 11 }}
+                  onClick={() => { setMarketGame("476"); setMarketSearch(""); fetchMarket(1, "", marketSort, "476"); }}
+                >
+                  Anime Dice
+                </button>
+                <button
+                  className={`edo-tab${marketGame === "452" ? " active" : ""}`}
+                  style={{ padding: "6px 16px", fontSize: 11 }}
+                  onClick={() => { setMarketGame("452"); setMarketSearch(""); fetchMarket(1, "", marketSort, "452"); }}
+                >
+                  Steal An Egg
+                </button>
+              </div>
+
               <div className="edo-toolbar" style={{ gap: 8, flexWrap: "wrap" }}>
                 <input
                   className="edo-input"
@@ -649,7 +667,10 @@ export default function EldoradoPage() {
               </div>
 
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {["Jackpot", "Gamepass", "Sp", "Sx", "Oc", "Qi", "Qd", "No", "Trait", "Gems", "Potion"].map((tag) => (
+                {(marketGame === "476"
+                  ? ["Jackpot", "Gamepass", "Sp", "Sx", "Oc", "Qi", "Qd", "No", "Trait", "Gems", "Potion"]
+                  : ["Egg", "Pet", "Gems", "Gamepass", "Enchant", "Potion", "Boost"]
+                ).map((tag) => (
                   <button
                     key={tag}
                     className={`edo-chip${marketSearch.toLowerCase() === tag.toLowerCase() ? " active" : ""}`}
