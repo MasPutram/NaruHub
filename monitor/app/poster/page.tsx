@@ -545,10 +545,10 @@ function PosterPage() {
   const [rateMutasiPerUnit, setRateMutasiPerUnit] = useState("");
   const [rateScramblePerUnit, setRateScramblePerUnit] = useState("");
   const [rateNitroPerUnit, setRateNitroPerUnit] = useState("");
-  const [title, setTitle] = useState("Selling GACOR Account");
+  const [title, setTitle] = useState("Selling Best Account");
   const [badge, setBadge] = useState(accountInitials(accountName));
   const [owner, setOwner] = useState("Mas Naru");
-  const [checklist, setChecklist] = useState("Clean Data, No Hat, No Summon");
+  const [checklist, setChecklist] = useState("All Clean, Clean Data, No Green Hat, No Summary");
   const [downloading, setDownloading] = useState(false);
 
   const [iconIdx, setIconIdx] = useState<Record<string, string>>({});
@@ -853,7 +853,7 @@ function PosterPage() {
   if (featured) featuredKeys.add(petKey(featured));
 
   const rightPanelPets = activePetsSorted.filter((p) => !featuredKeys.has(petKey(p)));
-  const rightPanelShown = rightPanelPets.slice(0, 8);
+  const rightPanelShown = rightPanelPets.slice(0, 10);
   const shownInActiveKeys = new Set(rightPanelShown.map(petKey));
 
   const alreadyShownKeys = new Set([...Array.from(featuredKeys), ...topPicks.map(petKey), ...rightPanelShown.map(petKey)]);
@@ -1364,7 +1364,7 @@ function PosterPage() {
               const featuredRarity = petRarity(featured.category, iconIdx);
               return (
               <div className="featured-box">
-                <div className="featured-ribbon">TOP EARNER!</div>
+                <div className="featured-ribbon">TOP PET</div>
                 {isFeaturedGrowing ? (
                   <span className="growing-badge featured-egg-badge">GROWING</span>
                 ) : isFeaturedEgg && (
@@ -1442,28 +1442,8 @@ function PosterPage() {
               </div>
             )}
 
-            <div className="price-box">
-              <div className="price-label">{isSold ? "SOLD" : "PRICE ACC"}</div>
-              {isSold && soldPrice > 0 ? (
-                <div className="price-value">{formatRupiah(soldPrice)}</div>
-              ) : (price || computeAutoPrice(detail, summary, ratePerB, rateIncomeAktifPerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit, rateNitroPerUnit)) ? (
-                <div className="price-value">{price || computeAutoPrice(detail, summary, ratePerB, rateIncomeAktifPerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit, rateNitroPerUnit)}</div>
-              ) : (
-                <div className="price-empty">Set price or rate in controls above</div>
-              )}
-            </div>
 
 
-            {qrDataUrl && (
-              <div className="qr-box">
-                <img src={qrDataUrl} width={110} height={110} alt="QR" />
-                <div className="qr-info">
-                  <div className="qr-owner">{owner || "Seller"}</div>
-                  <div className="qr-label">Scan to contact</div>
-                  <div className="qr-url">facebook.com/naruaho</div>
-                </div>
-              </div>
-            )}
           </div>
 
           {divineAll.length > 0 && (
