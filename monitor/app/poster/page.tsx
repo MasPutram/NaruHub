@@ -6,7 +6,7 @@ import QRCode from "qrcode";
 
 export default function PosterPageWrapper() {
   return (
-    <Suspense fallback={<div style={{ padding: 40, color: "#8b8ba3" }}>Memuat...</div>}>
+    <Suspense fallback={<div style={{ padding: 40, color: "#8b8ba3" }}>Loading...</div>}>
       <PosterPage />
     </Suspense>
   );
@@ -89,7 +89,7 @@ function fmtCompact(v: number | null | undefined): string {
 }
 
 function fmtDuration(seconds: number | undefined): string {
-  if (!seconds || seconds <= 0) return "SIAP MENETAS!";
+  if (!seconds || seconds <= 0) return "READY TO HATCH!";
   seconds = Math.max(0, Math.floor(seconds));
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -545,10 +545,10 @@ function PosterPage() {
   const [rateMutasiPerUnit, setRateMutasiPerUnit] = useState("");
   const [rateScramblePerUnit, setRateScramblePerUnit] = useState("");
   const [rateNitroPerUnit, setRateNitroPerUnit] = useState("");
-  const [title, setTitle] = useState("Jual Akun GACOR");
+  const [title, setTitle] = useState("Selling GACOR Account");
   const [badge, setBadge] = useState(accountInitials(accountName));
   const [owner, setOwner] = useState("Mas Naru");
-  const [checklist, setChecklist] = useState("Data Polos, No Topi, No Sum");
+  const [checklist, setChecklist] = useState("Clean Data, No Hat, No Summon");
   const [downloading, setDownloading] = useState(false);
 
   const [iconIdx, setIconIdx] = useState<Record<string, string>>({});
@@ -682,7 +682,7 @@ function PosterPage() {
       link.href = canvas.toDataURL("image/png");
       link.click();
     } catch (e) {
-      alert("Gagal download: " + (e as Error).message);
+      alert("Download failed: " + (e as Error).message);
     }
     setDownloading(false);
   }
@@ -743,7 +743,7 @@ function PosterPage() {
   }
 
   async function unsoldAccount() {
-    if (!confirm("Kembalikan akun ini ke katalog?")) return;
+    if (!confirm("Return this account to catalog?")) return;
     setUnsoldLoading(true);
     try {
       const res = await fetch("/api/unsold", {
@@ -763,8 +763,8 @@ function PosterPage() {
   if (!accountName && !isTemplate) {
     return (
       <div style={{ padding: 40, color: "#8b8ba3", fontFamily: "sans-serif" }}>
-        <p>Parameter <code>?account=NamaAkun</code> diperlukan.</p>
-        <a href="/" style={{ color: "#a78bfa" }}>Kembali ke Dashboard</a>
+        <p>Parameter <code>?account=AccountName</code> required.</p>
+        <a href="/" style={{ color: "#a78bfa" }}>Back to Dashboard</a>
       </div>
     );
   }
@@ -772,7 +772,7 @@ function PosterPage() {
   if (loading) {
     return (
       <div style={{ padding: 40, color: "#8b8ba3", fontFamily: "sans-serif" }}>
-        Memuat data akun...
+        Loading account data...
       </div>
     );
   }
@@ -780,8 +780,8 @@ function PosterPage() {
   if (!summary) {
     return (
       <div style={{ padding: 40, color: "#8b8ba3", fontFamily: "sans-serif" }}>
-        <p>Akun <strong>{accountName}</strong> tidak ditemukan atau sedang offline.</p>
-        <a href="/" style={{ color: "#a78bfa" }}>Kembali ke Dashboard</a>
+        <p>Account <strong>{accountName}</strong> not found or offline.</p>
+        <a href="/" style={{ color: "#a78bfa" }}>Back to Dashboard</a>
       </div>
     );
   }
@@ -898,11 +898,11 @@ function PosterPage() {
   const statItems: { label: string; value: string; accent?: string }[] = [
     { label: "SPEED", value: fmtCompact(summary.speed), accent: "speed" },
     { label: "CASH", value: fmtMoney(summary.money) },
-    { label: `POTENSI ${activeLimit} PET AKTIF`, value: fmtRate(potentialActiveRate), accent: "potensi" },
-    { label: "INCOME AKTIF", value: fmtRate(equippedIncome) },
-    { label: "TOTAL PET DI TAS", value: `${allSorted.length} pets` },
-    { label: "TOTAL EGG", value: `${totalEggs} eggs` },
-    { label: "PET DIVINE", value: `${divinePetCount}`, accent: "divine" },
+    { label: `POTENTIAL ${activeLimit} ACTIVE PETS`, value: fmtRate(potentialActiveRate), accent: "potensi" },
+    { label: "ACTIVE INCOME", value: fmtRate(equippedIncome) },
+    { label: "TOTAL PETS IN BAG", value: `${allSorted.length} pets` },
+    { label: "TOTAL EGGS", value: `${totalEggs} eggs` },
+    { label: "DIVINE PETS", value: `${divinePetCount}`, accent: "divine" },
     ...(summary.kandangLevel != null
       ? [{ label: "PEN LEVEL", value: `Lv. ${summary.kandangLevel}` }]
       : []),
@@ -910,19 +910,19 @@ function PosterPage() {
       ? [{ label: "TREADMILL LEVEL", value: `Lv. ${summary.treadmillLevel}` }]
       : []),
     ...(Number(summary.mutationToken) > 0
-      ? [{ label: "TOKEN MUTASI", value: "× " + Math.round(Number(summary.mutationToken)), accent: "mut" as const }]
+      ? [{ label: "FRACTURED TOKEN", value: "× " + Math.round(Number(summary.mutationToken)), accent: "mut" as const }]
       : []),
     ...(Number(summary.scrambleToken) > 0
-      ? [{ label: "TOKEN SCRAMBLE", value: "× " + Math.round(Number(summary.scrambleToken)), accent: "scramble" as const }]
+      ? [{ label: "SCRAMBLE TOKEN", value: "× " + Math.round(Number(summary.scrambleToken)), accent: "scramble" as const }]
       : []),
     ...(Number(summary.nitroToken) > 0
-      ? [{ label: "TOKEN NITRO", value: "× " + Math.round(Number(summary.nitroToken)), accent: "nitro" as const }]
+      ? [{ label: "NITRO TOKEN", value: "× " + Math.round(Number(summary.nitroToken)), accent: "nitro" as const }]
       : []),
     ...(Number(summary.spectralToken) > 0
-      ? [{ label: "TOKEN SPECTRAL", value: "× " + Math.round(Number(summary.spectralToken)), accent: "spectral" as const }]
+      ? [{ label: "SPECTRAL TOKEN", value: "× " + Math.round(Number(summary.spectralToken)), accent: "spectral" as const }]
       : []),
     ...(Number(summary.alienToken) > 0
-      ? [{ label: "TOKEN ALIEN", value: "× " + Math.round(Number(summary.alienToken)), accent: "alien" as const }]
+      ? [{ label: "ALIEN TOKEN", value: "× " + Math.round(Number(summary.alienToken)), accent: "alien" as const }]
       : []),
     { label: "TRAIL", value: summary.trail || "-", accent: "trail" },
   ];
@@ -1298,7 +1298,7 @@ function PosterPage() {
           {isSold && (
             <div className="poster-sold-overlay">
               <div className="poster-sold-stamp">
-                <span>TERJUAL</span>
+                <span>SOLD</span>
               </div>
             </div>
           )}
@@ -1334,7 +1334,7 @@ function PosterPage() {
                   const rarity = petRarity(p.category, iconIdx);
                   return (
                     <div key={i} className="pick-card">
-                      {isGrowing ? <span className="pick-growing-badge">GROWING</span> : isEgg && <span className="pick-egg-badge">TELUR</span>}
+                      {isGrowing ? <span className="pick-growing-badge">GROWING</span> : isEgg && <span className="pick-egg-badge">EGG</span>}
                       {rarity && (
                         <span
                           className={`pick-rarity-badge ${isEgg ? "" : "pick-rarity-solo"}`}
@@ -1349,7 +1349,7 @@ function PosterPage() {
                       {p.weight ? <div className="pweight">{fmtWeight(p.weight)}</div> : null}
                       {p.mutations && p.mutations.length > 0 && (
                         <div className="pmut" style={mutTextStyle(p.mutations[0])}>
-                          MUTASI: {p.mutations.map((m) => mutDisplayName(m)).join(" + ")}
+                          {p.mutations.map((m) => mutDisplayName(m)).join(" + ")}
                         </div>
                       )}
                     </div>
@@ -1364,11 +1364,11 @@ function PosterPage() {
               const featuredRarity = petRarity(featured.category, iconIdx);
               return (
               <div className="featured-box">
-                <div className="featured-ribbon">PALING GACOR!</div>
+                <div className="featured-ribbon">TOP EARNER!</div>
                 {isFeaturedGrowing ? (
                   <span className="growing-badge featured-egg-badge">GROWING</span>
                 ) : isFeaturedEgg && (
-                  <span className="egg-badge featured-egg-badge">TELUR</span>
+                  <span className="egg-badge featured-egg-badge">EGG</span>
                 )}
                 {featuredRarity && (
                   <span
@@ -1420,7 +1420,7 @@ function PosterPage() {
                       {p.weight ? <div className="piweight">{fmtWeight(p.weight)}</div> : null}
                       {(growingEggKeys.has(petKey(p)) || eggKeys.has(petKey(p)) || rowRarity || (p.mutations && p.mutations.length > 0)) && (
                         <div className="pet-badges">
-                          {growingEggKeys.has(petKey(p)) ? <span className="growing-badge">GROWING</span> : eggKeys.has(petKey(p)) && <span className="egg-badge">TELUR</span>}
+                          {growingEggKeys.has(petKey(p)) ? <span className="growing-badge">GROWING</span> : eggKeys.has(petKey(p)) && <span className="egg-badge">EGG</span>}
                           {rowRarity && (
                             <span className="rarity-badge" style={rarityBadgeStyle(rowRarity)}>{rowRarity}</span>
                           )}
@@ -1438,18 +1438,18 @@ function PosterPage() {
               </div>
             ) : (
               <div className="pet-list" style={{ textAlign: "center", padding: 40, color: "#94a3b8" }}>
-                Tidak ada pet aktif / menonjol
+                No active / notable pets
               </div>
             )}
 
             <div className="price-box">
-              <div className="price-label">{isSold ? "TERJUAL" : "PRICE ACC"}</div>
+              <div className="price-label">{isSold ? "SOLD" : "PRICE ACC"}</div>
               {isSold && soldPrice > 0 ? (
                 <div className="price-value">{formatRupiah(soldPrice)}</div>
               ) : (price || computeAutoPrice(detail, summary, ratePerB, rateIncomeAktifPerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit, rateNitroPerUnit)) ? (
                 <div className="price-value">{price || computeAutoPrice(detail, summary, ratePerB, rateIncomeAktifPerB, rateSpeedPerB, rateMutasiPerUnit, rateScramblePerUnit, rateNitroPerUnit)}</div>
               ) : (
-                <div className="price-empty">Isi harga atau rate di controls atas</div>
+                <div className="price-empty">Set price or rate in controls above</div>
               )}
             </div>
 
@@ -1458,8 +1458,8 @@ function PosterPage() {
               <div className="qr-box">
                 <img src={qrDataUrl} width={110} height={110} alt="QR" />
                 <div className="qr-info">
-                  <div className="qr-owner">{owner || "Penjual"}</div>
-                  <div className="qr-label">Scan untuk hubungi</div>
+                  <div className="qr-owner">{owner || "Seller"}</div>
+                  <div className="qr-label">Scan to contact</div>
                   <div className="qr-url">facebook.com/naruaho</div>
                 </div>
               </div>
@@ -1478,7 +1478,7 @@ function PosterPage() {
                       <div style={{ minWidth: 0, overflow: "hidden" }}>
                         <div className="ename">{p.name || displayName(p.category)}</div>
                         {p.rate ? <div className="erate">{fmtRate(p.rate)}</div> : null}
-                        {isEgg && <span className="egg-badge">TELUR</span>}
+                        {isEgg && <span className="egg-badge">EGG</span>}
                         {p.mutations && p.mutations.length > 0 && (
                           <div style={{ display: "flex", gap: 3, marginTop: 2, flexWrap: "wrap" }}>
                             {p.mutations.map((m, mi) => (
@@ -1498,7 +1498,7 @@ function PosterPage() {
 
           {mutPetsFlat.length > 0 && (
             <div className="poster-divine-full">
-              <div className="section-header">PET MUTASI LAIN</div>
+              <div className="section-header">OTHER MUTATED PETS</div>
               <div className="mut-grid">
                 {mutPetsFlat.map((p, i) => (
                   <div key={i} className="mut-cell">
@@ -1527,7 +1527,7 @@ function PosterPage() {
             <div className="poster-bottom">
               {growingEggsRemaining.length > 0 && (
                 <div className="egg-section">
-                  <div className="section-header">TELUR YANG SEDANG TUMBUH</div>
+                  <div className="section-header">GROWING EGGS</div>
                   <div className="egg-grid">
                     {growingEggsRemaining.slice(0, 9).map((e, i) => (
                       <div key={i} className="egg-cell">
@@ -1553,7 +1553,7 @@ function PosterPage() {
               )}
               {backpackEggsRemaining.length > 0 && (
                 <div className="egg-section">
-                  <div className="section-header">TELUR DI TAS (BELUM DITARUH)</div>
+                  <div className="section-header">EGGS IN BAG (NOT PLACED)</div>
                   <div className="egg-grid">
                     {backpackEggsRemaining.slice(0, 9).map((e, i) => (
                       <div key={i} className="egg-cell">
