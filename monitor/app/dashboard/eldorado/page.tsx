@@ -669,7 +669,7 @@ export default function EldoradoPage() {
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {(marketGame === "476"
                   ? ["Jackpot", "Gamepass", "Sp", "Sx", "Oc", "Qi", "Qd", "No", "Trait", "Gems", "Potion"]
-                  : ["Sunlion", "Archangel", "1t", "Divine", "Speed", "Skywhale"]
+                  : ["Sunlion", "Archangel", "1t", "Divine", "Speed", "Skywhale", "Spirit World Guardian", "Voidseer Pumpkin"]
                 ).map((tag) => (
                   <button
                     key={tag}
