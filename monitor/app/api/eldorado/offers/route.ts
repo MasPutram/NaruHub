@@ -36,35 +36,79 @@ export async function POST(req: NextRequest) {
     const results: any[] = [];
 
     for (const item of items) {
-      const details: any = {
-        offerTitle: item.title,
-        description: item.description || "",
-        guaranteedDeliveryTime: item.deliveryTime || "Minute20",
-        pricing: {
-          quantity: item.quantity ?? 1,
-          pricePerUnit: {
-            amount: item.price,
-            currency: item.currency || "USD",
+      const isAccount = item.offerType === "Account";
+
+      let payload: any;
+      let endpoint: string;
+
+      if (isAccount) {
+        const details: any = {
+          offerTitle: item.title,
+          description: item.description || "",
+          originalEmail: item.originalEmail === "Yes",
+          deliveryMethod: item.deliveryMethod || "Automatic",
+          pricing: {
+            pricePerUnit: {
+              amount: item.price,
+              currency: item.currency || "USD",
+            },
           },
-          volumeDiscounts: [],
-        },
-        offerImages: [],
-      };
-      if (item.mainOfferImage) {
-        details.mainOfferImage = item.mainOfferImage;
+          offerImages: [],
+          accounts: [{
+            login: item.accLogin || "",
+            password: item.accPassword || "",
+            emailDetails: (item.emailLogin || item.emailProvider) ? {
+              providerUrl: item.emailProvider || "",
+              login: item.emailLogin || "",
+              password: item.emailPassword || "",
+            } : undefined,
+            additionalInfo: item.additionalInfo || "",
+          }],
+        };
+        if (item.mainOfferImage) {
+          details.mainOfferImage = item.mainOfferImage;
+        }
+        payload = {
+          details,
+          augmentedGame: {
+            gameId: item.gameId || ANIME_DICE_GAME_ID,
+            category: "Account",
+            tradeEnvironmentId: item.tradeEnvironmentId || null,
+            offerAttributes: item.offerAttributes || [],
+          },
+        };
+        endpoint = "/api/v1/item-management/me/offers/account";
+      } else {
+        const details: any = {
+          offerTitle: item.title,
+          description: item.description || "",
+          guaranteedDeliveryTime: item.deliveryTime || "Minute20",
+          pricing: {
+            quantity: item.quantity ?? 1,
+            pricePerUnit: {
+              amount: item.price,
+              currency: item.currency || "USD",
+            },
+            volumeDiscounts: [],
+          },
+          offerImages: [],
+        };
+        if (item.mainOfferImage) {
+          details.mainOfferImage = item.mainOfferImage;
+        }
+        payload = {
+          details,
+          augmentedGame: {
+            gameId: item.gameId || ANIME_DICE_GAME_ID,
+            category: "CustomItem",
+            tradeEnvironmentId: item.tradeEnvironmentId || null,
+            offerAttributes: item.offerAttributes || [],
+          },
+        };
+        endpoint = "/api/v1/item-management/me/offers/item";
       }
 
-      const payload = {
-        details,
-        augmentedGame: {
-          gameId: item.gameId || ANIME_DICE_GAME_ID,
-          category: item.offerType || "CustomItem",
-          tradeEnvironmentId: item.tradeEnvironmentId || null,
-          offerAttributes: item.offerAttributes || [],
-        },
-      };
-
-      const res = await eldoradoFetch("/api/v1/item-management/me/offers/item", {
+      const res = await eldoradoFetch(endpoint, {
         method: "POST",
         body: JSON.stringify(payload),
       });

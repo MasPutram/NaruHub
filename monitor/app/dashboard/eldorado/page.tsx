@@ -42,6 +42,16 @@ interface NewItem {
   costIdr?: number | string;
   image?: File | null;
   imagePreview?: string;
+  originalEmail?: "Yes" | "No";
+  deliveryMethod?: "Automatic" | "Manual";
+  accLogin?: string;
+  accPassword?: string;
+  emailProvider?: string;
+  emailLogin?: string;
+  emailPassword?: string;
+  twoFaLogin?: string;
+  twoFaPassword?: string;
+  additionalInfo?: string;
 }
 
 const ELDORADO_CDN = "https://assetsdelivery.eldorado.gg/v7/_offers-v2_/";
@@ -69,11 +79,21 @@ const emptyItem = (type: "CustomItem" | "Account" = "CustomItem"): NewItem => ({
   title: "",
   description: "",
   price: 0,
-  quantity: type === "Account" ? 1 : 1,
+  quantity: 1,
   minQuantity: 1,
   deliveryTime: "Minute20",
   offerType: type,
   gameId: "476",
+  originalEmail: "No",
+  deliveryMethod: "Automatic",
+  accLogin: "",
+  accPassword: "",
+  emailProvider: "",
+  emailLogin: "",
+  emailPassword: "",
+  twoFaLogin: "",
+  twoFaPassword: "",
+  additionalInfo: "",
 });
 
 function fmtUsd(amount?: number) {
@@ -1204,6 +1224,62 @@ export default function EldoradoPage() {
                             onChange={(e) => updateItem(idx, "description", e.target.value)}
                           />
                         </div>
+                        {item.offerType === "Account" && (
+                          <>
+                            <div className="edo-field-row">
+                              <div className="edo-field">
+                                <label className="edo-label">Original Email</label>
+                                <select className="edo-select" value={item.originalEmail || "No"} onChange={(e) => updateItem(idx, "originalEmail", e.target.value)}>
+                                  <option value="No">No</option>
+                                  <option value="Yes">Yes</option>
+                                </select>
+                              </div>
+                              <div className="edo-field">
+                                <label className="edo-label">Delivery Method</label>
+                                <select className="edo-select" value={item.deliveryMethod || "Automatic"} onChange={(e) => updateItem(idx, "deliveryMethod", e.target.value)}>
+                                  <option value="Automatic">Automatic</option>
+                                  <option value="Manual">Manual</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div style={{ borderTop: "1px solid rgba(255,255,255,.06)", marginTop: 8, paddingTop: 8 }}>
+                              <span style={{ fontSize: 12, color: "var(--dim)", fontWeight: 600 }}>Account Details</span>
+                              <div className="edo-field-row" style={{ marginTop: 6 }}>
+                                <div className="edo-field">
+                                  <label className="edo-label">Login</label>
+                                  <input className="edo-input" placeholder="Username/Email..." value={item.accLogin || ""} onChange={(e) => updateItem(idx, "accLogin", e.target.value)} />
+                                </div>
+                                <div className="edo-field">
+                                  <label className="edo-label">Password</label>
+                                  <input className="edo-input" type="password" placeholder="Password..." value={item.accPassword || ""} onChange={(e) => updateItem(idx, "accPassword", e.target.value)} />
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{ borderTop: "1px solid rgba(255,255,255,.06)", marginTop: 8, paddingTop: 8 }}>
+                              <span style={{ fontSize: 12, color: "var(--dim)", fontWeight: 600 }}>Email Details <span style={{ opacity: .5 }}>(Optional)</span></span>
+                              <div className="edo-field-row" style={{ marginTop: 6 }}>
+                                <div className="edo-field">
+                                  <label className="edo-label">Provider URL</label>
+                                  <input className="edo-input" placeholder="mail.google.com..." value={item.emailProvider || ""} onChange={(e) => updateItem(idx, "emailProvider", e.target.value)} />
+                                </div>
+                                <div className="edo-field">
+                                  <label className="edo-label">Login</label>
+                                  <input className="edo-input" placeholder="Email login..." value={item.emailLogin || ""} onChange={(e) => updateItem(idx, "emailLogin", e.target.value)} />
+                                </div>
+                                <div className="edo-field">
+                                  <label className="edo-label">Password</label>
+                                  <input className="edo-input" type="password" placeholder="Password..." value={item.emailPassword || ""} onChange={(e) => updateItem(idx, "emailPassword", e.target.value)} />
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{ borderTop: "1px solid rgba(255,255,255,.06)", marginTop: 8, paddingTop: 8 }}>
+                              <span style={{ fontSize: 12, color: "var(--dim)", fontWeight: 600 }}>Additional Info <span style={{ opacity: .5 }}>(Optional)</span></span>
+                              <div className="edo-field" style={{ marginTop: 6 }}>
+                                <textarea className="edo-input edo-textarea" rows={2} placeholder="Info tambahan..." value={item.additionalInfo || ""} onChange={(e) => updateItem(idx, "additionalInfo", e.target.value)} />
+                              </div>
+                            </div>
+                          </>
+                        )}
                         <div className="edo-field-row">
                           <div className="edo-field">
                             <label className="edo-label">Harga Beli (IDR)</label>
@@ -1262,18 +1338,20 @@ export default function EldoradoPage() {
                               </div>
                             </>
                           )}
-                          <div className="edo-field">
-                            <label className="edo-label">Delivery</label>
-                            <select
-                              className="edo-select"
-                              value={item.deliveryTime}
-                              onChange={(e) => updateItem(idx, "deliveryTime", e.target.value)}
-                            >
-                              {DELIVERY_OPTIONS.map((o) => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                              ))}
-                            </select>
-                          </div>
+                          {item.offerType !== "Account" && (
+                            <div className="edo-field">
+                              <label className="edo-label">Delivery</label>
+                              <select
+                                className="edo-select"
+                                value={item.deliveryTime}
+                                onChange={(e) => updateItem(idx, "deliveryTime", e.target.value)}
+                              >
+                                {DELIVERY_OPTIONS.map((o) => (
+                                  <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
                         </div>
                         <div className="edo-field-row edo-estimates">
                           <div className="edo-est">
