@@ -1564,7 +1564,6 @@ function PosterPage() {
           {owner.trim() && (
             <div className="watermark-layer">
               <div className="watermark-text">{owner}</div>
-              <div className="watermark-sub">FACEBOOK</div>
             </div>
           )}
 
