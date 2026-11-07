@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
     const categoryParam = category ? `&category=${encodeURIComponent(category)}` : "";
     const res = await eldoradoFetch(
-      `/api/v1/item-management/me/offers/me/search?pageIndex=${page}&pageSize=${size}${categoryParam}`
+      `/api/flexibleOffersUser/me/search?pageIndex=${page}&pageSize=${size}${categoryParam}`
     );
 
     if (!res.ok) {
