@@ -383,6 +383,8 @@ export default function EldoradoPage() {
     try { return parseFloat(localStorage.getItem("edo-margin") || "50") || 50; } catch { return 50; }
   });
 
+  const [catalogAccounts, setCatalogAccounts] = useState<any[]>([]);
+
   const [folders, setFolders] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("edo-folders") || "[]"); } catch { return []; }
   });
@@ -499,6 +501,12 @@ export default function EldoradoPage() {
   useEffect(() => { fetchOffers(); fetchOrders(); fetchMarket(); }, [fetchOffers, fetchOrders, fetchMarket]);
 
   useEffect(() => {
+    fetch("/api/catalog-accounts").then((r) => r.json()).then((d) => {
+      if (d.accounts) setCatalogAccounts(d.accounts);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     const id = setInterval(() => { fetchOffers(); fetchOrders(); }, 30_000);
     return () => clearInterval(id);
   }, [fetchOffers, fetchOrders]);
@@ -608,33 +616,23 @@ export default function EldoradoPage() {
   async function fetchCodeBg(idx: number, code: string) {
     if (!code.trim()) return;
     try {
-      const [accRes, detRes] = await Promise.all([
-        fetch("/api/catalog-accounts"),
-        fetch("/api/account-detail?account=" + encodeURIComponent(code)),
-      ]);
-      const accData = await accRes.json();
-      let summary = (accData.accounts || []).find((a: any) => a.sourceAccount === code);
+      let summary = catalogAccounts.find((a: any) => a.sourceAccount === code);
       if (!summary) {
-        const allRes = await fetch("/api/accounts");
-        const allData = await allRes.json();
-        summary = (allData.accounts || []).find((a: any) => a.sourceAccount === code);
-      }
-      if (!summary) {
-        const soldRes = await fetch("/api/sold-accounts");
-        const soldData = await soldRes.json();
-        summary = (soldData.accounts || []).find((a: any) => a.sourceAccount === code);
+        const catRes = await fetch("/api/catalog-accounts");
+        const catData = await catRes.json();
+        summary = (catData.accounts || []).find((a: any) => a.sourceAccount === code);
       }
       if (!summary) { alert(`Akun "${code}" tidak ditemukan di katalog`); return; }
 
+      const detRes = await fetch("/api/account-detail?account=" + encodeURIComponent(code));
       const detData = await detRes.json();
       const detail = detData.ok ? detData : summary.detail || null;
       const desc = buildAccountDescription(summary, detail);
-      const title = `${code} — Steal An Egg Account`;
 
       setNewItems((prev) => prev.map((item, i) => i === idx ? {
         ...item,
         codeBg: code,
-        title: item.title || title,
+        title: `${code} — Steal An Egg Account`,
         description: desc,
       } : item));
     } catch (e: any) {
@@ -1365,21 +1363,23 @@ export default function EldoradoPage() {
                         {item.offerType === "Account" && (
                           <div className="edo-field-row" style={{ marginBottom: 8 }}>
                             <div className="edo-field" style={{ flex: 1 }}>
-                              <label className="edo-label">Code BG</label>
-                              <div style={{ display: "flex", gap: 4 }}>
-                                <input
-                                  className="edo-input"
-                                  placeholder="BG144..."
-                                  value={item.codeBg || ""}
-                                  onChange={(e) => updateItem(idx, "codeBg", e.target.value)}
-                                  onKeyDown={(e) => { if (e.key === "Enter" && item.codeBg) fetchCodeBg(idx, item.codeBg); }}
-                                />
-                                <button
-                                  className="edo-btn sm"
-                                  onClick={() => item.codeBg && fetchCodeBg(idx, item.codeBg)}
-                                  title="Auto-fill dari katalog"
-                                >Fill</button>
-                              </div>
+                              <label className="edo-label">Code Akun</label>
+                              <select
+                                className="edo-select"
+                                value={item.codeBg || ""}
+                                onChange={(e) => {
+                                  const code = e.target.value;
+                                  updateItem(idx, "codeBg", code);
+                                  if (code) fetchCodeBg(idx, code);
+                                }}
+                              >
+                                <option value="">— Pilih akun dari katalog —</option>
+                                {catalogAccounts.map((acc: any) => (
+                                  <option key={acc.sourceAccount} value={acc.sourceAccount}>
+                                    {acc.sourceAccount} — Speed {fmtGameMoney(acc.speed)} | Income {fmtGameRate(acc.incomeAktif)}
+                                  </option>
+                                ))}
+                              </select>
                             </div>
                           </div>
                         )}
