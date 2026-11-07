@@ -37,6 +37,7 @@ interface NewItem {
   quantity: number;
   minQuantity: number;
   deliveryTime: string;
+  costIdr?: number | string;
   image?: File | null;
   imagePreview?: string;
 }
@@ -80,6 +81,11 @@ function fmtUsd(amount?: number) {
 function truncatePrice(price: number): number {
   if (price >= 0.01) return Math.floor(price * 100) / 100;
   return Math.floor(price * 100000) / 100000;
+}
+
+function costIdrToUsd(costIdr: number, rate: number, marginPct: number): number {
+  if (!rate || !costIdr) return 0;
+  return truncatePrice((costIdr / rate) * (1 + marginPct / 100) / (1 - 0.15));
 }
 
 function fmtIdr(amount?: number) {
@@ -264,6 +270,9 @@ export default function EldoradoPage() {
   const [convUsd, setConvUsd] = useState("");
   const [convIdr, setConvIdr] = useState("");
   const [editSaving, setEditSaving] = useState(false);
+  const [margin, setMargin] = useState(() => {
+    try { return parseFloat(localStorage.getItem("edo-margin") || "50") || 50; } catch { return 50; }
+  });
 
   const [folders, setFolders] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("edo-folders") || "[]"); } catch { return []; }
@@ -1059,6 +1068,29 @@ export default function EldoradoPage() {
             <>
               <div className="edo-toolbar">
                 <button className="edo-btn" onClick={addRow}>+ Tambah Item</button>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <label style={{ fontSize: 13, color: "var(--dim)" }}>Margin</label>
+                  <input
+                    className="edo-input"
+                    type="number"
+                    min="0"
+                    style={{ width: 70, textAlign: "center" }}
+                    value={margin}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value) || 0;
+                      setMargin(v);
+                      try { localStorage.setItem("edo-margin", String(v)); } catch {}
+                      if (usdIdr) {
+                        setNewItems((prev) => prev.map((it) => {
+                          const c = parseFloat(String(it.costIdr)) || 0;
+                          if (!c) return it;
+                          return { ...it, price: costIdrToUsd(c, usdIdr, v) };
+                        }));
+                      }
+                    }}
+                  />
+                  <span style={{ fontSize: 13, color: "var(--dim)" }}>%</span>
+                </div>
                 <button
                   className="edo-btn primary"
                   onClick={handleBulkUpload}
@@ -1141,6 +1173,27 @@ export default function EldoradoPage() {
                         </div>
                         <div className="edo-field-row">
                           <div className="edo-field">
+                            <label className="edo-label">Harga Beli (IDR)</label>
+                            <input
+                              className="edo-input"
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="Rp modal..."
+                              value={item.costIdr || ""}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (v === "" || /^\d*\.?\d*$/.test(v)) {
+                                  const copy = [...newItems];
+                                  copy[idx] = { ...copy[idx], costIdr: v as any };
+                                  if (v && usdIdr) {
+                                    copy[idx].price = costIdrToUsd(parseFloat(v) || 0, usdIdr, margin);
+                                  }
+                                  setNewItems(copy);
+                                }
+                              }}
+                            />
+                          </div>
+                          <div className="edo-field">
                             <label className="edo-label">Price (USD)</label>
                             <input
                               className="edo-input"
@@ -1198,6 +1251,20 @@ export default function EldoradoPage() {
                             <span className="edo-est-label">Est. IDR</span>
                             <span className="edo-est-val green">{Number(item.price) && usdIdr ? fmtIdr(Number(item.price) * usdIdr * (1 - SALES_FEE)) : "-"}</span>
                           </div>
+                          {Number(item.costIdr) > 0 && Number(item.price) > 0 && usdIdr > 0 && (() => {
+                            const costIdr = parseFloat(String(item.costIdr)) || 0;
+                            const estIdr = Number(item.price) * usdIdr * (1 - SALES_FEE);
+                            const profit = estIdr - costIdr;
+                            const profitPct = costIdr > 0 ? (profit / costIdr) * 100 : 0;
+                            return (
+                              <div className="edo-est">
+                                <span className="edo-est-label">Profit</span>
+                                <span className="edo-est-val" style={{ color: profit >= 0 ? "var(--green)" : "#ef4444" }}>
+                                  {fmtIdr(profit)} ({profitPct >= 0 ? "+" : ""}{profitPct.toFixed(1)}%)
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>
