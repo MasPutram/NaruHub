@@ -14,6 +14,7 @@ interface Offer {
   guaranteedDeliveryTime?: string;
   createdAt?: string;
   mainOfferImage?: { smallImage?: string; largeImage?: string };
+  category?: string;
 }
 
 interface SoldOrder {
@@ -363,6 +364,7 @@ const styles = `
 
 export default function EldoradoPage() {
   const [offers, setOffers] = useState<Offer[]>([]);
+  const [listCategory, setListCategory] = useState<"" | "Account" | "CustomItem">("");
   const [orders, setOrders] = useState<SoldOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [ordersLoading, setOrdersLoading] = useState(true);
@@ -436,11 +438,13 @@ export default function EldoradoPage() {
   const [marketTotal, setMarketTotal] = useState(0);
   const [marketTotalPages, setMarketTotalPages] = useState(0);
 
-  const fetchOffers = useCallback(async () => {
+  const fetchOffers = useCallback(async (cat?: string) => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/eldorado/offers");
+      const c = cat ?? listCategory;
+      const qs = c ? `?category=${encodeURIComponent(c)}` : "";
+      const res = await fetch(`/api/eldorado/offers${qs}`);
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error || `HTTP ${res.status}`);
@@ -453,7 +457,7 @@ export default function EldoradoPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [listCategory]);
 
   const fetchOrders = useCallback(async () => {
     setOrdersLoading(true);
@@ -939,8 +943,17 @@ export default function EldoradoPage() {
           {tab === "list" && (
             <>
               <div className="edo-toolbar">
-                <button className="edo-btn" onClick={fetchOffers} disabled={loading}>
-                  {loading ? "Loading..." : "↻ Refresh List"}
+                <div style={{ display: "flex", gap: 4 }}>
+                  {(["", "Account", "CustomItem"] as const).map((c) => (
+                    <button key={c} className={`edo-btn sm${listCategory === c ? " active" : ""}`}
+                      onClick={() => { setListCategory(c); fetchOffers(c); }}
+                    >
+                      {c === "" ? "All" : c === "Account" ? "Account" : "Item"}
+                    </button>
+                  ))}
+                </div>
+                <button className="edo-btn" onClick={() => fetchOffers()} disabled={loading}>
+                  {loading ? "Loading..." : "↻ Refresh"}
                 </button>
                 <div className="edo-toolbar-right">
                   <span className="edo-count">{activeOffers.length} active / {offers.length} total</span>
@@ -1001,6 +1014,11 @@ export default function EldoradoPage() {
                           <span className={`edo-state ${(o.offerState || "").toLowerCase() === "active" ? "active" : "paused"}`}>
                             {o.offerState || "?"}
                           </span>
+                          {o.category && (
+                            <span className="edo-state" style={{ background: o.category === "Account" ? "#7c3aed" : "#2563eb", color: "#fff", fontSize: 10 }}>
+                              {o.category === "Account" ? "ACC" : "ITEM"}
+                            </span>
+                          )}
                           {folders.length > 0 && (
                             <select
                               className="edo-folder-assign"

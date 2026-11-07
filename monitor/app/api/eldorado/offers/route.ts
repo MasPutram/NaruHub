@@ -10,9 +10,11 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const page = searchParams.get("page") || "1";
     const size = searchParams.get("size") || "50";
+    const category = searchParams.get("category") || "";
 
+    const categoryParam = category ? `&category=${encodeURIComponent(category)}` : "";
     const res = await eldoradoFetch(
-      `/api/v1/item-management/me/offers/me/search?pageIndex=${page}&pageSize=${size}`
+      `/api/v1/item-management/me/offers/me/search?pageIndex=${page}&pageSize=${size}${categoryParam}`
     );
 
     if (!res.ok) {
