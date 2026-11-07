@@ -37,6 +37,8 @@ interface NewItem {
   quantity: number;
   minQuantity: number;
   deliveryTime: string;
+  offerType: "CustomItem" | "Account";
+  gameId: string;
   costIdr?: number | string;
   image?: File | null;
   imagePreview?: string;
@@ -63,13 +65,15 @@ const DELIVERY_OPTIONS = [
   { value: "Day7", label: "7 hari" },
 ];
 
-const emptyItem = (): NewItem => ({
+const emptyItem = (type: "CustomItem" | "Account" = "CustomItem"): NewItem => ({
   title: "",
   description: "",
   price: 0,
-  quantity: 1,
+  quantity: type === "Account" ? 1 : 1,
   minQuantity: 1,
   deliveryTime: "Minute20",
+  offerType: type,
+  gameId: "476",
 });
 
 function fmtUsd(amount?: number) {
@@ -500,7 +504,7 @@ export default function EldoradoPage() {
     setNewItems((prev) => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
   }
 
-  function addRow() { setNewItems((prev) => [...prev, emptyItem()]); }
+  function addRow() { setNewItems((prev) => { const last = prev[prev.length - 1]; const n = emptyItem(last?.offerType || "CustomItem"); n.gameId = last?.gameId || "476"; return [...prev, n]; }); }
   function removeRow(idx: number) { setNewItems((prev) => prev.filter((_, i) => i !== idx)); }
   function duplicateRow(idx: number) {
     setNewItems((prev) => {
@@ -526,7 +530,7 @@ export default function EldoradoPage() {
               mainOfferImage = await imgRes.json();
             }
           }
-          return { ...item, price: truncatePrice(Number(item.price)), mainOfferImage };
+          return { ...item, price: truncatePrice(Number(item.price)), mainOfferImage, quantity: item.offerType === "Account" ? 1 : item.quantity };
         })
       );
       const res = await fetch("/api/eldorado/offers", {
@@ -1152,11 +1156,40 @@ export default function EldoradoPage() {
                         </label>
                       </div>
                       <div className="edo-card-right">
+                        <div className="edo-field-row" style={{ marginBottom: 8 }}>
+                          <div className="edo-field">
+                            <label className="edo-label">Tipe</label>
+                            <div style={{ display: "flex", gap: 4 }}>
+                              {(["Account", "CustomItem"] as const).map((t) => (
+                                <button
+                                  key={t}
+                                  className={`edo-chip${item.offerType === t ? " active" : ""}`}
+                                  onClick={() => {
+                                    const copy = [...newItems];
+                                    copy[idx] = { ...copy[idx], offerType: t, quantity: t === "Account" ? 1 : copy[idx].quantity, minQuantity: t === "Account" ? 1 : copy[idx].minQuantity };
+                                    setNewItems(copy);
+                                  }}
+                                >{t === "Account" ? "Account" : "Item"}</button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="edo-field">
+                            <label className="edo-label">Game</label>
+                            <select
+                              className="edo-select"
+                              value={item.gameId}
+                              onChange={(e) => updateItem(idx, "gameId", e.target.value)}
+                            >
+                              <option value="476">Anime Dice</option>
+                              <option value="452">Steal An Egg</option>
+                            </select>
+                          </div>
+                        </div>
                         <div className="edo-field">
                           <label className="edo-label">Title</label>
                           <input
                             className="edo-input"
-                            placeholder="Nama item..."
+                            placeholder={item.offerType === "Account" ? "Nama akun..." : "Nama item..."}
                             value={item.title}
                             onChange={(e) => updateItem(idx, "title", e.target.value)}
                           />
@@ -1205,26 +1238,30 @@ export default function EldoradoPage() {
                               onBlur={(e) => updateItem(idx, "price", parseFloat(e.target.value) || 0)}
                             />
                           </div>
-                          <div className="edo-field">
-                            <label className="edo-label">Qty</label>
-                            <input
-                              className="edo-input"
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) => updateItem(idx, "quantity", parseInt(e.target.value) || 1)}
-                            />
-                          </div>
-                          <div className="edo-field">
-                            <label className="edo-label">Min Qty</label>
-                            <input
-                              className="edo-input"
-                              type="number"
-                              min="1"
-                              value={item.minQuantity}
-                              onChange={(e) => updateItem(idx, "minQuantity", parseInt(e.target.value) || 1)}
-                            />
-                          </div>
+                          {item.offerType !== "Account" && (
+                            <>
+                              <div className="edo-field">
+                                <label className="edo-label">Qty</label>
+                                <input
+                                  className="edo-input"
+                                  type="number"
+                                  min="1"
+                                  value={item.quantity}
+                                  onChange={(e) => updateItem(idx, "quantity", parseInt(e.target.value) || 1)}
+                                />
+                              </div>
+                              <div className="edo-field">
+                                <label className="edo-label">Min Qty</label>
+                                <input
+                                  className="edo-input"
+                                  type="number"
+                                  min="1"
+                                  value={item.minQuantity}
+                                  onChange={(e) => updateItem(idx, "minQuantity", parseInt(e.target.value) || 1)}
+                                />
+                              </div>
+                            </>
+                          )}
                           <div className="edo-field">
                             <label className="edo-label">Delivery</label>
                             <select

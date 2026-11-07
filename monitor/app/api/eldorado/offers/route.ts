@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
         details,
         augmentedGame: {
           gameId: item.gameId || ANIME_DICE_GAME_ID,
-          category: "CustomItem",
+          category: item.offerType || "CustomItem",
           tradeEnvironmentId: item.tradeEnvironmentId || null,
           offerAttributes: item.offerAttributes || [],
         },
