@@ -40,6 +40,8 @@ interface NewItem {
   offerType: "CustomItem" | "Account";
   gameId: string;
   costIdr?: number | string;
+  codeBg?: string;
+  images?: { file: File; preview: string }[];
   image?: File | null;
   imagePreview?: string;
   originalEmail?: "Yes" | "No";
@@ -110,6 +112,89 @@ function truncatePrice(price: number): number {
 function costIdrToUsd(costIdr: number, rate: number, marginPct: number): number {
   if (!rate || !costIdr) return 0;
   return truncatePrice((costIdr / rate) * (1 + marginPct / 100) / (1 - 0.15));
+}
+
+function fmtGameMoney(v: number | null | undefined): string {
+  if (v == null) return "-";
+  const abs = Math.abs(v);
+  if (abs >= 1e18) return "$" + (v / 1e18).toFixed(1) + "Qi";
+  if (abs >= 1e15) return "$" + (v / 1e15).toFixed(1) + "Qa";
+  if (abs >= 1e12) return "$" + (v / 1e12).toFixed(1) + "T";
+  if (abs >= 1e9) return "$" + (v / 1e9).toFixed(1) + "B";
+  if (abs >= 1e6) return "$" + (v / 1e6).toFixed(1) + "M";
+  if (abs >= 1e3) return "$" + (v / 1e3).toFixed(1) + "K";
+  return "$" + v.toFixed(0);
+}
+
+function fmtGameRate(v: number | null | undefined): string {
+  return fmtGameMoney(v) + "/s";
+}
+
+function buildAccountDescription(summary: any, detail: any): string {
+  const lines: string[] = [];
+  lines.push("✨ PRODUCT DETAILS:");
+  if (summary.speed != null) lines.push(`• Speed: ${fmtGameMoney(summary.speed).replace("$", "")}+ | Active Income: ${fmtGameRate(summary.incomeAktif)}`);
+  if (summary.money != null) lines.push(`• Cash: ${fmtGameMoney(summary.money)}`);
+
+  const allPets = detail?.allPets || [];
+  const backpackEggs = detail?.backpackEggs || [];
+  const growingEggs = detail?.growingEggs || [];
+  const totalPets = allPets.length || summary.petsCount || 0;
+  const totalEggs = backpackEggs.length + growingEggs.length;
+  if (totalPets || totalEggs) lines.push(`• ${totalPets} Pets | ${totalEggs} Eggs`);
+
+  const divines = allPets.filter((p: any) => (p.rarity || "").toLowerCase() === "divine");
+  if (divines.length > 0) {
+    const divNames = divines.slice(0, 5).map((p: any) => p.name || p.category).join(", ");
+    lines.push(`• ${divines.length} Divine Pets (${divNames}${divines.length > 5 ? ", etc." : ""})`);
+  }
+
+  const topPets = [...allPets].sort((a: any, b: any) => (b.rate || 0) - (a.rate || 0));
+  if (topPets.length > 0) {
+    lines.push(`• Top Pet: ${topPets[0].name || topPets[0].category} ${fmtGameRate(topPets[0].rate)}`);
+    if (topPets.length >= 3) {
+      const best = topPets.slice(1, 4).map((p: any) => `${p.name || p.category} ${fmtGameRate(p.rate)}`).join(", ");
+      lines.push(`• Best Pets: ${best}`);
+    }
+  }
+
+  if (summary.kandangLevel != null || summary.treadmillLevel != null) {
+    const parts: string[] = [];
+    if (summary.kandangLevel != null) parts.push(`Pen Level ${summary.kandangLevel}`);
+    if (summary.treadmillLevel != null) parts.push(`Treadmill Level ${summary.treadmillLevel}`);
+    lines.push(`• ${parts.join(" | ")}`);
+  }
+
+  const tokens: string[] = [];
+  if (summary.mutationToken) tokens.push(`Fractured x${summary.mutationToken}`);
+  if (summary.nitroToken) tokens.push(`Nitro x${summary.nitroToken}`);
+  if (summary.spectralToken) tokens.push(`Spectral x${summary.spectralToken}`);
+  if (summary.alienToken) tokens.push(`Alien x${summary.alienToken}`);
+  if (tokens.length) lines.push(`• Tokens: ${tokens.join(" | ")}`);
+  if (summary.trail) lines.push(`• Trail: ${summary.trail}`);
+
+  lines.push("");
+  lines.push("👤 ACCOUNT DETAILS:");
+  lines.push("• Fresh, clean Roblox account");
+  lines.push("• No email linked");
+  lines.push("• Phone/ID unverified");
+  lines.push("• No Bonafide Hat");
+  lines.push("• No active subscriptions or extra charges attached");
+  lines.push("");
+  lines.push("📦 Delivery via Account Gift (TCC)");
+  lines.push("⚡ Fast & safe delivery");
+  lines.push("🎥 Warranty requires uncut video from receiving details to first login");
+  lines.push("");
+  lines.push("BUY = NO REFUND");
+  lines.push("");
+
+  const tagNames = allPets
+    .filter((p: any) => (p.rarity || "").toLowerCase() === "divine" || (p.rarity || "").toLowerCase() === "eternal" || (p.rarity || "").toLowerCase() === "secret")
+    .map((p: any) => (p.name || p.category || "").toLowerCase())
+    .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
+  if (tagNames.length) lines.push(`TAGS: ${tagNames.join(", ")}`);
+
+  return lines.join("\n");
 }
 
 function fmtIdr(amount?: number) {
@@ -520,6 +605,43 @@ export default function EldoradoPage() {
     finally { setEditSaving(false); }
   }
 
+  async function fetchCodeBg(idx: number, code: string) {
+    if (!code.trim()) return;
+    try {
+      const [accRes, detRes] = await Promise.all([
+        fetch("/api/catalog-accounts"),
+        fetch("/api/account-detail?account=" + encodeURIComponent(code)),
+      ]);
+      const accData = await accRes.json();
+      let summary = (accData.accounts || []).find((a: any) => a.sourceAccount === code);
+      if (!summary) {
+        const allRes = await fetch("/api/accounts");
+        const allData = await allRes.json();
+        summary = (allData.accounts || []).find((a: any) => a.sourceAccount === code);
+      }
+      if (!summary) {
+        const soldRes = await fetch("/api/sold-accounts");
+        const soldData = await soldRes.json();
+        summary = (soldData.accounts || []).find((a: any) => a.sourceAccount === code);
+      }
+      if (!summary) { alert(`Akun "${code}" tidak ditemukan di katalog`); return; }
+
+      const detData = await detRes.json();
+      const detail = detData.ok ? detData : summary.detail || null;
+      const desc = buildAccountDescription(summary, detail);
+      const title = `${code} — Steal An Egg Account`;
+
+      setNewItems((prev) => prev.map((item, i) => i === idx ? {
+        ...item,
+        codeBg: code,
+        title: item.title || title,
+        description: desc,
+      } : item));
+    } catch (e: any) {
+      alert("Gagal fetch data akun: " + e.message);
+    }
+  }
+
   function updateItem(idx: number, field: keyof NewItem, value: any) {
     setNewItems((prev) => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
   }
@@ -542,15 +664,22 @@ export default function EldoradoPage() {
       const itemsWithImages = await Promise.all(
         valid.map(async (item) => {
           let mainOfferImage = undefined;
-          if (item.image) {
+          const offerImages: any[] = [];
+          const allImages = item.images || [];
+          if (allImages.length === 0 && item.image) {
+            allImages.push({ file: item.image, preview: item.imagePreview || "" });
+          }
+          for (let i = 0; i < allImages.length; i++) {
             const form = new FormData();
-            form.append("image", item.image);
+            form.append("image", allImages[i].file);
             const imgRes = await fetch("/api/eldorado/upload-image", { method: "POST", body: form });
             if (imgRes.ok) {
-              mainOfferImage = await imgRes.json();
+              const imgData = await imgRes.json();
+              if (i === 0) mainOfferImage = imgData;
+              else offerImages.push(imgData);
             }
           }
-          return { ...item, price: truncatePrice(Number(item.price)), mainOfferImage, quantity: item.offerType === "Account" ? 1 : item.quantity };
+          return { ...item, price: truncatePrice(Number(item.price)), mainOfferImage, offerImages, quantity: item.offerType === "Account" ? 1 : item.quantity };
         })
       );
       const res = await fetch("/api/eldorado/offers", {
@@ -1138,42 +1267,70 @@ export default function EldoradoPage() {
                     </div>
                     <div className="edo-card-body">
                       <div className="edo-card-left">
-                        <label
-                          className="edo-img-upload lg"
-                          title="Pilih atau drag gambar"
-                          onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("drag-over"); }}
-                          onDragLeave={(e) => { e.currentTarget.classList.remove("drag-over"); }}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            e.currentTarget.classList.remove("drag-over");
-                            const f = e.dataTransfer.files?.[0];
-                            if (!f || !f.type.startsWith("image/")) return;
-                            const copy = [...newItems];
-                            copy[idx] = { ...copy[idx], image: f, imagePreview: URL.createObjectURL(f) };
-                            setNewItems(copy);
-                          }}
-                        >
-                          {item.imagePreview ? (
-                            <img src={item.imagePreview} alt="" className="edo-img" />
-                          ) : (
-                            <div style={{ textAlign: "center", color: "var(--dim)" }}>
-                              <div style={{ fontSize: 24 }}>+</div>
-                              <div style={{ fontSize: 10 }}>Drop / Klik</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                          {(item.images || []).map((img, imgIdx) => (
+                            <div key={imgIdx} style={{ position: "relative" }}>
+                              <img src={img.preview} alt="" className="edo-img" style={{ width: 100, height: 100, objectFit: "cover", borderRadius: 10, border: "1px solid rgba(255,255,255,.08)" }} />
+                              <button
+                                style={{ position: "absolute", top: 2, right: 2, background: "rgba(0,0,0,.7)", border: "none", color: "#fff", borderRadius: 4, fontSize: 10, cursor: "pointer", padding: "2px 4px" }}
+                                onClick={() => {
+                                  const copy = [...newItems];
+                                  copy[idx] = { ...copy[idx], images: (copy[idx].images || []).filter((_, i) => i !== imgIdx) };
+                                  setNewItems(copy);
+                                }}
+                              >✕</button>
+                              {imgIdx === 0 && <span style={{ position: "absolute", bottom: 2, left: 2, background: "var(--accent)", color: "#fff", fontSize: 9, padding: "1px 4px", borderRadius: 3 }}>Main</span>}
                             </div>
+                          ))}
+                          {(!item.image && !(item.images || []).length) && (
+                            <label
+                              className="edo-img-upload lg"
+                              title="Pilih atau drag gambar"
+                              onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("drag-over"); }}
+                              onDragLeave={(e) => { e.currentTarget.classList.remove("drag-over"); }}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                e.currentTarget.classList.remove("drag-over");
+                                const f = e.dataTransfer.files?.[0];
+                                if (!f || !f.type.startsWith("image/")) return;
+                                const copy = [...newItems];
+                                copy[idx] = { ...copy[idx], images: [...(copy[idx].images || []), { file: f, preview: URL.createObjectURL(f) }] };
+                                setNewItems(copy);
+                              }}
+                            >
+                              <div style={{ textAlign: "center", color: "var(--dim)" }}>
+                                <div style={{ fontSize: 24 }}>+</div>
+                                <div style={{ fontSize: 10 }}>Drop / Klik</div>
+                              </div>
+                              <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
+                                const f = e.target.files?.[0]; if (!f) return;
+                                const copy = [...newItems];
+                                copy[idx] = { ...copy[idx], images: [...(copy[idx].images || []), { file: f, preview: URL.createObjectURL(f) }] };
+                                setNewItems(copy);
+                              }} />
+                            </label>
                           )}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            style={{ display: "none" }}
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (!f) return;
+                          <label className="edo-img-upload" style={{ width: 100, height: 32, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, cursor: "pointer", border: "1px dashed rgba(255,255,255,.12)" }}>
+                            + Tambah
+                            <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => {
+                              const files = Array.from(e.target.files || []);
+                              if (!files.length) return;
                               const copy = [...newItems];
-                              copy[idx] = { ...copy[idx], image: f, imagePreview: URL.createObjectURL(f) };
+                              const newImgs = files.map((f) => ({ file: f, preview: URL.createObjectURL(f) }));
+                              copy[idx] = { ...copy[idx], images: [...(copy[idx].images || []), ...newImgs] };
                               setNewItems(copy);
-                            }}
-                          />
-                        </label>
+                              e.target.value = "";
+                            }} />
+                          </label>
+                          {item.offerType === "Account" && item.codeBg && (
+                            <a
+                              href={`/poster?account=${encodeURIComponent(item.codeBg)}&lang=en`}
+                              target="_blank"
+                              rel="noopener"
+                              style={{ fontSize: 10, color: "var(--accent)", textAlign: "center" }}
+                            >Open Poster ↗</a>
+                          )}
+                        </div>
                       </div>
                       <div className="edo-card-right">
                         <div className="edo-field-row" style={{ marginBottom: 8 }}>
@@ -1205,6 +1362,27 @@ export default function EldoradoPage() {
                             </select>
                           </div>
                         </div>
+                        {item.offerType === "Account" && (
+                          <div className="edo-field-row" style={{ marginBottom: 8 }}>
+                            <div className="edo-field" style={{ flex: 1 }}>
+                              <label className="edo-label">Code BG</label>
+                              <div style={{ display: "flex", gap: 4 }}>
+                                <input
+                                  className="edo-input"
+                                  placeholder="BG144..."
+                                  value={item.codeBg || ""}
+                                  onChange={(e) => updateItem(idx, "codeBg", e.target.value)}
+                                  onKeyDown={(e) => { if (e.key === "Enter" && item.codeBg) fetchCodeBg(idx, item.codeBg); }}
+                                />
+                                <button
+                                  className="edo-btn sm"
+                                  onClick={() => item.codeBg && fetchCodeBg(idx, item.codeBg)}
+                                  title="Auto-fill dari katalog"
+                                >Fill</button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         <div className="edo-field">
                           <label className="edo-label">Title</label>
                           <input
@@ -1218,7 +1396,7 @@ export default function EldoradoPage() {
                           <label className="edo-label">Description</label>
                           <textarea
                             className="edo-input edo-textarea"
-                            rows={3}
+                            rows={item.description && item.description.split("\n").length > 5 ? 12 : 3}
                             placeholder="Deskripsi (opsional)"
                             value={item.description}
                             onChange={(e) => updateItem(idx, "description", e.target.value)}

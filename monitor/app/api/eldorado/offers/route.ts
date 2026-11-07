@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
               currency: item.currency || "USD",
             },
           },
-          offerImages: [],
+          offerImages: item.offerImages || [],
           accounts: [{
             login: item.accLogin || "",
             password: item.accPassword || "",
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
             },
             volumeDiscounts: [],
           },
-          offerImages: [],
+          offerImages: item.offerImages || [],
         };
         if (item.mainOfferImage) {
           details.mainOfferImage = item.mainOfferImage;
