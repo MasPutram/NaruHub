@@ -547,7 +547,7 @@ function PosterPage() {
   const [rateNitroPerUnit, setRateNitroPerUnit] = useState("");
   const [title, setTitle] = useState("Selling Best Account");
   const [badge, setBadge] = useState(accountInitials(accountName));
-  const [owner, setOwner] = useState("Mas Naru");
+  const [owner, setOwner] = useState("NARUA");
   const [checklist, setChecklist] = useState("All Clean, Clean Data, No Green Hat, No Summary");
   const [downloading, setDownloading] = useState(false);
 
@@ -678,7 +678,7 @@ function PosterPage() {
       const digits = accountName.match(/(\d+)$/)?.[1] || "";
       const cp = getCurrentPrice();
       const priceSuffix = cp > 0 ? `-${Math.round(cp / 1000)}k` : "";
-      link.download = isTemplate ? "Poster-Template-MasNaru.png" : `Blekok-${digits}${priceSuffix}.png`;
+      link.download = isTemplate ? "Poster-Template-NARUA.png" : `Blekok-${digits}${priceSuffix}.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
     } catch (e) {
