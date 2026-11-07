@@ -889,10 +889,16 @@ function PosterPage() {
 
   const equippedIncome = (activePets || []).reduce((s, p) => s + (p.rate || 0), 0);
 
-  const divineAll = [...allSorted, ...growingEggs, ...backpackEggs].filter((p) => {
+  const _divineSeen = new Set<string>();
+  const divineAll: Pet[] = [];
+  for (const p of [...allSorted, ...growingEggs, ...backpackEggs]) {
     const r = petRarity(p.category, iconIdx);
-    return r === "Divine";
-  });
+    if (r !== "Divine") continue;
+    const k = petKey(p);
+    if (_divineSeen.has(k)) continue;
+    _divineSeen.add(k);
+    divineAll.push(p);
+  }
   const divinePetCount = divineAll.length;
 
   const statItems: { label: string; value: string; accent?: string }[] = [
