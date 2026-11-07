@@ -45,29 +45,29 @@ export async function POST(req: NextRequest) {
         const details: any = {
           offerTitle: item.title,
           description: item.description || "",
-          originalEmail: item.originalEmail === "Yes",
-          deliveryMethod: item.deliveryMethod || "Automatic",
+          guaranteedDeliveryTime: item.deliveryTime || "Instant",
+          hasOriginalEmail: item.originalEmail === "Yes",
           pricing: {
+            quantity: 1,
             pricePerUnit: {
               amount: item.price,
               currency: item.currency || "USD",
             },
           },
           offerImages: item.offerImages || [],
-          accounts: [{
-            login: item.accLogin || "",
-            password: item.accPassword || "",
-            emailDetails: (item.emailLogin || item.emailProvider) ? {
-              providerUrl: item.emailProvider || "",
-              login: item.emailLogin || "",
-              password: item.emailPassword || "",
-            } : undefined,
-            additionalInfo: item.additionalInfo || "",
-          }],
         };
         if (item.mainOfferImage) {
           details.mainOfferImage = item.mainOfferImage;
         }
+        const emailDetails = (item.emailLogin || item.emailProvider) ? {
+          providerUrl: item.emailProvider || "",
+          login: item.emailLogin || "",
+          password: item.emailPassword || "",
+        } : null;
+        const mfaDetails = (item.twoFaLogin || item.twoFaPassword) ? {
+          login: item.twoFaLogin || "",
+          password: item.twoFaPassword || "",
+        } : null;
         payload = {
           details,
           augmentedGame: {
@@ -76,8 +76,18 @@ export async function POST(req: NextRequest) {
             tradeEnvironmentId: item.tradeEnvironmentId || null,
             offerAttributes: item.offerAttributes || [],
           },
+          accountDeliveryDetails: [{
+            id: null,
+            accountDetails: {
+              accountLogin: item.accLogin || "",
+              accountPassword: item.accPassword || "",
+            },
+            emailDetails,
+            mfaDetails,
+            additionalInfo: item.additionalInfo || null,
+          }],
         };
-        endpoint = "/api/v1/item-management/me/offers/account";
+        endpoint = "/api/flexibleOffers/account";
       } else {
         const details: any = {
           offerTitle: item.title,
