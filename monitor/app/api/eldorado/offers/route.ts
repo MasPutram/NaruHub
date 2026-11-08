@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
         const details: any = {
           offerTitle: item.title,
           description: item.description || "",
-          guaranteedDeliveryTime: item.deliveryTime || "Instant",
+          guaranteedDeliveryTime: "Instant",
           hasOriginalEmail: item.originalEmail === "Yes",
           pricing: {
             quantity: 1,
