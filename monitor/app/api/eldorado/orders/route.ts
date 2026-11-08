@@ -8,11 +8,10 @@ export async function GET(req: NextRequest) {
   try {
     getTenantFromRequest(req);
     const { searchParams } = new URL(req.url);
-    const size = searchParams.get("size") || "20";
+    const size = searchParams.get("size") || "50";
     const cursor = searchParams.get("cursor") || "9999-99-99 99:99:99.999999999999999-9999-9999-9999-999999999999";
     const direction = searchParams.get("direction") || "Next";
     const filter = searchParams.get("filter") || "DisplaySellingOrders";
-    const group = searchParams.get("group") || "Regular";
 
     const qs = new URLSearchParams({
       cursorValue: cursor,
@@ -21,10 +20,11 @@ export async function GET(req: NextRequest) {
       isAscendingDateOrder: "false",
       ignorePendingReviewOrders: "true",
       displayFilter: filter,
-      orderGroup: group,
     });
+    const orderState = searchParams.get("orderState");
+    if (orderState) qs.set("orderState", orderState);
 
-    const res = await eldoradoFetch(`/api/orders/me/seller/orders?${qs}`);
+    const res = await eldoradoFetch(`/api/v1/orders/me/seller/orders?${qs}`);
 
     if (!res.ok) {
       const text = await res.text();

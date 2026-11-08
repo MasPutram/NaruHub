@@ -472,7 +472,7 @@ export default function EldoradoPage() {
         throw new Error(d.error || `HTTP ${res.status}`);
       }
       const data = await res.json();
-      const items = data.results || data || [];
+      const items = data.results || data.orders || data || [];
       setOrders(Array.isArray(items) ? items : []);
     } catch (e: any) {
       setOrdersError(e.message);
@@ -528,17 +528,17 @@ export default function EldoradoPage() {
   const activeOffers = offers.filter((o) => (o.offerState || "").toLowerCase() === "active");
   const completedOrders = orders.filter((o) => {
     const s = (o.state?.state || "").toLowerCase();
-    return s === "received" || s === "delivered";
+    return s === "completed" || s === "received" || s === "delivered";
   });
   const SALES_FEE = 0.15;
   const WD_FEE_PCT = 0.04;
   const WD_FEE_FLAT = 2;
   const BANK_FEE_PCT = 0.02;
   const BANK_FEE_FLAT = 1.5;
-  const pendingOrders = orders.filter((o) => (o.state?.state || "").toLowerCase() === "delivered");
-  const receivedOrders = orders.filter((o) => (o.state?.state || "").toLowerCase() === "received");
+  const pendingOrders = orders.filter((o) => (o.state?.state || "").toLowerCase() === "received");
+  const walletOrders = orders.filter((o) => (o.state?.state || "").toLowerCase() === "completed");
   const pendingTotal = pendingOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0) * (1 - SALES_FEE);
-  const wallet = receivedOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0) * (1 - SALES_FEE);
+  const wallet = walletOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0) * (1 - SALES_FEE);
   const withdrawal = Math.max(wallet * (1 - WD_FEE_PCT) - WD_FEE_FLAT, 0);
   const estimasiIdr = Math.max(withdrawal * (1 - BANK_FEE_PCT) - BANK_FEE_FLAT, 0) * (usdIdr || 0);
 
