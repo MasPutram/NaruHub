@@ -530,15 +530,17 @@ export default function EldoradoPage() {
     const s = (o.state?.state || "").toLowerCase();
     return s === "received" || s === "delivered";
   });
-  const totalSold = completedOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0);
   const SALES_FEE = 0.15;
   const WD_FEE_PCT = 0.04;
   const WD_FEE_FLAT = 2;
   const BANK_FEE_PCT = 0.02;
   const BANK_FEE_FLAT = 1.5;
-  const afterSalesFee = totalSold * (1 - SALES_FEE);
-  const afterWdFee = Math.max(afterSalesFee * (1 - WD_FEE_PCT) - WD_FEE_FLAT, 0);
-  const income = Math.max(afterWdFee * (1 - BANK_FEE_PCT) - BANK_FEE_FLAT, 0);
+  const pendingOrders = orders.filter((o) => (o.state?.state || "").toLowerCase() === "delivered");
+  const receivedOrders = orders.filter((o) => (o.state?.state || "").toLowerCase() === "received");
+  const pendingTotal = pendingOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0) * (1 - SALES_FEE);
+  const wallet = receivedOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0) * (1 - SALES_FEE);
+  const withdrawal = Math.max(wallet * (1 - WD_FEE_PCT) - WD_FEE_FLAT, 0);
+  const estimasiIdr = Math.max(withdrawal * (1 - BANK_FEE_PCT) - BANK_FEE_FLAT, 0) * (usdIdr || 0);
 
   async function handleAction(offerId: string, action: string) {
     try {
@@ -733,21 +735,21 @@ export default function EldoradoPage() {
         {/* Top stats */}
         <div className="edo-topbar">
           <div className="edo-stats">
+            <div className="edo-stat estimasi">
+              <div className="edo-stat-label">PENDING</div>
+              <div className="edo-stat-value">{fmtUsd(pendingTotal)}</div>
+            </div>
             <div className="edo-stat wallet">
               <div className="edo-stat-label">WALLET</div>
-              <div className="edo-stat-value">{fmtUsd(totalSold)}</div>
+              <div className="edo-stat-value">{fmtUsd(wallet)}</div>
             </div>
             <div className="edo-stat withdrawn">
               <div className="edo-stat-label">WITHDRAWAL</div>
-              <div className="edo-stat-value">{fmtUsd(afterSalesFee)}</div>
-            </div>
-            <div className="edo-stat estimasi">
-              <div className="edo-stat-label">ESTIMASI</div>
-              <div className="edo-stat-value">{fmtUsd(afterWdFee)}</div>
+              <div className="edo-stat-value">{fmtUsd(withdrawal)}</div>
             </div>
             <div className="edo-stat income">
-              <div className="edo-stat-label">INCOME</div>
-              <div className="edo-stat-value">{fmtUsd(income)}</div>
+              <div className="edo-stat-label">ESTIMASI IDR</div>
+              <div className="edo-stat-value">{usdIdr ? fmtIdr(estimasiIdr) : "-"}</div>
             </div>
           </div>
         </div>
