@@ -56,3 +56,4 @@ export async function eldoradoFetch(path: string, opts: RequestInit = {}): Promi
 }
 
 export const ANIME_DICE_GAME_ID = "476";
+export const STEAL_AN_EGG_GAME_ID = "452";

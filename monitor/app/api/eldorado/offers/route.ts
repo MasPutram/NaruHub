@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eldoradoFetch, ANIME_DICE_GAME_ID } from "@/lib/eldorado";
+import { eldoradoFetch, ANIME_DICE_GAME_ID, STEAL_AN_EGG_GAME_ID } from "@/lib/eldorado";
 import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
         payload = {
           details,
           augmentedGame: {
-            gameId: item.gameId || ANIME_DICE_GAME_ID,
+            gameId: item.gameId || STEAL_AN_EGG_GAME_ID,
             category: "Account",
             tradeEnvironmentId: item.tradeEnvironmentId || null,
             offerAttributes: item.offerAttributes || [],
