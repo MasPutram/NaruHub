@@ -12,15 +12,18 @@ export async function GET(req: NextRequest) {
     const size = searchParams.get("size") || "50";
     const category = searchParams.get("category") || "";
 
-    let endpoint: string;
+    let res: Response;
     if (category === "Account") {
-      endpoint = `/api/flexibleOffersUser/me/search?pageIndex=${page}&pageSize=${size}&category=Account`;
-    } else if (category === "CustomItem") {
-      endpoint = `/api/v1/item-management/me/offers/me/search?pageIndex=${page}&pageSize=${size}&category=CustomItem`;
+      res = await eldoradoFetch(
+        `/api/flexibleOffersUser/me/search?pageIndex=${page}&pageSize=${size}&category=Account`,
+        { method: "POST", body: JSON.stringify({}) }
+      );
     } else {
-      endpoint = `/api/v1/item-management/me/offers/me/search?pageIndex=${page}&pageSize=${size}`;
+      const categoryParam = category ? `&category=${encodeURIComponent(category)}` : "";
+      res = await eldoradoFetch(
+        `/api/v1/item-management/me/offers/me/search?pageIndex=${page}&pageSize=${size}${categoryParam}`
+      );
     }
-    const res = await eldoradoFetch(endpoint);
 
     if (!res.ok) {
       const text = await res.text();
