@@ -617,6 +617,18 @@ export default function EldoradoPage() {
     finally { setEditSaving(false); }
   }
 
+  function buildAccountTitle(summary: any, detail: any): string {
+    const allPets = detail?.allPets || [];
+    const topPet = [...allPets].sort((a: any, b: any) => (b.rate || 0) - (a.rate || 0))[0];
+    const parts: string[] = [];
+    if (topPet) parts.push(`Main Pet ${fmtGameRate(topPet.rate)}`);
+    if (summary.speed != null) parts.push(`Speed ${fmtGameMoney(summary.speed).replace("$", "")}+`);
+    if (summary.incomeAktif != null) parts.push(`Income Aktif ${fmtGameRate(summary.incomeAktif)}`);
+    if (summary.mutationToken) parts.push("Token Mutation");
+    parts.push("Fresh Account");
+    return parts.join(" | ");
+  }
+
   async function fetchCodeBg(idx: number, code: string) {
     if (!code.trim()) return;
     try {
@@ -632,12 +644,17 @@ export default function EldoradoPage() {
       const detData = await detRes.json();
       const detail = detData.ok ? detData : summary.detail || null;
       const desc = buildAccountDescription(summary, detail);
+      const title = buildAccountTitle(summary, detail);
 
+      const catalogCost = summary.catalogPrice || 0;
+      const autoPrice = catalogCost && usdIdr ? costIdrToUsd(catalogCost, usdIdr, margin) : 0;
       setNewItems((prev) => prev.map((item, i) => i === idx ? {
         ...item,
         codeBg: code,
-        title: `${code} — Steal An Egg Account`,
+        title,
         description: desc,
+        costIdr: catalogCost || "",
+        ...(autoPrice > 0 ? { price: autoPrice } : {}),
       } : item));
     } catch (e: any) {
       alert("Gagal fetch data akun: " + e.message);
