@@ -147,6 +147,9 @@ interface Account {
   nitroToken?: number | null;
   spectralToken?: number | null;
   alienToken?: number | null;
+  allMutationTokens?: Record<string, number> | null;
+  maxTreadmillLevel?: number | null;
+  maxKandangLevel?: number | null;
   trail?: string | null;
   growingEggCount?: number;
   backpackEggCount?: number;
@@ -232,13 +235,16 @@ function fmtLevel(v: number | null | undefined): string {
   return "Lv. " + v;
 }
 
-function fmtLevelMax(v: number | null | undefined, maxLevel: number): { text: string; isMax: boolean } {
+function fmtLevelMax(v: number | null | undefined, maxLevel: number | null | undefined): { text: string; isMax: boolean } {
   if (v == null) return { text: "-", isMax: false };
-  const isMax = v >= maxLevel && maxLevel > 0;
-  return { text: isMax ? `Lv. ${v} MAX` : `Lv. ${v}`, isMax };
+  const max = Number(maxLevel) || 0;
+  const isMax = max > 0 && v >= max;
+  if (isMax) return { text: `Lv. ${v} MAX`, isMax: true };
+  if (max > 0) return { text: `Lv. ${v}/${max}`, isMax: false };
+  return { text: `Lv. ${v}`, isMax: false };
 }
 
-const POTENSI_EQUIP = 19;
+const POTENSI_EQUIP = 20;
 
 function equipSlots(): number {
   return POTENSI_EQUIP;
@@ -363,8 +369,6 @@ export default function DashboardPage() {
   const totalPets = allOnline.reduce((s, a) => s + (Number(a.petsCount) || 0), 0);
   const totalStolen = allOnline.reduce((s, a) => s + (Number(a.stolenCount) || 0), 0);
   const totalGrowing = filtered.reduce((s, a) => s + (Number(a.growingEggCount) || 0), 0);
-  const maxKandang = filtered.reduce((m, a) => Math.max(m, a.kandangLevel ?? 0), 0);
-  const maxTreadmill = filtered.reduce((m, a) => Math.max(m, a.treadmillLevel ?? 0), 0);
 
   async function openDetail(name: string) {
     const acc = accounts.find((a) => a.sourceAccount === name) || null;
@@ -557,6 +561,12 @@ export default function DashboardPage() {
         .st.alien { background: linear-gradient(135deg, #22c55e, #86efac); border-radius: 8px; padding: 5px 10px; }
         .st.alien .sl { color: #fff; }
         .st.alien .sv { color: #fff; font-size: 18px; }
+        .st.darkmatter { background: linear-gradient(135deg, #1e1b4b, #312e81); border-radius: 8px; padding: 5px 10px; }
+        .st.darkmatter .sl { color: #fff; }
+        .st.darkmatter .sv { color: #fff; font-size: 18px; }
+        .st.dynamic-token { background: linear-gradient(135deg, #475569, #94a3b8); border-radius: 8px; padding: 5px 10px; }
+        .st.dynamic-token .sl { color: #fff; }
+        .st.dynamic-token .sv { color: #fff; font-size: 18px; }
         .time-tag { font-size: 10px; font-weight: 700; flex-shrink: 0; }
         .time-tag.on { color: var(--dim); }
         .time-tag.off { color: var(--red); }
@@ -839,8 +849,6 @@ export default function DashboardPage() {
                 onDeleteConfirm={deleteAccount}
                 onDeleteCancel={() => setDeleteConfirm(null)}
                 genMsg={genMsgs.current[a.sourceAccount]}
-                maxKandang={maxKandang}
-                maxTreadmill={maxTreadmill}
                 deviceMap={deviceMap}
               />
             ))}
@@ -856,8 +864,6 @@ export default function DashboardPage() {
                 detailTab={detailTab}
                 setDetailTab={setDetailTab}
                 onClose={() => setDetail(null)}
-                maxKandang={maxKandang}
-                maxTreadmill={maxTreadmill}
               />
             </div>
           </div>
@@ -884,7 +890,7 @@ export default function DashboardPage() {
 }
 
 /* ===== ACCOUNT CARD ===== */
-function AccountCard({ account: a, onOpen, onSell, onModerated, onDelete, deleteConfirm, onDeleteConfirm, onDeleteCancel, genMsg, maxKandang, maxTreadmill, deviceMap }: {
+function AccountCard({ account: a, onOpen, onSell, onModerated, onDelete, deleteConfirm, onDeleteConfirm, onDeleteCancel, genMsg, deviceMap }: {
   account: Account;
   onOpen: (name: string) => void;
   onSell: (name: string) => void;
@@ -894,8 +900,6 @@ function AccountCard({ account: a, onOpen, onSell, onModerated, onDelete, delete
   onDeleteConfirm: (name: string) => void;
   onDeleteCancel: () => void;
   genMsg?: { text: string; color: string };
-  maxKandang: number;
-  maxTreadmill: number;
   deviceMap: Record<string, string>;
 }) {
   const isOff = !a.online;
@@ -928,7 +932,7 @@ function AccountCard({ account: a, onOpen, onSell, onModerated, onDelete, delete
         <div className="st money"><div className="sl">CASH</div><div className="sv">{fmtMoney(a.money)}</div></div>
         <div className="st income"><div className="sl">INCOME AKTIF</div><div className="sv">{fmtRate(a.incomeAktif)}</div></div>
         <div className="st income"><div className="sl">INCOME POTENSI</div><div className="sv">{fmtRate(a.incomePotensi)}</div></div>
-        <div className="st"><div className="sl">PEN &amp; TM</div><div className="sv">{(() => { const k = fmtLevelMax(a.kandangLevel, maxKandang); const t = fmtLevelMax(a.treadmillLevel, maxTreadmill); return <>{k.isMax ? <><span>{fmtLevel(a.kandangLevel)}</span> <span className="max-tag">MAX</span></> : fmtLevel(a.kandangLevel)} &amp; {t.isMax ? <><span>{fmtLevel(a.treadmillLevel)}</span> <span className="max-tag">MAX</span></> : fmtLevel(a.treadmillLevel)}</>; })()}</div></div>
+        <div className="st"><div className="sl">PEN &amp; TM</div><div className="sv">{(() => { const k = fmtLevelMax(a.kandangLevel, a.maxKandangLevel); const t = fmtLevelMax(a.treadmillLevel, a.maxTreadmillLevel); return <>{k.isMax ? <><span>{k.text}</span> <span className="max-tag">MAX</span></> : k.text} &amp; {t.isMax ? <><span>{t.text}</span> <span className="max-tag">MAX</span></> : t.text}</>; })()}</div></div>
         <div className="st"><div className="sl">TOTAL EGG</div><div className="sv">{fmtNum((a.growingEggCount || 0) + (a.backpackEggCount || 0))}</div></div>
         {a.mutationToken != null && a.mutationToken > 0 && (
         <div className="st boss"><div className="sl">&#x1F9EC; TOKEN MUTASI</div><div className="sv">{fmtNum(a.mutationToken)}</div></div>
@@ -945,6 +949,17 @@ function AccountCard({ account: a, onOpen, onSell, onModerated, onDelete, delete
         {a.alienToken != null && a.alienToken > 0 && (
         <div className="st alien"><div className="sl">&#x1F47D; TOKEN ALIEN</div><div className="sv">{fmtNum(a.alienToken)}</div></div>
         )}
+        {(() => {
+          const known = new Set(["Scrambled", "Boss", "Nitro", "Spectral", "Alien"]);
+          const tokens = a.allMutationTokens;
+          if (!tokens) return null;
+          return Object.entries(tokens).filter(([k, v]) => !known.has(k) && v > 0).map(([k, v]) => (
+            <div key={k} className={`st ${k === "DarkMatter" ? "darkmatter" : "dynamic-token"}`}>
+              <div className="sl">{k === "DarkMatter" ? "\u{1F311}" : "\u{2728}"} {k.toUpperCase()} TOKEN</div>
+              <div className="sv">{fmtNum(v)}</div>
+            </div>
+          ));
+        })()}
       </div>
       {eggCount > 0 && (
         <div className="egg-bar">
@@ -1078,13 +1093,11 @@ function AllAccountsCard({ accounts, tabMode, onOpen }: { accounts: Account[]; t
  *  - STOLEN / TOOLS: driven by fields the in-game script may or may not send;
  *    modal shows an empty state until those payloads land.
  */
-function DetailModal({ detail, detailTab, setDetailTab, onClose, maxKandang, maxTreadmill }: {
+function DetailModal({ detail, detailTab, setDetailTab, onClose }: {
   detail: { name: string; data: AccountDetail | null; loading: boolean; account: Account | null };
   detailTab: DetailTab;
   setDetailTab: (t: DetailTab) => void;
   onClose: () => void;
-  maxKandang: number;
-  maxTreadmill: number;
 }) {
   const [idx, setIdx] = useState<Record<string, string>>({});
   useEffect(() => { loadIconIndex().then(setIdx); }, []);
@@ -1179,11 +1192,11 @@ function DetailModal({ detail, detailTab, setDetailTab, onClose, maxKandang, max
               </div>
               <div className="ms-card">
                 <div className="mslabel">KANDANG</div>
-                <div className="msval">{fmtLevelMax(acc.kandangLevel, maxKandang).isMax ? <>{fmtLevel(acc.kandangLevel)} <span className="max-tag">MAX</span></> : fmtLevel(acc.kandangLevel)}</div>
+                <div className="msval">{(() => { const r = fmtLevelMax(acc.kandangLevel, acc.maxKandangLevel); return r.isMax ? <>{r.text} <span className="max-tag">MAX</span></> : r.text; })()}</div>
               </div>
               <div className="ms-card">
                 <div className="mslabel">TREADMILL</div>
-                <div className="msval">{fmtLevelMax(acc.treadmillLevel, maxTreadmill).isMax ? <>{fmtLevel(acc.treadmillLevel)} <span className="max-tag">MAX</span></> : fmtLevel(acc.treadmillLevel)}</div>
+                <div className="msval">{(() => { const r = fmtLevelMax(acc.treadmillLevel, acc.maxTreadmillLevel); return r.isMax ? <>{r.text} <span className="max-tag">MAX</span></> : r.text; })()}</div>
               </div>
               <div className="ms-card">
                 <div className="mslabel">ACTIVE LIMIT</div>
@@ -1194,7 +1207,7 @@ function DetailModal({ detail, detailTab, setDetailTab, onClose, maxKandang, max
                 <div className="msval" style={{ color: "var(--green)" }}>{fmtRate(
                   (() => {
                     if (!detail.data) return 0;
-                    const limit = detail.data.activeLimit || 19;
+                    const limit = detail.data.activeLimit || POTENSI_EQUIP;
                     const all = [
                       ...(detail.data.activePets || []),
                       ...(detail.data.allPets || []),
@@ -1234,6 +1247,17 @@ function DetailModal({ detail, detailTab, setDetailTab, onClose, maxKandang, max
                 <div className="mslabel">TOKEN ALIEN</div>
                 <div className="msval" style={{ color: "#22c55e" }}>{acc.alienToken != null ? fmtNum(acc.alienToken) : "—"}</div>
               </div>
+              {(() => {
+                const known = new Set(["Scrambled", "Boss", "Nitro", "Spectral", "Alien"]);
+                const tokens = acc.allMutationTokens;
+                if (!tokens) return null;
+                return Object.entries(tokens).filter(([k, v]) => !known.has(k) && v > 0).map(([k, v]) => (
+                  <div key={k} className="ms-card">
+                    <div className="mslabel">{k.toUpperCase()} TOKEN</div>
+                    <div className="msval" style={{ color: k === "DarkMatter" ? "#6366f1" : "#94a3b8" }}>{fmtNum(v)}</div>
+                  </div>
+                ));
+              })()}
             </div>
           )}
 

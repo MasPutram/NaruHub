@@ -51,6 +51,9 @@ interface Account {
   nitroToken?: number | null;
   spectralToken?: number | null;
   alienToken?: number | null;
+  allMutationTokens?: Record<string, number> | null;
+  maxTreadmillLevel?: number | null;
+  maxKandangLevel?: number | null;
   growingEggCount?: number;
   backpackEggCount?: number;
   topPets: Pet[];
@@ -520,6 +523,12 @@ function ModeratedPageInner() {
         .st.alien { background: linear-gradient(135deg, #22c55e, #86efac); border-radius: 8px; padding: 5px 10px; }
         .st.alien .sl { color: #fff; }
         .st.alien .sv { color: #fff; font-size: 18px; }
+        .st.darkmatter { background: linear-gradient(135deg, #1e1b4b, #312e81); border-radius: 8px; padding: 5px 10px; }
+        .st.darkmatter .sl { color: #fff; }
+        .st.darkmatter .sv { color: #fff; font-size: 18px; }
+        .st.dynamic-token { background: linear-gradient(135deg, #475569, #94a3b8); border-radius: 8px; padding: 5px 10px; }
+        .st.dynamic-token .sl { color: #fff; }
+        .st.dynamic-token .sv { color: #fff; font-size: 18px; }
         .max-tag { font-size: 9px; font-weight: 900; color: #1a1030; background: linear-gradient(135deg, var(--gold), #f59e0b); padding: 1px 6px; border-radius: 4px; letter-spacing: .5px; vertical-align: middle; margin-left: 4px; display: inline-block; line-height: 1.4; }
 
         .egg-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 6px 10px; background: rgba(52,211,153,.06); border: 1px solid rgba(52,211,153,.15); border-radius: 8px; }
@@ -707,7 +716,7 @@ function ModeratedPageInner() {
                   <div className="st money"><div className="sl">CASH</div><div className="sv">{fmtMoney(a.money)}</div></div>
                   <div className="st income"><div className="sl">INCOME AKTIF</div><div className="sv">{fmtRate(a.incomeAktif)}</div></div>
                   <div className="st income"><div className="sl">INCOME POTENSI</div><div className="sv">{fmtRate(a.incomePotensi)}</div></div>
-                  <div className="st"><div className="sl">PEN &amp; TM</div><div className="sv">{fmtLevel(a.kandangLevel)} &amp; {fmtLevel(a.treadmillLevel)}</div></div>
+                  <div className="st"><div className="sl">PEN &amp; TM</div><div className="sv">{(() => { const kMax = a.maxKandangLevel; const tMax = a.maxTreadmillLevel; const kText = a.kandangLevel == null ? "-" : kMax != null && a.kandangLevel >= kMax ? <><span>Lv. {a.kandangLevel}</span> <span className="max-tag">MAX</span></> : kMax != null ? `Lv. ${a.kandangLevel}/${kMax}` : `Lv. ${a.kandangLevel}`; const tText = a.treadmillLevel == null ? "-" : tMax != null && a.treadmillLevel >= tMax ? <><span>Lv. {a.treadmillLevel}</span> <span className="max-tag">MAX</span></> : tMax != null ? `Lv. ${a.treadmillLevel}/${tMax}` : `Lv. ${a.treadmillLevel}`; return <>{kText} &amp; {tText}</>; })()}</div></div>
                   <div className="st"><div className="sl">TOTAL EGG</div><div className="sv">{fmtNum((a.growingEggCount || 0) + (a.backpackEggCount || 0))}</div></div>
                   {a.mutationToken != null && a.mutationToken > 0 && (
                   <div className="st boss"><div className="sl">&#x1F9EC; TOKEN MUTASI</div><div className="sv">{fmtNum(a.mutationToken)}</div></div>
@@ -724,6 +733,17 @@ function ModeratedPageInner() {
                   {a.alienToken != null && a.alienToken > 0 && (
                   <div className="st alien"><div className="sl">&#x1F47D; TOKEN ALIEN</div><div className="sv">{fmtNum(a.alienToken)}</div></div>
                   )}
+                  {(() => {
+                    const known = new Set(["Scrambled", "Boss", "Nitro", "Spectral", "Alien"]);
+                    const tokens = a.allMutationTokens;
+                    if (!tokens) return null;
+                    return Object.entries(tokens).filter(([k, v]) => !known.has(k) && v > 0).map(([k, v]) => (
+                      <div key={k} className={`st ${k === "DarkMatter" ? "darkmatter" : "dynamic-token"}`}>
+                        <div className="sl">{k === "DarkMatter" ? "\u{1F311}" : "✨"} {k.toUpperCase()} TOKEN</div>
+                        <div className="sv">{typeof v === 'number' ? v.toLocaleString("en-US") : v}</div>
+                      </div>
+                    ));
+                  })()}
                 </div>
 
                 {eggCount > 0 && (
@@ -821,8 +841,8 @@ function ModeratedPageInner() {
                 <div className="ms-card"><div className="mslabel">CASH</div><div className="msval" style={{ color: "var(--gold)" }}>{fmtMoney(detailAccount.money)}</div></div>
                 <div className="ms-card"><div className="mslabel">INCOME AKTIF</div><div className="msval" style={{ color: "var(--accent2)" }}>{fmtRate(d?.activePets ? d.activePets.reduce((s, p) => s + (p.rate || 0), 0) : detailAccount.incomeAktif)}</div></div>
                 <div className="ms-card"><div className="mslabel">SPEED</div><div className="msval" style={{ color: "var(--accent)" }}>{fmtCompactNum(detailAccount.speed)}</div></div>
-                <div className="ms-card"><div className="mslabel">KANDANG</div><div className="msval">{fmtLevel(detailAccount.kandangLevel)}</div></div>
-                <div className="ms-card"><div className="mslabel">TREADMILL</div><div className="msval">{fmtLevel(detailAccount.treadmillLevel)}</div></div>
+                <div className="ms-card"><div className="mslabel">KANDANG</div><div className="msval">{detailAccount.kandangLevel == null ? "-" : detailAccount.maxKandangLevel != null && detailAccount.kandangLevel >= detailAccount.maxKandangLevel ? <><span>Lv. {detailAccount.kandangLevel}</span> <span className="max-tag">MAX</span></> : detailAccount.maxKandangLevel != null ? `Lv. ${detailAccount.kandangLevel}/${detailAccount.maxKandangLevel}` : fmtLevel(detailAccount.kandangLevel)}</div></div>
+                <div className="ms-card"><div className="mslabel">TREADMILL</div><div className="msval">{detailAccount.treadmillLevel == null ? "-" : detailAccount.maxTreadmillLevel != null && detailAccount.treadmillLevel >= detailAccount.maxTreadmillLevel ? <><span>Lv. {detailAccount.treadmillLevel}</span> <span className="max-tag">MAX</span></> : detailAccount.maxTreadmillLevel != null ? `Lv. ${detailAccount.treadmillLevel}/${detailAccount.maxTreadmillLevel}` : fmtLevel(detailAccount.treadmillLevel)}</div></div>
                 <div className="ms-card"><div className="mslabel">ACTIVE LIMIT</div><div className="msval">{d?.activeLimit ?? "-"}</div></div>
                 <div className="ms-card"><div className="mslabel">INCOME POTENSI</div><div className="msval" style={{ color: "var(--green)" }}>{fmtRate(incomePotensi)}</div></div>
                 <div className="ms-card"><div className="mslabel">TOKEN MUTASI</div><div className="msval" style={{ color: "#a78bfa" }}>{fmtNum(detailAccount.mutationToken ?? 0)}</div></div>
@@ -830,6 +850,17 @@ function ModeratedPageInner() {
                 <div className="ms-card"><div className="mslabel">TOKEN NITRO</div><div className="msval" style={{ color: "#d97706" }}>{detailAccount.nitroToken != null ? fmtNum(detailAccount.nitroToken) : "—"}</div></div>
                 <div className="ms-card"><div className="mslabel">TOKEN SPECTRAL</div><div className="msval" style={{ color: "#6366f1" }}>{detailAccount.spectralToken != null ? fmtNum(detailAccount.spectralToken) : "—"}</div></div>
                 <div className="ms-card"><div className="mslabel">TOKEN ALIEN</div><div className="msval" style={{ color: "#22c55e" }}>{detailAccount.alienToken != null ? fmtNum(detailAccount.alienToken) : "—"}</div></div>
+                {(() => {
+                  const known = new Set(["Scrambled", "Boss", "Nitro", "Spectral", "Alien"]);
+                  const tokens = detailAccount.allMutationTokens;
+                  if (!tokens) return null;
+                  return Object.entries(tokens).filter(([k, v]) => !known.has(k) && v > 0).map(([k, v]) => (
+                    <div key={k} className="ms-card">
+                      <div className="mslabel">{k.toUpperCase()} TOKEN</div>
+                      <div className="msval" style={{ color: k === "DarkMatter" ? "#6366f1" : "#94a3b8" }}>{fmtNum(v)}</div>
+                    </div>
+                  ));
+                })()}
               </div>
 
               {d ? (

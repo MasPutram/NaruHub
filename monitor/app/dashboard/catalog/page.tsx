@@ -44,6 +44,9 @@ interface Account {
   nitroToken?: number | null;
   spectralToken?: number | null;
   alienToken?: number | null;
+  allMutationTokens?: Record<string, number> | null;
+  maxTreadmillLevel?: number | null;
+  maxKandangLevel?: number | null;
   trail?: string | null;
   growingEggCount?: number;
   backpackEggCount?: number;
@@ -317,7 +320,7 @@ function GrowingEggGrid({ eggs, idx }: { eggs: Pet[]; idx: Record<string, string
 
 type DetailTab = "pets" | "eggs" | "stolen" | "tools";
 
-const POTENSI_EQUIP = 19;
+const POTENSI_EQUIP = 20;
 
 function equipSlots(): number {
   return POTENSI_EQUIP;
@@ -1192,6 +1195,12 @@ export default function CatalogPage() {
         .cc-stat.cc-alien { background: linear-gradient(135deg, #22c55e, #86efac); border-radius: 8px; padding: 5px 8px; }
         .cc-stat.cc-alien .cslabel { color: #fff; }
         .cc-stat.cc-alien .csval { color: #fff; font-weight: 800; }
+        .cc-stat.cc-darkmatter { background: linear-gradient(135deg, #1e1b4b, #312e81); border-radius: 8px; padding: 5px 8px; }
+        .cc-stat.cc-darkmatter .cslabel { color: #fff; }
+        .cc-stat.cc-darkmatter .csval { color: #fff; font-weight: 800; }
+        .cc-stat.cc-dynamic { background: linear-gradient(135deg, #475569, #94a3b8); border-radius: 8px; padding: 5px 8px; }
+        .cc-stat.cc-dynamic .cslabel { color: #fff; }
+        .cc-stat.cc-dynamic .csval { color: #fff; font-weight: 800; }
 
         .btn-download-all {
           background: #8b5cf6; color: #fff; border: none; border-radius: 10px;
@@ -1741,7 +1750,15 @@ export default function CatalogPage() {
                 </div>
                 <div className="cc-stat">
                   <div className="cslabel">PEN &amp; TM</div>
-                  <div className="csval">{a.kandangLevel != null ? `Lv.${a.kandangLevel}` : "-"} &amp; {a.treadmillLevel != null ? `Lv.${a.treadmillLevel}` : "-"}</div>
+                  <div className="csval">{(() => {
+                    const k = a.kandangLevel;
+                    const mk = a.maxKandangLevel;
+                    const kStr = k != null ? (mk != null && k >= mk ? `Lv.${k} MAX` : mk != null ? `Lv.${k}/${mk}` : `Lv.${k}`) : "-";
+                    const t = a.treadmillLevel;
+                    const mt = a.maxTreadmillLevel;
+                    const tStr = t != null ? (mt != null && t >= mt ? `Lv.${t} MAX` : mt != null ? `Lv.${t}/${mt}` : `Lv.${t}`) : "-";
+                    return <>{kStr} &amp; {tStr}</>;
+                  })()}</div>
                 </div>
                 <div className="cc-stat">
                   <div className="cslabel">TOTAL EGG</div>
@@ -1783,6 +1800,17 @@ export default function CatalogPage() {
                   <div className="csval">{a.alienToken}</div>
                 </div>
                 )}
+                {(() => {
+                  const known = new Set(["Scrambled", "Boss", "Nitro", "Spectral", "Alien"]);
+                  const tokens = a.allMutationTokens;
+                  if (!tokens) return null;
+                  return Object.entries(tokens).filter(([k, v]) => !known.has(k) && v > 0).map(([k, v]) => (
+                    <div key={k} className={`cc-stat ${k === "DarkMatter" ? "cc-darkmatter" : "cc-dynamic"}`}>
+                      <div className="cslabel">{k === "DarkMatter" ? "\u{1F311}" : "✨"} {k.toUpperCase()} TOKEN</div>
+                      <div className="csval">{v}</div>
+                    </div>
+                  ));
+                })()}
               </div>
 
               {(a.topPets || []).length > 0 && (
@@ -2518,7 +2546,13 @@ export default function CatalogPage() {
                     <div className="dms"><div className="dms-label">CASH</div><div className="dms-val" style={{ color: "var(--gold)" }}>{fmtMoney(acc.money)}</div></div>
                     <div className="dms"><div className="dms-label">INCOME AKTIF</div><div className="dms-val" style={{ color: "var(--accent2)" }}>{fmtMoney(d.activePets ? d.activePets.reduce((s: number, p: Pet) => s + (p.rate || 0), 0) : acc.incomeAktif)}/s</div></div>
                     <div className="dms"><div className="dms-label">SPEED</div><div className="dms-val" style={{ color: "var(--accent)" }}>{fmtCompactNum(acc.speed)}</div></div>
-                    <div className="dms"><div className="dms-label">PEN &amp; TM</div><div className="dms-val">{acc.kandangLevel != null ? `Lv.${acc.kandangLevel}` : "-"} &amp; {acc.treadmillLevel != null ? `Lv.${acc.treadmillLevel}` : "-"}</div></div>
+                    <div className="dms"><div className="dms-label">PEN &amp; TM</div><div className="dms-val">{(() => {
+                      const k = acc.kandangLevel; const mk = acc.maxKandangLevel;
+                      const kStr = k != null ? (mk != null && k >= mk ? `Lv.${k} MAX` : mk != null ? `Lv.${k}/${mk}` : `Lv.${k}`) : "-";
+                      const t = acc.treadmillLevel; const mt = acc.maxTreadmillLevel;
+                      const tStr = t != null ? (mt != null && t >= mt ? `Lv.${t} MAX` : mt != null ? `Lv.${t}/${mt}` : `Lv.${t}`) : "-";
+                      return <>{kStr} &amp; {tStr}</>;
+                    })()}</div></div>
                     <div className="dms"><div className="dms-label">ACTIVE LIMIT</div><div className="dms-val">{d.activeLimit ?? "-"}</div></div>
                     <div className="dms"><div className="dms-label">INCOME POTENSI</div><div className="dms-val" style={{ color: "var(--green)" }}>{fmtMoney(potensiVal)}/s</div></div>
                     <div className="dms"><div className="dms-label">TOKEN MUTASI</div><div className="dms-val" style={{ color: "#a78bfa" }}>{acc.mutationToken ?? 0}</div></div>
@@ -2526,6 +2560,14 @@ export default function CatalogPage() {
                     <div className="dms"><div className="dms-label">TOKEN NITRO</div><div className="dms-val" style={{ color: "#d97706" }}>{acc.nitroToken != null ? acc.nitroToken : "—"}</div></div>
                     <div className="dms"><div className="dms-label">TOKEN SPECTRAL</div><div className="dms-val" style={{ color: "#6366f1" }}>{acc.spectralToken != null ? acc.spectralToken : "—"}</div></div>
                     <div className="dms"><div className="dms-label">TOKEN ALIEN</div><div className="dms-val" style={{ color: "#22c55e" }}>{acc.alienToken != null ? acc.alienToken : "—"}</div></div>
+                    {(() => {
+                      const known = new Set(["Scrambled", "Boss", "Nitro", "Spectral", "Alien"]);
+                      const tokens = acc.allMutationTokens;
+                      if (!tokens) return null;
+                      return Object.entries(tokens).filter(([k, v]) => !known.has(k) && v > 0).map(([k, v]) => (
+                        <div key={k} className="dms"><div className="dms-label">{k.toUpperCase()} TOKEN</div><div className="dms-val" style={{ color: k === "DarkMatter" ? "#6366f1" : "#94a3b8" }}>{v}</div></div>
+                      ));
+                    })()}
                     {acc.trail && <div className="dms"><div className="dms-label">TRAIL</div><div className="dms-val" style={{ color: "var(--accent2)" }}>{acc.trail}</div></div>}
                   </div>
                   <div className="dm-tabs">

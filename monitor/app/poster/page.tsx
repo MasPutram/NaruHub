@@ -40,6 +40,9 @@ interface AccountSummary {
   nitroToken?: number | null;
   spectralToken?: number | null;
   alienToken?: number | null;
+  allMutationTokens?: Record<string, number> | null;
+  maxTreadmillLevel?: number | null;
+  maxKandangLevel?: number | null;
   trail?: string | null;
   topPets: Pet[];
   online: boolean;
@@ -53,7 +56,7 @@ interface AccountDetail {
   backpackEggs: Pet[];
 }
 
-const POTENSI_EQUIP = 19;
+const POTENSI_EQUIP = 20;
 const HIGH_VALUE_THRESHOLD = 1_000_000_000;
 const NOTABLE_THRESHOLD = 300_000_000;
 
@@ -910,10 +913,10 @@ function PosterPage() {
     { label: "TOTAL EGGS", value: `${totalEggs} eggs` },
     { label: "DIVINE PETS", value: `${divinePetCount}`, accent: "divine" },
     ...(summary.kandangLevel != null
-      ? [{ label: "PEN LEVEL", value: `Lv. ${summary.kandangLevel}` }]
+      ? [{ label: "PEN LEVEL", value: summary.maxKandangLevel && summary.kandangLevel >= summary.maxKandangLevel ? `Lv. ${summary.kandangLevel} MAX` : summary.maxKandangLevel ? `Lv. ${summary.kandangLevel}/${summary.maxKandangLevel}` : `Lv. ${summary.kandangLevel}` }]
       : []),
     ...(summary.treadmillLevel != null
-      ? [{ label: "TREADMILL LEVEL", value: `Lv. ${summary.treadmillLevel}` }]
+      ? [{ label: "TREADMILL LEVEL", value: summary.maxTreadmillLevel && summary.treadmillLevel >= summary.maxTreadmillLevel ? `Lv. ${summary.treadmillLevel} MAX` : summary.maxTreadmillLevel ? `Lv. ${summary.treadmillLevel}/${summary.maxTreadmillLevel}` : `Lv. ${summary.treadmillLevel}` }]
       : []),
     ...(Number(summary.mutationToken) > 0
       ? [{ label: "FRACTURED TOKEN", value: "× " + Math.round(Number(summary.mutationToken)), accent: "mut" as const }]
@@ -930,6 +933,14 @@ function PosterPage() {
     ...(Number(summary.alienToken) > 0
       ? [{ label: "ALIEN TOKEN", value: "× " + Math.round(Number(summary.alienToken)), accent: "alien" as const }]
       : []),
+    ...(() => {
+      const known = new Set(["Scrambled", "Boss", "Nitro", "Spectral", "Alien"]);
+      const tokens = summary.allMutationTokens;
+      if (!tokens) return [];
+      return Object.entries(tokens).filter(([k, v]) => !known.has(k) && v > 0).map(([k, v]) => ({
+        label: `${k.toUpperCase()} TOKEN`, value: "× " + Math.round(v), accent: k === "DarkMatter" ? "darkmatter" as const : "dynamic" as const,
+      }));
+    })(),
     { label: "TRAIL", value: summary.trail || "-", accent: "trail" },
   ];
 
@@ -1009,6 +1020,12 @@ function PosterPage() {
         .stat-cell.alien-cell-stat { background: #ecfdf5; border-color: #22c55e; }
         .stat-cell.alien-cell-stat .slabel { color: #16a34a; }
         .stat-cell.alien-cell-stat .sval { color: #15803d; }
+        .stat-cell.darkmatter-cell-stat { background: #eef2ff; border-color: #312e81; }
+        .stat-cell.darkmatter-cell-stat .slabel { color: #312e81; }
+        .stat-cell.darkmatter-cell-stat .sval { color: #1e1b4b; }
+        .stat-cell.dynamic-cell-stat { background: #f1f5f9; border-color: #64748b; }
+        .stat-cell.dynamic-cell-stat .slabel { color: #475569; }
+        .stat-cell.dynamic-cell-stat .sval { color: #334155; }
         .stat-cell.trail-cell-stat { background: #eff6ff; border-color: #2563eb; }
         .stat-cell.trail-cell-stat .slabel { color: #2563eb; }
         .stat-cell.trail-cell-stat .sval { color: #1d4ed8; }
