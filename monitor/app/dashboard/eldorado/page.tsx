@@ -137,7 +137,10 @@ function buildAccountDescription(summary: any, detail: any): string {
   if (summary.speed != null) lines.push(`• Speed: ${fmtGameMoney(summary.speed).replace("$", "")}+ | Active Income: ${fmtGameRate(summary.incomeAktif)}`);
   if (summary.money != null) lines.push(`• Cash: ${fmtGameMoney(summary.money)}`);
 
-  const allPets = detail?.allPets || [];
+  const activePets = detail?.activePets || [];
+  const backpackPets = detail?.allPets || [];
+  const activeUids = new Set(activePets.map((p: any) => p.uid).filter(Boolean));
+  const allPets = [...activePets, ...backpackPets.filter((p: any) => !p.uid || !activeUids.has(p.uid))];
   const backpackEggs = detail?.backpackEggs || [];
   const growingEggs = detail?.growingEggs || [];
   const totalPets = allPets.length || summary.petsCount || 0;
@@ -618,7 +621,10 @@ export default function EldoradoPage() {
   }
 
   function buildAccountTitle(summary: any, detail: any): string {
-    const allPets = detail?.allPets || [];
+    const activePets = detail?.activePets || [];
+    const backpackPets = detail?.allPets || [];
+    const activeUids = new Set(activePets.map((p: any) => p.uid).filter(Boolean));
+    const allPets = [...activePets, ...backpackPets.filter((p: any) => !p.uid || !activeUids.has(p.uid))];
     const topPet = [...allPets].sort((a: any, b: any) => (b.rate || 0) - (a.rate || 0))[0];
     const parts: string[] = [];
     if (topPet) parts.push(`Main Pet ${fmtGameRate(topPet.rate)}`);
