@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       ? data.fullData.activePets.reduce((s: number, p: any) => s + (p.rate || 0), 0)
       : null;
 
-    const POTENSI_EQUIP = 19;
+    const POTENSI_EQUIP = 20;
     let computedPotensi: number | null = null;
     if (data.fullData) {
       const pool: any[] = [
@@ -105,6 +105,9 @@ export async function POST(req: NextRequest) {
       nitroToken: data.nitroToken ?? null,
       spectralToken: data.spectralToken ?? null,
       alienToken: data.alienToken ?? null,
+      allMutationTokens: data.allMutationTokens ?? null,
+      maxTreadmillLevel: data.maxTreadmillLevel ?? null,
+      maxKandangLevel: data.maxKandangLevel ?? null,
       trail: data.trail ?? null,
       growingEggCount: data.fullData?.growingEggs?.length ?? 0,
       backpackEggCount: data.fullData?.backpackEggs?.length ?? 0,

@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.7.0"
+local VERSION = "v3.8.0"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -938,6 +938,7 @@ local function collectAccountStats()
 	end
 
 	local kandangLevel, treadmillLevel, currentMoney
+	local maxTreadmillLevel, maxKandangLevel
 	pcall(function()
 		local stats = SaveModule.Peek()
 		if stats then
@@ -945,9 +946,25 @@ local function collectAccountStats()
 			treadmillLevel = stats.TreadmillUpgradeLevel
 			currentMoney = stats.Money
 		end
+		local Treadmills = require(ReplicatedStorage.Data.Treadmills)
+		local tmDir = Treadmills.Directory or Treadmills
+		local tmMax = 0
+		for k, v in pairs(tmDir) do
+			local lvl = type(v) == "table" and v.UpgradeLevel
+			if type(lvl) == "number" and lvl > tmMax then tmMax = lvl end
+		end
+		if tmMax > 0 then maxTreadmillLevel = tmMax end
+		local Bases = require(ReplicatedStorage.Data.Bases)
+		local baseDir = Bases.Directory or Bases
+		local baseMax = 0
+		for k, v in pairs(baseDir) do
+			local lvl = type(v) == "table" and v.UpgradeLevel
+			if type(lvl) == "number" and lvl > baseMax then baseMax = lvl end
+		end
+		if baseMax > 0 then maxKandangLevel = baseMax end
 	end)
 
-	return runSpeed, moneyPerSecond, kandangLevel, treadmillLevel, currentMoney
+	return runSpeed, moneyPerSecond, kandangLevel, treadmillLevel, currentMoney, maxTreadmillLevel, maxKandangLevel
 end
 
 ------------------------------------------------------------
@@ -975,7 +992,7 @@ end
 local HARGA_PER_B = 5
 local DEFAULT_CHECKLIST = splitComma("Data Polos, No Topi, No Sum")
 local MAX_EQUIP_PETS = 17
-local POTENSI_EQUIP = 19
+local POTENSI_EQUIP = 20
 
 local function computeAutoPrice(petPool)
 	local totalRate = 0
@@ -997,7 +1014,7 @@ local function reportToMonitor()
 		local allPets = excludeActiveFromBackpack(collectBackpackPets(), activePets)
 		local growingEggs = collectGrowingEggs()
 		local backpackEggs = collectBackpackEggs()
-		local runSpeed, moneyPerSecond, kandangLevel, treadmillLevel, currentMoney = collectAccountStats()
+		local runSpeed, moneyPerSecond, kandangLevel, treadmillLevel, currentMoney, maxTreadmillLevel, maxKandangLevel = collectAccountStats()
 
 		local incomeEggBackpack = 0
 		for _, e in ipairs(backpackEggs) do
@@ -1112,6 +1129,8 @@ local function reportToMonitor()
 			currentMoney = currentMoney,
 			kandangLevel = kandangLevel,
 			treadmillLevel = treadmillLevel,
+			maxTreadmillLevel = maxTreadmillLevel,
+			maxKandangLevel = maxKandangLevel,
 			trail = equippedTrail,
 			scrambleToken = scrambleToken,
 			nitroToken = nitroToken,
@@ -1134,6 +1153,8 @@ local function reportToMonitor()
 			highValuePetTotal = highValuePetTotal,
 			kandangLevel = kandangLevel,
 			treadmillLevel = treadmillLevel,
+			maxTreadmillLevel = maxTreadmillLevel,
+			maxKandangLevel = maxKandangLevel,
 			petsCount = #allPets + #activePets,
 			stolenCount = #backpackEggs,
 			bossToken = bossToken,
@@ -1329,7 +1350,7 @@ task.spawn(function()
 				-- Dynamically scan all MutationConsumable tools we own.
 				-- Known tokens in priority order; any new token type is
 				-- picked up automatically and appended after these.
-				local KNOWN_ORDER = { "Scrambled", "Boss", "Nitro", "Spectral", "Alien" }
+				local KNOWN_ORDER = { "Scrambled", "Boss", "Nitro", "Spectral", "Alien", "DarkMatter" }
 				local ownedTokens = {}
 				local ownedSet = {}
 				pcall(function()
