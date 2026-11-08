@@ -1323,36 +1323,27 @@ export default function EldoradoPage() {
                               {imgIdx === 0 && <span style={{ position: "absolute", bottom: 2, left: 2, background: "var(--accent)", color: "#fff", fontSize: 9, padding: "1px 4px", borderRadius: 3 }}>Main</span>}
                             </div>
                           ))}
-                          {(!item.image && !(item.images || []).length) && (
-                            <label
-                              className="edo-img-upload lg"
-                              title="Pilih atau drag gambar"
-                              onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("drag-over"); }}
-                              onDragLeave={(e) => { e.currentTarget.classList.remove("drag-over"); }}
-                              onDrop={(e) => {
-                                e.preventDefault();
-                                e.currentTarget.classList.remove("drag-over");
-                                const f = e.dataTransfer.files?.[0];
-                                if (!f || !f.type.startsWith("image/")) return;
-                                const copy = [...newItems];
-                                copy[idx] = { ...copy[idx], images: [...(copy[idx].images || []), { file: f, preview: URL.createObjectURL(f) }] };
-                                setNewItems(copy);
-                              }}
-                            >
-                              <div style={{ textAlign: "center", color: "var(--dim)" }}>
-                                <div style={{ fontSize: 24 }}>+</div>
-                                <div style={{ fontSize: 10 }}>Drop / Klik</div>
-                              </div>
-                              <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
-                                const f = e.target.files?.[0]; if (!f) return;
-                                const copy = [...newItems];
-                                copy[idx] = { ...copy[idx], images: [...(copy[idx].images || []), { file: f, preview: URL.createObjectURL(f) }] };
-                                setNewItems(copy);
-                              }} />
-                            </label>
-                          )}
-                          <label className="edo-img-upload" style={{ width: 100, height: 32, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, cursor: "pointer", border: "1px dashed rgba(255,255,255,.12)" }}>
-                            + Tambah
+                          <label
+                            className={`edo-img-upload${(item.images || []).length ? "" : " lg"}`}
+                            style={(item.images || []).length ? { width: 100, height: 100, borderRadius: 10 } : undefined}
+                            title="Pilih atau drag gambar"
+                            onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add("drag-over"); }}
+                            onDragLeave={(e) => { e.currentTarget.classList.remove("drag-over"); }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              e.currentTarget.classList.remove("drag-over");
+                              const files = Array.from(e.dataTransfer.files || []).filter((f) => f.type.startsWith("image/"));
+                              if (!files.length) return;
+                              const copy = [...newItems];
+                              const newImgs = files.map((f) => ({ file: f, preview: URL.createObjectURL(f) }));
+                              copy[idx] = { ...copy[idx], images: [...(copy[idx].images || []), ...newImgs] };
+                              setNewItems(copy);
+                            }}
+                          >
+                            <div style={{ textAlign: "center", color: "var(--dim)" }}>
+                              <div style={{ fontSize: 24 }}>+</div>
+                              <div style={{ fontSize: 10 }}>Drop / Klik</div>
+                            </div>
                             <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => {
                               const files = Array.from(e.target.files || []);
                               if (!files.length) return;
