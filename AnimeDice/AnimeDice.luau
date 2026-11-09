@@ -1951,16 +1951,34 @@ do
 
 					local apple, dist = findNearestApple(hrp)
 					if apple then
-						aStatus:SetContent("→ " .. apple.Parent.Name .. " (" .. math.floor(dist) .. "m)")
-						aWalkTo(humanoid, hrp, apple.Position, 6)
-						task.wait(0.3)
-						if not apple.Parent or not apple.Parent.Parent then
+						local target = apple.Position
+						local appleRef = apple.Parent
+						aStatus:SetContent("→ " .. appleRef.Name .. " (" .. math.floor(dist) .. "m)")
+						humanoid:MoveTo(target)
+						local startTime = os.clock()
+						while aEnabled and (hrp.Position - target).Magnitude > 6 do
+							if os.clock() - startTime > 15 then break end
+							local newApple = findNearestApple(hrp)
+							if newApple and newApple ~= apple then
+								local newDist = (hrp.Position - newApple.Position).Magnitude
+								local curDist = (hrp.Position - target).Magnitude
+								if newDist < curDist * 0.6 then
+									apple = newApple
+									target = newApple.Position
+									appleRef = newApple.Parent
+									aStatus:SetContent("→ " .. appleRef.Name .. " (" .. math.floor(newDist) .. "m)")
+								end
+							end
+							humanoid:MoveTo(target)
+							task.wait(0.15)
+						end
+						if not appleRef or not appleRef.Parent then
 							collected = collected + 1
 							aCountPara:SetContent(tostring(collected))
 						end
 					else
 						aStatus:SetContent("Waiting for apples... (" .. collected .. " collected)")
-						task.wait(2)
+						task.wait(1)
 					end
 				end
 
