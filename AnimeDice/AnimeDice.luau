@@ -1893,6 +1893,22 @@ do
 					hrp = char:WaitForChild("HumanoidRootPart")
 				end
 
+				task.spawn(function()
+					task.wait(1)
+					while aEnabled do
+						pcall(function()
+							local c = player.Character
+							if c then
+								local h = c:FindFirstChildOfClass("Humanoid")
+								if h and h.Health > 0 then
+									h:ChangeState(Enum.HumanoidStateType.Jumping)
+								end
+							end
+						end)
+						task.wait(math.random(3, 12))
+					end
+				end)
+
 				if not isInAutumn(hrp) then
 					aStatus:SetContent("Hub → Portal...")
 					local pg = player:WaitForChild("PlayerGui")
