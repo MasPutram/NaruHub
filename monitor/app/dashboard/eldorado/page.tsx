@@ -700,7 +700,7 @@ export default function EldoradoPage() {
           for (let i = 0; i < allImages.length; i++) {
             const imgEntry = allImages[i];
             const hasFile = !!imgEntry.file;
-            const fileType = imgEntry.file instanceof File ? "File" : imgEntry.file instanceof Blob ? "Blob" : typeof imgEntry.file;
+            const fileType = typeof imgEntry.file === "object" && imgEntry.file ? imgEntry.file.constructor?.name || "object" : typeof imgEntry.file;
             const form = new FormData();
             form.append("image", imgEntry.file);
             const imgRes = await fetch("/api/eldorado/upload-image", { method: "POST", body: form });
