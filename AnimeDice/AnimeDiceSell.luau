@@ -2920,6 +2920,19 @@ do
 
 				aStatus:SetContent("Farming apples...")
 				local collected = 0
+				local PATROL = {
+					Vector3.new(-2794, 223.4, 5784),
+					Vector3.new(-2765, 223.4, 5815),
+					Vector3.new(-2754, 223.4, 5827),
+					Vector3.new(-2786, 223.5, 5857),
+					Vector3.new(-2799, 223.4, 5870),
+					Vector3.new(-2830, 223.4, 5840),
+					Vector3.new(-2843, 224.3, 5824),
+					Vector3.new(-2822, 223.3, 5807),
+					Vector3.new(-2798, 223.3, 5806),
+					Vector3.new(-2780, 223.4, 5823),
+				}
+				local patrolIdx = 1
 
 				while aEnabled do
 					if not humanoid or humanoid.Health <= 0 then
@@ -2935,34 +2948,25 @@ do
 
 					local apple, dist = findNearestApple(hrp)
 					if apple then
-						local target = apple.Position
-						local appleRef = apple.Parent
-						aStatus:SetContent("→ " .. appleRef.Name .. " (" .. math.floor(dist) .. "m)")
-						humanoid:MoveTo(target)
-						local startTime = os.clock()
-						while aEnabled and (hrp.Position - target).Magnitude > 6 do
-							if os.clock() - startTime > 15 then break end
-							local newApple = findNearestApple(hrp)
-							if newApple and newApple ~= apple then
-								local newDist = (hrp.Position - newApple.Position).Magnitude
-								local curDist = (hrp.Position - target).Magnitude
-								if newDist < curDist * 0.6 then
-									apple = newApple
-									target = newApple.Position
-									appleRef = newApple.Parent
-									aStatus:SetContent("→ " .. appleRef.Name .. " (" .. math.floor(newDist) .. "m)")
-								end
-							end
-							humanoid:MoveTo(target)
-							task.wait(0.15)
-						end
-						if not appleRef or not appleRef.Parent then
+						aStatus:SetContent("→ " .. apple.Parent.Name .. " (" .. math.floor(dist) .. "m) [" .. collected .. "]")
+						aWalkTo(humanoid, hrp, apple.Position, 6)
+						if not apple.Parent or not apple.Parent.Parent then
 							collected = collected + 1
 							aCountPara:SetContent(tostring(collected))
 						end
 					else
-						aStatus:SetContent("Waiting for apples... (" .. collected .. " collected)")
-						task.wait(1)
+						local wp = PATROL[patrolIdx]
+						aStatus:SetContent("Patrol " .. patrolIdx .. "/" .. #PATROL .. " [" .. collected .. "]")
+						humanoid:MoveTo(wp)
+						local startTime = os.clock()
+						while aEnabled and (hrp.Position - wp).Magnitude > 10 do
+							if os.clock() - startTime > 8 then break end
+							local a = findNearestApple(hrp)
+							if a then break end
+							humanoid:MoveTo(wp)
+							task.wait(0.2)
+						end
+						patrolIdx = patrolIdx % #PATROL + 1
 					end
 				end
 
