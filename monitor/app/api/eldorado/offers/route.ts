@@ -128,6 +128,7 @@ export async function POST(req: NextRequest) {
         endpoint = "/api/v1/item-management/me/offers/item";
       }
 
+      console.log(`[ELDORADO UPLOAD] ${endpoint}`, JSON.stringify(payload, null, 2));
       const res = await eldoradoFetch(endpoint, {
         method: "POST",
         body: JSON.stringify(payload),
