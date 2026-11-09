@@ -66,9 +66,6 @@ export async function POST(req: NextRequest) {
           },
           offerImages: item.offerImages || [],
         };
-        if (item.mainOfferImage) {
-          details.mainOfferImage = item.mainOfferImage;
-        }
         const emailDetails = (item.emailLogin || item.emailProvider) ? {
           providerUrl: item.emailProvider || "",
           login: item.emailLogin || "",
@@ -80,6 +77,7 @@ export async function POST(req: NextRequest) {
         } : null;
         payload = {
           details,
+          ...(item.mainOfferImage ? { mainOfferImage: item.mainOfferImage } : {}),
           augmentedGame: {
             gameId: item.gameId || STEAL_AN_EGG_GAME_ID,
             category: "Account",
