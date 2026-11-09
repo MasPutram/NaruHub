@@ -86,7 +86,7 @@ const emptyItem = (type: "CustomItem" | "Account" = "CustomItem"): NewItem => ({
   minQuantity: 1,
   deliveryTime: "Minute20",
   offerType: type,
-  gameId: "476",
+  gameId: type === "Account" ? "452" : "476",
   originalEmail: "No",
   deliveryMethod: "Automatic",
   accLogin: "",
@@ -1375,7 +1375,7 @@ export default function EldoradoPage() {
                                   className={`edo-chip${item.offerType === t ? " active" : ""}`}
                                   onClick={() => {
                                     const copy = [...newItems];
-                                    copy[idx] = { ...copy[idx], offerType: t, quantity: t === "Account" ? 1 : copy[idx].quantity, minQuantity: t === "Account" ? 1 : copy[idx].minQuantity };
+                                    copy[idx] = { ...copy[idx], offerType: t, gameId: t === "Account" ? "452" : "476", quantity: t === "Account" ? 1 : copy[idx].quantity, minQuantity: t === "Account" ? 1 : copy[idx].minQuantity };
                                     setNewItems(copy);
                                   }}
                                 >{t === "Account" ? "Account" : "Item"}</button>
