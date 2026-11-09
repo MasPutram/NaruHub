@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Anime Dice v2.11.0
+-- NaruHub | Anime Dice v2.12.0
 -- Monitoring. Self-contained GUI (inline NaruUI).
 
 ------------------------------------------------------------
@@ -1431,7 +1431,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v2.11.0",
+	Title = "NaruHub | Anime Dice v2.12.0",
 	Badge = "MONITOR",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(440, 340),
@@ -2004,6 +2004,131 @@ do
 				end
 
 				aStatus:SetContent("Off")
+			end)
+		end,
+	})
+
+	-- Auto Buy Apple Board Upgrades
+	local bSection = AutumnTab:AddSection("Auto Buy Apple Board", { NoCollapse = true })
+	local bEnabled = false
+	local bStatus = bSection:AddParagraph({ Title = "Status", Content = "Off" })
+
+	bSection:AddToggle("AutoBuyAppleBoard", {
+		Title = "Auto Buy Apple Board Upgrades",
+		Default = false,
+		Callback = function(v)
+			bEnabled = v
+			if not v then
+				bStatus:SetContent("Off")
+				return
+			end
+			bStatus:SetContent("Starting...")
+
+			task.spawn(function()
+				local player = LocalPlayer
+				local char = player.Character or player.CharacterAdded:Wait()
+				local hrp = char:WaitForChild("HumanoidRootPart")
+				local rs = game:GetService("ReplicatedStorage")
+				local buyRemote = rs.Network.AppleService.RF.BuyUpgrade
+				local totalBought = 0
+
+				while bEnabled do
+					pcall(function()
+						char = player.Character
+						if char then hrp = char:FindFirstChild("HumanoidRootPart") end
+					end)
+					if not hrp then task.wait(1) continue end
+
+					local bought = false
+					for i = 1, 13 do
+						if not bEnabled then break end
+						local ok, result = pcall(function()
+							return buyRemote:InvokeServer(i)
+						end)
+						if ok and result then
+							totalBought = totalBought + 1
+							bought = true
+							bStatus:SetContent("Bought upgrade #" .. i .. " [total: " .. totalBought .. "]")
+						end
+						task.wait(0.1)
+					end
+
+					if not bought then
+						bStatus:SetContent("Waiting for apples... [bought: " .. totalBought .. "]")
+					end
+					task.wait(2)
+				end
+
+				bStatus:SetContent("Off")
+			end)
+		end,
+	})
+
+	-- Auto Buy Apple Tree Nodes
+	local tSection = AutumnTab:AddSection("Auto Buy Apple Tree Nodes", { NoCollapse = true })
+	local tEnabled = false
+	local tStatus = tSection:AddParagraph({ Title = "Status", Content = "Off" })
+
+	local TREE_NODES_BY_PRICE = {
+		"Seedling", "Juicy Harvest I", "Fallen Leaves I", "Quick Sprouts I",
+		"Hearty Meal I", "Acorn Charm I", "Autumn Fortune I", "Autumn Luck I",
+		"Juicy Harvest II", "Leaf Strength I", "Fallen Leaves II", "Autumn Fortune II",
+		"Lucky Orchard I", "Leaf Strength II", "Swift Feast I", "Diamond Apples",
+		"Quick Sprouts II", "Autumn Luck II", "Acorn Charm II", "Hearty Meal II",
+		"Swift Feast II", "Juicy Harvest III", "Autumn Fortune III", "Lucky Orchard II",
+		"Fallen Leaves III", "Galaxy Apples", "Quick Sprouts III", "Acorn Charm III",
+		"Lucky Orchard III", "Leaf Strength III", "Golden Basket", "Fallen Leaves IV",
+		"Juicy Harvest IV", "Autumn Luck III", "Rainbow Apples", "Lucky Orchard IV",
+		"Acorn Charm IV", "Swift Feast II", "Juicy Harvest V",
+	}
+
+	tSection:AddToggle("AutoBuyTreeNodes", {
+		Title = "Auto Buy Apple Tree Nodes",
+		Default = false,
+		Callback = function(v)
+			tEnabled = v
+			if not v then
+				tStatus:SetContent("Off")
+				return
+			end
+			tStatus:SetContent("Starting...")
+
+			task.spawn(function()
+				local player = LocalPlayer
+				local char = player.Character or player.CharacterAdded:Wait()
+				local hrp = char:WaitForChild("HumanoidRootPart")
+				local rs = game:GetService("ReplicatedStorage")
+				local buyRemote = rs.Network.AppleTreeService.RF.BuyAppleUpgrade
+				local totalBought = 0
+
+				while tEnabled do
+					pcall(function()
+						char = player.Character
+						if char then hrp = char:FindFirstChild("HumanoidRootPart") end
+					end)
+					if not hrp then task.wait(1) continue end
+
+					local bought = false
+					for _, nodeName in ipairs(TREE_NODES_BY_PRICE) do
+						if not tEnabled then break end
+						local ok, result = pcall(function()
+							return buyRemote:InvokeServer(nodeName)
+						end)
+						if ok and result then
+							totalBought = totalBought + 1
+							bought = true
+							tStatus:SetContent("Bought: " .. nodeName .. " [total: " .. totalBought .. "]")
+						end
+						task.wait(0.1)
+					end
+
+					if not bought then
+						tStatus:SetContent("Waiting for apples... [bought: " .. totalBought .. "]")
+					end
+					task.wait(2)
+				end
+
+				tStatus:SetContent("Off")
 			end)
 		end,
 	})
