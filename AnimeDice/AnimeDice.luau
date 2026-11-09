@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Anime Dice v2.12.0
+-- NaruHub | Anime Dice v2.13.0
 -- Monitoring. Self-contained GUI (inline NaruUI).
 
 ------------------------------------------------------------
@@ -1431,7 +1431,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v2.12.0",
+	Title = "NaruHub | Anime Dice v2.13.0",
 	Badge = "MONITOR",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(440, 340),
@@ -2195,6 +2195,101 @@ do
 				end
 
 				tStatus:SetContent("Off")
+			end)
+		end,
+	})
+
+	-- Auto Claim Quest Autumn
+	local QUEST_POS = Vector3.new(-2958, 224, 5611)
+	local qSection = AutumnTab:AddSection("Auto Claim Quest", { NoCollapse = true })
+	local qcEnabled = false
+	local qcStatus = qSection:AddParagraph({ Title = "Status", Content = "Off" })
+
+	local DAILY_QUEST_IDS = {"apples300", "rareApples", "rushApples", "boardLevels", "floors50", "floors150", "runFloor25", "leafRolls"}
+	local HOURLY_QUEST_IDS = {"h_apples80", "h_rareApples2", "h_combo15", "h_boardLevels2", "h_floors15", "h_leafRolls5", "h_rushApples15"}
+
+	qSection:AddToggle("AutoClaimQuestAutumn", {
+		Title = "Auto Claim Quest Autumn",
+		Default = false,
+		Callback = function(v)
+			qcEnabled = v
+			if not v then
+				qcStatus:SetContent("Off")
+				return
+			end
+			qcStatus:SetContent("Starting...")
+
+			task.spawn(function()
+				local player = LocalPlayer
+				local char = player.Character or player.CharacterAdded:Wait()
+				local humanoid = char:WaitForChild("Humanoid")
+				local hrp = char:WaitForChild("HumanoidRootPart")
+				local rs = game:GetService("ReplicatedStorage")
+				local claimRemote = rs.Network.AutumnQuestService.RF.Claim
+				local claimBonus = rs.Network.AutumnQuestService.RF.ClaimBonus
+				local totalClaimed = 0
+
+				if not isInAutumn(hrp) then
+					qcStatus:SetContent("Must be in Autumn world!")
+					task.wait(3)
+					qcEnabled = false
+					qcStatus:SetContent("Off")
+					return
+				end
+
+				if not walkToZone(humanoid, hrp, QUEST_POS, function(s) qcStatus:SetContent(s) end, "Quest Board", function() return qcEnabled end) then
+					qcStatus:SetContent("Off")
+					return
+				end
+
+				while qcEnabled do
+					pcall(function()
+						char = player.Character
+						if char then
+							humanoid = char:FindFirstChildOfClass("Humanoid")
+							hrp = char:FindFirstChild("HumanoidRootPart")
+						end
+					end)
+					if not hrp then task.wait(1) continue end
+
+					if (hrp.Position - QUEST_POS).Magnitude > 25 then
+						walkToZone(humanoid, hrp, QUEST_POS, function(s) qcStatus:SetContent(s) end, "Quest Board", function() return qcEnabled end)
+					end
+
+					local claimed = false
+					for _, id in ipairs(DAILY_QUEST_IDS) do
+						if not qcEnabled then break end
+						local ok, result = pcall(function() return claimRemote:InvokeServer(id) end)
+						if ok and result then
+							totalClaimed = totalClaimed + 1
+							claimed = true
+							qcStatus:SetContent("Claimed: " .. id .. " [total: " .. totalClaimed .. "]")
+						end
+						task.wait(0.3)
+					end
+
+					for _, id in ipairs(HOURLY_QUEST_IDS) do
+						if not qcEnabled then break end
+						local ok, result = pcall(function() return claimRemote:InvokeServer(id) end)
+						if ok and result then
+							totalClaimed = totalClaimed + 1
+							claimed = true
+							qcStatus:SetContent("Claimed: " .. id .. " [total: " .. totalClaimed .. "]")
+						end
+						task.wait(0.3)
+					end
+
+					pcall(function() claimBonus:InvokeServer("daily") end)
+					task.wait(0.3)
+					pcall(function() claimBonus:InvokeServer("hourly") end)
+
+					if not claimed then
+						qcStatus:SetContent("No quests ready [claimed: " .. totalClaimed .. "]")
+					end
+					task.wait(math.random(30, 60))
+				end
+
+				qcStatus:SetContent("Off")
 			end)
 		end,
 	})
