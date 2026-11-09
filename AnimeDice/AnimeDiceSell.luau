@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | AnimeDice Sell Catalog v2.4.0
+-- NaruHub | AnimeDice Sell Catalog v2.5.0
 -- Sends enriched inventory data to dashboard catalog for marketplace listings.
 -- Self-contained GUI (no external NaruUI fetch).
 
@@ -1621,7 +1621,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | AD Catalog v2.3.0",
+	Title = "NaruHub | AD Catalog v2.5.0",
 	Badge = "SELL",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(540, 460),
@@ -2780,6 +2780,178 @@ do
 					qStatus:SetContent("Off")
 				end
 				qEnabled = false
+			end)
+		end,
+	})
+end
+
+------------------------------------------------------------
+-- Autumn Tab — Auto Collect Apple
+------------------------------------------------------------
+do
+	local AutumnTab = Window:AddTab({ Title = "Autumn" })
+	local aSection = AutumnTab:AddSection("Auto Collect Apple", { NoCollapse = true })
+
+	local aEnabled = false
+	local aStatus = aSection:AddParagraph({ Title = "Status", Content = "Off" })
+	local aCyclePara = aSection:AddParagraph({ Title = "Cycle", Content = "-" })
+
+	local AUTUMN_PORTAL_ROUTE = {
+		Vector3.new(256.6, 4.3, 120.7),
+		Vector3.new(224.5, 4.8, 95.4),
+		Vector3.new(201.0, 4.3, 51.8),
+		Vector3.new(210.7, 4.6, 10.8),
+		Vector3.new(227.9, 5.1, -9.6),
+		Vector3.new(261.0, 5.2, -30.0),
+		Vector3.new(275.4, 4.3, -51.9),
+		Vector3.new(284.2, 4.3, -77.5),
+		Vector3.new(286.0, 4.3, -103.5),
+	}
+
+	local AUTUMN_WALK_ROUTE = {
+		Vector3.new(-2929.5, 222.4, 5626.3),
+		Vector3.new(-2908.5, 222.8, 5658.2),
+		Vector3.new(-2896.5, 222.6, 5709.5),
+		Vector3.new(-2875.5, 222.8, 5744.2),
+		Vector3.new(-2857.6, 222.8, 5763.3),
+		Vector3.new(-2838.0, 223.2, 5782.3),
+		Vector3.new(-2817.6, 223.2, 5802.6),
+	}
+
+	local APPLE_POINTS = {
+		Vector3.new(-2794, 223.4, 5784),
+		Vector3.new(-2765, 223.4, 5815),
+		Vector3.new(-2754, 223.4, 5827),
+		Vector3.new(-2767, 223.4, 5839),
+		Vector3.new(-2786, 223.5, 5857),
+		Vector3.new(-2799, 223.4, 5870),
+		Vector3.new(-2812, 223.4, 5858),
+		Vector3.new(-2830, 223.4, 5840),
+		Vector3.new(-2843, 224.3, 5824),
+		Vector3.new(-2822, 223.3, 5807),
+		Vector3.new(-2798, 223.3, 5806),
+		Vector3.new(-2780, 223.4, 5823),
+		Vector3.new(-2791, 223.4, 5838),
+		Vector3.new(-2810, 223.5, 5848),
+		Vector3.new(-2820, 223.4, 5825),
+	}
+
+	local function aWalkTo(hum, root, target, radius)
+		radius = radius or 8
+		if not aEnabled then return end
+		local startTime = os.clock()
+		hum:MoveTo(target)
+		while (root.Position - target).Magnitude > radius do
+			if not aEnabled then return end
+			if os.clock() - startTime > 15 then break end
+			hum:MoveTo(target)
+			task.wait(0.3)
+		end
+	end
+
+	local function isInAutumn(root)
+		return root.Position.Z > 5000
+	end
+
+	aSection:AddToggle("AutoCollectApple", {
+		Title = "Auto Collect Apple",
+		Default = false,
+		Callback = function(v)
+			aEnabled = v
+			if not v then
+				aStatus:SetContent("Off")
+				aCyclePara:SetContent("-")
+				return
+			end
+			aStatus:SetContent("Starting...")
+
+			task.spawn(function()
+				local player = LocalPlayer
+				local char = player.Character or player.CharacterAdded:Wait()
+				local humanoid = char:WaitForChild("Humanoid")
+				local hrp = char:WaitForChild("HumanoidRootPart")
+
+				local function refresh()
+					char = player.Character or player.CharacterAdded:Wait()
+					humanoid = char:WaitForChild("Humanoid")
+					hrp = char:WaitForChild("HumanoidRootPart")
+				end
+
+				if not isInAutumn(hrp) then
+					aStatus:SetContent("Hub → Portal...")
+					local pg = player:WaitForChild("PlayerGui")
+					local hubBtn = pg:FindFirstChild("Root") and pg.Root:FindFirstChild("HUD") and pg.Root.HUD:FindFirstChild("Top") and pg.Root.HUD.Top:FindFirstChild("Hub")
+					if hubBtn then
+						pcall(function() firesignal(hubBtn.Activated) end)
+						pcall(function() hubBtn.MouseButton1Click:Fire() end)
+						task.wait(2)
+						refresh()
+					end
+
+					aStatus:SetContent("Walking to portal...")
+					for _, wp in ipairs(AUTUMN_PORTAL_ROUTE) do
+						if not aEnabled then return end
+						aWalkTo(humanoid, hrp, wp, 10)
+					end
+
+					aStatus:SetContent("Entering portal...")
+					local attempt = 0
+					while not isInAutumn(hrp) do
+						if not aEnabled then return end
+						attempt = attempt + 1
+						humanoid:MoveTo(Vector3.new(286, 6, -130))
+						local t = os.clock()
+						while os.clock() - t < 4 and not isInAutumn(hrp) do
+							humanoid:MoveTo(Vector3.new(286, 6, -130))
+							task.wait(0.2)
+						end
+						if isInAutumn(hrp) then break end
+						aWalkTo(humanoid, hrp, Vector3.new(286, 4.3, -103), 5)
+						task.wait(1)
+					end
+					humanoid:MoveTo(hrp.Position)
+					task.wait(3)
+					refresh()
+
+					aStatus:SetContent("Walking to apple area...")
+					for _, wp in ipairs(AUTUMN_WALK_ROUTE) do
+						if not aEnabled then return end
+						aWalkTo(humanoid, hrp, wp, 12)
+					end
+				end
+
+				aStatus:SetContent("Farming apples...")
+				local cycle = 0
+
+				while aEnabled do
+					cycle = cycle + 1
+					local shuffled = table.clone(APPLE_POINTS)
+					for i = #shuffled, 2, -1 do
+						local j = math.random(1, i)
+						shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+					end
+					aCyclePara:SetContent("Cycle " .. cycle)
+
+					for idx, wp in ipairs(shuffled) do
+						if not aEnabled then break end
+						if not humanoid or humanoid.Health <= 0 then
+							char = player.CharacterAdded:Wait()
+							task.wait(2)
+							refresh()
+							if not isInAutumn(hrp) then
+								aStatus:SetContent("Respawned di lobby — stopped")
+								aEnabled = false
+								return
+							end
+						end
+						aStatus:SetContent("Cycle " .. cycle .. " — apple " .. idx .. "/" .. #shuffled)
+						aWalkTo(humanoid, hrp, wp, 10)
+						task.wait(0.5)
+					end
+				end
+
+				aStatus:SetContent("Off")
+				aCyclePara:SetContent("-")
 			end)
 		end,
 	})
