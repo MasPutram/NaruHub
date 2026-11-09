@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Anime Dice v2.14.0
+-- NaruHub | Anime Dice v2.14.1
 -- Monitoring. Self-contained GUI (inline NaruUI).
 
 ------------------------------------------------------------
@@ -1431,7 +1431,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v2.14.0",
+	Title = "NaruHub | Anime Dice v2.14.1",
 	Badge = "MONITOR",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(440, 340),
@@ -1924,30 +1924,7 @@ do
 				local claimRemote = rs.Network.AutumnQuestService.RF.Claim
 				local claimBonus = rs.Network.AutumnQuestService.RF.ClaimBonus
 
-				local AppleConfig = require(rs.Framework.Features.Autumn.AppleConfig)
-				local DataController = require(rs.Framework.Features.Data.DataController)
-				local AutumnConfig = require(rs.Framework.Features.Autumn.AutumnConfig)
-				local ApplesCurrency = AutumnConfig.Currencies.Apples
-
 				local stats = { quests = 0, board = 0, tree = 0, apples = 0, cycle = 0 }
-
-				local function getAppleCount()
-					local data = DataController.Inventory[ApplesCurrency]()
-					return data and data.amount or 0
-				end
-
-				local function getCheapestBoardCost()
-					local boardData = DataController.AppleBoard()
-					local cheapest = math.huge
-					for _, upgrade in ipairs(AppleConfig.Upgrades) do
-						local level = AppleConfig.GetLevel(boardData, upgrade.name)
-						if level < upgrade.max then
-							local cost = AppleConfig.GetCost(upgrade, level)
-							if cost < cheapest then cheapest = cost end
-						end
-					end
-					return cheapest
-				end
 
 				local function refreshChar()
 					pcall(function()
@@ -2051,120 +2028,111 @@ do
 					stats.cycle = stats.cycle + 1
 					local cycleLabel = "C" .. stats.cycle
 
-					-- ======== STEP 1: QUEST CLAIM (try remote first, walk only if claimable) ========
-					aStatus:SetContent(cycleLabel .. " | Checking quests...")
-					local questClaimable = false
-					for _, id in ipairs(DAILY_QUEST_IDS) do
-						if not aEnabled then break end
-						local ok, result = pcall(function() return claimRemote:InvokeServer(id) end)
-						if ok and result then
-							questClaimable = true
-							stats.quests = stats.quests + 1
-							aStatus:SetContent(cycleLabel .. " | Claimed: " .. id)
+					local function farmApples(duration)
+						local farmEnd = os.clock() + duration
+						while aEnabled and os.clock() < farmEnd do
+							refreshChar()
+							if not humanoid or not hrp then task.wait(1) continue end
+							local apple, dist = findNearestApple(hrp)
+							if apple then
+								aStatus:SetContent(cycleLabel .. " | → " .. apple.Parent.Name .. " (" .. math.floor(dist) .. "m)")
+								aWalkTo(humanoid, hrp, apple.Position, 6)
+								task.wait(0.3)
+								if not apple.Parent or not apple.Parent.Parent then
+									stats.apples = stats.apples + 1
+									aCountPara:SetContent(tostring(stats.apples))
+								end
+							else
+								local wp = PATROL[patrolIdx]
+								aStatus:SetContent(cycleLabel .. " | Patrol " .. patrolIdx .. "/" .. #PATROL)
+								humanoid:MoveTo(wp)
+								local startTime = os.clock()
+								while aEnabled and (hrp.Position - wp).Magnitude > 10 do
+									if os.clock() - startTime > 8 then break end
+									local a = findNearestApple(hrp)
+									if a then break end
+									humanoid:MoveTo(wp)
+									task.wait(0.2)
+								end
+								patrolIdx = patrolIdx % #PATROL + 1
+							end
 						end
-						task.wait(0.15)
 					end
-					for _, id in ipairs(HOURLY_QUEST_IDS) do
-						if not aEnabled then break end
-						local ok, result = pcall(function() return claimRemote:InvokeServer(id) end)
-						if ok and result then
-							questClaimable = true
-							stats.quests = stats.quests + 1
-							aStatus:SetContent(cycleLabel .. " | Claimed: " .. id)
-						end
-						task.wait(0.15)
-					end
-					if questClaimable then
-						walkTo(QUEST_POS, "Quest Board")
+
+					-- ======== STEP 1: QUEST — jalan dulu, baru claim ========
+					aStatus:SetContent(cycleLabel .. " | → Quest Board...")
+					if walkTo(QUEST_POS, "Quest Board") then
+						aStatus:SetContent(cycleLabel .. " | Claiming quests...")
 						for _, id in ipairs(DAILY_QUEST_IDS) do
 							if not aEnabled then break end
 							local ok, result = pcall(function() return claimRemote:InvokeServer(id) end)
-							if ok and result then stats.quests = stats.quests + 1 end
-							task.wait(0.15)
+							if ok and result then
+								stats.quests = stats.quests + 1
+								aStatus:SetContent(cycleLabel .. " | Claimed: " .. id)
+							end
+							task.wait(0.2)
 						end
 						for _, id in ipairs(HOURLY_QUEST_IDS) do
 							if not aEnabled then break end
 							local ok, result = pcall(function() return claimRemote:InvokeServer(id) end)
-							if ok and result then stats.quests = stats.quests + 1 end
-							task.wait(0.15)
+							if ok and result then
+								stats.quests = stats.quests + 1
+								aStatus:SetContent(cycleLabel .. " | Claimed: " .. id)
+							end
+							task.wait(0.2)
 						end
 						pcall(function() claimBonus:InvokeServer("daily") end)
 						task.wait(0.2)
 						pcall(function() claimBonus:InvokeServer("hourly") end)
-						task.wait(math.random(3, 5))
 					end
 					if not aEnabled then break end
+					task.wait(math.random(2, 4))
 
-					-- ======== STEP 2: BOARD UPGRADE (check apple count first) ========
-					local apples = getAppleCount()
-					local cheapestBoard = getCheapestBoardCost()
-					if apples >= cheapestBoard then
-						aStatus:SetContent(cycleLabel .. " | → Apple Board...")
-						if walkTo(BOARD_POS, "Apple Board") then
-							for _, name in ipairs(BOARD_UPGRADES) do
-								if not aEnabled then break end
-								local ok, result = pcall(function() return boardBuyRemote:InvokeServer(name, true) end)
-								if ok and result then
-									stats.board = stats.board + 1
-									aStatus:SetContent(cycleLabel .. " | Board: " .. name)
-								end
-								task.wait(0.1)
-							end
-						end
-						task.wait(math.random(3, 5))
-					end
-					if not aEnabled then break end
-
-					-- ======== STEP 3: TREE UPGRADE (check apple count first) ========
-					apples = getAppleCount()
-					if apples >= 100 then
-						aStatus:SetContent(cycleLabel .. " | → Apple Tree...")
-						if walkTo(TREE_POS, "Apple Tree") then
-							for _, nodeName in ipairs(TREE_NODES) do
-								if not aEnabled then break end
-								local ok, result = pcall(function() return treeBuyRemote:InvokeServer(nodeName) end)
-								if ok and result then
-									stats.tree = stats.tree + 1
-									aStatus:SetContent(cycleLabel .. " | Tree: " .. nodeName)
-								end
-								task.wait(0.1)
-							end
-						end
-						task.wait(math.random(3, 5))
-					end
-					if not aEnabled then break end
-
-					-- ======== STEP 4: FARM APPLES ========
+					-- ======== STEP 2: FARM APPLES (60s) ========
 					aStatus:SetContent(cycleLabel .. " | Farming apples...")
-					local farmEnd = os.clock() + 60
-					while aEnabled and os.clock() < farmEnd do
-						refreshChar()
-						if not humanoid or not hrp then task.wait(1) continue end
+					farmApples(60)
+					if not aEnabled then break end
+					task.wait(math.random(2, 4))
 
-						local apple, dist = findNearestApple(hrp)
-						if apple then
-							aStatus:SetContent(cycleLabel .. " | → " .. apple.Parent.Name .. " (" .. math.floor(dist) .. "m)")
-							aWalkTo(humanoid, hrp, apple.Position, 6)
-							task.wait(0.3)
-							if not apple.Parent or not apple.Parent.Parent then
-								stats.apples = stats.apples + 1
-								aCountPara:SetContent(tostring(stats.apples))
+					-- ======== STEP 3: BOARD — jalan dulu, baru buy ========
+					aStatus:SetContent(cycleLabel .. " | → Apple Board...")
+					if walkTo(BOARD_POS, "Apple Board") then
+						aStatus:SetContent(cycleLabel .. " | Buying board upgrades...")
+						for _, name in ipairs(BOARD_UPGRADES) do
+							if not aEnabled then break end
+							local ok, result = pcall(function() return boardBuyRemote:InvokeServer(name, true) end)
+							if ok and result then
+								stats.board = stats.board + 1
+								aStatus:SetContent(cycleLabel .. " | Board: " .. name)
 							end
-						else
-							local wp = PATROL[patrolIdx]
-							aStatus:SetContent(cycleLabel .. " | Patrol " .. patrolIdx .. "/" .. #PATROL)
-							humanoid:MoveTo(wp)
-							local startTime = os.clock()
-							while aEnabled and (hrp.Position - wp).Magnitude > 10 do
-								if os.clock() - startTime > 8 then break end
-								local a = findNearestApple(hrp)
-								if a then break end
-								humanoid:MoveTo(wp)
-								task.wait(0.2)
-							end
-							patrolIdx = patrolIdx % #PATROL + 1
+							task.wait(0.1)
 						end
 					end
+					if not aEnabled then break end
+					task.wait(math.random(2, 4))
+
+					-- ======== STEP 4: FARM APPLES (60s) ========
+					aStatus:SetContent(cycleLabel .. " | Farming apples...")
+					farmApples(60)
+					if not aEnabled then break end
+					task.wait(math.random(2, 4))
+
+					-- ======== STEP 5: TREE — jalan dulu, baru buy ========
+					aStatus:SetContent(cycleLabel .. " | → Apple Tree...")
+					if walkTo(TREE_POS, "Apple Tree") then
+						aStatus:SetContent(cycleLabel .. " | Buying tree upgrades...")
+						for _, nodeName in ipairs(TREE_NODES) do
+							if not aEnabled then break end
+							local ok, result = pcall(function() return treeBuyRemote:InvokeServer(nodeName) end)
+							if ok and result then
+								stats.tree = stats.tree + 1
+								aStatus:SetContent(cycleLabel .. " | Tree: " .. nodeName)
+							end
+							task.wait(0.1)
+						end
+					end
+					if not aEnabled then break end
+					task.wait(math.random(2, 4))
 
 					aStatus:SetContent(cycleLabel .. " | Q:" .. stats.quests .. " B:" .. stats.board .. " T:" .. stats.tree .. " A:" .. stats.apples)
 					task.wait(math.random(3, 5))
