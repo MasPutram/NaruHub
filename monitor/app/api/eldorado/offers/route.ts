@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
         status: res.status,
         ok: res.ok,
         data,
-        _debug: !res.ok ? { hasMainImage: !!item.mainOfferImage, mainOfferImage: item.mainOfferImage, imageCount: (item.images || []).length, offerImagesCount: (item.offerImages || []).length } : undefined,
+        _debug: !res.ok ? { hasMainImage: !!item.mainOfferImage, mainOfferImage: item.mainOfferImage, imgDebug: item.imgDebug } : undefined,
       });
     }
 
