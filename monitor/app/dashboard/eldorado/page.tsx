@@ -692,28 +692,21 @@ export default function EldoradoPage() {
         valid.map(async (item) => {
           let mainOfferImage = undefined;
           const offerImages: any[] = [];
-          const imgDebug: any[] = [];
           const allImages = item.images || [];
           if (allImages.length === 0 && item.image) {
             allImages.push({ file: item.image, preview: item.imagePreview || "" });
           }
           for (let i = 0; i < allImages.length; i++) {
-            const imgEntry = allImages[i];
-            const hasFile = !!imgEntry.file;
-            const fileType = typeof imgEntry.file === "object" && imgEntry.file ? imgEntry.file.constructor?.name || "object" : typeof imgEntry.file;
             const form = new FormData();
-            form.append("image", imgEntry.file);
+            form.append("image", allImages[i].file);
             const imgRes = await fetch("/api/eldorado/upload-image", { method: "POST", body: form });
-            const imgText = await imgRes.text();
-            let imgData: any;
-            try { imgData = JSON.parse(imgText); } catch { imgData = imgText; }
-            imgDebug.push({ i, hasFile, fileType, ok: imgRes.ok, status: imgRes.status, data: imgData });
             if (imgRes.ok) {
+              const imgData = await imgRes.json();
               if (i === 0) mainOfferImage = imgData;
               else offerImages.push(imgData);
             }
           }
-          return { ...item, price: truncatePrice(Number(item.price)), mainOfferImage, offerImages, imgDebug, quantity: item.offerType === "Account" ? 1 : item.quantity };
+          return { ...item, price: truncatePrice(Number(item.price)), mainOfferImage, offerImages, quantity: item.offerType === "Account" ? 1 : item.quantity };
         })
       );
       const res = await fetch("/api/eldorado/offers", {
@@ -1613,7 +1606,6 @@ export default function EldoradoPage() {
                     {uploadResults.map((r, i) => (
                       <li key={i}>
                         {r.ok ? "✓" : "✗"} {r.title} — {r.ok ? "Berhasil" : `Gagal (${r.status}): ${typeof r.data === "string" ? r.data : JSON.stringify(r.data)}`}
-                        {r._debug && <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 2, wordBreak: "break-all" }}>DEBUG: {JSON.stringify(r._debug)}</div>}
                       </li>
                     ))}
                   </ul>

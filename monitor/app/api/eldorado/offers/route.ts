@@ -126,7 +126,6 @@ export async function POST(req: NextRequest) {
         endpoint = "/api/v1/item-management/me/offers/item";
       }
 
-      console.log(`[ELDORADO UPLOAD] ${endpoint}`, JSON.stringify(payload, null, 2));
       const res = await eldoradoFetch(endpoint, {
         method: "POST",
         body: JSON.stringify(payload),
@@ -141,7 +140,6 @@ export async function POST(req: NextRequest) {
         status: res.status,
         ok: res.ok,
         data,
-        _debug: !res.ok ? { hasMainImage: !!item.mainOfferImage, mainOfferImage: item.mainOfferImage, imgDebug: item.imgDebug } : undefined,
       });
     }
 
