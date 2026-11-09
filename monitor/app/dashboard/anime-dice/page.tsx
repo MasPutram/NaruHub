@@ -111,11 +111,11 @@ export default function AnimeDicePage() {
   const [search, setSearch] = useState("");
   const [detail, setDetail] = useState<{ name: string; data: ADDetail | null; loading: boolean; account: ADAccount | null } | null>(null);
   const [combined, setCombined] = useState<CombinedState>({ open: false, loading: false, details: [] });
-  const [hauntedFound, setHauntedFound] = useState<{ gear: string; account: string }[]>([]);
-  const [hauntedMissing, setHauntedMissing] = useState<string[]>([]);
-  const [hauntedUnits, setHauntedUnits] = useState<{ unit: string; account: string; count: number }[]>([]);
-  const [hauntedAccounts, setHauntedAccounts] = useState<{ account: string; gears: string[]; units: { name: string; count: number }[] }[]>([]);
-  const [hauntedExpanded, setHauntedExpanded] = useState(false);
+  const [autumnFound, setAutumnFound] = useState<{ gear: string; account: string }[]>([]);
+  const [autumnMissing, setAutumnMissing] = useState<string[]>([]);
+  const [autumnUnits, setAutumnUnits] = useState<{ unit: string; account: string; count: number }[]>([]);
+  const [autumnAccounts, setAutumnAccounts] = useState<{ account: string; gears: string[]; units: { name: string; count: number }[] }[]>([]);
+  const [autumnExpanded, setAutumnExpanded] = useState(false);
   const [sovereignAccounts, setSovereignAccounts] = useState<{ account: string; units: { name: string; count: number }[]; total: number }[]>([]);
   const [sovereignTotal, setSovereignTotal] = useState(0);
   const [sovereignExpanded, setSovereignExpanded] = useState(false);
@@ -131,15 +131,15 @@ export default function AnimeDicePage() {
     } catch {}
   }, []);
 
-  const fetchHaunted = useCallback(async () => {
+  const fetchAutumn = useCallback(async () => {
     try {
       const res = await fetch("/api/anime-dice/haunted-check");
       const data = await res.json();
       if (data.ok) {
-        setHauntedFound(data.found || []);
-        setHauntedMissing(data.missing || []);
-        setHauntedUnits(data.units || []);
-        setHauntedAccounts(data.accounts || []);
+        setAutumnFound(data.found || []);
+        setAutumnMissing(data.missing || []);
+        setAutumnUnits(data.units || []);
+        setAutumnAccounts(data.accounts || []);
       }
     } catch {}
   }, []);
@@ -158,13 +158,13 @@ export default function AnimeDicePage() {
   useEffect(() => {
     setMounted(true);
     fetchAccounts();
-    fetchHaunted();
+    fetchAutumn();
     fetchSovereign();
     const id = setInterval(fetchAccounts, 5000);
-    const id2 = setInterval(fetchHaunted, 10000);
+    const id2 = setInterval(fetchAutumn, 10000);
     const id3 = setInterval(fetchSovereign, 10000);
     return () => { clearInterval(id); clearInterval(id2); clearInterval(id3); };
-  }, [fetchAccounts, fetchHaunted, fetchSovereign]);
+  }, [fetchAccounts, fetchAutumn, fetchSovereign]);
 
   function sortAccounts(list: ADAccount[]): ADAccount[] {
     const sorted = [...list];
@@ -391,12 +391,12 @@ export default function AnimeDicePage() {
         .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 6px; }
         .section-header > span:first-child { font-size: 12px; font-weight: 800; color: var(--accent); letter-spacing: .5px; text-transform: uppercase; }
 
-        .haunted-banner { background: linear-gradient(135deg, rgba(249,115,22,.12), rgba(168,85,247,.12)); border: 1px solid rgba(249,115,22,.3); border-radius: 12px; padding: 14px 20px; margin-bottom: 16px; cursor: pointer; transition: border-color .15s; }
-        .haunted-banner:hover { border-color: rgba(249,115,22,.5); }
+        .haunted-banner { background: linear-gradient(135deg, rgba(180,83,9,.12), rgba(161,98,7,.12)); border: 1px solid rgba(180,83,9,.3); border-radius: 12px; padding: 14px 20px; margin-bottom: 16px; cursor: pointer; transition: border-color .15s; }
+        .haunted-banner:hover { border-color: rgba(180,83,9,.5); }
         .sovereign-banner { background: linear-gradient(135deg, rgba(255,215,0,.12), rgba(255,165,0,.12)); border-color: rgba(255,215,0,.3); }
         .sovereign-banner:hover { border-color: rgba(255,215,0,.5); }
         .haunted-header { display: flex; align-items: center; justify-content: space-between; }
-        .haunted-title { font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: #f97316; display: flex; align-items: center; gap: 8px; }
+        .haunted-title { font-size: 12px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: #b45309; display: flex; align-items: center; gap: 8px; }
         .haunted-counter { font-size: 11px; font-weight: 700; color: var(--dim); display: flex; align-items: center; gap: 4px; }
         .haunted-counter .num { color: #34d399; }
         .haunted-arrow { font-size: 10px; color: var(--dim); transition: transform .2s; }
@@ -409,7 +409,7 @@ export default function AnimeDicePage() {
         .haunted-detail { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.06); }
         .haunted-accs { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
         .haunted-acc-card { background: rgba(255,255,255,.03); border: 1px solid #1e1e38; border-radius: 10px; padding: 10px 14px; }
-        .haunted-acc-name { font-size: 13px; font-weight: 800; color: #f97316; margin-bottom: 8px; }
+        .haunted-acc-name { font-size: 13px; font-weight: 800; color: #b45309; margin-bottom: 8px; }
         .haunted-acc-items { display: flex; flex-wrap: wrap; gap: 5px; }
         .haunted-acc-chip { font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 14px; }
         .haunted-acc-chip.gear { background: rgba(52,211,153,.12); border: 1px solid rgba(52,211,153,.25); color: #34d399; }
@@ -422,42 +422,42 @@ export default function AnimeDicePage() {
           <h1>Anime Dice Dashboard</h1>
         </div>
 
-        {(hauntedMissing.length > 0 || hauntedUnits.length > 0) && (
-          <div className="haunted-banner" onClick={() => setHauntedExpanded(!hauntedExpanded)}>
+        {(autumnMissing.length > 0 || autumnUnits.length > 0) && (
+          <div className="haunted-banner" onClick={() => setAutumnExpanded(!autumnExpanded)}>
             <div className="haunted-header">
-              <div className="haunted-title">
-                <span>&#x1F383;</span> Halloween Tracker
+              <div className="haunted-title" style={{ color: "#b45309" }}>
+                <span>&#x1F341;</span> Autumn Tracker
               </div>
               <div className="haunted-counter">
-                <span>Gear <span className="num">{hauntedFound.length}/5</span></span>
-                {hauntedUnits.length > 0 && <span>&nbsp;&bull; Unit Langka <span className="num">{hauntedUnits.length}</span></span>}
-                <span className={`haunted-arrow ${hauntedExpanded ? "open" : ""}`}>&#x25BC;</span>
+                <span>Gear <span className="num">{autumnFound.length}/6</span></span>
+                {autumnUnits.length > 0 && <span>&nbsp;&bull; Unit Langka <span className="num">{autumnUnits.length}</span></span>}
+                <span className={`haunted-arrow ${autumnExpanded ? "open" : ""}`}>&#x25BC;</span>
               </div>
             </div>
             <div className="haunted-summary">
-              {["Pumpkin Head", "Mummy Wraps", "Vampire Cape", "Ghost Wisps", "Candy Bucket"].map((g) => {
-                const f = hauntedFound.find((h) => h.gear === g);
+              {["Leaf King's Crown", "Levy's Harvest Rake", "Netsu's Bonfire Wings", "Asce's Fall Lantern", "Naroto's Fox Tail", "Madera's Harvest Moon"].map((g) => {
+                const f = autumnFound.find((h) => h.gear === g);
                 return (
                   <span key={g} className={`haunted-chip ${f ? "got" : "miss"}`}>
                     {f ? "✓" : "✗"} {g}
                   </span>
                 );
               })}
-              {hauntedUnits.map((u) => (
+              {autumnUnits.map((u) => (
                 <span key={u.unit + u.account} className="haunted-chip unit">
                   {u.unit} x{u.count}
                 </span>
               ))}
             </div>
-            {hauntedExpanded && (
+            {autumnExpanded && (
               <div className="haunted-detail" onClick={(e) => e.stopPropagation()}>
-                {hauntedAccounts.length === 0 ? (
-                  <div className="haunted-none">Belum ada akun yang mendapatkan Haunted gear atau unit langka</div>
+                {autumnAccounts.length === 0 ? (
+                  <div className="haunted-none">Belum ada akun yang mendapatkan Autumn gear atau unit langka</div>
                 ) : (
                   <div className="haunted-accs">
-                    {hauntedAccounts.map((acc) => (
+                    {autumnAccounts.map((acc) => (
                       <div key={acc.account} className="haunted-acc-card">
-                        <div className="haunted-acc-name">{acc.account}</div>
+                        <div className="haunted-acc-name" style={{ color: "#b45309" }}>{acc.account}</div>
                         <div className="haunted-acc-items">
                           {acc.gears.map((g) => (
                             <span key={g} className="haunted-acc-chip gear">{g}</span>

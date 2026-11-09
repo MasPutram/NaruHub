@@ -4,18 +4,19 @@ import { getTenantFromRequest } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-const HAUNTED_GEARS = [
-  "Pumpkin Head",
-  "Candy Bucket",
-  "Ghost Wisps",
-  "Mummy Wraps",
-  "Vampire Cape",
+const AUTUMN_GEARS = [
+  "Leaf King's Crown",
+  "Levy's Harvest Rake",
+  "Netsu's Bonfire Wings",
+  "Asce's Fall Lantern",
+  "Naroto's Fox Tail",
+  "Madera's Harvest Moon",
 ];
 
 const RARE_UNITS = [
-  "Witch Erzo",
-  "Witch Namee",
-  "Vampire Gujo",
+  "Bonfire Netsu",
+  "Impact Yujiru",
+  "Wildfire Asce",
 ];
 
 export async function GET(req: NextRequest) {
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
     } while (cursor !== "0");
 
     if (keys.length === 0) {
-      return NextResponse.json({ ok: true, found: [], missing: HAUNTED_GEARS, units: [], accounts: [] });
+      return NextResponse.json({ ok: true, found: [], missing: AUTUMN_GEARS, units: [], accounts: [] });
     }
 
     const values = await redis.mget(...keys);
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
       const bp: any[] = Array.isArray(data.backpack) ? data.backpack : [];
       const accountGears: string[] = [];
       for (const item of bp) {
-        if (HAUNTED_GEARS.includes(item.name)) {
+        if (AUTUMN_GEARS.includes(item.name)) {
           accountGears.push(item.name);
           if (!foundSet.has(item.name)) {
             found.push({ gear: item.name, account });
@@ -80,7 +81,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const missing = HAUNTED_GEARS.filter((g) => !foundSet.has(g));
+    const missing = AUTUMN_GEARS.filter((g) => !foundSet.has(g));
     const accounts = Object.entries(accountsMap).map(([account, data]) => ({
       account,
       ...data,
@@ -88,6 +89,6 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ ok: true, found, missing, units, accounts });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e.message, found: [], missing: HAUNTED_GEARS, units: [], accounts: [] }, { status: 500 });
+    return NextResponse.json({ ok: false, error: e.message, found: [], missing: AUTUMN_GEARS, units: [], accounts: [] }, { status: 500 });
   }
 }
