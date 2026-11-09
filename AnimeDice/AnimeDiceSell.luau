@@ -3040,7 +3040,7 @@ do
 					if not bought then
 						bStatus:SetContent("Waiting for apples... [bought: " .. totalBought .. "]")
 					end
-					task.wait(2)
+					task.wait(math.random(5, 10))
 				end
 
 				bStatus:SetContent("Off")
@@ -3109,7 +3109,7 @@ do
 					if not bought then
 						tStatus:SetContent("Waiting for apples... [bought: " .. totalBought .. "]")
 					end
-					task.wait(2)
+					task.wait(math.random(5, 10))
 				end
 
 				tStatus:SetContent("Off")
