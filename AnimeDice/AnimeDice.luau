@@ -2008,6 +2008,24 @@ do
 		end,
 	})
 
+	local BOARD_POS = Vector3.new(-2773, 224, 5852)
+	local TREE_POS = Vector3.new(-2814, 224, 5767)
+
+	local function walkToZone(humanoid, hrp, target, statusFn, label, enabled)
+		if (hrp.Position - target).Magnitude < 20 then return true end
+		statusFn("Walking to " .. label .. "...")
+		humanoid:MoveTo(target)
+		local t = os.clock()
+		while (hrp.Position - target).Magnitude > 15 do
+			if not enabled() then return false end
+			if os.clock() - t > 20 then break end
+			humanoid:MoveTo(target)
+			task.wait(0.3)
+		end
+		task.wait(0.5)
+		return true
+	end
+
 	-- Auto Buy Apple Board Upgrades
 	local bSection = AutumnTab:AddSection("Auto Buy Apple Board", { NoCollapse = true })
 	local bEnabled = false
@@ -2027,17 +2045,44 @@ do
 			task.spawn(function()
 				local player = LocalPlayer
 				local char = player.Character or player.CharacterAdded:Wait()
+				local humanoid = char:WaitForChild("Humanoid")
 				local hrp = char:WaitForChild("HumanoidRootPart")
 				local rs = game:GetService("ReplicatedStorage")
 				local buyRemote = rs.Network.AppleService.RF.BuyUpgrade
 				local totalBought = 0
 
+				local function refresh()
+					char = player.Character or player.CharacterAdded:Wait()
+					humanoid = char:WaitForChild("Humanoid")
+					hrp = char:WaitForChild("HumanoidRootPart")
+				end
+
+				if not isInAutumn(hrp) then
+					bStatus:SetContent("Must be in Autumn world!")
+					task.wait(3)
+					bEnabled = false
+					bStatus:SetContent("Off")
+					return
+				end
+
+				if not walkToZone(humanoid, hrp, BOARD_POS, function(s) bStatus:SetContent(s) end, "Apple Board", function() return bEnabled end) then
+					bStatus:SetContent("Off")
+					return
+				end
+
 				while bEnabled do
 					pcall(function()
 						char = player.Character
-						if char then hrp = char:FindFirstChild("HumanoidRootPart") end
+						if char then
+							humanoid = char:FindFirstChildOfClass("Humanoid")
+							hrp = char:FindFirstChild("HumanoidRootPart")
+						end
 					end)
 					if not hrp then task.wait(1) continue end
+
+					if (hrp.Position - BOARD_POS).Magnitude > 25 then
+						walkToZone(humanoid, hrp, BOARD_POS, function(s) bStatus:SetContent(s) end, "Apple Board", function() return bEnabled end)
+					end
 
 					local bought = false
 					for i = 1, 13 do
@@ -2096,17 +2141,38 @@ do
 			task.spawn(function()
 				local player = LocalPlayer
 				local char = player.Character or player.CharacterAdded:Wait()
+				local humanoid = char:WaitForChild("Humanoid")
 				local hrp = char:WaitForChild("HumanoidRootPart")
 				local rs = game:GetService("ReplicatedStorage")
 				local buyRemote = rs.Network.AppleTreeService.RF.BuyAppleUpgrade
 				local totalBought = 0
 
+				if not isInAutumn(hrp) then
+					tStatus:SetContent("Must be in Autumn world!")
+					task.wait(3)
+					tEnabled = false
+					tStatus:SetContent("Off")
+					return
+				end
+
+				if not walkToZone(humanoid, hrp, TREE_POS, function(s) tStatus:SetContent(s) end, "Apple Tree", function() return tEnabled end) then
+					tStatus:SetContent("Off")
+					return
+				end
+
 				while tEnabled do
 					pcall(function()
 						char = player.Character
-						if char then hrp = char:FindFirstChild("HumanoidRootPart") end
+						if char then
+							humanoid = char:FindFirstChildOfClass("Humanoid")
+							hrp = char:FindFirstChild("HumanoidRootPart")
+						end
 					end)
 					if not hrp then task.wait(1) continue end
+
+					if (hrp.Position - TREE_POS).Magnitude > 25 then
+						walkToZone(humanoid, hrp, TREE_POS, function(s) tStatus:SetContent(s) end, "Apple Tree", function() return tEnabled end)
+					end
 
 					local bought = false
 					for _, nodeName in ipairs(TREE_NODES_BY_PRICE) do
