@@ -1810,7 +1810,7 @@ do
 
 	local aEnabled = false
 	local aStatus = aSection:AddParagraph({ Title = "Status", Content = "Off" })
-	local aCyclePara = aSection:AddParagraph({ Title = "Cycle", Content = "-" })
+	local aCountPara = aSection:AddParagraph({ Title = "Collected", Content = "0" })
 
 	local AUTUMN_PORTAL_ROUTE = {
 		Vector3.new(256.6, 4.3, 120.7),
@@ -1834,24 +1834,6 @@ do
 		Vector3.new(-2817.6, 223.2, 5802.6),
 	}
 
-	local APPLE_POINTS = {
-		Vector3.new(-2794, 223.4, 5784),
-		Vector3.new(-2765, 223.4, 5815),
-		Vector3.new(-2754, 223.4, 5827),
-		Vector3.new(-2767, 223.4, 5839),
-		Vector3.new(-2786, 223.5, 5857),
-		Vector3.new(-2799, 223.4, 5870),
-		Vector3.new(-2812, 223.4, 5858),
-		Vector3.new(-2830, 223.4, 5840),
-		Vector3.new(-2843, 224.3, 5824),
-		Vector3.new(-2822, 223.3, 5807),
-		Vector3.new(-2798, 223.3, 5806),
-		Vector3.new(-2780, 223.4, 5823),
-		Vector3.new(-2791, 223.4, 5838),
-		Vector3.new(-2810, 223.5, 5848),
-		Vector3.new(-2820, 223.4, 5825),
-	}
-
 	local function aWalkTo(hum, root, target, radius)
 		radius = radius or 8
 		if not aEnabled then return end
@@ -1869,6 +1851,25 @@ do
 		return root.Position.Z > 5000
 	end
 
+	local function findNearestApple(hrp)
+		local folder = workspace:FindFirstChild("AutumnApples")
+		if not folder then return nil end
+		local nearest, nearDist = nil, math.huge
+		for _, child in pairs(folder:GetChildren()) do
+			if child:IsA("Model") and child.Name:find("Apple") then
+				local pp = child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart")
+				if pp then
+					local dist = (hrp.Position - pp.Position).Magnitude
+					if dist < nearDist then
+						nearest = pp
+						nearDist = dist
+					end
+				end
+			end
+		end
+		return nearest, nearDist
+	end
+
 	aSection:AddToggle("AutoCollectApple", {
 		Title = "Auto Collect Apple",
 		Default = false,
@@ -1876,7 +1877,6 @@ do
 			aEnabled = v
 			if not v then
 				aStatus:SetContent("Off")
-				aCyclePara:SetContent("-")
 				return
 			end
 			aStatus:SetContent("Starting...")
@@ -1911,10 +1911,8 @@ do
 					end
 
 					aStatus:SetContent("Entering portal...")
-					local attempt = 0
 					while not isInAutumn(hrp) do
 						if not aEnabled then return end
-						attempt = attempt + 1
 						humanoid:MoveTo(Vector3.new(286, 6, -130))
 						local t = os.clock()
 						while os.clock() - t < 4 and not isInAutumn(hrp) do
@@ -1937,37 +1935,36 @@ do
 				end
 
 				aStatus:SetContent("Farming apples...")
-				local cycle = 0
+				local collected = 0
 
 				while aEnabled do
-					cycle = cycle + 1
-					local shuffled = table.clone(APPLE_POINTS)
-					for i = #shuffled, 2, -1 do
-						local j = math.random(1, i)
-						shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
-					end
-					aCyclePara:SetContent("Cycle " .. cycle)
-
-					for idx, wp in ipairs(shuffled) do
-						if not aEnabled then break end
-						if not humanoid or humanoid.Health <= 0 then
-							char = player.CharacterAdded:Wait()
-							task.wait(2)
-							refresh()
-							if not isInAutumn(hrp) then
-								aStatus:SetContent("Respawned di lobby — stopped")
-								aEnabled = false
-								return
-							end
+					if not humanoid or humanoid.Health <= 0 then
+						char = player.CharacterAdded:Wait()
+						task.wait(2)
+						refresh()
+						if not isInAutumn(hrp) then
+							aStatus:SetContent("Respawned di lobby — stopped")
+							aEnabled = false
+							return
 						end
-						aStatus:SetContent("Cycle " .. cycle .. " — apple " .. idx .. "/" .. #shuffled)
-						aWalkTo(humanoid, hrp, wp, 10)
-						task.wait(0.5)
+					end
+
+					local apple, dist = findNearestApple(hrp)
+					if apple then
+						aStatus:SetContent("→ " .. apple.Parent.Name .. " (" .. math.floor(dist) .. "m)")
+						aWalkTo(humanoid, hrp, apple.Position, 6)
+						task.wait(0.3)
+						if not apple.Parent or not apple.Parent.Parent then
+							collected = collected + 1
+							aCountPara:SetContent(tostring(collected))
+						end
+					else
+						aStatus:SetContent("Waiting for apples... (" .. collected .. " collected)")
+						task.wait(2)
 					end
 				end
 
 				aStatus:SetContent("Off")
-				aCyclePara:SetContent("-")
 			end)
 		end,
 	})
