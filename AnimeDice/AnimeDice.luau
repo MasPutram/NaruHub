@@ -2084,16 +2084,21 @@ do
 						walkToZone(humanoid, hrp, BOARD_POS, function(s) bStatus:SetContent(s) end, "Apple Board", function() return bEnabled end)
 					end
 
+					local BOARD_UPGRADES = {
+						"Juicy Apples", "Faster Growth", "Bigger Harvest", "Lucky Apples",
+						"Long Reach", "Double Pick", "Apple Combo", "Leaf Picker",
+						"Apple Shower", "Rare Shine", "Mega Apples", "Apple Frenzy", "Orchard Mastery",
+					}
 					local bought = false
-					for i = 1, 13 do
+					for _, name in ipairs(BOARD_UPGRADES) do
 						if not bEnabled then break end
 						local ok, result = pcall(function()
-							return buyRemote:InvokeServer(i)
+							return buyRemote:InvokeServer(name, true)
 						end)
 						if ok and result then
 							totalBought = totalBought + 1
 							bought = true
-							bStatus:SetContent("Bought upgrade #" .. i .. " [total: " .. totalBought .. "]")
+							bStatus:SetContent("Bought " .. name .. " [total: " .. totalBought .. "]")
 						end
 						task.wait(0.1)
 					end
