@@ -1606,6 +1606,7 @@ export default function EldoradoPage() {
                     {uploadResults.map((r, i) => (
                       <li key={i}>
                         {r.ok ? "✓" : "✗"} {r.title} — {r.ok ? "Berhasil" : `Gagal (${r.status}): ${typeof r.data === "string" ? r.data : JSON.stringify(r.data)}`}
+                        {r._debug && <div style={{ fontSize: 10, color: "var(--dim)", marginTop: 2 }}>DEBUG: hasMainImage={String(r._debug.hasMainImage)}, imageCount={r._debug.imageCount}, offerImagesCount={r._debug.offerImagesCount}, mainOfferImage={JSON.stringify(r._debug.mainOfferImage)}</div>}
                       </li>
                     ))}
                   </ul>
