@@ -1966,6 +1966,7 @@ do
 					if apple then
 						aStatus:SetContent("→ " .. apple.Parent.Name .. " (" .. math.floor(dist) .. "m) [" .. collected .. "]")
 						aWalkTo(humanoid, hrp, apple.Position, 6)
+						task.wait(0.3)
 						if not apple.Parent or not apple.Parent.Parent then
 							collected = collected + 1
 							aCountPara:SetContent(tostring(collected))
