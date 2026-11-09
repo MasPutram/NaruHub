@@ -1,5 +1,5 @@
 --!nocheck
--- NaruHub | Anime Dice v2.13.0
+-- NaruHub | Anime Dice v2.14.0
 -- Monitoring. Self-contained GUI (inline NaruUI).
 
 ------------------------------------------------------------
@@ -1431,7 +1431,7 @@ local Fluent = NaruUI.New({
 })
 
 local Window = Fluent:CreateWindow({
-	Title = "NaruHub | Anime Dice v2.13.0",
+	Title = "NaruHub | Anime Dice v2.14.0",
 	Badge = "MONITOR",
 	TabWidth = 90,
 	Size = UDim2.fromOffset(440, 340),
@@ -1870,8 +1870,39 @@ do
 		return nearest, nearDist
 	end
 
-	aSection:AddToggle("AutoCollectApple", {
-		Title = "Auto Collect Apple",
+	local BOARD_POS = Vector3.new(-2773, 224, 5852)
+	local TREE_POS = Vector3.new(-2814, 224, 5767)
+	local QUEST_POS = Vector3.new(-2958, 224, 5611)
+	local FARM_CENTER = Vector3.new(-2797, 224, 5828)
+
+	local BOARD_UPGRADES = {
+		"Juicy Apples", "Faster Growth", "Bigger Harvest", "Lucky Apples",
+		"Long Reach", "Double Pick", "Apple Combo", "Leaf Picker",
+		"Apple Shower", "Rare Shine", "Mega Apples", "Apple Frenzy", "Orchard Mastery",
+	}
+	local TREE_NODES = {
+		"Seedling", "Juicy Harvest I", "Fallen Leaves I", "Quick Sprouts I",
+		"Hearty Meal I", "Acorn Charm I", "Autumn Fortune I", "Autumn Luck I",
+		"Juicy Harvest II", "Leaf Strength I", "Fallen Leaves II", "Autumn Fortune II",
+		"Lucky Orchard I", "Leaf Strength II", "Swift Feast I", "Diamond Apples",
+		"Quick Sprouts II", "Autumn Luck II", "Acorn Charm II", "Hearty Meal II",
+		"Swift Feast II", "Juicy Harvest III", "Autumn Fortune III", "Lucky Orchard II",
+		"Fallen Leaves III", "Galaxy Apples", "Quick Sprouts III", "Acorn Charm III",
+		"Lucky Orchard III", "Leaf Strength III", "Golden Basket", "Fallen Leaves IV",
+		"Juicy Harvest IV", "Autumn Luck III", "Rainbow Apples", "Lucky Orchard IV",
+		"Acorn Charm IV", "Swift Feast II", "Juicy Harvest V",
+	}
+	local DAILY_QUEST_IDS = {"apples300", "rareApples", "rushApples", "boardLevels", "floors50", "floors150", "runFloor25", "leafRolls"}
+	local HOURLY_QUEST_IDS = {"h_apples80", "h_rareApples2", "h_combo15", "h_boardLevels2", "h_floors15", "h_leafRolls5", "h_rushApples15"}
+
+	local PATROL = {
+		Vector3.new(-2797, 224, 5828), Vector3.new(-2770, 224, 5820),
+		Vector3.new(-2820, 224, 5840), Vector3.new(-2790, 224, 5855),
+		Vector3.new(-2765, 224, 5830), Vector3.new(-2810, 224, 5810),
+	}
+
+	aSection:AddToggle("AutoCycleAutumn", {
+		Title = "Auto Cycle Autumn",
 		Default = false,
 		Callback = function(v)
 			aEnabled = v
@@ -1886,11 +1917,62 @@ do
 				local char = player.Character or player.CharacterAdded:Wait()
 				local humanoid = char:WaitForChild("Humanoid")
 				local hrp = char:WaitForChild("HumanoidRootPart")
+				local rs = game:GetService("ReplicatedStorage")
 
-				local function refresh()
-					char = player.Character or player.CharacterAdded:Wait()
-					humanoid = char:WaitForChild("Humanoid")
-					hrp = char:WaitForChild("HumanoidRootPart")
+				local boardBuyRemote = rs.Network.AppleService.RF.BuyUpgrade
+				local treeBuyRemote = rs.Network.AppleTreeService.RF.BuyAppleUpgrade
+				local claimRemote = rs.Network.AutumnQuestService.RF.Claim
+				local claimBonus = rs.Network.AutumnQuestService.RF.ClaimBonus
+
+				local AppleConfig = require(rs.Framework.Features.Autumn.AppleConfig)
+				local DataController = require(rs.Framework.Features.Data.DataController)
+				local AutumnConfig = require(rs.Framework.Features.Autumn.AutumnConfig)
+				local ApplesCurrency = AutumnConfig.Currencies.Apples
+
+				local stats = { quests = 0, board = 0, tree = 0, apples = 0, cycle = 0 }
+
+				local function getAppleCount()
+					local data = DataController.Inventory[ApplesCurrency]()
+					return data and data.amount or 0
+				end
+
+				local function getCheapestBoardCost()
+					local boardData = DataController.AppleBoard()
+					local cheapest = math.huge
+					for _, upgrade in ipairs(AppleConfig.Upgrades) do
+						local level = AppleConfig.GetLevel(boardData, upgrade.name)
+						if level < upgrade.max then
+							local cost = AppleConfig.GetCost(upgrade, level)
+							if cost < cheapest then cheapest = cost end
+						end
+					end
+					return cheapest
+				end
+
+				local function refreshChar()
+					pcall(function()
+						char = player.Character
+						if char then
+							humanoid = char:FindFirstChildOfClass("Humanoid")
+							hrp = char:FindFirstChild("HumanoidRootPart")
+						end
+					end)
+				end
+
+				local function walkTo(target, label)
+					if not aEnabled then return false end
+					if (hrp.Position - target).Magnitude < 15 then return true end
+					aStatus:SetContent("Walking to " .. label .. "...")
+					humanoid:MoveTo(target)
+					local t = os.clock()
+					while (hrp.Position - target).Magnitude > 12 do
+						if not aEnabled then return false end
+						if os.clock() - t > 25 then break end
+						humanoid:MoveTo(target)
+						task.wait(0.3)
+					end
+					task.wait(0.5)
+					return true
 				end
 
 				task.spawn(function()
@@ -1917,7 +1999,7 @@ do
 						pcall(function() firesignal(hubBtn.Activated) end)
 						pcall(function() hubBtn.MouseButton1Click:Fire() end)
 						task.wait(2)
-						refresh()
+						refreshChar()
 					end
 
 					aStatus:SetContent("Walking to portal...")
@@ -1941,36 +2023,24 @@ do
 					end
 					humanoid:MoveTo(hrp.Position)
 					task.wait(3)
-					refresh()
+					refreshChar()
 
-					aStatus:SetContent("Walking to apple area...")
+					aStatus:SetContent("Walking to autumn area...")
 					for _, wp in ipairs(AUTUMN_WALK_ROUTE) do
 						if not aEnabled then return end
 						aWalkTo(humanoid, hrp, wp, 12)
 					end
 				end
 
-				aStatus:SetContent("Farming apples...")
-				local collected = 0
-				local PATROL = {
-					Vector3.new(-2794, 223.4, 5784),
-					Vector3.new(-2765, 223.4, 5815),
-					Vector3.new(-2754, 223.4, 5827),
-					Vector3.new(-2786, 223.5, 5857),
-					Vector3.new(-2799, 223.4, 5870),
-					Vector3.new(-2830, 223.4, 5840),
-					Vector3.new(-2843, 224.3, 5824),
-					Vector3.new(-2822, 223.3, 5807),
-					Vector3.new(-2798, 223.3, 5806),
-					Vector3.new(-2780, 223.4, 5823),
-				}
 				local patrolIdx = 1
 
 				while aEnabled do
-					if not humanoid or humanoid.Health <= 0 then
+					refreshChar()
+					if not humanoid or not hrp then task.wait(1) continue end
+					if humanoid.Health <= 0 then
 						char = player.CharacterAdded:Wait()
 						task.wait(2)
-						refresh()
+						refreshChar()
 						if not isInAutumn(hrp) then
 							aStatus:SetContent("Respawned di lobby — stopped")
 							aEnabled = false
@@ -1978,323 +2048,129 @@ do
 						end
 					end
 
-					local apple, dist = findNearestApple(hrp)
-					if apple then
-						aStatus:SetContent("→ " .. apple.Parent.Name .. " (" .. math.floor(dist) .. "m) [" .. collected .. "]")
-						aWalkTo(humanoid, hrp, apple.Position, 6)
-						task.wait(0.3)
-						if not apple.Parent or not apple.Parent.Parent then
-							collected = collected + 1
-							aCountPara:SetContent(tostring(collected))
+					stats.cycle = stats.cycle + 1
+					local cycleLabel = "C" .. stats.cycle
+
+					-- ======== STEP 1: QUEST CLAIM (try remote first, walk only if claimable) ========
+					aStatus:SetContent(cycleLabel .. " | Checking quests...")
+					local questClaimable = false
+					for _, id in ipairs(DAILY_QUEST_IDS) do
+						if not aEnabled then break end
+						local ok, result = pcall(function() return claimRemote:InvokeServer(id) end)
+						if ok and result then
+							questClaimable = true
+							stats.quests = stats.quests + 1
+							aStatus:SetContent(cycleLabel .. " | Claimed: " .. id)
 						end
-					else
-						local wp = PATROL[patrolIdx]
-						aStatus:SetContent("Patrol " .. patrolIdx .. "/" .. #PATROL .. " [" .. collected .. "]")
-						humanoid:MoveTo(wp)
-						local startTime = os.clock()
-						while aEnabled and (hrp.Position - wp).Magnitude > 10 do
-							if os.clock() - startTime > 8 then break end
-							local a = findNearestApple(hrp)
-							if a then break end
-							humanoid:MoveTo(wp)
-							task.wait(0.2)
-						end
-						patrolIdx = patrolIdx % #PATROL + 1
+						task.wait(0.15)
 					end
+					for _, id in ipairs(HOURLY_QUEST_IDS) do
+						if not aEnabled then break end
+						local ok, result = pcall(function() return claimRemote:InvokeServer(id) end)
+						if ok and result then
+							questClaimable = true
+							stats.quests = stats.quests + 1
+							aStatus:SetContent(cycleLabel .. " | Claimed: " .. id)
+						end
+						task.wait(0.15)
+					end
+					if questClaimable then
+						walkTo(QUEST_POS, "Quest Board")
+						for _, id in ipairs(DAILY_QUEST_IDS) do
+							if not aEnabled then break end
+							local ok, result = pcall(function() return claimRemote:InvokeServer(id) end)
+							if ok and result then stats.quests = stats.quests + 1 end
+							task.wait(0.15)
+						end
+						for _, id in ipairs(HOURLY_QUEST_IDS) do
+							if not aEnabled then break end
+							local ok, result = pcall(function() return claimRemote:InvokeServer(id) end)
+							if ok and result then stats.quests = stats.quests + 1 end
+							task.wait(0.15)
+						end
+						pcall(function() claimBonus:InvokeServer("daily") end)
+						task.wait(0.2)
+						pcall(function() claimBonus:InvokeServer("hourly") end)
+						task.wait(math.random(3, 5))
+					end
+					if not aEnabled then break end
+
+					-- ======== STEP 2: BOARD UPGRADE (check apple count first) ========
+					local apples = getAppleCount()
+					local cheapestBoard = getCheapestBoardCost()
+					if apples >= cheapestBoard then
+						aStatus:SetContent(cycleLabel .. " | → Apple Board...")
+						if walkTo(BOARD_POS, "Apple Board") then
+							for _, name in ipairs(BOARD_UPGRADES) do
+								if not aEnabled then break end
+								local ok, result = pcall(function() return boardBuyRemote:InvokeServer(name, true) end)
+								if ok and result then
+									stats.board = stats.board + 1
+									aStatus:SetContent(cycleLabel .. " | Board: " .. name)
+								end
+								task.wait(0.1)
+							end
+						end
+						task.wait(math.random(3, 5))
+					end
+					if not aEnabled then break end
+
+					-- ======== STEP 3: TREE UPGRADE (check apple count first) ========
+					apples = getAppleCount()
+					if apples >= 100 then
+						aStatus:SetContent(cycleLabel .. " | → Apple Tree...")
+						if walkTo(TREE_POS, "Apple Tree") then
+							for _, nodeName in ipairs(TREE_NODES) do
+								if not aEnabled then break end
+								local ok, result = pcall(function() return treeBuyRemote:InvokeServer(nodeName) end)
+								if ok and result then
+									stats.tree = stats.tree + 1
+									aStatus:SetContent(cycleLabel .. " | Tree: " .. nodeName)
+								end
+								task.wait(0.1)
+							end
+						end
+						task.wait(math.random(3, 5))
+					end
+					if not aEnabled then break end
+
+					-- ======== STEP 4: FARM APPLES ========
+					aStatus:SetContent(cycleLabel .. " | Farming apples...")
+					local farmEnd = os.clock() + 60
+					while aEnabled and os.clock() < farmEnd do
+						refreshChar()
+						if not humanoid or not hrp then task.wait(1) continue end
+
+						local apple, dist = findNearestApple(hrp)
+						if apple then
+							aStatus:SetContent(cycleLabel .. " | → " .. apple.Parent.Name .. " (" .. math.floor(dist) .. "m)")
+							aWalkTo(humanoid, hrp, apple.Position, 6)
+							task.wait(0.3)
+							if not apple.Parent or not apple.Parent.Parent then
+								stats.apples = stats.apples + 1
+								aCountPara:SetContent(tostring(stats.apples))
+							end
+						else
+							local wp = PATROL[patrolIdx]
+							aStatus:SetContent(cycleLabel .. " | Patrol " .. patrolIdx .. "/" .. #PATROL)
+							humanoid:MoveTo(wp)
+							local startTime = os.clock()
+							while aEnabled and (hrp.Position - wp).Magnitude > 10 do
+								if os.clock() - startTime > 8 then break end
+								local a = findNearestApple(hrp)
+								if a then break end
+								humanoid:MoveTo(wp)
+								task.wait(0.2)
+							end
+							patrolIdx = patrolIdx % #PATROL + 1
+						end
+					end
+
+					aStatus:SetContent(cycleLabel .. " | Q:" .. stats.quests .. " B:" .. stats.board .. " T:" .. stats.tree .. " A:" .. stats.apples)
+					task.wait(math.random(3, 5))
 				end
 
 				aStatus:SetContent("Off")
-			end)
-		end,
-	})
-
-	local BOARD_POS = Vector3.new(-2773, 224, 5852)
-	local TREE_POS = Vector3.new(-2814, 224, 5767)
-
-	local function walkToZone(humanoid, hrp, target, statusFn, label, enabled)
-		if (hrp.Position - target).Magnitude < 20 then return true end
-		statusFn("Walking to " .. label .. "...")
-		humanoid:MoveTo(target)
-		local t = os.clock()
-		while (hrp.Position - target).Magnitude > 15 do
-			if not enabled() then return false end
-			if os.clock() - t > 20 then break end
-			humanoid:MoveTo(target)
-			task.wait(0.3)
-		end
-		task.wait(0.5)
-		return true
-	end
-
-	-- Auto Buy Apple Board Upgrades
-	local bSection = AutumnTab:AddSection("Auto Buy Apple Board", { NoCollapse = true })
-	local bEnabled = false
-	local bStatus = bSection:AddParagraph({ Title = "Status", Content = "Off" })
-
-	bSection:AddToggle("AutoBuyAppleBoard", {
-		Title = "Auto Buy Apple Board Upgrades",
-		Default = false,
-		Callback = function(v)
-			bEnabled = v
-			if not v then
-				bStatus:SetContent("Off")
-				return
-			end
-			bStatus:SetContent("Starting...")
-
-			task.spawn(function()
-				local player = LocalPlayer
-				local char = player.Character or player.CharacterAdded:Wait()
-				local humanoid = char:WaitForChild("Humanoid")
-				local hrp = char:WaitForChild("HumanoidRootPart")
-				local rs = game:GetService("ReplicatedStorage")
-				local buyRemote = rs.Network.AppleService.RF.BuyUpgrade
-				local totalBought = 0
-
-				local function refresh()
-					char = player.Character or player.CharacterAdded:Wait()
-					humanoid = char:WaitForChild("Humanoid")
-					hrp = char:WaitForChild("HumanoidRootPart")
-				end
-
-				if not isInAutumn(hrp) then
-					bStatus:SetContent("Must be in Autumn world!")
-					task.wait(3)
-					bEnabled = false
-					bStatus:SetContent("Off")
-					return
-				end
-
-				if not walkToZone(humanoid, hrp, BOARD_POS, function(s) bStatus:SetContent(s) end, "Apple Board", function() return bEnabled end) then
-					bStatus:SetContent("Off")
-					return
-				end
-
-				while bEnabled do
-					pcall(function()
-						char = player.Character
-						if char then
-							humanoid = char:FindFirstChildOfClass("Humanoid")
-							hrp = char:FindFirstChild("HumanoidRootPart")
-						end
-					end)
-					if not hrp then task.wait(1) continue end
-
-					if (hrp.Position - BOARD_POS).Magnitude > 25 then
-						walkToZone(humanoid, hrp, BOARD_POS, function(s) bStatus:SetContent(s) end, "Apple Board", function() return bEnabled end)
-					end
-
-					local BOARD_UPGRADES = {
-						"Juicy Apples", "Faster Growth", "Bigger Harvest", "Lucky Apples",
-						"Long Reach", "Double Pick", "Apple Combo", "Leaf Picker",
-						"Apple Shower", "Rare Shine", "Mega Apples", "Apple Frenzy", "Orchard Mastery",
-					}
-					local bought = false
-					for _, name in ipairs(BOARD_UPGRADES) do
-						if not bEnabled then break end
-						local ok, result = pcall(function()
-							return buyRemote:InvokeServer(name, true)
-						end)
-						if ok and result then
-							totalBought = totalBought + 1
-							bought = true
-							bStatus:SetContent("Bought " .. name .. " [total: " .. totalBought .. "]")
-						end
-						task.wait(0.1)
-					end
-
-					if not bought then
-						bStatus:SetContent("Waiting for apples... [bought: " .. totalBought .. "]")
-					end
-					task.wait(math.random(5, 10))
-				end
-
-				bStatus:SetContent("Off")
-			end)
-		end,
-	})
-
-	-- Auto Buy Apple Tree Nodes
-	local tSection = AutumnTab:AddSection("Auto Buy Apple Tree Nodes", { NoCollapse = true })
-	local tEnabled = false
-	local tStatus = tSection:AddParagraph({ Title = "Status", Content = "Off" })
-
-	local TREE_NODES_BY_PRICE = {
-		"Seedling", "Juicy Harvest I", "Fallen Leaves I", "Quick Sprouts I",
-		"Hearty Meal I", "Acorn Charm I", "Autumn Fortune I", "Autumn Luck I",
-		"Juicy Harvest II", "Leaf Strength I", "Fallen Leaves II", "Autumn Fortune II",
-		"Lucky Orchard I", "Leaf Strength II", "Swift Feast I", "Diamond Apples",
-		"Quick Sprouts II", "Autumn Luck II", "Acorn Charm II", "Hearty Meal II",
-		"Swift Feast II", "Juicy Harvest III", "Autumn Fortune III", "Lucky Orchard II",
-		"Fallen Leaves III", "Galaxy Apples", "Quick Sprouts III", "Acorn Charm III",
-		"Lucky Orchard III", "Leaf Strength III", "Golden Basket", "Fallen Leaves IV",
-		"Juicy Harvest IV", "Autumn Luck III", "Rainbow Apples", "Lucky Orchard IV",
-		"Acorn Charm IV", "Swift Feast II", "Juicy Harvest V",
-	}
-
-	tSection:AddToggle("AutoBuyTreeNodes", {
-		Title = "Auto Buy Apple Tree Nodes",
-		Default = false,
-		Callback = function(v)
-			tEnabled = v
-			if not v then
-				tStatus:SetContent("Off")
-				return
-			end
-			tStatus:SetContent("Starting...")
-
-			task.spawn(function()
-				local player = LocalPlayer
-				local char = player.Character or player.CharacterAdded:Wait()
-				local humanoid = char:WaitForChild("Humanoid")
-				local hrp = char:WaitForChild("HumanoidRootPart")
-				local rs = game:GetService("ReplicatedStorage")
-				local buyRemote = rs.Network.AppleTreeService.RF.BuyAppleUpgrade
-				local totalBought = 0
-
-				if not isInAutumn(hrp) then
-					tStatus:SetContent("Must be in Autumn world!")
-					task.wait(3)
-					tEnabled = false
-					tStatus:SetContent("Off")
-					return
-				end
-
-				if not walkToZone(humanoid, hrp, TREE_POS, function(s) tStatus:SetContent(s) end, "Apple Tree", function() return tEnabled end) then
-					tStatus:SetContent("Off")
-					return
-				end
-
-				while tEnabled do
-					pcall(function()
-						char = player.Character
-						if char then
-							humanoid = char:FindFirstChildOfClass("Humanoid")
-							hrp = char:FindFirstChild("HumanoidRootPart")
-						end
-					end)
-					if not hrp then task.wait(1) continue end
-
-					if (hrp.Position - TREE_POS).Magnitude > 25 then
-						walkToZone(humanoid, hrp, TREE_POS, function(s) tStatus:SetContent(s) end, "Apple Tree", function() return tEnabled end)
-					end
-
-					local bought = false
-					for _, nodeName in ipairs(TREE_NODES_BY_PRICE) do
-						if not tEnabled then break end
-						local ok, result = pcall(function()
-							return buyRemote:InvokeServer(nodeName)
-						end)
-						if ok and result then
-							totalBought = totalBought + 1
-							bought = true
-							tStatus:SetContent("Bought: " .. nodeName .. " [total: " .. totalBought .. "]")
-						end
-						task.wait(0.1)
-					end
-
-					if not bought then
-						tStatus:SetContent("Waiting for apples... [bought: " .. totalBought .. "]")
-					end
-					task.wait(math.random(5, 10))
-				end
-
-				tStatus:SetContent("Off")
-			end)
-		end,
-	})
-
-	-- Auto Claim Quest Autumn
-	local QUEST_POS = Vector3.new(-2958, 224, 5611)
-	local qSection = AutumnTab:AddSection("Auto Claim Quest", { NoCollapse = true })
-	local qcEnabled = false
-	local qcStatus = qSection:AddParagraph({ Title = "Status", Content = "Off" })
-
-	local DAILY_QUEST_IDS = {"apples300", "rareApples", "rushApples", "boardLevels", "floors50", "floors150", "runFloor25", "leafRolls"}
-	local HOURLY_QUEST_IDS = {"h_apples80", "h_rareApples2", "h_combo15", "h_boardLevels2", "h_floors15", "h_leafRolls5", "h_rushApples15"}
-
-	qSection:AddToggle("AutoClaimQuestAutumn", {
-		Title = "Auto Claim Quest Autumn",
-		Default = false,
-		Callback = function(v)
-			qcEnabled = v
-			if not v then
-				qcStatus:SetContent("Off")
-				return
-			end
-			qcStatus:SetContent("Starting...")
-
-			task.spawn(function()
-				local player = LocalPlayer
-				local char = player.Character or player.CharacterAdded:Wait()
-				local humanoid = char:WaitForChild("Humanoid")
-				local hrp = char:WaitForChild("HumanoidRootPart")
-				local rs = game:GetService("ReplicatedStorage")
-				local claimRemote = rs.Network.AutumnQuestService.RF.Claim
-				local claimBonus = rs.Network.AutumnQuestService.RF.ClaimBonus
-				local totalClaimed = 0
-
-				if not isInAutumn(hrp) then
-					qcStatus:SetContent("Must be in Autumn world!")
-					task.wait(3)
-					qcEnabled = false
-					qcStatus:SetContent("Off")
-					return
-				end
-
-				if not walkToZone(humanoid, hrp, QUEST_POS, function(s) qcStatus:SetContent(s) end, "Quest Board", function() return qcEnabled end) then
-					qcStatus:SetContent("Off")
-					return
-				end
-
-				while qcEnabled do
-					pcall(function()
-						char = player.Character
-						if char then
-							humanoid = char:FindFirstChildOfClass("Humanoid")
-							hrp = char:FindFirstChild("HumanoidRootPart")
-						end
-					end)
-					if not hrp then task.wait(1) continue end
-
-					if (hrp.Position - QUEST_POS).Magnitude > 25 then
-						walkToZone(humanoid, hrp, QUEST_POS, function(s) qcStatus:SetContent(s) end, "Quest Board", function() return qcEnabled end)
-					end
-
-					local claimed = false
-					for _, id in ipairs(DAILY_QUEST_IDS) do
-						if not qcEnabled then break end
-						local ok, result = pcall(function() return claimRemote:InvokeServer(id) end)
-						if ok and result then
-							totalClaimed = totalClaimed + 1
-							claimed = true
-							qcStatus:SetContent("Claimed: " .. id .. " [total: " .. totalClaimed .. "]")
-						end
-						task.wait(0.3)
-					end
-
-					for _, id in ipairs(HOURLY_QUEST_IDS) do
-						if not qcEnabled then break end
-						local ok, result = pcall(function() return claimRemote:InvokeServer(id) end)
-						if ok and result then
-							totalClaimed = totalClaimed + 1
-							claimed = true
-							qcStatus:SetContent("Claimed: " .. id .. " [total: " .. totalClaimed .. "]")
-						end
-						task.wait(0.3)
-					end
-
-					pcall(function() claimBonus:InvokeServer("daily") end)
-					task.wait(0.3)
-					pcall(function() claimBonus:InvokeServer("hourly") end)
-
-					if not claimed then
-						qcStatus:SetContent("No quests ready [claimed: " .. totalClaimed .. "]")
-					end
-					task.wait(math.random(30, 60))
-				end
-
-				qcStatus:SetContent("Off")
 			end)
 		end,
 	})
