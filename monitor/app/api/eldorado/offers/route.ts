@@ -66,6 +66,9 @@ export async function POST(req: NextRequest) {
           },
           offerImages: item.offerImages || [],
         };
+        if (item.mainOfferImage) {
+          details.mainOfferImage = item.mainOfferImage;
+        }
         const emailDetails = (item.emailLogin || item.emailProvider) ? {
           providerUrl: item.emailProvider || "",
           login: item.emailLogin || "",
