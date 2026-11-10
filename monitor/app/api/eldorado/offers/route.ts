@@ -15,8 +15,7 @@ export async function GET(req: NextRequest) {
     let res: Response;
     if (category === "Account") {
       res = await eldoradoFetch(
-        `/api/flexibleOffersUser/me/search?pageIndex=${page}&pageSize=${size}&category=Account`,
-        { method: "POST", body: JSON.stringify({}) }
+        `/api/flexibleOffersUser/me/search?pageIndex=${page}&pageSize=${size}&category=Account`
       );
     } else {
       const categoryParam = category ? `&category=${encodeURIComponent(category)}` : "";
