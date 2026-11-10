@@ -140,6 +140,7 @@ export async function POST(req: NextRequest) {
         status: res.status,
         ok: res.ok,
         data,
+        _debug: !res.ok ? { mainOfferImage: item.mainOfferImage, payload: JSON.stringify(payload).slice(0, 500) } : undefined,
       });
     }
 
