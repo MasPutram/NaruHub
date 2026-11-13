@@ -535,7 +535,10 @@ export default function EldoradoPage() {
   const WD_FEE_FLAT = 2;
   const BANK_FEE_PCT = 0.02;
   const BANK_FEE_FLAT = 1.5;
-  const pendingOrders = orders.filter((o) => (o.state?.state || "").toLowerCase() === "received");
+  const pendingOrders = orders.filter((o) => {
+    const s = (o.state?.state || "").toLowerCase();
+    return s === "delivered" || s === "received";
+  });
   const walletOrders = orders.filter((o) => (o.state?.state || "").toLowerCase() === "completed");
   const pendingTotal = pendingOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0) * (1 - SALES_FEE);
   const wallet = walletOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0) * (1 - SALES_FEE);
