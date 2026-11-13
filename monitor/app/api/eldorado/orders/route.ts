@@ -20,11 +20,12 @@ export async function GET(req: NextRequest) {
       isAscendingDateOrder: "false",
       ignorePendingReviewOrders: "true",
       displayFilter: filter,
+      orderGroup: "Regular",
     });
     const orderState = searchParams.get("orderState");
     if (orderState) qs.set("orderState", orderState);
 
-    const res = await eldoradoFetch(`/api/v1/orders/me/seller/orders?${qs}`);
+    const res = await eldoradoFetch(`/api/orders/me/seller/orders?${qs}`);
 
     if (!res.ok) {
       const text = await res.text();
