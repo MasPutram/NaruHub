@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.9.0"
+local VERSION = "v3.10.0"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -232,6 +232,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 
 ------------------------------------------------------------
@@ -695,6 +696,64 @@ section:AddToggle("AutoHatchToggle", {
 		if val and autoHatchSignal then
 			autoHatchSignal:Fire()
 		end
+	end,
+})
+
+local disableHopTeleport = false
+section:AddToggle("DisableHopTeleport", {
+	Title = "Disable Teleport (Hop Server)",
+	Default = false,
+	Callback = function(val) disableHopTeleport = val end,
+})
+
+section:AddButton({
+	Title = "Hop ke Server Sepi",
+	Callback = function()
+		if disableHopTeleport then return end
+		monitorPara:SetContent("Mencari server sepi...")
+		task.spawn(function()
+			local ok, bestJobId, bestPlayers = pcall(function()
+				local cursor = ""
+				local bId = nil
+				local bPlayers = math.huge
+				local myJobId = game.JobId
+
+				for _ = 1, 5 do
+					local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+					if cursor and cursor ~= "" then
+						url = url .. "&cursor=" .. cursor
+					end
+
+					local res = request({ Url = url, Method = "GET" })
+					if not res or not res.Body then break end
+
+					local data = HttpService:JSONDecode(res.Body)
+					if not data or not data.data then break end
+
+					for _, server in ipairs(data.data) do
+						if server.playing and server.playing < bPlayers and server.id ~= myJobId then
+							bPlayers = server.playing
+							bId = server.id
+						end
+					end
+
+					cursor = data.nextPageCursor
+					if not cursor or cursor == "" then break end
+					task.wait(0.5)
+				end
+
+				return bId, bPlayers
+			end)
+
+			if ok and bestJobId then
+				monitorPara:SetContent("Server sepi: " .. tostring(bestPlayers) .. " players. Teleporting...")
+				pcall(function()
+					TeleportService:TeleportToPlaceInstance(game.PlaceId, bestJobId, LocalPlayer)
+				end)
+			else
+				monitorPara:SetContent("Gagal cari server sepi")
+			end
+		end)
 	end,
 })
 
