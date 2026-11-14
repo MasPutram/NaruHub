@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.8.0"
+local VERSION = "v3.9.0"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -638,12 +638,12 @@ local monitorPara = section:AddParagraph({
 	Center = true,
 })
 
-local AUTO_SELL_MIN_RATE = 2_000_000_000
+local AUTO_SELL_TIER1_RATE = 3_000_000_000
+local AUTO_SELL_TIER2_RATE = 5_000_000_000
 local AUTO_SELL_RARITIES = { "Common", "Uncommon", "Rare", "Epic", "Mythic", "Legendary", "Cosmic", "Eternal", "Titan" }
-local AUTO_SELL_NEVER = { Divine = true }
 local autoSellEnabled = false
 section:AddToggle("AutoSellToggle", {
-	Title = "Sell Auto (< 2B/s, skip Divine + weight>=1B)",
+	Title = "Sell Auto (< 3B skip Divine, < 5B skip Eternal/Divine)",
 	Default = false,
 	Callback = function(val)
 		autoSellEnabled = val
@@ -1554,7 +1554,7 @@ end)
 
 
 ------------------------------------------------------------
--- Auto Sell inventory backlog (< 2B/s, unplaced only, skip Divine + weight>=1B)
+-- Auto Sell inventory backlog (< 3B skip Divine, < 5B skip Eternal/Divine, weight>=1B skip)
 -- Requires equip (AskWearTool) then SellPet on the held UID.
 ------------------------------------------------------------
 task.spawn(function()
@@ -1585,12 +1585,12 @@ task.spawn(function()
 								Mutations = rec.Mutations or {},
 							})
 						end)
-						if rarity == "Divine" or weight >= 1_000_000_000 then
-							-- skip: Divine ga pernah dijual, weight >= 1B kg juga skip
-						else
-							if rate > 0 and rate < AUTO_SELL_MIN_RATE then
-								toSell[#toSell + 1] = uid
-							end
+						if weight >= 1_000_000_000 then
+							-- skip: weight >= 1B kg
+						elseif rate > 0 and rate < AUTO_SELL_TIER1_RATE and rarity ~= "Divine" then
+							toSell[#toSell + 1] = uid
+						elseif rate > 0 and rate >= AUTO_SELL_TIER1_RATE and rate < AUTO_SELL_TIER2_RATE and rarity ~= "Divine" and rarity ~= "Eternal" then
+							toSell[#toSell + 1] = uid
 						end
 					end
 				end
