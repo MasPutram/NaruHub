@@ -562,6 +562,8 @@ function PosterPage() {
   const [savingPrice, setSavingPrice] = useState(false);
   const [savedPrice, setSavedPrice] = useState(false);
   const posterRef = useRef<HTMLDivElement>(null);
+  const topRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
   const autoDownload = params.get("autoDownload") === "1";
   const [qrDataUrl, setQrDataUrl] = useState("");
 
@@ -667,12 +669,12 @@ function PosterPage() {
     return () => clearTimeout(timer);
   }, [autoDownload, loading, summary, detail, accountName, paramCatalogPrice]);
 
-  async function downloadPoster() {
-    if (!posterRef.current) return;
+  async function downloadSection(ref: React.RefObject<HTMLDivElement | null>, suffix: string) {
+    if (!ref.current) return;
     setDownloading(true);
     try {
       const { default: html2canvas } = await import("html2canvas-pro");
-      const canvas = await html2canvas(posterRef.current, {
+      const canvas = await html2canvas(ref.current, {
         scale: 2,
         backgroundColor: "#DFE7F0",
         useCORS: true,
@@ -681,7 +683,8 @@ function PosterPage() {
       const digits = accountName.match(/(\d+)$/)?.[1] || "";
       const cp = getCurrentPrice();
       const priceSuffix = cp > 0 ? `-${Math.round(cp / 1000)}k` : "";
-      link.download = isTemplate ? "Poster-Template-NARUA.png" : `Blekok-${digits}${priceSuffix}.png`;
+      const base = isTemplate ? "Poster-Template-NARUA" : `Blekok-${digits}${priceSuffix}`;
+      link.download = suffix ? `${base}-${suffix}.png` : `${base}.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
     } catch (e) {
@@ -689,6 +692,10 @@ function PosterPage() {
     }
     setDownloading(false);
   }
+
+  async function downloadPoster() { await downloadSection(posterRef, ""); }
+  async function downloadTop() { await downloadSection(topRef, "Top"); }
+  async function downloadBottom() { await downloadSection(bottomRef, "Bottom"); }
 
   function getCurrentPrice(): number {
     if (price) {
@@ -1283,7 +1290,13 @@ function PosterPage() {
         <label>Checklist:</label>
         <input value={checklist} onChange={(e) => setChecklist(e.target.value)} placeholder="Data Polos, No Topi, No Sum" style={{ width: 280 }} />
         <button className="dlbtn" onClick={downloadPoster} disabled={downloading}>
-          {downloading ? "Downloading..." : "Download PNG"}
+          {downloading ? "..." : "Download Full"}
+        </button>
+        <button className="dlbtn" style={{ background: "#3b82f6" }} onClick={downloadTop} disabled={downloading}>
+          Download Top
+        </button>
+        <button className="dlbtn" style={{ background: "#3b82f6" }} onClick={downloadBottom} disabled={downloading}>
+          Download Bottom
         </button>
         {!isSold && (
           <button
@@ -1325,6 +1338,8 @@ function PosterPage() {
               </div>
             </div>
           )}
+          {/* TOP HALF */}
+          <div className="poster-top" ref={topRef} style={{ width: "100%", display: "flex", flexWrap: "wrap", gap: 16, background: "#DFE7F0" }}>
           {/* LEFT COLUMN */}
           <div className="left">
             <div className="poster-title">{title}</div>
@@ -1468,7 +1483,10 @@ function PosterPage() {
 
 
           </div>
+          </div>{/* END TOP HALF */}
 
+          {/* BOTTOM HALF */}
+          <div className="poster-bottom-half" ref={bottomRef} style={{ width: "100%", background: "#DFE7F0" }}>
           {divineAll.length > 0 && (
             <div className="poster-divine-full">
               <div className="section-header" style={{ background: "#fefce8", color: "#a16207" }}>EGG / PET DIVINE ({divineAll.length})</div>
@@ -1577,6 +1595,8 @@ function PosterPage() {
               )}
             </div>
           )}
+
+          </div>{/* END BOTTOM HALF */}
 
           {owner.trim() && (
             <div className="watermark-layer">
