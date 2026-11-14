@@ -797,11 +797,12 @@ export default function CatalogPage() {
     }
   }
 
-  function downloadAllPosters() {
+  function downloadAllPosters(section: "full" | "top" | "bottom" = "full") {
     if (visible.length === 0) return;
     if (batchProgress) return;
     const withPrice = visible;
     setBatchProgress({ current: 0, total: withPrice.length, account: "" });
+    const sectionSuffix = section === "full" ? "" : section === "top" ? "-Top" : "-Bottom";
 
     let idx = 0;
     const iframe = document.createElement("iframe");
@@ -815,7 +816,7 @@ export default function CatalogPage() {
           const digits = (ev.data.account as string).match(/(\d+)$/)?.[1] || "";
           const price = Number(ev.data.price) || 0;
           const priceSuffix = price > 0 ? `-${Math.round(price / 1000)}k` : "";
-          link.download = `Blekok-${digits}${priceSuffix}.png`;
+          link.download = `Blekok-${digits}${priceSuffix}${sectionSuffix}.png`;
           link.href = ev.data.dataUrl;
           link.click();
         }
@@ -834,7 +835,7 @@ export default function CatalogPage() {
     function loadNext() {
       const a = withPrice[idx];
       setBatchProgress({ current: idx + 1, total: withPrice.length, account: a.sourceAccount });
-      iframe.src = `/poster?account=${encodeURIComponent(a.sourceAccount)}&catalogPrice=${a.catalogPrice || 0}&autoDownload=1`;
+      iframe.src = `/poster?account=${encodeURIComponent(a.sourceAccount)}&catalogPrice=${a.catalogPrice || 0}&autoDownload=1&section=${section}`;
     }
     loadNext();
   }
@@ -1581,12 +1582,28 @@ export default function CatalogPage() {
           </button>
           <button
             className="btn-download-all"
-            onClick={downloadAllPosters}
+            onClick={() => downloadAllPosters("full")}
             disabled={!!batchProgress || visible.length === 0}
           >
             {batchProgress
               ? `Generating ${batchProgress.current}/${batchProgress.total} — ${batchProgress.account}`
               : `Download All Poster (${visible.length} akun)`}
+          </button>
+          <button
+            className="btn-download-all"
+            style={{ background: "#1e3a5f", fontSize: "0.85rem" }}
+            onClick={() => downloadAllPosters("top")}
+            disabled={!!batchProgress || visible.length === 0}
+          >
+            Download All Top
+          </button>
+          <button
+            className="btn-download-all"
+            style={{ background: "#1e3a5f", fontSize: "0.85rem" }}
+            onClick={() => downloadAllPosters("bottom")}
+            disabled={!!batchProgress || visible.length === 0}
+          >
+            Download All Bottom
           </button>
           <button
             className="btn-download-all"

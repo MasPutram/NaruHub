@@ -565,6 +565,7 @@ function PosterPage() {
   const topRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const autoDownload = params.get("autoDownload") === "1";
+  const autoSection = params.get("section") || "full";
   const [qrDataUrl, setQrDataUrl] = useState("");
 
   useEffect(() => { loadIconIndex().then(setIconIdx); }, []);
@@ -643,10 +644,12 @@ function PosterPage() {
   useEffect(() => {
     if (!autoDownload || loading || !summary || !posterRef.current) return;
     if (!detail) return;
+    const targetRef = autoSection === "top" ? topRef : autoSection === "bottom" ? bottomRef : posterRef;
+    if (!targetRef.current) return;
     const timer = setTimeout(async () => {
       try {
         const { default: html2canvas } = await import("html2canvas-pro");
-        const canvas = await html2canvas(posterRef.current!, {
+        const canvas = await html2canvas(targetRef.current!, {
           scale: 2,
           backgroundColor: "#DFE7F0",
           useCORS: true,
@@ -657,6 +660,7 @@ function PosterPage() {
           account: accountName,
           dataUrl,
           price: paramCatalogPrice,
+          section: autoSection,
         }, "*");
       } catch (e) {
         window.parent.postMessage({
@@ -667,7 +671,7 @@ function PosterPage() {
       }
     }, 2000);
     return () => clearTimeout(timer);
-  }, [autoDownload, loading, summary, detail, accountName, paramCatalogPrice]);
+  }, [autoDownload, autoSection, loading, summary, detail, accountName, paramCatalogPrice]);
 
   async function downloadSection(ref: React.RefObject<HTMLDivElement | null>, suffix: string) {
     if (!ref.current) return;
