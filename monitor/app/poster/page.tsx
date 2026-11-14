@@ -987,9 +987,9 @@ function PosterPage() {
         .poster-wrap { display: flex; justify-content: center; padding: 24px; overflow-x: auto; }
 
         .poster {
-          width: 1080px; min-height: 600px; background: #DFE7F0; padding: 32px;
+          width: 1080px; min-height: 600px; background: #DFE7F0; padding: 0;
           font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #1e293b;
-          display: flex; flex-wrap: wrap; gap: 16px;
+          display: flex; flex-wrap: wrap; gap: 0;
         }
         .left { width: 608px; flex-shrink: 0; }
         .right { width: 392px; flex-shrink: 0; }
@@ -1343,7 +1343,7 @@ function PosterPage() {
             </div>
           )}
           {/* TOP HALF */}
-          <div className="poster-top" ref={topRef} style={{ width: "100%", display: "flex", flexWrap: "wrap", gap: 16, background: "#DFE7F0" }}>
+          <div className="poster-top" ref={topRef} style={{ width: "100%", display: "flex", flexWrap: "wrap", gap: 16, background: "#DFE7F0", padding: "32px 32px 24px" }}>
           {/* LEFT COLUMN */}
           <div className="left">
             <div className="poster-title">{title}</div>
@@ -1490,7 +1490,7 @@ function PosterPage() {
           </div>{/* END TOP HALF */}
 
           {/* BOTTOM HALF */}
-          <div className="poster-bottom-half" ref={bottomRef} style={{ width: "100%", background: "#DFE7F0" }}>
+          <div className="poster-bottom-half" ref={bottomRef} style={{ width: "100%", background: "#DFE7F0", padding: "24px 32px 32px" }}>
           {divineAll.length > 0 && (
             <div className="poster-divine-full">
               <div className="section-header" style={{ background: "#fefce8", color: "#a16207" }}>EGG / PET DIVINE ({divineAll.length})</div>
