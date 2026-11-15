@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.10.1"
+local VERSION = "v3.10.2"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -483,7 +483,9 @@ local Window = Fluent:CreateWindow({
 })
 
 do
-	local hui = (gethui and gethui()) or game:GetService("CoreGui")
+	local huiOk, huiResult = false, nil
+	if gethui then huiOk, huiResult = pcall(gethui) end
+	local hui = (huiOk and huiResult) or game:GetService("CoreGui")
 	for _, o in ipairs(hui:GetChildren()) do
 		if o.Name == "StealAnEggMinBtn" or o.Name == "StealAnEggLauncher" or o.Name == "StealAnEggDragOverlay" then
 			pcall(function() o:Destroy() end)
