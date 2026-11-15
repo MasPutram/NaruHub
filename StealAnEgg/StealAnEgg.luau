@@ -31,7 +31,7 @@ end
 ------------------------------------------------------------
 -- Key Gate
 ------------------------------------------------------------
-local VERSION = "v3.10.0"
+local VERSION = "v3.10.1"
 local SERVER_BASE_URL = "https://naruhub.my.id"
 local function redactKey(value)
 	value = tostring(value or "")
@@ -982,19 +982,35 @@ local function collectBackpackEggs()
 	return eggs
 end
 
+local function parseSuffixedNumber(raw)
+	if type(raw) == "number" then return raw end
+	if type(raw) ~= "string" then return nil end
+	local cleaned = raw:gsub("[^%d%.%a]", "")
+	local num, suffix = cleaned:match("^([%d%.]+)(%a*)$")
+	if not num then return nil end
+	local multipliers = {[""] = 1, K = 1e3, M = 1e6, B = 1e9, T = 1e12, Qa = 1e15, Qi = 1e18}
+	return (tonumber(num) or 0) * (multipliers[suffix] or 1)
+end
+
 local function collectAccountStats()
 	local runSpeed, moneyPerSecond
 	local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
 	if leaderstats then
 		local speedValue = leaderstats:FindFirstChild("Speed")
 		if speedValue then
-			runSpeed = speedValue.Value
+			runSpeed = parseSuffixedNumber(speedValue.Value)
 		end
 		local moneyValue = leaderstats:FindFirstChild("Money/s")
 		if moneyValue then
-			moneyPerSecond = moneyValue.Value
+			moneyPerSecond = parseSuffixedNumber(moneyValue.Value)
 		end
 	end
+	pcall(function()
+		if not moneyPerSecond or moneyPerSecond == 0 then
+			local attr = LocalPlayer:GetAttribute("MoneyPerSecond")
+			if type(attr) == "number" and attr > 0 then moneyPerSecond = attr end
+		end
+	end)
 
 	local kandangLevel, treadmillLevel, currentMoney
 	local maxTreadmillLevel, maxKandangLevel
