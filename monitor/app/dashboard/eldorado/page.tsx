@@ -609,7 +609,6 @@ export default function EldoradoPage() {
           details: {
             offerTitle: editData.title,
             description: editData.description || "",
-            guaranteedDeliveryTime: "Instant",
             hasOriginalEmail: false,
             pricing: {
               quantity: 1,
@@ -624,13 +623,6 @@ export default function EldoradoPage() {
             tradeEnvironmentId: null,
             offerAttributes: [],
           },
-          accountDeliveryDetails: [{
-            id: null,
-            accountDetails: { accountLogin: "", accountPassword: "" },
-            emailDetails: null,
-            mfaDetails: null,
-            additionalInfo: null,
-          }],
         };
       } else {
         payload = {
