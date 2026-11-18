@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
 
     const [pendingRes, balanceRes] = await Promise.all([
       eldoradoFetch("/api/orders/me/pendingOrdersSum"),
-      eldoradoFetch("/api/v1/userpayment/me/balance"),
+      eldoradoFetch("/api/userpayment/me"),
     ]);
 
     let pending: number | null = null;
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     let balance: number | null = null;
     if (balanceRes.ok) {
       const d = await balanceRes.json();
-      balance = d.amount ?? d.balance ?? null;
+      balance = d.userPaymentPrivateDTO?.balance?.amount ?? null;
     }
 
     return NextResponse.json({ pending, balance });
