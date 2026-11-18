@@ -8,24 +8,15 @@ export async function GET(req: NextRequest) {
   try {
     getTenantFromRequest(req);
 
-    const [pendingRes, balanceRes] = await Promise.all([
-      eldoradoFetch("/api/orders/me/pendingOrdersSum"),
-      eldoradoFetch("/api/userpayment/me"),
-    ]);
-
-    let pending: number | null = null;
-    if (pendingRes.ok) {
-      const d = await pendingRes.json();
-      pending = d.amount ?? null;
-    }
+    const balanceRes = await eldoradoFetch("/api/userpayment/me");
 
     let balance: number | null = null;
     if (balanceRes.ok) {
       const d = await balanceRes.json();
-      balance = d.userPaymentPrivateDTO?.balance?.amount ?? null;
+      balance = d.userPaymentPrivateDTO?.balanceInUSD?.amount ?? null;
     }
 
-    return NextResponse.json({ pending, balance });
+    return NextResponse.json({ balance });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }

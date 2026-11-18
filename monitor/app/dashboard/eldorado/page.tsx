@@ -385,7 +385,6 @@ export default function EldoradoPage() {
   const [convIdr, setConvIdr] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
-  const [walletPending, setWalletPending] = useState<number | null>(null);
   const [margin, setMargin] = useState(() => {
     try { return parseFloat(localStorage.getItem("edo-margin") || "50") || 50; } catch { return 50; }
   });
@@ -513,7 +512,6 @@ export default function EldoradoPage() {
       if (res.ok) {
         const data = await res.json();
         if (typeof data.balance === "number") setWalletBalance(data.balance);
-        if (typeof data.pending === "number") setWalletPending(data.pending);
       }
     } catch {}
   }, []);
@@ -552,8 +550,7 @@ export default function EldoradoPage() {
     const s = (o.state?.state || "").toLowerCase();
     return s === "delivered" || s === "received";
   });
-  const calcPending = pendingOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0) * (1 - SALES_FEE);
-  const pendingTotal = walletPending ?? calcPending;
+  const pendingTotal = pendingOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0) * (1 - SALES_FEE);
   const wallet = walletBalance;
   const withdrawal = wallet != null ? Math.max(wallet * (1 - WD_FEE_PCT) - WD_FEE_FLAT, 0) : null;
   const estimasiIdr = withdrawal != null ? Math.max(withdrawal * (1 - BANK_FEE_PCT) - BANK_FEE_FLAT, 0) * (usdIdr || 0) : null;
