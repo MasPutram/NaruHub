@@ -624,6 +624,13 @@ export default function EldoradoPage() {
             tradeEnvironmentId: null,
             offerAttributes: [],
           },
+          accountDeliveryDetails: [{
+            id: null,
+            accountDetails: { accountLogin: "", accountPassword: "" },
+            emailDetails: null,
+            mfaDetails: null,
+            additionalInfo: null,
+          }],
         };
       } else {
         payload = {
