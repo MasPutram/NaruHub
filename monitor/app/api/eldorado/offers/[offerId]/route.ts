@@ -9,14 +9,22 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ offe
     getTenantFromRequest(req);
     const { offerId } = await params;
     const body = await req.json();
-    const { action } = body;
+    const { action, isAccount } = body;
 
     let res: Response;
 
     if (action === "pause") {
-      res = await eldoradoFetch(`/api/v1/item-management/me/offers/${offerId}/pause`, { method: "POST" });
+      if (isAccount) {
+        res = await eldoradoFetch(`/api/flexibleOffers/${offerId}/pause`, { method: "POST" });
+      } else {
+        res = await eldoradoFetch(`/api/v1/item-management/me/offers/${offerId}/pause`, { method: "POST" });
+      }
     } else if (action === "resume") {
-      res = await eldoradoFetch(`/api/v1/item-management/me/offers/${offerId}/resume`, { method: "POST" });
+      if (isAccount) {
+        res = await eldoradoFetch(`/api/flexibleOffers/${offerId}/resume`, { method: "POST" });
+      } else {
+        res = await eldoradoFetch(`/api/v1/item-management/me/offers/${offerId}/resume`, { method: "POST" });
+      }
     } else if (action === "price") {
       res = await eldoradoFetch(`/api/v1/item-management/me/offers/${offerId}/price`, {
         method: "PUT",
@@ -28,11 +36,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ offe
         body: JSON.stringify(body.quantity),
       });
     } else if (action === "details") {
-      const { action: _, ...detailsPayload } = body;
-      res = await eldoradoFetch(`/api/v1/item-management/me/offers/item/${offerId}/details`, {
-        method: "PUT",
-        body: JSON.stringify(detailsPayload),
-      });
+      const { action: _, isAccount: _ia, ...detailsPayload } = body;
+      if (isAccount) {
+        res = await eldoradoFetch(`/api/flexibleOffers/account/${offerId}`, {
+          method: "PUT",
+          body: JSON.stringify(detailsPayload),
+        });
+      } else {
+        res = await eldoradoFetch(`/api/v1/item-management/me/offers/item/${offerId}/details`, {
+          method: "PUT",
+          body: JSON.stringify(detailsPayload),
+        });
+      }
     } else {
       return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }
@@ -50,10 +65,15 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ o
   try {
     getTenantFromRequest(req);
     const { offerId } = await params;
+    const url = new URL(req.url);
+    const isAccount = url.searchParams.get("isAccount") === "true";
 
-    const res = await eldoradoFetch(`/api/v1/item-management/me/offers/${offerId}`, {
-      method: "DELETE",
-    });
+    let res: Response;
+    if (isAccount) {
+      res = await eldoradoFetch(`/api/flexibleOffers/${offerId}`, { method: "DELETE" });
+    } else {
+      res = await eldoradoFetch(`/api/v1/item-management/me/offers/${offerId}`, { method: "DELETE" });
+    }
 
     return NextResponse.json({ ok: res.ok }, { status: res.status });
   } catch (e: any) {

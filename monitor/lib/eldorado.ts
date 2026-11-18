@@ -44,12 +44,12 @@ export async function eldoradoFetch(path: string, opts: RequestInit = {}): Promi
     return h;
   };
 
-  const res = await fetch(`${BASE}${path}`, { ...opts, headers: buildHeaders(token) });
+  const res = await fetch(`${BASE}${path}`, { ...opts, headers: buildHeaders(token), cache: "no-store" });
 
   if (res.status === 401) {
     cachedToken = null;
     token = await getToken();
-    return fetch(`${BASE}${path}`, { ...opts, headers: buildHeaders(token) });
+    return fetch(`${BASE}${path}`, { ...opts, headers: buildHeaders(token), cache: "no-store" });
   }
 
   return res;

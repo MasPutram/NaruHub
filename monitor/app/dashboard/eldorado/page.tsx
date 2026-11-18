@@ -384,6 +384,8 @@ export default function EldoradoPage() {
   const [convUsd, setConvUsd] = useState("");
   const [convIdr, setConvIdr] = useState("");
   const [editSaving, setEditSaving] = useState(false);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [walletPending, setWalletPending] = useState<number | null>(null);
   const [margin, setMargin] = useState(() => {
     try { return parseFloat(localStorage.getItem("edo-margin") || "50") || 50; } catch { return 50; }
   });
@@ -505,7 +507,20 @@ export default function EldoradoPage() {
     }
   }, [marketGame]);
 
-  useEffect(() => { fetchOffers(); fetchOrders(); fetchMarket(); }, [fetchOffers, fetchOrders, fetchMarket]);
+  const fetchWallet = useCallback(async () => {
+    try {
+      const res = await fetch("/api/eldorado/wallet");
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data.balance === "number") setWalletBalance(data.balance);
+        else if (typeof data.amount === "number") setWalletBalance(data.amount);
+        if (typeof data.pendingSales === "number") setWalletPending(data.pendingSales);
+        else if (typeof data.pending === "number") setWalletPending(data.pending);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchOffers(); fetchOrders(); fetchMarket(); fetchWallet(); }, [fetchOffers, fetchOrders, fetchMarket, fetchWallet]);
 
   useEffect(() => {
     fetch("/api/catalog-accounts").then((r) => r.json()).then((d) => {
@@ -514,9 +529,9 @@ export default function EldoradoPage() {
   }, []);
 
   useEffect(() => {
-    const id = setInterval(() => { fetchOffers(); fetchOrders(); }, 30_000);
+    const id = setInterval(() => { fetchOffers(); fetchOrders(); fetchWallet(); }, 30_000);
     return () => clearInterval(id);
-  }, [fetchOffers, fetchOrders]);
+  }, [fetchOffers, fetchOrders, fetchWallet]);
 
   useEffect(() => {
     fetch("https://open.er-api.com/v6/latest/USD")
@@ -540,27 +555,30 @@ export default function EldoradoPage() {
     return s === "delivered" || s === "received";
   });
   const walletOrders = orders.filter((o) => (o.state?.state || "").toLowerCase() === "completed");
-  const pendingTotal = pendingOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0) * (1 - SALES_FEE);
-  const wallet = walletOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0) * (1 - SALES_FEE);
+  const calcPending = pendingOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0) * (1 - SALES_FEE);
+  const calcWallet = walletOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0) * (1 - SALES_FEE);
+  const pendingTotal = walletPending ?? calcPending;
+  const wallet = walletBalance ?? calcWallet;
   const withdrawal = Math.max(wallet * (1 - WD_FEE_PCT) - WD_FEE_FLAT, 0);
   const estimasiIdr = Math.max(withdrawal * (1 - BANK_FEE_PCT) - BANK_FEE_FLAT, 0) * (usdIdr || 0);
 
-  async function handleAction(offerId: string, action: string) {
+  async function handleAction(offerId: string, action: string, isAccount = false) {
     try {
       const res = await fetch(`/api/eldorado/offers/${offerId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, isAccount }),
       });
       if (res.ok) fetchOffers();
       else alert("Action failed");
     } catch { alert("Action failed"); }
   }
 
-  async function handleDelete(offerId: string) {
+  async function handleDelete(offerId: string, isAccount = false) {
     if (!confirm("Hapus listing ini?")) return;
     try {
-      const res = await fetch(`/api/eldorado/offers/${offerId}`, { method: "DELETE" });
+      const qs = isAccount ? "?isAccount=true" : "";
+      const res = await fetch(`/api/eldorado/offers/${offerId}${qs}`, { method: "DELETE" });
       if (res.ok) fetchOffers();
       else alert("Delete failed");
     } catch { alert("Delete failed"); }
@@ -575,6 +593,7 @@ export default function EldoradoPage() {
       quantity: offer.quantity || 1,
       minQuantity: offer.minQuantity || 1,
       deliveryTime: offer.guaranteedDeliveryTime || "Minute20",
+      isAccount: offer.category === "Account",
       mainOfferImage: offer.mainOfferImage ? {
         smallImage: offer.mainOfferImage.smallImage || "",
         largeImage: offer.mainOfferImage.largeImage || "",
@@ -587,27 +606,47 @@ export default function EldoradoPage() {
     if (!editId || !editData) return;
     setEditSaving(true);
     try {
-      const payload = {
-        action: "details",
-        details: {
-          offerTitle: editData.title,
-          description: editData.description || "",
-          guaranteedDeliveryTime: editData.deliveryTime || "Minute20",
-          pricing: {
-            quantity: editData.quantity ?? 1,
-            pricePerUnit: { amount: truncatePrice(Number(editData.price)), currency: "USD" },
-            volumeDiscounts: [],
+      const isAccount = editData.isAccount;
+      let payload: any;
+      if (isAccount) {
+        payload = {
+          action: "details",
+          isAccount: true,
+          details: {
+            offerTitle: editData.title,
+            description: editData.description || "",
+            guaranteedDeliveryTime: "Instant",
+            pricing: {
+              quantity: 1,
+              pricePerUnit: { amount: truncatePrice(Number(editData.price)), currency: "USD" },
+            },
+            offerImages: [],
+            ...(editData.mainOfferImage ? { mainOfferImage: editData.mainOfferImage } : {}),
           },
-          offerImages: [],
-          ...(editData.mainOfferImage ? { mainOfferImage: editData.mainOfferImage } : {}),
-        },
-        augmentedGame: {
-          gameId: "476",
-          category: "CustomItem",
-          tradeEnvironmentId: null,
-          offerAttributes: [],
-        },
-      };
+        };
+      } else {
+        payload = {
+          action: "details",
+          details: {
+            offerTitle: editData.title,
+            description: editData.description || "",
+            guaranteedDeliveryTime: editData.deliveryTime || "Minute20",
+            pricing: {
+              quantity: editData.quantity ?? 1,
+              pricePerUnit: { amount: truncatePrice(Number(editData.price)), currency: "USD" },
+              volumeDiscounts: [],
+            },
+            offerImages: [],
+            ...(editData.mainOfferImage ? { mainOfferImage: editData.mainOfferImage } : {}),
+          },
+          augmentedGame: {
+            gameId: "476",
+            category: "CustomItem",
+            tradeEnvironmentId: null,
+            offerAttributes: [],
+          },
+        };
+      }
       const res = await fetch(`/api/eldorado/offers/${editId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -1069,11 +1108,11 @@ export default function EldoradoPage() {
                               <>
                                 <button className="edo-btn sm" onClick={() => startEdit(o)} title="Edit">&#x270E;</button>
                                 {(o.offerState || "").toLowerCase() === "active" ? (
-                                  <button className="edo-btn sm" onClick={() => handleAction(o.id, "pause")} title="Pause">&#x23F8;</button>
+                                  <button className="edo-btn sm" onClick={() => handleAction(o.id, "pause", o.category === "Account")} title="Pause">&#x23F8;</button>
                                 ) : (
-                                  <button className="edo-btn sm" onClick={() => handleAction(o.id, "resume")} title="Resume">&#x25B6;</button>
+                                  <button className="edo-btn sm" onClick={() => handleAction(o.id, "resume", o.category === "Account")} title="Resume">&#x25B6;</button>
                                 )}
-                                <button className="edo-btn sm danger" onClick={() => handleDelete(o.id)} title="Hapus">&#x2715;</button>
+                                <button className="edo-btn sm danger" onClick={() => handleDelete(o.id, o.category === "Account")} title="Hapus">&#x2715;</button>
                               </>
                             )}
                           </div>
