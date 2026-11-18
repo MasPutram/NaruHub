@@ -552,13 +552,11 @@ export default function EldoradoPage() {
     const s = (o.state?.state || "").toLowerCase();
     return s === "delivered" || s === "received";
   });
-  const walletOrders = orders.filter((o) => (o.state?.state || "").toLowerCase() === "completed");
   const calcPending = pendingOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0) * (1 - SALES_FEE);
-  const calcWallet = walletOrders.reduce((sum, o) => sum + (o.totalPrice?.amount || 0), 0) * (1 - SALES_FEE);
   const pendingTotal = walletPending ?? calcPending;
-  const wallet = walletBalance ?? calcWallet;
-  const withdrawal = Math.max(wallet * (1 - WD_FEE_PCT) - WD_FEE_FLAT, 0);
-  const estimasiIdr = Math.max(withdrawal * (1 - BANK_FEE_PCT) - BANK_FEE_FLAT, 0) * (usdIdr || 0);
+  const wallet = walletBalance;
+  const withdrawal = wallet != null ? Math.max(wallet * (1 - WD_FEE_PCT) - WD_FEE_FLAT, 0) : null;
+  const estimasiIdr = withdrawal != null ? Math.max(withdrawal * (1 - BANK_FEE_PCT) - BANK_FEE_FLAT, 0) * (usdIdr || 0) : null;
 
   async function handleAction(offerId: string, action: string, isAccount = false) {
     try {
@@ -781,15 +779,15 @@ export default function EldoradoPage() {
             </div>
             <div className="edo-stat wallet">
               <div className="edo-stat-label">WALLET</div>
-              <div className="edo-stat-value">{fmtUsd(wallet)}</div>
+              <div className="edo-stat-value">{wallet != null ? fmtUsd(wallet) : "—"}</div>
             </div>
             <div className="edo-stat withdrawn">
               <div className="edo-stat-label">WITHDRAWAL</div>
-              <div className="edo-stat-value">{fmtUsd(withdrawal)}</div>
+              <div className="edo-stat-value">{withdrawal != null ? fmtUsd(withdrawal) : "—"}</div>
             </div>
             <div className="edo-stat income">
               <div className="edo-stat-label">ESTIMASI IDR</div>
-              <div className="edo-stat-value">{usdIdr ? fmtIdr(estimasiIdr) : "-"}</div>
+              <div className="edo-stat-value">{estimasiIdr != null && usdIdr ? fmtIdr(estimasiIdr) : "—"}</div>
             </div>
           </div>
         </div>
