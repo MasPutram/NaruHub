@@ -133,7 +133,7 @@ function fmtGameRate(v: number | null | undefined): string {
 
 function buildAccountDescription(summary: any, detail: any): string {
   const lines: string[] = [];
-  lines.push("✨ PRODUCT DETAILS:");
+  lines.push("PRODUCT DETAILS:");
   if (summary.speed != null) lines.push(`• Speed: ${fmtGameMoney(summary.speed).replace("$", "")}+ | Active Income: ${fmtGameRate(summary.incomeAktif)}`);
   if (summary.money != null) lines.push(`• Cash: ${fmtGameMoney(summary.money)}`);
 
@@ -147,10 +147,12 @@ function buildAccountDescription(summary: any, detail: any): string {
   const totalEggs = backpackEggs.length + growingEggs.length;
   if (totalPets || totalEggs) lines.push(`• ${totalPets} Pets | ${totalEggs} Eggs`);
 
-  const divines = allPets.filter((p: any) => (p.rarity || "").toLowerCase() === "divine");
-  if (divines.length > 0) {
-    const divNames = divines.slice(0, 5).map((p: any) => p.name || p.category).join(", ");
-    lines.push(`• ${divines.length} Divine Pets (${divNames}${divines.length > 5 ? ", etc." : ""})`);
+  const divinePets = allPets.filter((p: any) => (p.rarity || "").toLowerCase() === "divine");
+  const divineEggs = [...backpackEggs, ...growingEggs].filter((e: any) => (e.rarity || "").toLowerCase() === "divine");
+  const totalDivine = divinePets.length + divineEggs.length;
+  if (totalDivine > 0) {
+    const divNames = divinePets.slice(0, 5).map((p: any) => p.name || p.category).join(", ");
+    lines.push(`• ${totalDivine} Divine (${divinePets.length} Pets, ${divineEggs.length} Eggs): ${divNames}${divinePets.length > 5 ? ", etc." : ""}`);
   }
 
   const topPets = [...allPets].sort((a: any, b: any) => (b.rate || 0) - (a.rate || 0));
@@ -178,25 +180,24 @@ function buildAccountDescription(summary: any, detail: any): string {
   if (summary.trail) lines.push(`• Trail: ${summary.trail}`);
 
   lines.push("");
-  lines.push("👤 ACCOUNT DETAILS:");
+  lines.push("ACCOUNT DETAILS:");
   lines.push("• Fresh, clean Roblox account");
   lines.push("• No email linked");
   lines.push("• Phone/ID unverified");
   lines.push("• No Bonafide Hat");
   lines.push("• No active subscriptions or extra charges attached");
   lines.push("");
-  lines.push("📦 Delivery via Account Gift (TCC)");
-  lines.push("⚡ Fast & safe delivery");
-  lines.push("🎥 Warranty requires uncut video from receiving details to first login");
+  lines.push("Delivery via Account Gift (TCC)");
+  lines.push("Fast & safe delivery");
+  lines.push("Warranty requires uncut video from receiving details to first login");
   lines.push("");
   lines.push("BUY = NO REFUND");
-  lines.push("");
 
   const tagNames = allPets
     .filter((p: any) => (p.rarity || "").toLowerCase() === "divine" || (p.rarity || "").toLowerCase() === "eternal" || (p.rarity || "").toLowerCase() === "secret")
     .map((p: any) => (p.name || p.category || "").toLowerCase())
     .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
-  if (tagNames.length) lines.push(`TAGS: ${tagNames.join(", ")}`);
+  if (tagNames.length) lines.push(`NO REFUND TAGS: ${tagNames.join(", ")}`);
 
   return lines.join("\n");
 }
@@ -609,12 +610,19 @@ export default function EldoradoPage() {
             offerTitle: editData.title,
             description: editData.description || "",
             guaranteedDeliveryTime: "Instant",
+            hasOriginalEmail: false,
             pricing: {
               quantity: 1,
               pricePerUnit: { amount: truncatePrice(Number(editData.price)), currency: "USD" },
             },
             offerImages: [],
             ...(editData.mainOfferImage ? { mainOfferImage: editData.mainOfferImage } : {}),
+          },
+          augmentedGame: {
+            gameId: "452",
+            category: "Account",
+            tradeEnvironmentId: null,
+            offerAttributes: [],
           },
         };
       } else {
@@ -662,11 +670,18 @@ export default function EldoradoPage() {
     const backpackPets = detail?.allPets || [];
     const activeUids = new Set(activePets.map((p: any) => p.uid).filter(Boolean));
     const allPets = [...activePets, ...backpackPets.filter((p: any) => !p.uid || !activeUids.has(p.uid))];
+    const backpackEggs = detail?.backpackEggs || [];
+    const growingEggs = detail?.growingEggs || [];
     const topPet = [...allPets].sort((a: any, b: any) => (b.rate || 0) - (a.rate || 0))[0];
-    const parts: string[] = [];
-    if (topPet) parts.push(`Main Pet ${fmtGameRate(topPet.rate)}`);
+    const divinePets = allPets.filter((p: any) => (p.rarity || "").toLowerCase() === "divine");
+    const divineEggs = [...backpackEggs, ...growingEggs].filter((e: any) => (e.rarity || "").toLowerCase() === "divine");
+    const totalDivine = divinePets.length + divineEggs.length;
+    const rarity = topPet ? (topPet.rarity || "") : "";
+    const parts: string[] = ["[CHEAP]"];
+    if (topPet) parts.push(`Main Pet ${rarity} ${fmtGameRate(topPet.rate)}`);
     if (summary.speed != null) parts.push(`Speed ${fmtGameMoney(summary.speed).replace("$", "")}+`);
     if (summary.incomeAktif != null) parts.push(`Income Aktif ${fmtGameRate(summary.incomeAktif)}`);
+    if (totalDivine > 0) parts.push(`${totalDivine} Divine`);
     if (summary.mutationToken) parts.push("Token Mutation");
     parts.push("Fresh Account");
     return parts.join(" | ");

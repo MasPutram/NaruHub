@@ -38,7 +38,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ offe
     } else if (action === "details") {
       const { action: _, isAccount: _ia, ...detailsPayload } = body;
       if (isAccount) {
-        res = await eldoradoFetch(`/api/flexibleOffers/account/${offerId}`, {
+        res = await eldoradoFetch(`/api/flexibleOffers/account/${offerId}/details`, {
           method: "PUT",
           body: JSON.stringify(detailsPayload),
         });
