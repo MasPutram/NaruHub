@@ -513,9 +513,7 @@ export default function EldoradoPage() {
       if (res.ok) {
         const data = await res.json();
         if (typeof data.balance === "number") setWalletBalance(data.balance);
-        else if (typeof data.amount === "number") setWalletBalance(data.amount);
-        if (typeof data.pendingSales === "number") setWalletPending(data.pendingSales);
-        else if (typeof data.pending === "number") setWalletPending(data.pending);
+        if (typeof data.pending === "number") setWalletPending(data.pending);
       }
     } catch {}
   }, []);
