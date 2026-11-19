@@ -1163,9 +1163,24 @@ export default function EldoradoPage() {
                                         const v = e.target.value;
                                         if (v === "" || /^\d*$/.test(v)) {
                                           const c = parseFloat(v) || 0;
-                                          const autoPrice = c && usdIdr ? costIdrToUsd(c, usdIdr, margin) : editData.price;
+                                          const m = parseFloat(String(editData.editMargin)) || 70;
+                                          const autoPrice = c && usdIdr ? costIdrToUsd(c, usdIdr, m) : editData.price;
                                           setEditData({ ...editData, costIdr: v, price: autoPrice });
                                         }
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="edo-field" style={{ maxWidth: 80 }}>
+                                    <label className="edo-label">Margin %</label>
+                                    <input
+                                      className="edo-input"
+                                      type="number"
+                                      value={editData.editMargin ?? 70}
+                                      onChange={(e) => {
+                                        const m = parseFloat(e.target.value) || 0;
+                                        const c = parseFloat(String(editData.costIdr)) || 0;
+                                        const autoPrice = c && usdIdr ? costIdrToUsd(c, usdIdr, m) : editData.price;
+                                        setEditData({ ...editData, editMargin: m, price: autoPrice });
                                       }}
                                     />
                                   </div>
