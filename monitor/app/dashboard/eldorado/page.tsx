@@ -193,12 +193,6 @@ function buildAccountDescription(summary: any, detail: any): string {
   lines.push("");
   lines.push("BUY = NO REFUND");
 
-  const tagNames = allPets
-    .filter((p: any) => (p.rarity || "").toLowerCase() === "divine" || (p.rarity || "").toLowerCase() === "eternal" || (p.rarity || "").toLowerCase() === "secret")
-    .map((p: any) => (p.name || p.category || "").toLowerCase())
-    .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
-  if (tagNames.length) lines.push(`NO REFUND TAGS: ${tagNames.join(", ")}`);
-
   return lines.join("\n");
 }
 
