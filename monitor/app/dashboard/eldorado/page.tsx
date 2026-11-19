@@ -1159,7 +1159,14 @@ export default function EldoradoPage() {
                                       inputMode="numeric"
                                       placeholder="Rp modal..."
                                       value={editData.costIdr || ""}
-                                      onChange={(e) => { const v = e.target.value; if (v === "" || /^\d*$/.test(v)) setEditData({ ...editData, costIdr: v }); }}
+                                      onChange={(e) => {
+                                        const v = e.target.value;
+                                        if (v === "" || /^\d*$/.test(v)) {
+                                          const c = parseFloat(v) || 0;
+                                          const autoPrice = c && usdIdr ? costIdrToUsd(c, usdIdr, margin) : editData.price;
+                                          setEditData({ ...editData, costIdr: v, price: autoPrice });
+                                        }
+                                      }}
                                     />
                                   </div>
                                   <div className="edo-field">
