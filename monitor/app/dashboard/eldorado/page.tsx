@@ -399,6 +399,10 @@ export default function EldoradoPage() {
     try { return JSON.parse(localStorage.getItem("edo-folder-map") || "{}"); } catch { return {}; }
   });
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
+  const [costMap, setCostMap] = useState<Record<string, number>>(() => {
+    try { return JSON.parse(localStorage.getItem("edo-cost-map") || "{}"); } catch { return {}; }
+  });
+  function saveCostMap(m: Record<string, number>) { setCostMap(m); try { localStorage.setItem("edo-cost-map", JSON.stringify(m)); } catch {} }
 
   function saveFolders(f: string[]) { setFolders(f); try { localStorage.setItem("edo-folders", JSON.stringify(f)); } catch {} }
   function saveFolderMap(m: Record<string, string>) { setFolderMap(m); try { localStorage.setItem("edo-folder-map", JSON.stringify(m)); } catch {} }
@@ -588,6 +592,7 @@ export default function EldoradoPage() {
       minQuantity: offer.minQuantity || 1,
       deliveryTime: offer.guaranteedDeliveryTime || "Minute20",
       isAccount: offer.category === "Account",
+      costIdr: costMap[offer.id] || "",
       mainOfferImage: offer.mainOfferImage ? {
         smallImage: offer.mainOfferImage.smallImage || "",
         largeImage: offer.mainOfferImage.largeImage || "",
@@ -653,6 +658,8 @@ export default function EldoradoPage() {
         body: JSON.stringify(payload),
       });
       if (res.ok) {
+        const c = parseFloat(String(editData.costIdr)) || 0;
+        if (c > 0) { saveCostMap({ ...costMap, [editId]: c }); } else { const m = { ...costMap }; delete m[editId]; saveCostMap(m); }
         setEditId(null);
         setEditData(null);
         fetchOffers();
@@ -1145,6 +1152,17 @@ export default function EldoradoPage() {
                                 </div>
                                 <div className="edo-field-row">
                                   <div className="edo-field">
+                                    <label className="edo-label">Harga Beli (IDR)</label>
+                                    <input
+                                      className="edo-input"
+                                      type="text"
+                                      inputMode="numeric"
+                                      placeholder="Rp modal..."
+                                      value={editData.costIdr || ""}
+                                      onChange={(e) => { const v = e.target.value; if (v === "" || /^\d*$/.test(v)) setEditData({ ...editData, costIdr: v }); }}
+                                    />
+                                  </div>
+                                  <div className="edo-field">
                                     <label className="edo-label">Price (USD)</label>
                                     <input
                                       className="edo-input"
@@ -1181,6 +1199,18 @@ export default function EldoradoPage() {
                                     <span className="edo-est-label">Est. IDR</span>
                                     <span className="edo-est-val green">{Number(editData.price) && usdIdr ? fmtIdr(Number(editData.price) * usdIdr * (1 - SALES_FEE)) : "-"}</span>
                                   </div>
+                                  {Number(editData.costIdr) > 0 && Number(editData.price) > 0 && usdIdr > 0 && (() => {
+                                    const cost = parseFloat(String(editData.costIdr)) || 0;
+                                    const estIdr = Number(editData.price) * usdIdr * (1 - SALES_FEE);
+                                    const profit = estIdr - cost;
+                                    const profitPct = cost > 0 ? (profit / cost) * 100 : 0;
+                                    return (
+                                      <div className="edo-est">
+                                        <span className="edo-est-label">Profit</span>
+                                        <span className="edo-est-val" style={{ color: profit >= 0 ? "var(--green)" : "#ef4444" }}>{fmtIdr(profit)} ({profitPct >= 0 ? "+" : ""}{profitPct.toFixed(0)}%)</span>
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                               </>
                             ) : (
@@ -1213,6 +1243,24 @@ export default function EldoradoPage() {
                                     <span className="edo-est-val">{DELIVERY_OPTIONS.find((d) => d.value === o.guaranteedDeliveryTime)?.label || o.guaranteedDeliveryTime || "-"}</span>
                                   </div>
                                 </div>
+                                {costMap[o.id] > 0 && usdIdr > 0 && (() => {
+                                  const cost = costMap[o.id];
+                                  const estIdr = (o.pricePerUnit?.amount || 0) * usdIdr * (1 - SALES_FEE);
+                                  const profit = estIdr - cost;
+                                  const profitPct = cost > 0 ? (profit / cost) * 100 : 0;
+                                  return (
+                                    <div className="edo-field-row" style={{ marginTop: 4 }}>
+                                      <div className="edo-est">
+                                        <span className="edo-est-label">Harga Beli</span>
+                                        <span className="edo-est-val">{fmtIdr(cost)}</span>
+                                      </div>
+                                      <div className="edo-est">
+                                        <span className="edo-est-label">Profit</span>
+                                        <span className="edo-est-val" style={{ color: profit >= 0 ? "var(--green)" : "#ef4444" }}>{fmtIdr(profit)} ({profitPct >= 0 ? "+" : ""}{profitPct.toFixed(0)}%)</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
                               </>
                             )}
                           </div>
