@@ -397,6 +397,10 @@ export default function EldoradoPage() {
     try { return JSON.parse(localStorage.getItem("edo-cost-map") || "{}"); } catch { return {}; }
   });
   function saveCostMap(m: Record<string, number>) { setCostMap(m); try { localStorage.setItem("edo-cost-map", JSON.stringify(m)); } catch {} }
+  const [accountMap, setAccountMap] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem("edo-account-map") || "{}"); } catch { return {}; }
+  });
+  function saveAccountMap(m: Record<string, string>) { setAccountMap(m); try { localStorage.setItem("edo-account-map", JSON.stringify(m)); } catch {} }
 
   function saveFolders(f: string[]) { setFolders(f); try { localStorage.setItem("edo-folders", JSON.stringify(f)); } catch {} }
   function saveFolderMap(m: Record<string, string>) { setFolderMap(m); try { localStorage.setItem("edo-folder-map", JSON.stringify(m)); } catch {} }
@@ -766,6 +770,13 @@ export default function EldoradoPage() {
       });
       const data = await res.json();
       setUploadResults(data.results || []);
+      const newMap = { ...accountMap };
+      (data.results || []).forEach((r: any, i: number) => {
+        if (r.ok && r.data?.id && itemsWithImages[i]?.codeBg) {
+          newMap[r.data.id] = itemsWithImages[i].codeBg;
+        }
+      });
+      saveAccountMap(newMap);
       if (data.results?.every((r: any) => r.ok)) {
         setNewItems([emptyItem()]);
         fetchOffers();
@@ -1232,6 +1243,7 @@ export default function EldoradoPage() {
                             ) : (
                               <>
                                 <div style={{ fontWeight: 700, fontSize: 14 }}>{o.offerTitle || "-"}</div>
+                                {accountMap[o.id] && <div style={{ fontSize: 11, color: "var(--accent)", marginTop: 2 }}>Akun: {accountMap[o.id]}</div>}
                                 {o.description && <div style={{ fontSize: 12, color: "var(--dim)", marginTop: 2 }}>{o.description}</div>}
                                 <div className="edo-field-row" style={{ marginTop: 6 }}>
                                   <div className="edo-est">
