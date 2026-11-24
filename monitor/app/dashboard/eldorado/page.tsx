@@ -1533,7 +1533,7 @@ export default function EldoradoPage() {
                                 }}
                               >
                                 <option value="">— Pilih akun dari katalog —</option>
-                                {catalogAccounts.map((acc: any) => (
+                                {catalogAccounts.filter((acc: any) => !Object.values(accountMap).includes(acc.sourceAccount)).map((acc: any) => (
                                   <option key={acc.sourceAccount} value={acc.sourceAccount}>
                                     {acc.sourceAccount} — Speed {fmtGameMoney(acc.speed)} | Income {fmtGameRate(acc.incomeAktif)}
                                   </option>
